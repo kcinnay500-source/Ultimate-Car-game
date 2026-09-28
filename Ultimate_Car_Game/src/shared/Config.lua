@@ -178,6 +178,6 @@ Config.Milestones = {
 
 -- Server-Tick
 Config.TickInterval = 1
-Config.SyncInterval = 0.25
+Config.SyncInterval = 0.5 -- höchstens 2 Snapshots pro Sekunde und Spieler
 
 return Config

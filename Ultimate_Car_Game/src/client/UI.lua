@@ -2,6 +2,7 @@
 -- und kleine Bausteine. Touch-Flächen sind mindestens 44 px hoch.
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
 
 local UI = {}
 
@@ -203,21 +204,36 @@ function UI.Build()
 	gui.ResetOnSpawn = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.IgnoreGuiInset = false
+	gui.DisplayOrder = 10
 	gui.Parent = player:WaitForChild("PlayerGui")
 	UI.Gui = gui
 
-	-- HUD
-	local hud = UI.Frame(gui, {
-		Name = "HUD", BackgroundColor3 = T.panel, BackgroundTransparency = 0.1,
-		Size = UDim2.new(0, 260, 0, 0), Position = UDim2.new(0, 10, 0, 10),
+	-- Obere Leiste (zentriert, damit sie weder den Chat links oben noch sich selbst überdeckt)
+	local top = UI.Frame(gui, {
+		Name = "Top", BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 6), Size = UDim2.new(0.94, 0, 0, 0),
 	})
+	local topLimit = Instance.new("UISizeConstraint")
+	topLimit.MaxSize = Vector2.new(480, 400)
+	topLimit.Parent = top
+	UI.List(top, 6)
+	UI.Top = top
+
+	local hud = UI.Frame(top, { Name = "HUD", BackgroundColor3 = T.panel, BackgroundTransparency = 0.1, LayoutOrder = 1 })
 	UI.Corner(hud, 12)
 	UI.Padding(hud, 8)
 	UI.List(hud, 4)
-	UI.HudCredits = UI.Label(hud, "0 Cr", { Font = Enum.Font.GothamBold, TextSize = 18, LayoutOrder = 1 })
-	UI.HudScrap = UI.Label(hud, "0 kg Schrott", { TextSize = 15, TextColor3 = T.warn, LayoutOrder = 2 })
-	UI.HudLevel = UI.Label(hud, "Level 1", { TextSize = 14, TextColor3 = T.muted, LayoutOrder = 3 })
-	local _, xpFill = UI.Progress(hud, T.accent2, 4)
+	local money = UI.Frame(hud, { BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, 0, 0, 22), LayoutOrder = 1 })
+	UI.HudCredits = UI.Label(money, "0 Cr", {
+		Font = Enum.Font.GothamBold, TextSize = 17, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(0.5, -4, 1, 0),
+		TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	UI.HudScrap = UI.Label(money, "0 kg Schrott", {
+		TextSize = 15, TextColor3 = T.warn, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(0.5, -4, 1, 0),
+		Position = UDim2.new(0.5, 4, 0, 0), TextXAlignment = Enum.TextXAlignment.Right, TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	UI.HudLevel = UI.Label(hud, "Level 1", { TextSize = 14, TextColor3 = T.muted, LayoutOrder = 2 })
+	local _, xpFill = UI.Progress(hud, T.accent2, 3)
 	UI.HudXp = xpFill
 	UI.Hud = hud
 
@@ -227,11 +243,10 @@ function UI.Build()
 	goal.AutoButtonColor = true
 	goal.BackgroundColor3 = T.panel
 	goal.BackgroundTransparency = 0.1
-	goal.Size = UDim2.new(0, 300, 0, 56)
-	goal.AnchorPoint = Vector2.new(1, 0)
-	goal.Position = UDim2.new(1, -10, 0, 10)
+	goal.Size = UDim2.new(1, 0, 0, UI.MinTouch + 4)
+	goal.LayoutOrder = 2
 	goal.Text = ""
-	goal.Parent = gui
+	goal.Parent = top
 	UI.Corner(goal, 12)
 	UI.Padding(goal, 8)
 	UI.List(goal, 4)
@@ -256,6 +271,7 @@ function UI.Build()
 	local panel = UI.Frame(gui, {
 		Name = "Panel", BackgroundColor3 = T.bg, AutomaticSize = Enum.AutomaticSize.None,
 		AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0.97, 0, 0.94, 0), Visible = false, ZIndex = 5,
+		Active = true, -- schluckt Touch/Drag, damit Kamera und Figur ruhig bleiben
 	})
 	UI.Corner(panel, 14)
 	local limit = Instance.new("UISizeConstraint")
@@ -264,6 +280,7 @@ function UI.Build()
 	UI.Panel = panel
 
 	local header = UI.Frame(panel, { BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, -20, 0, 48), Position = UDim2.new(0, 10, 0, 6) })
+	UI.Header = header
 	UI.HeaderInfo = UI.Label(header, "", { Font = Enum.Font.GothamBold, TextSize = 16, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, -60, 1, 0), TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Center })
 	UI.Button(header, "✕", T.danger, function()
 		UI.Close()
@@ -279,6 +296,7 @@ function UI.Build()
 	tabs.ScrollingDirection = Enum.ScrollingDirection.X
 	tabs.ScrollBarThickness = 4
 	tabs.Parent = panel
+	UI.TabBar = tabs
 	UI.List(tabs, 6, true)
 
 	local content = Instance.new("ScrollingFrame")
@@ -315,7 +333,7 @@ function UI.Build()
 	UI.ToastHost = toasts
 
 	-- Bestätigungsdialog
-	local shade = UI.Frame(gui, { BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.4, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 30 })
+	local shade = UI.Frame(gui, { BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.4, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 30, Active = true })
 	local box = UI.Card(shade)
 	box.ZIndex = 31
 	box.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -339,7 +357,40 @@ function UI.Build()
 	end, { LayoutOrder = 3, ZIndex = 32, TextColor3 = T.text })
 	UI.Shade = shade
 
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(UI.ApplyLayout)
+	UI.ApplyLayout()
 	return gui
+end
+
+-- Kompakt-Layout für niedrige Bildschirme (z. B. Handy quer, 844×390): Tabs in die Kopfzeile,
+-- damit für den Inhalt genug Höhe bleibt.
+UI.Compact = false
+function UI.ApplyLayout()
+	if not UI.Gui then
+		return
+	end
+	local h = UI.Gui.AbsoluteSize.Y
+	local compact = h > 0 and h < 500
+	UI.Compact = compact
+	if compact then
+		UI.HeaderInfo.Visible = false
+		UI.TabBar.Position = UDim2.new(0, 10, 0, 6)
+		UI.TabBar.Size = UDim2.new(1, -78, 0, 50)
+		UI.Content.Position = UDim2.new(0, 10, 0, 60)
+		UI.Content.Size = UDim2.new(1, -20, 1, -64)
+	else
+		UI.HeaderInfo.Visible = true
+		UI.TabBar.Position = UDim2.new(0, 10, 0, 58)
+		UI.TabBar.Size = UDim2.new(1, -20, 0, 54)
+		UI.Content.Position = UDim2.new(0, 10, 0, 116)
+		UI.Content.Size = UDim2.new(1, -20, 1, -124)
+	end
+end
+
+local function setTouchControls(enabled)
+	pcall(function()
+		GuiService.TouchControlsEnabled = enabled
+	end)
 end
 
 function UI.Confirm(text, onYes)
@@ -397,21 +448,23 @@ end
 
 function UI.Open(key)
 	UI.IsOpen = true
+	UI.ApplyLayout()
 	UI.Panel.Visible = true
-	UI.Hud.Visible = false
-	UI.GoalButton.Visible = false
+	UI.Top.Visible = false
 	UI.MenuButton.Visible = false
+	setTouchControls(false)
 	UI.Show(key or UI.CurrentTab or "overview")
-	UI.Panel.Size = UDim2.new(0.9, 0, 0.88, 0)
-	TweenService:Create(UI.Panel, TweenInfo.new(0.12), { Size = UDim2.new(0.97, 0, 0.94, 0) }):Play()
+	local full = UI.Compact and UDim2.new(0.99, 0, 0.98, 0) or UDim2.new(0.97, 0, 0.94, 0)
+	UI.Panel.Size = UDim2.new(full.X.Scale - 0.05, 0, full.Y.Scale - 0.05, 0)
+	TweenService:Create(UI.Panel, TweenInfo.new(0.12), { Size = full }):Play()
 end
 
 function UI.Close()
 	UI.IsOpen = false
 	UI.Panel.Visible = false
-	UI.Hud.Visible = true
-	UI.GoalButton.Visible = true
+	UI.Top.Visible = true
 	UI.MenuButton.Visible = true
+	setTouchControls(true)
 end
 
 return UI

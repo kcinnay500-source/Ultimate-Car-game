@@ -225,4 +225,29 @@ return {
 		T.check(srv.env.workspace.Hof:FindFirstChild("Start") ~= nil, "Spawn vorhanden")
 		T.eq(#srv.World.BoardRows, srv.S.Config.LeaderboardBoardRows, "Tafel-Zeilen")
 	end },
+
+	{ "Handy quer (844×390): Kompakt-Layout, Menü schluckt Eingaben", function(T, H)
+		local env, S, player = clientEnv(H)
+		local UI = require(env.services.StarterPlayer.StarterPlayerScripts.Client.UI)
+		local gui = player.PlayerGui.UltimateCarGame
+		gui.AbsoluteSize = Vector2.new(844, 354)
+		gui:GetPropertyChangedSignal("AbsoluteSize"):Fire()
+		T.eq(UI.Compact, true, "Kompakt-Modus aktiv")
+		T.eq(UI.HeaderInfo.Visible, false, "Kopfzeilentext ausgeblendet")
+		T.eq(UI.Content.Position.Y.Offset, 60, "Inhalt direkt unter der Tab-Leiste")
+		UI.Open("press")
+		T.eq(UI.Panel.Active, true, "Panel schluckt Touch")
+		T.eq(UI.Shade.Active, true, "Dialog schluckt Touch")
+		T.eq(env.services.GuiService.TouchControlsEnabled, false, "Touch-Steuerung aus bei offenem Menü")
+		T.eq(UI.Top.Visible, false, "obere Leiste verborgen")
+		UI.Close()
+		T.eq(env.services.GuiService.TouchControlsEnabled, true, "Touch-Steuerung wieder an")
+		gui.AbsoluteSize = Vector2.new(390, 800)
+		gui:GetPropertyChangedSignal("AbsoluteSize"):Fire()
+		T.eq(UI.Compact, false, "Hochformat: normales Layout")
+		T.eq(UI.Content.Position.Y.Offset, 116, "Inhalt unter Kopf und Tabs")
+		T.eq(UI.Hud.Parent, UI.Top, "HUD in der zentrierten Leiste")
+		T.eq(UI.GoalButton.Parent, UI.Top, "Ziel unter dem HUD, keine Überlappung")
+		T.eq(gui.DisplayOrder, 10, "über Standard-Oberflächen")
+	end },
 }

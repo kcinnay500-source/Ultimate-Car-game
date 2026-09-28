@@ -4,6 +4,8 @@ local Core = {}
 
 Core.Sessions = {} -- [Player] = Session
 Core.Remotes = nil -- { Action, Sync, Notice }
+Core.PendingSaves = 0 -- laufende Speichervorgänge beim Verlassen/Herunterfahren
+local lockCounter = 0
 
 -- Uhr (in Tests ersetzbar)
 function Core.Now()
@@ -19,9 +21,12 @@ function Core.NewRandom()
 end
 
 function Core.NewSession(player)
+	lockCounter += 1
 	local session = {
 		player = player,
 		userId = player.UserId,
+		-- eindeutig pro Sitzung: ein schneller Wiederbeitritt auf demselben Server wartet so auf das Speichern der alten Sitzung
+		lockId = tostring(game.JobId) .. ":" .. tostring(player.UserId) .. ":" .. tostring(lockCounter) .. ":" .. tostring(math.floor(os.clock() * 1000)),
 		profile = nil,
 		loaded = false,
 		persistent = false,

@@ -10,6 +10,13 @@ Stand: umgesetzt, alle Phasen abgehakt. Grundlage ist **kein** vorhandenes 2.4.0
 - [x] Phase 4 – Nebenspiele: Schrottplatz, Mechaniker-Quiz, Parkplatz-Chaos (und die Werkstatt als mittleres Hauptspiel)
 - [x] Phase 5 – Ziele und Verzahnung: Meilensteine, Tagesauftrag, 3 Tagesziele, „Nächstes Ziel“, Boni-Übersicht, Game-Pass-Vorbereitung, Version 3.0.0
 - [x] Nach jeder Phase: Build, Luau-Compiler, Tests grün; Selbst-Review
+- [x] Unabhängiges Review (Roblox-API, Rennen, Layout): alle Befunde behoben, je mit Regressionstest (siehe TESTBERICHT.txt)
+
+## Offene Punkte
+
+- Game-Pass-IDs in `Config.GamePasses` eintragen (bis dahin startet kein Kauf).
+- Studio-Prüffolge (`STUDIO_TESTS.md`) einmal auf echten Geräten durchgehen.
+- Optional: statische Snapshot-Teile (Kataloge, Texte) nur einmal senden, um Bandbreite zu sparen.
 
 ## Datenmodell
 
@@ -34,7 +41,7 @@ Das Profil liegt im DataStore `UltimateCarGame_v2`, Schlüssel `player_<UserId>`
 | `games.stats.*` | 0 | Zähler für Ziele |
 | `games.milestones` | {} | abgeholte Meilensteine |
 | `games.daily` | Tag "", nicht abgeholt | Tagesauftrag und Tagesziele (UTC) |
-| `_lock` | – | Sitzungssperre `{ job, t }` |
+| `_lock` | – | Sitzungssperre `{ job, id, t }`, `id` eindeutig pro Sitzung |
 
 ## Remote-Aktionen
 

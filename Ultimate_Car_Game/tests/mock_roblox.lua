@@ -418,6 +418,12 @@ function M:Destroy()
 		sig.handlers = {}
 	end
 end
+function M:GetPropertyChangedSignal(prop)
+	local key = "Changed:" .. tostring(prop)
+	local data = self.__data
+	data._signals[key] = data._signals[key] or Signal.new(data._env)
+	return data._signals[key]
+end
 function M:SetAttribute(k, v)
 	self.__data._attributes[k] = v
 end
@@ -665,7 +671,11 @@ local function makeMarketplace(env)
 	local svc = newInstance(env, "MarketplaceService")
 	svc.__data.owned = {}
 	svc.__data.prompts = {}
+	svc.__data.yield = 0 -- Sekunden Latenz (echte Aufrufe warten)
 	svc.__data.UserOwnsGamePassAsync = function(_, userId, passId)
+		if svc.__data.yield > 0 then
+			env.scheduler:wait(svc.__data.yield)
+		end
 		return svc.__data.owned[userId .. ":" .. passId] == true
 	end
 	svc.__data.PromptGamePassPurchase = function(_, player, passId)
@@ -704,7 +714,11 @@ function Mock.NewEnv(opts)
 	service("Players", makePlayers(env))
 	service("DataStoreService", makeDataStoreService(env))
 	service("MarketplaceService", makeMarketplace(env))
-	service("RunService")
+	env.studio = opts.studio == true
+	service("RunService").__data.IsStudio = function()
+		return env.studio
+	end
+	service("GuiService")
 	local tween = service("TweenService")
 	tween.__data.Create = function()
 		return { Play = function() end, Cancel = function() end }

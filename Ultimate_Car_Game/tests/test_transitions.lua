@@ -80,12 +80,11 @@ return {
 	end },
 
 	{ "Studio ohne DataStore: spielbar, nicht gespeichert, Hinweis", function(T, H)
-		local srv = H.Server({ dataStoreGetFail = true })
+		local srv = H.Server({ dataStoreGetFail = true, studio = true })
 		local player = H.Join(srv, 607, "Wim")
 		local session = srv.Core.Get(player)
 		T.check(session ~= nil, "Sitzung geladen")
 		T.eq(session.persistent, false, "nicht persistent")
-		H.Act(srv, player, "ui_ready", { rid = 1 })
 		local toasts = H.Notices(srv, player, "toast")
 		local found = false
 		for _, t in ipairs(toasts) do
@@ -99,7 +98,7 @@ return {
 	end },
 
 	{ "DataStore-Ausfall beim Laden überschreibt keine echten Daten", function(T, H)
-		local srv = H.Server()
+		local srv = H.Server({ studio = true })
 		local ds = srv.env.services.DataStoreService.__data
 		local store = ds.stores[srv.S.Config.ProfileStoreName] or H.Store(srv)
 		H.Join(srv, 699, "Init")
@@ -218,5 +217,97 @@ return {
 		T.eq(#H.Notices(srv, a, "open"), 1, "A in Reichweite: öffnet")
 		T.eq(H.Notices(srv, a, "open")[1].tab, entry.tab, "richtiger Bereich")
 		T.eq(#H.Notices(srv, b, "open"), 0, "B außer Reichweite: nichts")
+	end },
+
+	{ "Live-Server mit DataStore-Ausfall: Hinweis und erneut beitreten, keine Daten überschrieben", function(T, H)
+		local srv = H.Server({ studio = false })
+		local ds = srv.env.services.DataStoreService.__data
+		H.Join(srv, 620, "Init")
+		local store = H.Store(srv)
+		local key = srv.Profiles.Key(621)
+		store.data[key] = { credits = 777, level = 20 }
+		ds.fail = true
+		local player = H.Join(srv, 621, "Hugo")
+		H.Advance(srv, 5)
+		T.eq(srv.Core.Get(player), nil, "keine Sitzung mit Ersatzprofil")
+		T.eq(player.__data.kicked, srv.S.Locale.T("profile_failed"), "Hinweis zum erneuten Beitreten")
+		ds.fail = false
+		T.eq(store.data[key].credits, 777, "Daten unverändert")
+		local again = H.Join(srv, 621, "Hugo")
+		T.eq(H.Profile(srv, again).credits, 777, "Wiederbeitritt lädt echte Daten")
+	end },
+
+	{ "Letzter Spieler verlässt, Server fährt herunter: Speichern wird abgewartet", function(T, H)
+		local srv = H.Server()
+		local ds = srv.env.services.DataStoreService.__data
+		local player = H.Join(srv, 622, "Ines")
+		H.Profile(srv, player).credits = 3333
+		ds.updateYield = 2
+		H.Leave(srv, player) -- Speichern läuft noch (wartet auf den DataStore)
+		local done = false
+		srv.env.scheduler:spawn(function()
+			for _, fn in ipairs(srv.env.game.__data.closeCallbacks) do
+				fn()
+			end
+			done = true
+		end)
+		T.eq(done, false, "BindToClose wartet auf laufendes Speichern")
+		T.eq(srv.Core.PendingSaves, 1, "ein Speichervorgang offen")
+		H.Advance(srv, 5)
+		T.eq(done, true, "BindToClose endet danach")
+		local stored = H.Store(srv).data[srv.Profiles.Key(622)]
+		T.eq(stored.credits, 3333, "gespeichert")
+		T.eq(stored._lock, nil, "Sperre freigegeben")
+	end },
+
+	{ "Schneller Wiederbeitritt auf demselben Server lädt den neuesten Stand", function(T, H)
+		local srv = H.Server()
+		local ds = srv.env.services.DataStoreService.__data
+		local player = H.Join(srv, 623, "Jonas")
+		H.Profile(srv, player).credits = 4444
+		ds.updateYield = 1
+		H.Leave(srv, player)
+		local again = H.Join(srv, 623, "Jonas") -- während das Freigabe-Speichern noch läuft
+		H.Advance(srv, 15)
+		T.eq(H.Profile(srv, again).credits, 4444, "neuester Stand geladen")
+		H.Advance(srv, 70) -- Autosave der neuen Sitzung
+		T.eq(H.Store(srv).data[srv.Profiles.Key(623)].credits, 4444, "nichts überschrieben")
+		T.eq(#H.Errors(srv.env), 0, "keine Laufzeitfehler")
+	end },
+
+	{ "Verlassen während der Game-Pass-Prüfung hinterlässt keine Sperre", function(T, H)
+		local srv = H.Server({
+			before = function(srv)
+				srv.S.Config.GamePasses.DoubleScrap.id = 111
+			end,
+		})
+		srv.env.services.MarketplaceService.__data.yield = 2
+		local player = H.Join(srv, 624, "Kim")
+		H.Advance(srv, 0.5)
+		H.Leave(srv, player)
+		H.Advance(srv, 10)
+		T.eq(srv.Core.Sessions[player], nil, "keine Sitzung")
+		local stored = H.Store(srv)
+		T.check(stored == nil or stored.data[srv.Profiles.Key(624)] == nil or stored.data[srv.Profiles.Key(624)]._lock == nil, "keine Sperre")
+		srv.S.Config.GamePasses.DoubleScrap.id = 0
+	end },
+
+	{ "Fehler einer Sitzung stoppt Tick und Sync der anderen nicht", function(T, H)
+		local srv = H.Server()
+		local a = H.Join(srv, 625, "Lars")
+		local b = H.Join(srv, 626, "Mona")
+		H.Profile(srv, a).games.press = nil -- kaputte Sitzung
+		H.Advance(srv, 3)
+		local before = #H.Sent(srv, "Sync", b)
+		H.Advance(srv, 3)
+		T.check(#H.Sent(srv, "Sync", b) > before, "B erhält weiter Snapshots")
+		T.check(#srv.env.warnings > 0, "Fehler protokolliert")
+		T.eq(#H.Errors(srv.env), 0, "Schleifen laufen weiter: " .. table.concat(H.Errors(srv.env), " | "))
+	end },
+
+	{ "Tafel zeigt Hinweis, wenn die Bestenliste fehlt", function(T, H)
+		local srv = H.Server({ dataStoreGetFail = true, studio = true })
+		H.Advance(srv, 2)
+		T.eq(srv.World.BoardStatus.Text, srv.S.Locale.T("leaderboard_unavailable"), "nicht mehr 'wird geladen'")
 	end },
 }

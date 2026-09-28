@@ -2,9 +2,11 @@
 -- Ohne DataStore-Zugriff (z. B. Studio ohne API-Freigabe) läuft das Spiel mit einem
 -- nicht gespeicherten Sitzungsprofil weiter; ein solches Profil überschreibt nie echte Daten.
 local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Rules = require(Shared:WaitForChild("Rules"))
+local Locale = require(Shared:WaitForChild("Locale"))
 local DataUtil = require(script.Parent:WaitForChild("DataUtil"))
 local Core = require(script.Parent:WaitForChild("Core"))
 
@@ -34,14 +36,26 @@ function Profiles.Key(userId)
 	return Config.ProfileKeyPrefix .. tostring(userId)
 end
 
-local function lockIsForeign(lock, now)
-	return type(lock) == "table" and lock.job ~= Profiles.JobId and type(lock.t) == "number" and now - lock.t < Config.SessionLockTimeout and now >= lock.t
+-- Eine Sperre gehört genau einer Sitzung (lockId). Fremd und frisch = nicht überschreiben.
+local function lockIsForeign(lock, now, lockId)
+	return type(lock) == "table" and lock.id ~= lockId and type(lock.t) == "number" and now - lock.t < Config.SessionLockTimeout and now >= lock.t
 end
 
--- Rückgabe: profile, persistent, status ("ok" | "unavailable" | "locked")
-function Profiles.Load(userId)
+function Profiles.IsStudio()
+	local ok, result = pcall(function()
+		return RunService:IsStudio()
+	end)
+	return ok and result == true
+end
+
+-- Rückgabe: profile, persistent, status ("ok" | "unavailable" | "locked" | "failed")
+-- "unavailable": Studio ohne DataStore -> Sitzungsprofil. "failed": Live-Server mit DataStore-Ausfall -> Spieler erneut beitreten lassen.
+function Profiles.Load(userId, lockId)
 	if not Profiles.Available then
-		return Rules.LoadData(nil), false, "unavailable"
+		if Profiles.IsStudio() then
+			return Rules.LoadData(nil), false, "unavailable"
+		end
+		return nil, false, "failed"
 	end
 	local key = Profiles.Key(userId)
 	for attempt = 1, Profiles.LockRetries do
@@ -50,17 +64,20 @@ function Profiles.Load(userId)
 			return Profiles.Store:UpdateAsync(key, function(old)
 				local now = Core.Now()
 				local data = type(old) == "table" and old or {}
-				if lockIsForeign(data._lock, now) then
+				if lockIsForeign(data._lock, now, lockId) then
 					lockedByOther = true
 					return nil
 				end
-				data._lock = { job = Profiles.JobId, t = now }
+				data._lock = { job = Profiles.JobId, id = lockId, t = now }
 				return data
 			end)
 		end)
 		if not ok then
 			warn("[Profiles] Laden fehlgeschlagen: " .. tostring(result))
-			return Rules.LoadData(nil), false, "unavailable"
+			if Profiles.IsStudio() then
+				return Rules.LoadData(nil), false, "unavailable"
+			end
+			return nil, false, "failed"
 		end
 		if not lockedByOther then
 			return Rules.LoadData(result), true, "ok"
@@ -104,11 +121,11 @@ function Profiles.SaveNow(session, release)
 	local ok, err = DataUtil.Retry(function()
 		return Profiles.Store:UpdateAsync(key, function(old)
 			local now = Core.Now()
-			if type(old) == "table" and lockIsForeign(old._lock, now) then
+			if type(old) == "table" and lockIsForeign(old._lock, now, session.lockId) then
 				stolen = true
 				return nil
 			end
-			data._lock = (not release) and { job = Profiles.JobId, t = now } or nil
+			data._lock = (not release) and { job = Profiles.JobId, id = session.lockId, t = now } or nil
 			return data
 		end)
 	end)
@@ -119,6 +136,7 @@ function Profiles.SaveNow(session, release)
 	if stolen then
 		warn("[Profiles] Sperre gehört einer anderen Sitzung, nicht gespeichert")
 		session.persistent = false
+		Core.Toast(session.player, Locale.T("save_lost"))
 		return false
 	end
 	session.lastSave = Core.Now()

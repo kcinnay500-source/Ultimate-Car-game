@@ -91,6 +91,9 @@ function LeaderboardService.Refresh(force)
 	cache.fetchedAt = now
 	if not LeaderboardService.Store then
 		cache.available = false
+		if LeaderboardService.OnUpdated then
+			LeaderboardService.OnUpdated(cache)
+		end
 		return false
 	end
 	LeaderboardService.Fetching = true

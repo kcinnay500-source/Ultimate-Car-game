@@ -114,17 +114,16 @@ function PressUI.Build(page, ctx)
 	T = UI.Theme
 
 	local press = UI.Card(page, 1)
-	UI.Title(press, "Schrottpresse", 1)
-	UI.Small(press, "Tippe auf das Schrottauto. Jeder Tipp presst Schrott, schnelle Serien erhöhen die Combo bis ×" .. Config.PressComboMax .. ".", 2)
-	refs.scrap = UI.Label(press, "0 kg Schrott", { Font = Enum.Font.GothamBlack, TextSize = 26, TextColor3 = T.warn, LayoutOrder = 3 })
+	refs.scrap = UI.Label(press, "0 kg Schrott", { Font = Enum.Font.GothamBlack, TextSize = 24, TextColor3 = T.warn, LayoutOrder = 3 })
 	refs.stats = UI.Small(press, "", 4)
+	UI.Small(press, "Tippe auf das Schrottauto. Jeder Tipp presst Schrott, schnelle Serien erhöhen die Combo bis ×" .. Config.PressComboMax .. ".", 8)
 
 	local area = Instance.new("TextButton")
 	area.Name = "Presse"
 	area.Text = ""
 	area.AutoButtonColor = false
 	area.BackgroundColor3 = T.bg
-	area.Size = UDim2.new(1, 0, 0, 190)
+	area.Size = UDim2.new(1, 0, 0, 170)
 	area.LayoutOrder = 5
 	area.ClipsDescendants = true
 	area.Parent = press

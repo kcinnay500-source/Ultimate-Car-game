@@ -20,6 +20,8 @@ leaderboard_unavailable,Bestenliste gerade nicht verfügbar,,,Bestenliste gerade
 leaderboard_loading,Bestenliste wird geladen …,,,Bestenliste wird geladen …
 studio_nosave,Speichern nicht aktiv: In Studio unter Game Settings > Security den API-Zugriff erlauben.,,,Speichern nicht aktiv: In Studio unter Game Settings > Security den API-Zugriff erlauben.
 profile_locked,Dein Profil wird noch in einer anderen Sitzung verwendet. Bitte in einer Minute erneut beitreten.,,,Dein Profil wird noch in einer anderen Sitzung verwendet. Bitte in einer Minute erneut beitreten.
+profile_failed,Dein Spielstand konnte gerade nicht geladen werden. Bitte gleich erneut beitreten – es ist nichts verloren.,,,Dein Spielstand konnte gerade nicht geladen werden. Bitte gleich erneut beitreten – es ist nichts verloren.
+save_lost,Dein Profil wurde in einer anderen Sitzung geöffnet. Fortschritt in dieser Sitzung wird nicht mehr gespeichert.,,,Dein Profil wurde in einer anderen Sitzung geöffnet. Fortschritt in dieser Sitzung wird nicht mehr gespeichert.
 rebirth_confirm,"Rebirth durchführen? Schrott und Presse-Upgrades werden zurückgesetzt. Du erhältst dauerhaft ×{1} Schrott. Werkstatt, Credits, Level, Tuning und Meilensteine bleiben.",,,"Rebirth durchführen? Schrott und Presse-Upgrades werden zurückgesetzt. Du erhältst dauerhaft ×{1} Schrott. Werkstatt, Credits, Level, Tuning und Meilensteine bleiben."
 level_up,Level {1} erreicht! +{2},,,Level {1} erreicht! +{2}
 pass_not_configured,Dieser Game Pass ist noch nicht eingerichtet.,,,Dieser Game Pass ist noch nicht eingerichtet.

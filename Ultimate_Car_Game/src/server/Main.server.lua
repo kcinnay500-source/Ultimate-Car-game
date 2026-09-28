@@ -48,7 +48,10 @@ LeaderboardService.OnUpdated = function(cache)
 	World.UpdateBoard(cache)
 	for _, session in pairs(Core.Sessions) do
 		if session.loaded and not session.closing then
-			LeaderboardService.Push(session)
+			local ok, err = pcall(LeaderboardService.Push, session)
+			if not ok then
+				warn("[Main] Bestenliste für " .. tostring(session.userId) .. ": " .. tostring(err))
+			end
 		end
 	end
 end
@@ -61,12 +64,16 @@ SideGamesService.Register(Actions)
 GoalsService.Register(Actions)
 LeaderboardService.Register(Actions)
 Purchases.Register(Actions)
-Actions.Register("ui_ready", function(session)
-	Core.MarkDirty(session)
+local function welcome(session)
 	LeaderboardService.Push(session)
 	if not session.persistent then
 		Core.Toast(session.player, Locale.T("studio_nosave"))
 	end
+end
+
+Actions.Register("ui_ready", function(session)
+	Core.MarkDirty(session)
+	welcome(session)
 end)
 Actions.Connect(Core.Remotes.Action)
 
@@ -75,38 +82,63 @@ local function sendSync(session)
 	Core.Remotes.Sync:FireClient(session.player, Snapshot.Build(session.profile, Core.Now(), session.passes))
 end
 
+-- Speichert beim Verlassen/Herunterfahren: Profil zuerst (gibt die Sperre frei), dann Bestenliste.
+-- Core.PendingSaves hält BindToClose offen, bis alle laufenden Speichervorgänge fertig sind.
+local function finalSave(session)
+	Core.PendingSaves += 1
+	local ok, err = pcall(function()
+		Profiles.Save(session, true)
+		LeaderboardService.Write(session, true)
+	end)
+	Core.PendingSaves -= 1
+	if not ok then
+		warn("[Main] Speichern beim Verlassen fehlgeschlagen: " .. tostring(err))
+	end
+end
+
+local function leftDuringJoin(player, session)
+	return player.Parent == nil or Core.Sessions[player] ~= session or session.closing
+end
+
 local function onPlayerAdded(player)
 	if Core.Sessions[player] then
 		return
 	end
 	local session = Core.NewSession(player)
-	local profile, persistent, status = Profiles.Load(player.UserId)
-	if player.Parent == nil or Core.Sessions[player] ~= session then
+	-- Alle Schritte, die warten können, laufen vor dem Laden des Profils
+	Purchases.OnJoin(session)
+	if leftDuringJoin(player, session) then
+		Core.Remove(player)
+		return
+	end
+	local profile, persistent, status = Profiles.Load(player.UserId, session.lockId)
+	if leftDuringJoin(player, session) then
 		-- Spieler hat während des Ladens verlassen: Sperre sofort freigeben
 		if persistent and profile then
 			session.profile = profile
 			session.persistent = true
-			Profiles.Save(session, true)
+			finalSave(session)
 		end
-		Core.Sessions[player] = nil
-		return
-	end
-	if status == "locked" then
 		Core.Remove(player)
-		player:Kick(Locale.T("profile_locked"))
 		return
 	end
+	if status == "locked" or status == "failed" then
+		Core.Remove(player)
+		player:Kick(Locale.T(status == "locked" and "profile_locked" or "profile_failed"))
+		return
+	end
+	-- Ab hier wartet nichts mehr: die Sitzung ist sofort vollständig
 	session.profile = profile
 	session.persistent = persistent
 	session.lastSave = Core.Now()
 	GoalRules.EnsureDay(profile, Core.Now())
-	Purchases.OnJoin(session)
 	PressService.OnJoin(session)
 	WorkshopService.OnJoin(session)
 	TuningService.OnJoin(session)
 	session.leaderboardWrittenCode = -1
 	session.loaded = true
 	Core.MarkDirty(session)
+	welcome(session)
 end
 
 local function onPlayerRemoving(player)
@@ -116,9 +148,8 @@ local function onPlayerRemoving(player)
 	end
 	session.closing = true
 	if session.loaded then
-		PressService.Tick(session, Core.Now())
-		LeaderboardService.Write(session, true)
-		Profiles.Save(session, true)
+		pcall(PressService.Tick, session, Core.Now())
+		finalSave(session)
 	end
 	Core.Remove(player)
 end
@@ -149,43 +180,44 @@ for _, entry in ipairs(World.Prompts) do
 end
 
 game:BindToClose(function()
-	local pending = 0
 	for _, session in pairs(Core.Sessions) do
 		if session.loaded and not session.closing then
 			session.closing = true
-			pending += 1
-			task.spawn(function()
-				LeaderboardService.Write(session, true)
-				Profiles.Save(session, true)
-				pending -= 1
-			end)
+			task.spawn(finalSave, session)
 		end
 	end
-	-- höchstens etwa 25 s warten (Roblox beendet nach 30 s)
+	-- Auch Speichervorgänge von Spielern abwarten, die gerade verlassen haben (höchstens etwa 25 s)
 	for _ = 1, 100 do
-		if pending <= 0 then
+		if Core.PendingSaves <= 0 then
 			break
 		end
 		task.wait(0.25)
 	end
 end)
 
--- Server-Tick: Maschinen, Tageswechsel, Autosave, Bestenliste
+-- Server-Tick: Maschinen, Tageswechsel, Autosave, Bestenliste. Fehler einer Sitzung stoppen nie die Schleife.
+local function tickSession(session, now)
+	PressService.Tick(session, now)
+	GoalsService.Tick(session, now)
+	Core.MarkDirty(session)
+	if now - session.lastSave >= Config.AutosaveInterval then
+		session.lastSave = now
+		task.spawn(Profiles.Save, session, false)
+	end
+	if now - session.leaderboardWrittenAt >= Config.LeaderboardWriteInterval then
+		task.spawn(LeaderboardService.Write, session, false)
+	end
+end
+
 task.spawn(function()
 	while true do
 		task.wait(Config.TickInterval)
 		local now = Core.Now()
 		for _, session in pairs(Core.Sessions) do
 			if session.loaded and not session.closing then
-				PressService.Tick(session, now)
-				GoalsService.Tick(session, now)
-				Core.MarkDirty(session)
-				if now - session.lastSave >= Config.AutosaveInterval then
-					session.lastSave = now
-					task.spawn(Profiles.Save, session, false)
-				end
-				if now - session.leaderboardWrittenAt >= Config.LeaderboardWriteInterval then
-					task.spawn(LeaderboardService.Write, session, false)
+				local ok, err = pcall(tickSession, session, now)
+				if not ok then
+					warn("[Main] Tick für " .. tostring(session.userId) .. ": " .. tostring(err))
 				end
 			end
 		end
@@ -193,13 +225,16 @@ task.spawn(function()
 	end
 end)
 
--- Sync: geänderte Zustände gebündelt an die Besitzer
+-- Sync: geänderte Zustände gebündelt an die Besitzer (höchstens alle SyncInterval Sekunden)
 task.spawn(function()
 	while true do
 		task.wait(Config.SyncInterval)
 		for _, session in pairs(Core.Sessions) do
 			if session.loaded and not session.closing and session.dirty and session.player.Parent ~= nil then
-				sendSync(session)
+				local ok, err = pcall(sendSync, session)
+				if not ok then
+					warn("[Main] Sync für " .. tostring(session.userId) .. ": " .. tostring(err))
+				end
 			end
 		end
 	end

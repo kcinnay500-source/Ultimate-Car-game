@@ -96,7 +96,8 @@ local function station(root, name, tab, cf, color)
 	folder.Name = name
 	folder.Parent = root
 	part(folder, { Name = "Platte", Size = Vector3.new(18, 0.3, 18), CFrame = cf * CFrame.new(0, 0.25, 0), Color = color:Lerp(Color3.fromRGB(30, 35, 45), 0.7), Material = Enum.Material.Concrete })
-	sign(folder, cf * CFrame.new(0, 9, 7), name, color)
+	-- Schild vorn über dem Eingang, damit Dächer und Pressen es nicht verdecken
+	sign(folder, cf * CFrame.new(0, 12, -8.5), name, color)
 	local anchor = part(folder, { Name = "PromptAnker", Size = Vector3.new(1.5, 3, 1.5), CFrame = cf * CFrame.new(0, 1.9, -5), Color = color, Material = Enum.Material.Neon })
 	prompt(anchor, tab, name)
 	return folder

@@ -251,7 +251,7 @@ Config.Milestones = {
 
 -- Server-Tick
 Config.TickInterval = 1
-Config.SyncInterval = 0.25
+Config.SyncInterval = 0.5 -- höchstens 2 Snapshots pro Sekunde und Spieler
 
 return Config
 ]]></ProtectedString></Properties></Item>
@@ -582,6 +582,8 @@ Locale.Strings = {
 	leaderboard_loading = "Bestenliste wird geladen …",
 	studio_nosave = "Speichern nicht aktiv: In Studio unter Game Settings > Security den API-Zugriff erlauben.",
 	profile_locked = "Dein Profil wird noch in einer anderen Sitzung verwendet. Bitte in einer Minute erneut beitreten.",
+	profile_failed = "Dein Spielstand konnte gerade nicht geladen werden. Bitte gleich erneut beitreten – es ist nichts verloren.",
+	save_lost = "Dein Profil wurde in einer anderen Sitzung geöffnet. Fortschritt in dieser Sitzung wird nicht mehr gespeichert.",
 	rebirth_confirm = "Rebirth durchführen? Schrott und Presse-Upgrades werden zurückgesetzt. Du erhältst dauerhaft ×{1} Schrott. Werkstatt, Credits, Level, Tuning und Meilensteine bleiben.",
 	level_up = "Level {1} erreicht! +{2}",
 	pass_not_configured = "Dieser Game Pass ist noch nicht eingerichtet.",
@@ -2043,6 +2045,8 @@ local Core = {}
 
 Core.Sessions = {} -- [Player] = Session
 Core.Remotes = nil -- { Action, Sync, Notice }
+Core.PendingSaves = 0 -- laufende Speichervorgänge beim Verlassen/Herunterfahren
+local lockCounter = 0
 
 -- Uhr (in Tests ersetzbar)
 function Core.Now()
@@ -2058,9 +2062,12 @@ function Core.NewRandom()
 end
 
 function Core.NewSession(player)
+	lockCounter += 1
 	local session = {
 		player = player,
 		userId = player.UserId,
+		-- eindeutig pro Sitzung: ein schneller Wiederbeitritt auf demselben Server wartet so auf das Speichern der alten Sitzung
+		lockId = tostring(game.JobId) .. ":" .. tostring(player.UserId) .. ":" .. tostring(lockCounter) .. ":" .. tostring(math.floor(os.clock() * 1000)),
 		profile = nil,
 		loaded = false,
 		persistent = false,
@@ -2314,6 +2321,9 @@ function LeaderboardService.Refresh(force)
 	cache.fetchedAt = now
 	if not LeaderboardService.Store then
 		cache.available = false
+		if LeaderboardService.OnUpdated then
+			LeaderboardService.OnUpdated(cache)
+		end
 		return false
 	end
 	LeaderboardService.Fetching = true
@@ -2458,7 +2468,10 @@ LeaderboardService.OnUpdated = function(cache)
 	World.UpdateBoard(cache)
 	for _, session in pairs(Core.Sessions) do
 		if session.loaded and not session.closing then
-			LeaderboardService.Push(session)
+			local ok, err = pcall(LeaderboardService.Push, session)
+			if not ok then
+				warn("[Main] Bestenliste für " .. tostring(session.userId) .. ": " .. tostring(err))
+			end
 		end
 	end
 end
@@ -2471,12 +2484,16 @@ SideGamesService.Register(Actions)
 GoalsService.Register(Actions)
 LeaderboardService.Register(Actions)
 Purchases.Register(Actions)
-Actions.Register("ui_ready", function(session)
-	Core.MarkDirty(session)
+local function welcome(session)
 	LeaderboardService.Push(session)
 	if not session.persistent then
 		Core.Toast(session.player, Locale.T("studio_nosave"))
 	end
+end
+
+Actions.Register("ui_ready", function(session)
+	Core.MarkDirty(session)
+	welcome(session)
 end)
 Actions.Connect(Core.Remotes.Action)
 
@@ -2485,38 +2502,63 @@ local function sendSync(session)
 	Core.Remotes.Sync:FireClient(session.player, Snapshot.Build(session.profile, Core.Now(), session.passes))
 end
 
+-- Speichert beim Verlassen/Herunterfahren: Profil zuerst (gibt die Sperre frei), dann Bestenliste.
+-- Core.PendingSaves hält BindToClose offen, bis alle laufenden Speichervorgänge fertig sind.
+local function finalSave(session)
+	Core.PendingSaves += 1
+	local ok, err = pcall(function()
+		Profiles.Save(session, true)
+		LeaderboardService.Write(session, true)
+	end)
+	Core.PendingSaves -= 1
+	if not ok then
+		warn("[Main] Speichern beim Verlassen fehlgeschlagen: " .. tostring(err))
+	end
+end
+
+local function leftDuringJoin(player, session)
+	return player.Parent == nil or Core.Sessions[player] ~= session or session.closing
+end
+
 local function onPlayerAdded(player)
 	if Core.Sessions[player] then
 		return
 	end
 	local session = Core.NewSession(player)
-	local profile, persistent, status = Profiles.Load(player.UserId)
-	if player.Parent == nil or Core.Sessions[player] ~= session then
+	-- Alle Schritte, die warten können, laufen vor dem Laden des Profils
+	Purchases.OnJoin(session)
+	if leftDuringJoin(player, session) then
+		Core.Remove(player)
+		return
+	end
+	local profile, persistent, status = Profiles.Load(player.UserId, session.lockId)
+	if leftDuringJoin(player, session) then
 		-- Spieler hat während des Ladens verlassen: Sperre sofort freigeben
 		if persistent and profile then
 			session.profile = profile
 			session.persistent = true
-			Profiles.Save(session, true)
+			finalSave(session)
 		end
-		Core.Sessions[player] = nil
-		return
-	end
-	if status == "locked" then
 		Core.Remove(player)
-		player:Kick(Locale.T("profile_locked"))
 		return
 	end
+	if status == "locked" or status == "failed" then
+		Core.Remove(player)
+		player:Kick(Locale.T(status == "locked" and "profile_locked" or "profile_failed"))
+		return
+	end
+	-- Ab hier wartet nichts mehr: die Sitzung ist sofort vollständig
 	session.profile = profile
 	session.persistent = persistent
 	session.lastSave = Core.Now()
 	GoalRules.EnsureDay(profile, Core.Now())
-	Purchases.OnJoin(session)
 	PressService.OnJoin(session)
 	WorkshopService.OnJoin(session)
 	TuningService.OnJoin(session)
 	session.leaderboardWrittenCode = -1
 	session.loaded = true
 	Core.MarkDirty(session)
+	welcome(session)
 end
 
 local function onPlayerRemoving(player)
@@ -2526,9 +2568,8 @@ local function onPlayerRemoving(player)
 	end
 	session.closing = true
 	if session.loaded then
-		PressService.Tick(session, Core.Now())
-		LeaderboardService.Write(session, true)
-		Profiles.Save(session, true)
+		pcall(PressService.Tick, session, Core.Now())
+		finalSave(session)
 	end
 	Core.Remove(player)
 end
@@ -2559,43 +2600,44 @@ for _, entry in ipairs(World.Prompts) do
 end
 
 game:BindToClose(function()
-	local pending = 0
 	for _, session in pairs(Core.Sessions) do
 		if session.loaded and not session.closing then
 			session.closing = true
-			pending += 1
-			task.spawn(function()
-				LeaderboardService.Write(session, true)
-				Profiles.Save(session, true)
-				pending -= 1
-			end)
+			task.spawn(finalSave, session)
 		end
 	end
-	-- höchstens etwa 25 s warten (Roblox beendet nach 30 s)
+	-- Auch Speichervorgänge von Spielern abwarten, die gerade verlassen haben (höchstens etwa 25 s)
 	for _ = 1, 100 do
-		if pending <= 0 then
+		if Core.PendingSaves <= 0 then
 			break
 		end
 		task.wait(0.25)
 	end
 end)
 
--- Server-Tick: Maschinen, Tageswechsel, Autosave, Bestenliste
+-- Server-Tick: Maschinen, Tageswechsel, Autosave, Bestenliste. Fehler einer Sitzung stoppen nie die Schleife.
+local function tickSession(session, now)
+	PressService.Tick(session, now)
+	GoalsService.Tick(session, now)
+	Core.MarkDirty(session)
+	if now - session.lastSave >= Config.AutosaveInterval then
+		session.lastSave = now
+		task.spawn(Profiles.Save, session, false)
+	end
+	if now - session.leaderboardWrittenAt >= Config.LeaderboardWriteInterval then
+		task.spawn(LeaderboardService.Write, session, false)
+	end
+end
+
 task.spawn(function()
 	while true do
 		task.wait(Config.TickInterval)
 		local now = Core.Now()
 		for _, session in pairs(Core.Sessions) do
 			if session.loaded and not session.closing then
-				PressService.Tick(session, now)
-				GoalsService.Tick(session, now)
-				Core.MarkDirty(session)
-				if now - session.lastSave >= Config.AutosaveInterval then
-					session.lastSave = now
-					task.spawn(Profiles.Save, session, false)
-				end
-				if now - session.leaderboardWrittenAt >= Config.LeaderboardWriteInterval then
-					task.spawn(LeaderboardService.Write, session, false)
+				local ok, err = pcall(tickSession, session, now)
+				if not ok then
+					warn("[Main] Tick für " .. tostring(session.userId) .. ": " .. tostring(err))
 				end
 			end
 		end
@@ -2603,13 +2645,16 @@ task.spawn(function()
 	end
 end)
 
--- Sync: geänderte Zustände gebündelt an die Besitzer
+-- Sync: geänderte Zustände gebündelt an die Besitzer (höchstens alle SyncInterval Sekunden)
 task.spawn(function()
 	while true do
 		task.wait(Config.SyncInterval)
 		for _, session in pairs(Core.Sessions) do
 			if session.loaded and not session.closing and session.dirty and session.player.Parent ~= nil then
-				sendSync(session)
+				local ok, err = pcall(sendSync, session)
+				if not ok then
+					warn("[Main] Sync für " .. tostring(session.userId) .. ": " .. tostring(err))
+				end
 			end
 		end
 	end
@@ -2704,9 +2749,11 @@ return PressService
 -- Ohne DataStore-Zugriff (z. B. Studio ohne API-Freigabe) läuft das Spiel mit einem
 -- nicht gespeicherten Sitzungsprofil weiter; ein solches Profil überschreibt nie echte Daten.
 local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Rules = require(Shared:WaitForChild("Rules"))
+local Locale = require(Shared:WaitForChild("Locale"))
 local DataUtil = require(script.Parent:WaitForChild("DataUtil"))
 local Core = require(script.Parent:WaitForChild("Core"))
 
@@ -2736,14 +2783,26 @@ function Profiles.Key(userId)
 	return Config.ProfileKeyPrefix .. tostring(userId)
 end
 
-local function lockIsForeign(lock, now)
-	return type(lock) == "table" and lock.job ~= Profiles.JobId and type(lock.t) == "number" and now - lock.t < Config.SessionLockTimeout and now >= lock.t
+-- Eine Sperre gehört genau einer Sitzung (lockId). Fremd und frisch = nicht überschreiben.
+local function lockIsForeign(lock, now, lockId)
+	return type(lock) == "table" and lock.id ~= lockId and type(lock.t) == "number" and now - lock.t < Config.SessionLockTimeout and now >= lock.t
 end
 
--- Rückgabe: profile, persistent, status ("ok" | "unavailable" | "locked")
-function Profiles.Load(userId)
+function Profiles.IsStudio()
+	local ok, result = pcall(function()
+		return RunService:IsStudio()
+	end)
+	return ok and result == true
+end
+
+-- Rückgabe: profile, persistent, status ("ok" | "unavailable" | "locked" | "failed")
+-- "unavailable": Studio ohne DataStore -> Sitzungsprofil. "failed": Live-Server mit DataStore-Ausfall -> Spieler erneut beitreten lassen.
+function Profiles.Load(userId, lockId)
 	if not Profiles.Available then
-		return Rules.LoadData(nil), false, "unavailable"
+		if Profiles.IsStudio() then
+			return Rules.LoadData(nil), false, "unavailable"
+		end
+		return nil, false, "failed"
 	end
 	local key = Profiles.Key(userId)
 	for attempt = 1, Profiles.LockRetries do
@@ -2752,17 +2811,20 @@ function Profiles.Load(userId)
 			return Profiles.Store:UpdateAsync(key, function(old)
 				local now = Core.Now()
 				local data = type(old) == "table" and old or {}
-				if lockIsForeign(data._lock, now) then
+				if lockIsForeign(data._lock, now, lockId) then
 					lockedByOther = true
 					return nil
 				end
-				data._lock = { job = Profiles.JobId, t = now }
+				data._lock = { job = Profiles.JobId, id = lockId, t = now }
 				return data
 			end)
 		end)
 		if not ok then
 			warn("[Profiles] Laden fehlgeschlagen: " .. tostring(result))
-			return Rules.LoadData(nil), false, "unavailable"
+			if Profiles.IsStudio() then
+				return Rules.LoadData(nil), false, "unavailable"
+			end
+			return nil, false, "failed"
 		end
 		if not lockedByOther then
 			return Rules.LoadData(result), true, "ok"
@@ -2806,11 +2868,11 @@ function Profiles.SaveNow(session, release)
 	local ok, err = DataUtil.Retry(function()
 		return Profiles.Store:UpdateAsync(key, function(old)
 			local now = Core.Now()
-			if type(old) == "table" and lockIsForeign(old._lock, now) then
+			if type(old) == "table" and lockIsForeign(old._lock, now, session.lockId) then
 				stolen = true
 				return nil
 			end
-			data._lock = (not release) and { job = Profiles.JobId, t = now } or nil
+			data._lock = (not release) and { job = Profiles.JobId, id = session.lockId, t = now } or nil
 			return data
 		end)
 	end)
@@ -2821,6 +2883,7 @@ function Profiles.SaveNow(session, release)
 	if stolen then
 		warn("[Profiles] Sperre gehört einer anderen Sitzung, nicht gespeichert")
 		session.persistent = false
+		Core.Toast(session.player, Locale.T("save_lost"))
 		return false
 	end
 	session.lastSave = Core.Now()
@@ -3159,7 +3222,8 @@ local function station(root, name, tab, cf, color)
 	folder.Name = name
 	folder.Parent = root
 	part(folder, { Name = "Platte", Size = Vector3.new(18, 0.3, 18), CFrame = cf * CFrame.new(0, 0.25, 0), Color = color:Lerp(Color3.fromRGB(30, 35, 45), 0.7), Material = Enum.Material.Concrete })
-	sign(folder, cf * CFrame.new(0, 9, 7), name, color)
+	-- Schild vorn über dem Eingang, damit Dächer und Pressen es nicht verdecken
+	sign(folder, cf * CFrame.new(0, 12, -8.5), name, color)
 	local anchor = part(folder, { Name = "PromptAnker", Size = Vector3.new(1.5, 3, 1.5), CFrame = cf * CFrame.new(0, 1.9, -5), Color = color, Material = Enum.Material.Neon })
 	prompt(anchor, tab, name)
 	return folder
@@ -3972,17 +4036,16 @@ function PressUI.Build(page, ctx)
 	T = UI.Theme
 
 	local press = UI.Card(page, 1)
-	UI.Title(press, "Schrottpresse", 1)
-	UI.Small(press, "Tippe auf das Schrottauto. Jeder Tipp presst Schrott, schnelle Serien erhöhen die Combo bis ×" .. Config.PressComboMax .. ".", 2)
-	refs.scrap = UI.Label(press, "0 kg Schrott", { Font = Enum.Font.GothamBlack, TextSize = 26, TextColor3 = T.warn, LayoutOrder = 3 })
+	refs.scrap = UI.Label(press, "0 kg Schrott", { Font = Enum.Font.GothamBlack, TextSize = 24, TextColor3 = T.warn, LayoutOrder = 3 })
 	refs.stats = UI.Small(press, "", 4)
+	UI.Small(press, "Tippe auf das Schrottauto. Jeder Tipp presst Schrott, schnelle Serien erhöhen die Combo bis ×" .. Config.PressComboMax .. ".", 8)
 
 	local area = Instance.new("TextButton")
 	area.Name = "Presse"
 	area.Text = ""
 	area.AutoButtonColor = false
 	area.BackgroundColor3 = T.bg
-	area.Size = UDim2.new(1, 0, 0, 190)
+	area.Size = UDim2.new(1, 0, 0, 170)
 	area.LayoutOrder = 5
 	area.ClipsDescendants = true
 	area.Parent = press
@@ -4424,6 +4487,7 @@ return TuningUI
 -- und kleine Bausteine. Touch-Flächen sind mindestens 44 px hoch.
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
 
 local UI = {}
 
@@ -4625,21 +4689,36 @@ function UI.Build()
 	gui.ResetOnSpawn = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.IgnoreGuiInset = false
+	gui.DisplayOrder = 10
 	gui.Parent = player:WaitForChild("PlayerGui")
 	UI.Gui = gui
 
-	-- HUD
-	local hud = UI.Frame(gui, {
-		Name = "HUD", BackgroundColor3 = T.panel, BackgroundTransparency = 0.1,
-		Size = UDim2.new(0, 260, 0, 0), Position = UDim2.new(0, 10, 0, 10),
+	-- Obere Leiste (zentriert, damit sie weder den Chat links oben noch sich selbst überdeckt)
+	local top = UI.Frame(gui, {
+		Name = "Top", BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 6), Size = UDim2.new(0.94, 0, 0, 0),
 	})
+	local topLimit = Instance.new("UISizeConstraint")
+	topLimit.MaxSize = Vector2.new(480, 400)
+	topLimit.Parent = top
+	UI.List(top, 6)
+	UI.Top = top
+
+	local hud = UI.Frame(top, { Name = "HUD", BackgroundColor3 = T.panel, BackgroundTransparency = 0.1, LayoutOrder = 1 })
 	UI.Corner(hud, 12)
 	UI.Padding(hud, 8)
 	UI.List(hud, 4)
-	UI.HudCredits = UI.Label(hud, "0 Cr", { Font = Enum.Font.GothamBold, TextSize = 18, LayoutOrder = 1 })
-	UI.HudScrap = UI.Label(hud, "0 kg Schrott", { TextSize = 15, TextColor3 = T.warn, LayoutOrder = 2 })
-	UI.HudLevel = UI.Label(hud, "Level 1", { TextSize = 14, TextColor3 = T.muted, LayoutOrder = 3 })
-	local _, xpFill = UI.Progress(hud, T.accent2, 4)
+	local money = UI.Frame(hud, { BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, 0, 0, 22), LayoutOrder = 1 })
+	UI.HudCredits = UI.Label(money, "0 Cr", {
+		Font = Enum.Font.GothamBold, TextSize = 17, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(0.5, -4, 1, 0),
+		TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	UI.HudScrap = UI.Label(money, "0 kg Schrott", {
+		TextSize = 15, TextColor3 = T.warn, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(0.5, -4, 1, 0),
+		Position = UDim2.new(0.5, 4, 0, 0), TextXAlignment = Enum.TextXAlignment.Right, TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	UI.HudLevel = UI.Label(hud, "Level 1", { TextSize = 14, TextColor3 = T.muted, LayoutOrder = 2 })
+	local _, xpFill = UI.Progress(hud, T.accent2, 3)
 	UI.HudXp = xpFill
 	UI.Hud = hud
 
@@ -4649,11 +4728,10 @@ function UI.Build()
 	goal.AutoButtonColor = true
 	goal.BackgroundColor3 = T.panel
 	goal.BackgroundTransparency = 0.1
-	goal.Size = UDim2.new(0, 300, 0, 56)
-	goal.AnchorPoint = Vector2.new(1, 0)
-	goal.Position = UDim2.new(1, -10, 0, 10)
+	goal.Size = UDim2.new(1, 0, 0, UI.MinTouch + 4)
+	goal.LayoutOrder = 2
 	goal.Text = ""
-	goal.Parent = gui
+	goal.Parent = top
 	UI.Corner(goal, 12)
 	UI.Padding(goal, 8)
 	UI.List(goal, 4)
@@ -4678,6 +4756,7 @@ function UI.Build()
 	local panel = UI.Frame(gui, {
 		Name = "Panel", BackgroundColor3 = T.bg, AutomaticSize = Enum.AutomaticSize.None,
 		AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0.97, 0, 0.94, 0), Visible = false, ZIndex = 5,
+		Active = true, -- schluckt Touch/Drag, damit Kamera und Figur ruhig bleiben
 	})
 	UI.Corner(panel, 14)
 	local limit = Instance.new("UISizeConstraint")
@@ -4686,6 +4765,7 @@ function UI.Build()
 	UI.Panel = panel
 
 	local header = UI.Frame(panel, { BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, -20, 0, 48), Position = UDim2.new(0, 10, 0, 6) })
+	UI.Header = header
 	UI.HeaderInfo = UI.Label(header, "", { Font = Enum.Font.GothamBold, TextSize = 16, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, -60, 1, 0), TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Center })
 	UI.Button(header, "✕", T.danger, function()
 		UI.Close()
@@ -4701,6 +4781,7 @@ function UI.Build()
 	tabs.ScrollingDirection = Enum.ScrollingDirection.X
 	tabs.ScrollBarThickness = 4
 	tabs.Parent = panel
+	UI.TabBar = tabs
 	UI.List(tabs, 6, true)
 
 	local content = Instance.new("ScrollingFrame")
@@ -4737,7 +4818,7 @@ function UI.Build()
 	UI.ToastHost = toasts
 
 	-- Bestätigungsdialog
-	local shade = UI.Frame(gui, { BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.4, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 30 })
+	local shade = UI.Frame(gui, { BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.4, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 30, Active = true })
 	local box = UI.Card(shade)
 	box.ZIndex = 31
 	box.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -4761,7 +4842,40 @@ function UI.Build()
 	end, { LayoutOrder = 3, ZIndex = 32, TextColor3 = T.text })
 	UI.Shade = shade
 
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(UI.ApplyLayout)
+	UI.ApplyLayout()
 	return gui
+end
+
+-- Kompakt-Layout für niedrige Bildschirme (z. B. Handy quer, 844×390): Tabs in die Kopfzeile,
+-- damit für den Inhalt genug Höhe bleibt.
+UI.Compact = false
+function UI.ApplyLayout()
+	if not UI.Gui then
+		return
+	end
+	local h = UI.Gui.AbsoluteSize.Y
+	local compact = h > 0 and h < 500
+	UI.Compact = compact
+	if compact then
+		UI.HeaderInfo.Visible = false
+		UI.TabBar.Position = UDim2.new(0, 10, 0, 6)
+		UI.TabBar.Size = UDim2.new(1, -78, 0, 50)
+		UI.Content.Position = UDim2.new(0, 10, 0, 60)
+		UI.Content.Size = UDim2.new(1, -20, 1, -64)
+	else
+		UI.HeaderInfo.Visible = true
+		UI.TabBar.Position = UDim2.new(0, 10, 0, 58)
+		UI.TabBar.Size = UDim2.new(1, -20, 0, 54)
+		UI.Content.Position = UDim2.new(0, 10, 0, 116)
+		UI.Content.Size = UDim2.new(1, -20, 1, -124)
+	end
+end
+
+local function setTouchControls(enabled)
+	pcall(function()
+		GuiService.TouchControlsEnabled = enabled
+	end)
 end
 
 function UI.Confirm(text, onYes)
@@ -4819,21 +4933,23 @@ end
 
 function UI.Open(key)
 	UI.IsOpen = true
+	UI.ApplyLayout()
 	UI.Panel.Visible = true
-	UI.Hud.Visible = false
-	UI.GoalButton.Visible = false
+	UI.Top.Visible = false
 	UI.MenuButton.Visible = false
+	setTouchControls(false)
 	UI.Show(key or UI.CurrentTab or "overview")
-	UI.Panel.Size = UDim2.new(0.9, 0, 0.88, 0)
-	TweenService:Create(UI.Panel, TweenInfo.new(0.12), { Size = UDim2.new(0.97, 0, 0.94, 0) }):Play()
+	local full = UI.Compact and UDim2.new(0.99, 0, 0.98, 0) or UDim2.new(0.97, 0, 0.94, 0)
+	UI.Panel.Size = UDim2.new(full.X.Scale - 0.05, 0, full.Y.Scale - 0.05, 0)
+	TweenService:Create(UI.Panel, TweenInfo.new(0.12), { Size = full }):Play()
 end
 
 function UI.Close()
 	UI.IsOpen = false
 	UI.Panel.Visible = false
-	UI.Hud.Visible = true
-	UI.GoalButton.Visible = true
+	UI.Top.Visible = true
 	UI.MenuButton.Visible = true
+	setTouchControls(true)
 end
 
 return UI
