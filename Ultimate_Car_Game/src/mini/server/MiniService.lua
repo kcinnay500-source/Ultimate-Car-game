@@ -9,6 +9,7 @@
 --   OnSettled(p)       nach erfolgreichem 'settle'
 --   OnActivity(p)      nach erfolgreichem 'yard'
 --   OnLeave(p, wasWritable)  PlayerRemoving / BindToClose, vor P.Save; blockiert nicht
+--   OnSaved(p, saved)  nach P.Save(release): Bestenliste nur, wenn dieses letzte Speichern gelang
 --   Pending()          laufende Bestenlisten-Schreibvorgänge (für BindToClose)
 -- Geld (d.money) ändern Minispiele nur in Handle (also innerhalb von request()); danach ruft
 -- MiniService ctx.changed(p) (höchstens 2×/s, dazwischen ctx.push und ein nachgeholtes changed im Tick).
@@ -114,7 +115,11 @@ end
 local function sendSnapshot(ms, t)
 	ms.dirty = false
 	ms.lastSent = t
-	emit(ms, MiniNet.Events.Snapshot, MiniSnapshot.Build(ms.p.profile.data, t, ms.passes, ms.quiz))
+	local snap = MiniSnapshot.Build(ms.p.profile.data, t, ms.passes, ms.quiz)
+	if type(snap.press) == "table" then
+		snap.press.clickAcks = table.clone(ms.clickAcks or {}) -- bestätigte Klickpakete (PressUI-Vorhersage)
+	end
+	emit(ms, MiniNet.Events.Snapshot, snap)
 end
 
 -- Sendet, wenn sich etwas geändert hat (oder bei Produktion alle SnapshotIdleInterval), nie öfter als 2×/s.
@@ -275,6 +280,12 @@ function Mini.Handle(p, action, args)
 		return "cooldown"
 	end
 	if seen(ms, clean.rid) then
+		if action == "mini_press_click" then
+			-- wiederholtes Klickpaket: schon gezählt, nur erneut bestätigen
+			PressService.Ack(ms, clean.rid)
+			ms.dirty = true
+			flush(ms, t)
+		end
 		return "duplicate"
 	end
 	local d = p.profile.data
@@ -322,15 +333,23 @@ function Mini.OnJoin(p)
 	local ok, err = pcall(function()
 		local t = now()
 		MiniRules.EnsureDay(d, t)
-		local offline = PressService.OnJoin(ms, d, t)
+		-- Die Presse-Uhr springt hier auf jetzt; die Offline-Sekunden merkt sich ms.offlinePending, bis sie
+		-- gutgeschrieben sind (nach der Game-Pass-Prüfung oder spätestens in OnLeave, falls der Spieler
+		-- während der Prüfung geht – sonst wäre die Offline-Zeit mit dem neuen lastTick endgültig verloren).
+		ms.offlinePending = PressService.OnJoin(ms, d, t)
 		TuningService.OnJoin(ms, d, t)
 		-- Game Passes (kann warten), danach den Offline-Ertrag gutschreiben: nur Schrott, nie Geld.
 		task.spawn(function()
 			local passes = MiniPasses.Check(ms.userId)
 			if Mini.Sessions[p.player] ~= ms or not ctx or ctx.getSession(p.player) ~= p then
-				return
+				return -- OnLeave hat den Offline-Ertrag schon (ohne Pass-Bonus) gutgeschrieben
 			end
 			ms.passes = passes
+			local offline = ms.offlinePending
+			ms.offlinePending = nil
+			if not offline then
+				return
+			end
 			local info = PressService.ApplyOffline(ms, d, offline, now())
 			if info then
 				queueNotice(ms, "offline", info)
@@ -357,6 +376,12 @@ function Mini.Tick(p, t)
 		end
 		PressService.Tick(ms, d, t)
 		if GoalsService.Tick(ms, d, t) then
+			ms.dirty = true
+		end
+		-- Schrottplatz: sobald das Fahrzeug zerlegt werden darf, einmal neuen Snapshot senden
+		local sy = d.games.scrapyard
+		if sy.vehicle and ms.scrapReadySent ~= sy.readyAt and SideGameRules.DismantleIn(d, t) <= 0 then
+			ms.scrapReadySent = sy.readyAt
 			ms.dirty = true
 		end
 		if api.writable(ms) and LeaderboardService.CanWrite(true) and LeaderboardService.WriteDue(ms, t) then
@@ -398,7 +423,13 @@ function Mini.OnActivity(p)
 	end
 end
 
--- Letzter Presse-Tick und Bestenliste. wasWritable = profile.writable vor P.Save(release).
+-- Sitzungen, die gerade verlassen werden und auf das Ergebnis des letzten Speicherns warten.
+Mini.Leaving = setmetatable({}, { __mode = "k" }) -- [p] = { ms, writable }
+
+-- Letzter Presse-Tick. wasWritable = profile.writable vor P.Save(release).
+-- Die Bestenliste wird erst in OnSaved geschrieben: nur ein tatsächlich gespeicherter Lebenszeit-Wert
+-- darf in die globale Liste (sonst zeigte sie nach verweigertem Speichern – offener Robux-Beleg,
+-- verlorene Sperre – einen Wert, den das Profil nicht hat, und fiele beim nächsten Besuch zurück).
 -- Mehrfacher Aufruf (BindToClose + PlayerRemoving) ist harmlos.
 function Mini.OnLeave(p, wasWritable)
 	local ms = Mini.Sessions[p.player]
@@ -406,9 +437,26 @@ function Mini.OnLeave(p, wasWritable)
 		return
 	end
 	Mini.Sessions[p.player] = nil
+	if ms.offlinePending then
+		-- Verlassen vor Ende der Game-Pass-Prüfung: Offline-Ertrag jetzt (ohne Pass-Bonus) verbuchen.
+		local offline = ms.offlinePending
+		ms.offlinePending = nil
+		pcall(PressService.ApplyOffline, ms, p.profile.data, offline, now())
+	end
 	pcall(PressService.Tick, ms, p.profile.data, now())
-	if wasWritable == true and LeaderboardService.CanWrite(true) then
-		task.spawn(LeaderboardService.Write, ms, true, true)
+	Mini.Leaving[p] = { ms = ms, writable = wasWritable == true and not p.profile.receiptPending }
+end
+
+-- Nach P.Save(release): saved = Rückgabe von P.Save. Blockiert nicht (Schreiben in eigenem Task,
+-- BindToClose wartet über Mini.Pending()).
+function Mini.OnSaved(p, saved)
+	local entry = Mini.Leaving[p]
+	if not entry or saved ~= true then
+		return
+	end
+	Mini.Leaving[p] = nil
+	if entry.writable and LeaderboardService.CanWrite(true) then
+		task.spawn(LeaderboardService.Write, entry.ms, true, true)
 	end
 end
 

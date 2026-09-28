@@ -4,12 +4,13 @@
 local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 local SideGameRules = require(MiniShared:WaitForChild("SideGameRules"))
+local QuizBank = require(script.Parent:WaitForChild("QuizBank")) -- nur Server: Lösungen nie beim Client
 
 local SideGamesService = {}
 
 function SideGamesService.Register(Actions, api)
-	Actions.Register("mini_scrapyard_buy", function(ms, _, d)
-		local ok, res = SideGameRules.BuyVehicle(d)
+	Actions.Register("mini_scrapyard_buy", function(ms, _, d, now)
+		local ok, res = SideGameRules.BuyVehicle(d, now)
 		api.toast(ms, ok and "Fahrzeug gekauft. Jetzt zerlegen!" or res)
 	end)
 
@@ -34,13 +35,13 @@ function SideGamesService.Register(Actions, api)
 	end)
 
 	Actions.Register("mini_quiz_new", function(ms, _, _, now)
-		SideGameRules.NewQuestion(ms.quiz, ms.rng, now)
+		SideGameRules.NewQuestion(ms.quiz, ms.rng, now, QuizBank.Questions)
 	end)
 
 	Actions.Register("mini_quiz_answer", function(ms, data, d, now)
 		local ok, res = SideGameRules.Answer(d, ms.quiz, data.token, data.choice, now)
 		if ok then
-			api.notice(ms, "quiz", { correct = res.correct, correctPos = res.correctPos, choice = data.choice, credits = res.credits })
+			api.notice(ms, "quiz", { correct = res.correct, correctPos = res.correctPos, choice = data.choice, credits = res.credits, capped = res.capped })
 		end
 	end)
 
@@ -54,7 +55,8 @@ function SideGamesService.Register(Actions, api)
 			if res.crashed then
 				api.toast(ms, "Blechschaden! Der Weg war blockiert. Serie beendet.")
 			elseif res.solved then
-				api.toast(ms, "Parkplatz frei! +" .. MiniLocale.Credits(res.credits))
+				api.toast(ms, res.capped and "Parkplatz frei! Für heute gibt es dafür keine Credits mehr."
+					or ("Parkplatz frei! +" .. MiniLocale.Credits(res.credits)))
 			end
 		end
 	end)

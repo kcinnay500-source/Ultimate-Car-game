@@ -7,6 +7,9 @@ local ScrapyardUI = {}
 
 local UI, Remote, T
 local refs = {}
+local vehicle = false
+local readyClock = 0 -- os.clock(), ab dem der Server das Zerlegen erlaubt (aus sy.readyIn)
+local shownWait = -1
 
 function ScrapyardUI.Build(page, ctx)
 	UI, Remote = ctx.UI, ctx.Remote
@@ -62,13 +65,32 @@ function ScrapyardUI.Render(s)
 		"Lager: %d Altteile · Werkzeugbonus +%s · Chance auf seltene Funde %s",
 		s.parts or 0, MiniLocale.Percent((sy.toolBonus or 1) - 1), MiniLocale.Percent(sy.rareChance or 0)
 	)
-	refs.buy.Text = "Fahrzeug kaufen (" .. MiniLocale.Credits(sy.carCost or 0) .. ")"
-	UI.SetEnabled(refs.buy, not sy.vehicle and (s.credits or 0) >= (sy.carCost or math.huge), T.green)
-	UI.SetEnabled(refs.dismantle, sy.vehicle == true, T.blue)
+	local left = sy.carsLeft or 0
+	refs.buy.Text = left > 0 and ("Fahrzeug kaufen (" .. MiniLocale.Credits(sy.carCost or 0) .. " · heute noch " .. left .. ")")
+		or "Heute keine Fahrzeuge mehr"
+	UI.SetEnabled(refs.buy, not sy.vehicle and left > 0 and (s.credits or 0) >= (sy.carCost or math.huge), T.green)
+	vehicle = sy.vehicle == true
+	readyClock = os.clock() + math.max(0, tonumber(sy.readyIn) or 0)
+	shownWait = -1
+	ScrapyardUI.Step()
 	refs.sellInfo.Text = string.format("%d Altteile für %s verkaufen.", sy.sellParts or 0, MiniLocale.Credits(sy.sellCredits or 0))
 	refs.sell.Text = "Verkaufen (+" .. MiniLocale.Credits(sy.sellCredits or 0) .. ")"
 	UI.SetEnabled(refs.sell, (s.parts or 0) >= (sy.sellParts or math.huge), T.green)
 	refs.upgrade.Render(s, MiniLocale.Credits)
+end
+
+-- Pro Frame (sichtbarer Tab): Countdown bis zum Zerlegen lokal herunterzählen.
+function ScrapyardUI.Step()
+	if not refs.dismantle then
+		return
+	end
+	local wait = vehicle and math.max(0, math.ceil(readyClock - os.clock())) or 0
+	if wait == shownWait then
+		return
+	end
+	shownWait = wait
+	refs.dismantle.Text = wait > 0 and ("Wird vorbereitet … " .. wait .. " s") or "Fahrzeug zerlegen"
+	UI.SetEnabled(refs.dismantle, vehicle and wait <= 0, T.blue)
 end
 
 return ScrapyardUI

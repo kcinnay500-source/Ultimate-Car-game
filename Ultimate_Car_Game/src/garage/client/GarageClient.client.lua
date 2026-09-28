@@ -501,7 +501,7 @@ task.spawn(function()
         isTabletOpen=function() return visible end,
         closeTablet=function() visible=false;tablet.Visible=false;if protectCoreUI then protectCoreUI() end end,
         openTablet=function(key) showPage(key) end,
-        hideHud=function() refresh();refreshVehicleActions() end,
+        hideHud=function() refresh();refreshVehicleActions();if protectCoreUI then protectCoreUI() end end, -- 3.0: Spielerliste sofort mitschalten
         toast=toast,
     })
     if not ok then warn("[3.0] Minispiele-Start fehlgeschlagen: "..tostring(err)) end
@@ -512,7 +512,7 @@ local lastListSetting
 local backpackDisabled=false
 protectCoreUI=function()
     if not backpackDisabled then backpackDisabled=pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack,false) end) end
-    local desired=(not visible and not overlay.Visible) and originalPlayerList or false
+    local desired=(not visible and not overlay.Visible and not MiniClient.IsOpen()) and originalPlayerList or false -- 3.0: auch über dem Minispiel-Panel aus
     if desired~=lastListSetting then
         local ok=pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,desired) end)
         if ok then lastListSetting=desired end

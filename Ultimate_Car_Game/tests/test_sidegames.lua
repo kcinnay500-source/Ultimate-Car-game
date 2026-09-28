@@ -26,6 +26,13 @@ return {
 		T.eq(d.money, money - MC.ScrapyardCarCost, "kein zweites Fahrzeug gleichzeitig")
 		local scrap, lifetime = d.games.press.scrap, d.games.press.lifetime
 		local inv = H.Copy(d.inventory)
+		-- Vorbereitungszeit: sofort zerlegen geht nicht (Kauf→Zerlegen→Verkauf ist sonst eine Endlos-Geldquelle)
+		g:Advance(0.2)
+		g:Act(player, "mini_scrapyard_dismantle", { rid = 40 })
+		T.eq(#g:Notices(player, "scrapyard"), 0, "Zerlegen vor Ablauf der Vorbereitungszeit abgelehnt")
+		T.eq(d.games.scrapyard.vehicle, true, "Fahrzeug steht noch")
+		T.check(g:HasToast(player, "vorbereitet"), "Hinweis auf die Vorbereitungszeit")
+		g:Advance(MC.ScrapyardDismantleSeconds)
 		g:Act(player, "mini_scrapyard_dismantle", { rid = 4 })
 		local results = g:Notices(player, "scrapyard")
 		T.eq(#results, 1, "Ergebnis gemeldet")
@@ -60,7 +67,7 @@ return {
 			d.money = 1e6
 			g:Advance(0.2)
 			g:Act(player, "mini_scrapyard_buy", { rid = 100 + i })
-			g:Advance(0.2)
+			g:Advance(MC.ScrapyardDismantleSeconds + 0.2)
 			local mark = g:Mark()
 			g:Act(player, "mini_scrapyard_dismantle", { rid = 200 + i })
 			local n = g:Notices(player, "scrapyard", mark)[1]
@@ -73,6 +80,67 @@ return {
 			end
 		end
 		T.eq(rareSeen, 5, "bei 100 % Chance immer selten")
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+	end },
+
+	{ "Schrottplatz: kein Endlos-Gewinn – Vorbereitungszeit und Tageslimit, auch nach Rejoin", function(T, H)
+		local g = H.Garage()
+		local MC, SG = g:MiniShared("MiniConfig"), g:MiniShared("SideGameRules")
+		local player = g:Join(404, { name = "Max" })
+		g:Advance(1)
+		local d = g:D(player)
+		d.games.press.upgrades = {}
+		d.games.scrapyardLevel = 100
+		d.toolLevel = 10
+		-- Skript mit vollem Remote-Budget: kaufen, zerlegen, verkaufen so schnell wie möglich (10 Minuten)
+		local start = d.money
+		d.money = 1e7
+		local rid, cycles = 0, 0
+		local t0 = g:Now()
+		while g:Now() - t0 < 600 do
+			rid += 1
+			g:Act(player, "mini_scrapyard_buy", { rid = rid })
+			g:Advance(0.13)
+			rid += 1
+			local before = d.games.stats.dismantled
+			g:Act(player, "mini_scrapyard_dismantle", { rid = rid })
+			if d.games.stats.dismantled > before then
+				cycles += 1
+			end
+			g:Advance(0.13)
+			rid += 1
+			g:Act(player, "mini_scrapyard_sell", { rid = rid })
+			g:Advance(0.13)
+		end
+		T.check(cycles <= MC.ScrapyardCarsPerDay, "höchstens " .. MC.ScrapyardCarsPerDay .. " Fahrzeuge pro Tag (" .. cycles .. ")")
+		T.check(cycles <= 600 / MC.ScrapyardDismantleSeconds + 1, "höchstens ein Fahrzeug je Vorbereitungszeit (" .. cycles .. ")")
+		T.eq(SG.ScrapyardCarsLeft(d, g:Now()), 0, "Tageslimit erreicht")
+		local money = d.money
+		g:Act(player, "mini_scrapyard_buy", { rid = rid + 1 })
+		T.eq(d.money, money, "nach dem Tageslimit kein Kauf")
+		T.check(g:HasToast(player, "Morgen"), "Hinweis auf morgen")
+		-- Rejoin setzt nichts zurück (Tageszähler im Profil)
+		g:Leave(player)
+		g:Advance(2)
+		local p2 = g:Join(404, { name = "Max" })
+		g:Advance(1)
+		local d2 = g:D(p2)
+		d2.money = 1e6
+		g:Act(p2, "mini_scrapyard_buy", { rid = 1 })
+		T.eq(d2.games.scrapyard.vehicle, false, "Tageslimit gilt nach Rejoin weiter")
+		-- Neuer Tag (UTC): wieder Fahrzeuge
+		g:Advance(86400)
+		g:Act(p2, "mini_scrapyard_buy", { rid = 2 })
+		T.eq(d2.games.scrapyard.vehicle, true, "am nächsten Tag wieder ein Fahrzeug")
+		-- Vorbereitungszeit wird gespeichert und nach Rejoin geprüft; Uhr rückwärts wartet nie länger als die volle Zeit
+		T.near(d2.games.scrapyard.readyAt, g:Now() + MC.ScrapyardDismantleSeconds, 0.01, "readyAt gespeichert")
+		d2.games.scrapyard.readyAt = g:Now() + 1e6
+		T.near(SG.DismantleIn(d2, g:Now()), MC.ScrapyardDismantleSeconds, 0.01, "Uhr rückwärts: höchstens die volle Vorbereitungszeit")
+		local MR = g:MiniShared("MiniRules")
+		local loaded = MR.LoadGames({ scrapyard = { vehicle = true, readyAt = 0 / 0 } }, d2, g:Now())
+		T.eq(loaded.scrapyard.readyAt, 0, "NaN-readyAt wird 0")
+		T.eq(MR.LoadGames({ scrapyard = { vehicle = false, readyAt = 5 } }, d2, g:Now()).scrapyard.readyAt, 0, "ohne Fahrzeug readyAt 0")
+		T.check(start > 0, "Startguthaben")
 		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
 	end },
 
@@ -144,6 +212,30 @@ return {
 			distinct += 1
 		end
 		T.check(distinct >= 3, "richtige Antwort steht nicht immer an derselben Stelle")
+		-- Snapshot enthält nie den Index der Frage oder die Lösung
+		g:Advance(0.6)
+		local view = g:MiniSnapshot(player).quiz.question
+		T.eq(view and view.index, nil, "kein Fragenindex beim Client")
+		T.eq(view and view.correctPos, nil, "keine richtige Position beim Client")
+		-- Tageslimit bezahlter Antworten: danach nur noch Diagnosepunkte, keine Credits/XP
+		local MC = g:MiniShared("MiniConfig")
+		local SG = g:MiniShared("SideGameRules")
+		local MR = g:MiniShared("MiniRules")
+		MR.EnsureDay(d, g:Now())
+		d.games.daily.progress.quizCorrect = MC.QuizPaidPerDay
+		T.eq(SG.QuizPaidLeft(d, g:Now()), 0, "Limit erreicht")
+		cur = ms.quiz.current
+		local m2, xp2, dp2 = d.money, d.xp, d.games.quiz.diagPoints
+		local lvl2 = d.level
+		g:Advance(0.2)
+		g:Act(player, "mini_quiz_answer", { token = cur.token, choice = find(cur.order, 1), rid = 500 })
+		T.eq(d.money, m2, "keine Credits über dem Tageslimit")
+		T.check(d.xp == xp2 and d.level == lvl2, "keine XP über dem Tageslimit")
+		T.eq(d.games.quiz.diagPoints, dp2 + 1, "Diagnosepunkt zählt weiter")
+		local last = g:Notices(player, "quiz")
+		T.eq(last[#last].capped, true, "Client erfährt das Limit")
+		-- Skript mit Antwortschlüssel: pro Tag höchstens QuizPaidPerDay × 90 Cr
+		T.eq(MC.QuizPaidPerDay * MC.QuizCorrectCredits <= 5000, true, "Tages-Obergrenze Quiz-Credits ≤ 5.000 Cr")
 	end },
 
 	{ "Parkplatz: Lösung serverseitig geprüft, Serienbonus gedeckelt", function(T, H)
@@ -169,6 +261,7 @@ return {
 		g:Act(player, "mini_parking_tap", { cell = pz.exit, rid = 4 })
 		T.eq(pz.moves, 0, "leere Felder zählen nicht")
 		-- Blockierer wegfahren (verschiedene Felder direkt nacheinander), dann Ziel
+		g:Advance(0.2) -- Abklingzeit je Feld der Tipps oben (Feld 3, leeres Feld, Ausfahrt) abwarten
 		local rid = 10
 		for _, cell in ipairs(SG.ParkingPath(pz.target)) do
 			if find(pz.cars, cell) then
@@ -204,6 +297,11 @@ return {
 		d.games.parking.streak = 1000
 		T.eq(CB.CustomerBonus(d), 1.7, "Serienbonus gedeckelt auf 1,7")
 		T.eq(CB.OfferBonus(d), 5, "Zusatzangebote gedeckelt auf +5")
+		-- Serienanteil der Belohnung gedeckelt wie der Kundenbonus (Serie 24)
+		T.eq(MC.ParkingRewardStreakCap, 24, "Deckel bei Serie 24")
+		T.eq(SG.ParkingReward(24), 120 + 24 * 15, "Serie 24")
+		T.eq(SG.ParkingReward(3000), 120 + 24 * 15, "Serie 3000 zahlt nicht mehr als Serie 24")
+		T.eq(SG.ParkingReward(1e300), 120 + 24 * 15, "riesige Serie")
 		-- Abbruch beendet die Serie
 		g:Advance(0.2)
 		g:Act(player, "mini_parking_new", { rid = 300 })
@@ -220,6 +318,55 @@ return {
 		g:Advance(0.2)
 		g:Act(player, "mini_parking_new", { rid = 302 })
 		T.eq(d.games.parking.streak, 0, "abgebrochene Runde beendet die Serie")
+	end },
+
+	{ "Parkplatz: risikofreies Skript-Lösen bringt begrenzt Credits (Serien- und Tageslimit)", function(T, H)
+		local g = H.Garage()
+		local SG, MC = g:MiniShared("SideGameRules"), g:MiniShared("MiniConfig")
+		local player = g:Join(405, { name = "Nora" })
+		g:Advance(1)
+		local d = g:D(player)
+		d.games.press.upgrades = {}
+		local money0, rep0, level0 = d.money, d.reputation, d.level
+		local rid = 0
+		local solved, maxPay = 0, 0
+		-- Skript: nur Blockierer auf dem Pfad antippen, dann das Ziel (bricht die Serie nie)
+		for _ = 1, 150 do
+			rid += 1
+			g:Advance(0.13)
+			g:Act(player, "mini_parking_new", { rid = rid })
+			local pz = d.games.parking.puzzle
+			for _, cell in ipairs(SG.ParkingPath(pz.target)) do
+				if find(pz.cars, cell) then
+					rid += 1
+					g:Advance(0.13)
+					g:Act(player, "mini_parking_tap", { cell = cell, rid = rid })
+				end
+			end
+			local before, lvl = d.money, d.level
+			rid += 1
+			g:Advance(0.13)
+			g:Act(player, "mini_parking_tap", { cell = pz.target, rid = rid })
+			if pz.solved then
+				solved += 1
+				-- Level-Aufstieg (2.4.0: 120 + 18 × Level Cr) herausrechnen
+				local levelBonus = 0
+				for l = lvl + 1, d.level do
+					levelBonus += 120 + 18 * l
+				end
+				maxPay = math.max(maxPay, d.money - before - levelBonus)
+			end
+		end
+		T.check(solved >= 100, "Skript löst viele Rätsel (" .. solved .. ")")
+		T.check(maxPay <= SG.ParkingReward(MC.ParkingRewardStreakCap), "Belohnung je Lösung gedeckelt (" .. maxPay .. ")")
+		local earned = d.money - money0
+		local cap = MC.ParkingPaidPerDay * SG.ParkingReward(MC.ParkingRewardStreakCap)
+		T.check(earned <= cap + 5000, "Tagesverdienst begrenzt (" .. earned .. " ≤ " .. cap .. " + Level-Boni)")
+		T.check(d.reputation - rep0 <= MC.ParkingPaidPerDay + 2 * (d.level - level0), "Ruf nur für bezahlte Lösungen (+2 je Level)")
+		T.eq(SG.ParkingPaidLeft(d, g:Now()), 0, "Tageslimit erreicht")
+		T.check(d.games.parking.streak >= 100, "Serie läuft weiter")
+		T.check(g:HasToast(player, "keine Credits mehr"), "Hinweis nach dem Tageslimit")
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
 	end },
 
 	{ "Querboni auf die 2.4.0-Werkstatt: Angebote, Reparaturzeit, Vergütung", function(T, H)

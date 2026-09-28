@@ -46,9 +46,12 @@ function ParkingUI.Render(s)
 	if not pk then
 		return
 	end
+	local paid = (pk.paidLeft or 0) > 0
 	refs.info.Text = string.format(
-		"Serie: %d · Beste Serie: %d · Auftragsqualität ×%s (höchstens ×%s)",
-		pk.streak or 0, pk.best or 0, dec(pk.customerBonus or 1), dec(MiniConfig.CustomerBonusCap or 1.7)
+		"Serie: %d · Beste Serie: %d · Auftragsqualität ×%s (höchstens ×%s) · %s",
+		pk.streak or 0, pk.best or 0, dec(pk.customerBonus or 1), dec(MiniConfig.CustomerBonusCap or 1.7),
+		paid and string.format("Nächste Lösung: %d Cr (heute noch %d bezahlt)", pk.nextReward or 0, pk.paidLeft or 0)
+			or "Heute keine Credits mehr, die Serie zählt weiter"
 	)
 	local pz = pk.puzzle
 	local cars, path = {}, {}

@@ -96,14 +96,14 @@ return {
 		local player = g:Join(90, { name = "Emil" })
 		g:Advance(1)
 		g:D(player).games.press.upgrades = { pu1 = 5 }
-		local sets0, sorted0 = calls.set, calls.sorted
+		local sets0, sorted0 = calls.ordered, calls.sorted
 		local store = ordered(g)
 		-- 10 Minuten Spielzeit mit ständigem Produzieren und vielen Refresh-Anfragen
 		for _ = 1, 600 do
 			g:Advance(1)
 			g:Act(player, "mini_leaderboard_refresh")
 		end
-		local sets = calls.set - sets0
+		local sets = calls.ordered - sets0
 		local reads = calls.sorted - sorted0
 		T.check(sets <= 600 / 120 + 1, "höchstens alle 120 s geschrieben (" .. sets .. ")")
 		T.check(sets >= 4, "regelmäßig geschrieben (" .. sets .. ")")
@@ -111,9 +111,9 @@ return {
 		T.check(store["90"] ~= nil, "Eintrag des Spielers vorhanden")
 		-- Verlassen schreibt sofort (auch wenn die letzte Schreibung < 120 s her ist)
 		g:Advance(5)
-		local before = calls.set
+		local before = calls.ordered
 		g:Leave(player)
-		T.eq(calls.set, before + 1, "Schreiben beim Verlassen")
+		T.eq(calls.ordered, before + 1, "Schreiben beim Verlassen")
 		T.eq(#g:Errors(), 0, "keine Laufzeitfehler")
 	end },
 
@@ -148,6 +148,95 @@ return {
 		gn:Advance(5)
 		T.check(ordered(gn)["97"] ~= nil, "mit writable geschrieben")
 		T.eq(#g:Errors() + #gs:Errors() + #gn:Errors(), 0, "keine Laufzeitfehler")
+	end },
+
+	{ "Verspäteter Wiederholungsversuch überschreibt keinen neueren Wert (Verlassen, anderer Server)", function(T, H)
+		local g = H.Garage()
+		local LB, PR = g:MiniServer("LeaderboardService"), g:MiniShared("PressRules")
+		local ds = g:DataStoreMock()
+		local player = g:Join(98, { name = "Olga" })
+		g:Advance(1)
+		local d = g:D(player)
+		d.games.press.upgrades = {}
+		local ms = g:MiniState(player)
+		local store = ordered(g)
+		-- Tick-Schreiben mit altem Wert c1 scheitert einmal (Drosselung) und wartet 1 s auf den Wiederholungsversuch
+		d.games.press.lifetime = 1000
+		ms.leaderboardWrittenAt = g:Now() - 1000
+		ms.leaderboardWrittenCode = -1
+		ds.failNext = 1
+		g:Advance(0.5)
+		T.eq(ds.failNext, 0, "erster Versuch ist gescheitert")
+		T.eq(LB.Pending, 1, "Wiederholung steht aus")
+		-- Währenddessen verlässt der Spieler das Spiel: Schreiben mit dem höheren Wert c2
+		d.games.press.lifetime = 5e6
+		local c2 = PR.EncodeScore(5e6)
+		g:Leave(player)
+		T.eq(store["98"], c2, "Verlassen schreibt den neuen Wert")
+		g:Advance(5)
+		T.eq(LB.Pending, 0, "nichts mehr offen")
+		T.eq(store["98"], c2, "alter Wiederholungsversuch überschreibt den höheren Wert nicht")
+		-- Anderer Server mit älterem Stand: UpdateAsync mit math.max lässt den höheren Wert stehen
+		local stale = {
+			userId = 98, leaderboardWrittenAt = 0, leaderboardWrittenCode = -1,
+			p = { profile = { data = { games = { press = { lifetime = 10 } } } } },
+		}
+		T.eq(LB.Write(stale, true, true), true, "Schreibaufruf gelingt")
+		T.eq(store["98"], c2, "niedrigerer Wert eines anderen Servers ändert nichts")
+		stale.p.profile.data.games.press.lifetime = 9e9
+		stale.leaderboardWrittenCode = -1
+		LB.Write(stale, true, true)
+		T.eq(store["98"], PR.EncodeScore(9e9), "höherer Wert wird geschrieben")
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+	end },
+
+	{ "Bestenliste beim Verlassen nur nach gelungenem Speichern (offener Robux-Beleg, verlorene Sperre)", function(T, H)
+		-- Fall 1: offener Robux-Beleg – P.Save verweigert, also kein Bestenlisten-Wert, den das Profil nicht hat
+		local g = H.Garage()
+		local PR = g:MiniShared("PressRules")
+		local p1 = g:Join(99, { name = "Paul" })
+		g:Advance(1)
+		local d1 = g:D(p1)
+		d1.games.press.upgrades = {}
+		g:Advance(1)
+		local before = ordered(g)["99"]
+		d1.games.press.lifetime = 7e6
+		g:Profile(p1).receiptPending = { id = "kauf-offen", amount = 100, snapshot = { money = d1.money } }
+		g:Leave(p1)
+		g:Advance(5)
+		T.eq(ordered(g)["99"], before, "kein ungespeicherter Wert in der Bestenliste (offener Beleg)")
+		-- Fall 2: ein anderer Server hat die Sperre übernommen – Speichern scheitert (lostLock)
+		local p2 = g:Join(100, { name = "Quirin" })
+		g:Advance(1)
+		local d2 = g:D(p2)
+		d2.games.press.upgrades = {}
+		g:Advance(1)
+		local before2 = ordered(g)["100"]
+		d2.games.press.lifetime = 8e6
+		g:Record(100).lock = { token = "anderer-server", expires = g:Now() + 170 }
+		g:Leave(p2)
+		g:Advance(5)
+		T.eq(ordered(g)["100"], before2, "kein ungespeicherter Wert in der Bestenliste (Sperre verloren)")
+		-- Normalfall: gespeichert, dann geschrieben
+		local p3 = g:Join(101, { name = "Rita" })
+		g:Advance(1)
+		local d3 = g:D(p3)
+		d3.games.press.upgrades = {}
+		d3.games.press.lifetime = 9e6
+		g:Leave(p3)
+		g:Advance(5)
+		T.eq(ordered(g)["101"], PR.EncodeScore(9e6), "nach gelungenem Speichern geschrieben")
+		T.eq(g:Record(101).data.games.press.lifetime, 9e6, "Profil enthält denselben Wert")
+		-- BindToClose: Speichern und danach Bestenliste, der Server wartet darauf
+		local gc = H.Garage()
+		local pc = gc:Join(102, { name = "Sara" })
+		gc:Advance(1)
+		local dc = gc:D(pc)
+		dc.games.press.upgrades = {}
+		dc.games.press.lifetime = 6e6
+		gc:Close()
+		T.eq(ordered(gc)["102"], PR.EncodeScore(6e6), "BindToClose schreibt nach dem Speichern")
+		T.eq(#g:Errors() + #gc:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText() .. gc:ErrorText())
 	end },
 
 	{ "DataStore-Fehler: Hinweis statt Absturz, Tafel zeigt Hinweis", function(T, H)

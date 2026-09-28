@@ -14,11 +14,11 @@ C.LeaseSeconds = 180
 C.StartMoney = 800
 C.MaxBays = 4
 C.MaxPlots = 8
--- 3.0: Grundstücks-Pivots (x, z in Studs, rot = Drehung um Y in Grad, 0 oder 180) für W.Create.
--- Platzhalter = 2.4.0-Raster (330 × 260), bis der Stadtplan die endgültigen Werte liefert.
+-- 3.0: Grundstücks-Pivots an der Werkstattmeile (docs/CITY_SPEC.md §4.2; x, z in Studs, rot um Y in Grad).
+-- rot=0: Nordseite, Front (+Z) zur Meile; rot=180: Südseite. Reihenfolge = Belegung (nahe am Stadtplatz zuerst).
 C.PlotSlots = {
-    {x=0,z=0,rot=0}, {x=330,z=0,rot=0}, {x=660,z=0,rot=0}, {x=990,z=0,rot=0},
-    {x=0,z=260,rot=0}, {x=330,z=260,rot=0}, {x=660,z=260,rot=0}, {x=990,z=260,rot=0},
+    {x=262,z=-109,rot=0}, {x=-262,z=109,rot=180}, {x=-234,z=-109,rot=0}, {x=234,z=109,rot=180},
+    {x=412,z=-109,rot=0}, {x=-412,z=109,rot=180}, {x=-384,z=-109,rot=0}, {x=384,z=109,rot=180},
 }
 C.LiftHeight = 3.6
 C.NumberCap = 1e24

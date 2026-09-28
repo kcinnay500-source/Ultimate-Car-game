@@ -698,6 +698,12 @@ function Garage:BuildCity(opts)
 		p.Parent = parent
 		return p
 	end
+	-- Die generierte Stadt (tools/worldgen im Basisbaum) weicht der synthetischen Test-Stadt, sonst gäbe es zwei
+	-- Workspace.City und FindFirstChild("City") fände die falsche.
+	local generated = env.workspace:FindFirstChild("City")
+	if generated then
+		generated:Destroy()
+	end
 	local city = env.Instance.new("Model")
 	city.Name = "City"
 	local stations = env.Instance.new("Folder")

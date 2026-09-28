@@ -51,8 +51,28 @@ function PressService.Tick(ms, d, now)
 	d.games.press.lastTick = now
 end
 
+-- Bestätigung eines Klickpakets (rid) für den Client: die letzten ClickAckCount rids stehen im Snapshot
+-- (press.clickAcks). Auch Wiederholungen einer schon gezählten rid werden bestätigt.
+local ACK_COUNT = 16
+function PressService.Ack(ms, rid)
+	if type(rid) ~= "number" then
+		return
+	end
+	ms.clickAcks = ms.clickAcks or {}
+	for _, r in ipairs(ms.clickAcks) do
+		if r == rid then
+			return
+		end
+	end
+	table.insert(ms.clickAcks, rid)
+	while #ms.clickAcks > ACK_COUNT do
+		table.remove(ms.clickAcks, 1)
+	end
+end
+
 function PressService.Register(Actions, api)
 	Actions.Register("mini_press_click", function(ms, data, d, now)
+		PressService.Ack(ms, data.rid)
 		local accepted = PressService.AcceptClicks(ms, data.count, now)
 		if accepted > 0 then
 			PressRules.ApplyClicks(d, accepted, now, now, ms.passes)

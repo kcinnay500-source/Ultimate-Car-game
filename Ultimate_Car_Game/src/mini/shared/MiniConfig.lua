@@ -94,12 +94,18 @@ MiniConfig.ScrapyardSellCredits = 220
 MiniConfig.ScrapyardScrapPerPart = 40
 MiniConfig.ScrapyardRareParts = 4 -- Ersatz, falls für das Level noch kein echtes Ersatzteil passt
 MiniConfig.ScrapyardRareBrand = "nexra" -- seltene Funde sind gebrauchte Teile der Grundmarke
+-- Kaufen → Zerlegen → Verkaufen bringt im Schnitt Gewinn. Damit das keine Endlosquelle wird, die nur das
+-- Remote-Budget begrenzt: Zerlegen erst nach einer Vorbereitungszeit, und nur begrenzt viele Fahrzeuge pro Tag (UTC).
+MiniConfig.ScrapyardDismantleSeconds = 8
+MiniConfig.ScrapyardCarsPerDay = 25
 
 -- Mechaniker-Quiz (HTML: answerQuestion)
 MiniConfig.QuizCorrectCredits = 90
 MiniConfig.QuizCorrectXp = 20
 MiniConfig.QuizWrongXp = 4
 MiniConfig.QuizCooldown = 1
+-- Richtige Antworten bringen Credits und XP nur bis zu diesem Tageszähler (UTC); danach nur Diagnosepunkte.
+MiniConfig.QuizPaidPerDay = 40
 MiniConfig.DiagReductionPerPoint = 0.015
 MiniConfig.DiagReductionCap = 0.35
 
@@ -113,6 +119,10 @@ MiniConfig.CustomerBonusPerStreak = 0.03
 MiniConfig.CustomerBonusCap = 1.7
 MiniConfig.ParkingOfferBonusEvery = 5
 MiniConfig.ParkingOfferBonusMax = 5
+-- Der Serienanteil der Belohnung wächst nur bis zu der Serie, bei der auch der Kundenbonus gedeckelt ist
+-- (ceil((1,7 − 1) / 0,03) = 24). Bezahlte Lösungen (Credits, XP, Ruf) höchstens ParkingPaidPerDay pro Tag (UTC).
+MiniConfig.ParkingRewardStreakCap = math.ceil((MiniConfig.CustomerBonusCap - 1) / MiniConfig.CustomerBonusPerStreak - 1e-9)
+MiniConfig.ParkingPaidPerDay = 40
 
 -- Tagesauftrag (HTML: claimDaily)
 MiniConfig.DailyCredits = 350

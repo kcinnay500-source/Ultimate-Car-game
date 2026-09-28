@@ -23,9 +23,14 @@ LeaderboardService.Now = function()
 	return os.time()
 end
 
-local function retry(fn)
+-- skip (optional): vor jedem Versuch geprüft; true bricht ab (Ergebnis "skipped"), z. B. wenn ein
+-- neuerer Wert inzwischen geschrieben wurde.
+local function retry(fn, skip)
 	local lastErr
 	for i = 1, MiniConfig.DataStoreRetries do
+		if skip and skip() then
+			return true, "skipped"
+		end
 		local ok, result = pcall(fn)
 		if ok then
 			return true, result
@@ -83,8 +88,19 @@ function LeaderboardService.Write(ms, force, writable)
 	ms.leaderboardWrittenAt = now
 	LeaderboardService.Writes += 1
 	LeaderboardService.Pending += 1
+	-- Monoton schreiben: Ein verspäteter Wiederholungsversuch eines älteren Werts (oder ein anderer Server
+	-- mit älterem Stand) darf einen neueren, höheren Wert nie überschreiben. Deshalb UpdateAsync mit
+	-- math.max statt SetAsync; zusätzlich entfällt der Versuch, sobald diese Sitzung schon >= code schrieb.
 	local ok, err = retry(function()
-		LeaderboardService.Store:SetAsync(tostring(ms.userId), code)
+		LeaderboardService.Store:UpdateAsync(tostring(ms.userId), function(old)
+			old = (type(old) == "number" and old == old) and old or 0
+			if old >= code then
+				return nil -- nichts ändern: gespeicherter Wert ist schon gleich oder höher
+			end
+			return code
+		end)
+	end, function()
+		return ms.leaderboardWrittenCode >= code
 	end)
 	LeaderboardService.Pending -= 1
 	if ok then

@@ -32,8 +32,21 @@ local NAMES = {
 	spawn = "Stadtplatz",
 	center = "Stadtzentrum",
 	plaza = "Stadtplatz",
+	-- CITY_SPEC §7 (weitere Ankunftspunkte der Stadt)
+	hub = "Minispiel-Zentrale",
+	carwash = "Waschanlage",
+	park = "Stadtpark",
+	track = "Teststrecke",
+	scrapyard_gate = "Schrottplatz-Tor",
+	scrap_trader = "Schrotthändler",
+	dyno = "Leistungsprüfstand",
+	testdrive = "Probefahrt",
+	meile_map = "Werkstattmeile",
 }
 MapUI.Names = NAMES
+MapUI.FallbackName = "Weiteres Reiseziel"
+
+local warnedKeys = {}
 
 local function displayName(inst)
 	for _, attr in ipairs({ "DisplayName", "Label", "Title" }) do
@@ -42,7 +55,16 @@ local function displayName(inst)
 			return v
 		end
 	end
-	return NAMES[inst.Name] or inst.Name
+	local known = NAMES[inst.Name]
+	if known then
+		return known
+	end
+	-- Nie den rohen (englischen/internen) Schlüssel zeigen; Worldgen soll DisplayName setzen.
+	if not warnedKeys[inst.Name] then
+		warnedKeys[inst.Name] = true
+		warn("[MapUI] Ankunftspunkt ohne deutschen Namen (Attribut DisplayName fehlt): " .. inst.Name)
+	end
+	return MapUI.FallbackName
 end
 
 local function positionOf(inst)

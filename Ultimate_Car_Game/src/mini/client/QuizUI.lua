@@ -56,7 +56,10 @@ function QuizUI.OnResult(res)
 		end
 	end
 	refs.result.Visible = true
-	if res.correct then
+	if res.correct and res.capped then
+		refs.result.Text = "Richtig! Ein Diagnosepunkt. Credits gibt es heute für das Quiz keine mehr."
+		refs.result.TextColor3 = T.green
+	elseif res.correct then
 		refs.result.Text = "Richtig! +" .. MiniLocale.Credits(tonumber(res.credits) or 0) .. " und ein Diagnosepunkt."
 		refs.result.TextColor3 = T.green
 	else
@@ -70,7 +73,7 @@ function QuizUI.Render(s)
 	if not q then
 		return
 	end
-	refs.info.Text = string.format("Diagnosepunkte: %d · Reparaturzeit −%s (höchstens 35 %%)", q.diagPoints or 0, MiniLocale.Percent(q.reduction or 0))
+	refs.info.Text = string.format("Diagnosepunkte: %d · Reparaturzeit −%s (höchstens 35 %%) · Heute noch %d bezahlte Antworten", q.diagPoints or 0, MiniLocale.Percent(q.reduction or 0), q.paidLeft or 0)
 	local view = q.question
 	if view and view.token ~= shownToken then
 		shownToken = view.token

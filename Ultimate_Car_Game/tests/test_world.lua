@@ -212,8 +212,13 @@ return {
 		g:Advance(3.1)
 		g:Act(p, "mini_travel", { key = "workshop", rid = 5 })
 		T.check((g:Root(p).Position - home.Position).Magnitude < 12, "zurück in der eigenen Werkstatt")
-		-- ohne Stadt bleibt der Plot-Spawn aktiv (2.4.0)
-		local g2 = H.Garage()
+		-- ohne Stadt bleibt der Plot-Spawn aktiv (2.4.0); die generierte Stadt aus dem Basisbaum entfernen
+		local g2 = H.Garage({ before = function(gx)
+			local generated = gx:Find("Workspace.City")
+			if generated then
+				generated:Destroy()
+			end
+		end })
 		local p2 = g2:Join(1002)
 		g2:Advance(1)
 		T.eq(g2:Plot(p2).Start.Enabled, true, "ohne Stadt: Plot-Spawn aktiv")

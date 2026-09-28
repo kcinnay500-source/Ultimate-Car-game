@@ -3782,7 +3782,7 @@ local function makeDataStoreService(env)
 	d.fail = false -- true: alle Aufrufe werfen Fehler
 	d.failNext = 0 -- die nächsten n Aufrufe werfen Fehler
 	d.getFail = false -- true: GetDataStore wirft (Studio ohne API-Zugriff)
-	d.calls = { update = 0, set = 0, sorted = 0, get = 0 }
+	d.calls = { update = 0, set = 0, sorted = 0, get = 0, ordered = 0 } -- ordered: Schreibzugriffe auf OrderedDataStores
 	d.updateYield = 0 -- Sekunden Latenz pro UpdateAsync/GetAsync/SetAsync
 	d.strict = true -- Roblox-Regeln für speicherbare Werte prüfen
 	d.log = {} -- {op, store, key, t}
@@ -3875,6 +3875,7 @@ local function makeDataStoreService(env)
 		return {
 			SetAsync = function(_, key, value)
 				d.calls.set += 1
+				d.calls.ordered += 1
 				if failing() then
 					error("DataStore-Fehler (Mock)")
 				end
@@ -3883,7 +3884,7 @@ local function makeDataStoreService(env)
 				store.data[key] = value
 			end,
 			UpdateAsync = function(_, key, fn)
-				d.calls.update += 1
+				d.calls.ordered += 1 -- nicht in calls.update (das zählt Profil-Speicherungen)
 				if failing() then
 					error("DataStore-Fehler (Mock)")
 				end

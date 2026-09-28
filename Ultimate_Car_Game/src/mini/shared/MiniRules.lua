@@ -107,7 +107,7 @@ function MiniRules.DefaultGames()
 			comboAt = 0,
 		},
 		tuning = { projects = {}, lastIdle = 0, completed = 0 },
-		scrapyard = { vehicle = false },
+		scrapyard = { vehicle = false, readyAt = 0 }, -- readyAt: Serverzeit, ab der Zerlegen erlaubt ist
 		quiz = { diagPoints = 0 }, -- die offene Frage liegt nur in der Server-Sitzung (nie im Profil)
 		parking = { streak = 0, best = 0, puzzle = false },
 		stats = stats,
@@ -192,6 +192,7 @@ function MiniRules.LoadGames(raw, d, now)
 	end
 
 	g.scrapyard.vehicle = tableOr(raw.scrapyard).vehicle == true
+	g.scrapyard.readyAt = g.scrapyard.vehicle and load(tableOr(raw.scrapyard).readyAt, 0, 0, HUGE) or 0
 	g.quiz.diagPoints = loadInt(tableOr(raw.quiz).diagPoints, 0, 0, MAX_SAFE)
 
 	local pk, gk = tableOr(raw.parking), g.parking

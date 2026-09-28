@@ -236,6 +236,17 @@ return {
 		press(g, findButton(spage, "Fahrzeug kaufen", true))
 		T.eq(d.games.scrapyard.vehicle, true, "Server: Fahrzeug gekauft")
 		g:Advance(0.6)
+		-- Vorbereitungszeit: Knopf zählt herunter und ist gesperrt, danach zerlegen
+		T.eq(findButton(spage, "Fahrzeug zerlegen"), nil, "Zerlegen während der Vorbereitung gesperrt")
+		T.check(findButton(spage, "Wird vorbereitet", true) == nil, "Countdown-Knopf ist nicht anklickbar")
+		local countdown
+		for _, x in ipairs(spage:GetDescendants()) do
+			if x.ClassName == "TextButton" and tostring(x.Text):find("Wird vorbereitet", 1, true) then
+				countdown = x
+			end
+		end
+		T.check(countdown ~= nil, "Countdown sichtbar")
+		g:Advance(g:MiniShared("MiniConfig").ScrapyardDismantleSeconds)
 		press(g, findButton(spage, "Fahrzeug zerlegen"))
 		T.eq(d.games.scrapyard.vehicle, false, "Server: zerlegt")
 		g:Advance(0.6)
@@ -247,8 +258,9 @@ return {
 		local ms = g:MiniState(p)
 		local q = ms.quiz.current
 		if T.check(q ~= false and q ~= nil, "Server: Frage gestellt") then
-			local Cat = g:MiniShared("MiniCatalog")
-			local text = Cat.Questions[q.index].a[q.order[2]]
+			local Bank = g:MiniServer("QuizBank")
+			local text = Bank.Questions[q.index].a[q.order[2]]
+			T.eq(g:MiniShared("MiniCatalog").Questions, nil, "kein Antwortschlüssel in ReplicatedStorage")
 			local n = sentCount(g)
 			press(g, findButton(qpage, text))
 			local a = lastAction(g, n, "mini_quiz_answer")
@@ -314,13 +326,19 @@ return {
 		g:Advance(1)
 		local grown = g.env.instanceCount - before
 		T.check(grown < 50, "keine Instanzflut bei 10.000 Klicks (" .. grown .. " neue Instanzen)")
-		local batches, total = 0, 0
+		-- Klickpakete tragen eine rid (Bestätigung/Wiederholung, PressUI); Wiederholungen derselben rid zählen einmal
+		local batches, total, rids = 0, 0, {}
 		for _, a in ipairs((sentFrom(g, n0))) do
 			if a[1] == "mini_press_click" then
-				batches += 1
-				total += a[2].count
-				T.eq(a[2].rid, nil, "Klickpaket ohne rid")
+				T.check(type(a[2].rid) == "number", "Klickpaket mit rid")
 				T.eq(a[2].scrap, nil, "kein Betrag im Klickpaket")
+				if not rids[a[2].rid] then
+					rids[a[2].rid] = a[2].count
+					batches += 1
+					total += a[2].count
+				else
+					T.eq(a[2].count, rids[a[2].rid], "Wiederholung mit gleicher Anzahl")
+				end
 			end
 		end
 		T.check(batches > 0 and batches <= 110, "Klicks gebündelt (" .. batches .. " Pakete)")
@@ -491,6 +509,8 @@ return {
 		local crane = g:Find("Workspace.City.Animated.Kran")
 		local car = g:Find("Workspace.City.Animated.Auto1")
 		local c0, k0, a0 = ram.CFrame, crane.CFrame, car.Position
+		-- Animationen laufen nur bis 300 Studs von der Kamera (CITY_SPEC); Kamera zur Szene
+		g.env.workspace.CurrentCamera.CFrame = CFrame.new(30, 20, -290)
 		g:Advance(3)
 		T.check((ram.CFrame.Position - c0.Position).Magnitude > 0.01 or ram.CFrame ~= c0, "Presse bewegt")
 		T.check(crane.CFrame ~= k0, "Kran bewegt")
@@ -523,6 +543,463 @@ return {
 		if arrival then
 			T.check((g:Root(p).Position - arrival.Position).Magnitude < 6, "Server hat gereist")
 		end
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+	end },
+	{ "Stadt-Animationen nach CITY_SPEC: Presse, Ampel, Uhr, Hebebühne, Schranke, Warnleuchte, Haltelinie, Sichtweite", function(T, H)
+		local g, p = start(H, { before = function(g)
+			local city = g:BuildCity({})
+			local animated = Instance.new("Folder")
+			animated.Name = "Animated"
+			animated.Parent = city
+			local function part(name, parent, pos, props)
+				local x = Instance.new("Part")
+				x.Name = name
+				x.Anchored = true
+				x.Size = Vector3.new(4, 4, 4)
+				x.CFrame = CFrame.new(pos)
+				for k, v in pairs(props or {}) do
+					x[k] = v
+				end
+				x.Parent = parent
+				return x
+			end
+			local function model(name, kind, attrs)
+				local m = Instance.new("Model")
+				m.Name = name
+				m:SetAttribute("Anim", kind)
+				for k, v in pairs(attrs or {}) do
+					m:SetAttribute(k, v)
+				end
+				m.Parent = animated
+				return m
+			end
+			-- Presse wie CITY_SPEC §Schrottpresse: Crosshead steht vor der Platen in GetChildren
+			local press = model("Schrottpresse", "press")
+			part("Bed", press, Vector3.new(0, 1.5, 0))
+			part("Columns", press, Vector3.new(0, 13, 6))
+			part("Crosshead", press, Vector3.new(0, 26, 0))
+			part("Cylinders", press, Vector3.new(0, 21, 0))
+			part("Platen", press, Vector3.new(0, 18, 0))
+			press.PrimaryPart = press.Bed
+			-- Worldgen-Presse: Kind-Model "Ram", Zeiten als Attribute (Periode 6 s: 1,2 runter, 0,4 halten, 2 hoch, Rest oben)
+			local wp = model("WorldgenPresse", "press", { Stroke = 12.5, Period = 6, Down = 1.2, Hold = 0.4, Up = 2 })
+			local ram = Instance.new("Model")
+			ram.Name = "Ram"
+			part("Plate", ram, Vector3.new(-30, 17, 0))
+			ram.Parent = wp
+			part("Querhaupt", wp, Vector3.new(-30, 26, 0))
+			-- Presse ohne Pressplatte, nur "Frame"/"Rahmen": nichts darf sich bewegen
+			local bad = model("Presse2", "press")
+			part("Frame", bad, Vector3.new(20, 5, 0))
+			part("Rahmenhead", bad, Vector3.new(20, 9, 0))
+			-- Ampel (Meile)
+			local sig = model("Ampel", "signal", { Serves = "Meile", Group = "K-West" })
+			part("Red", sig, Vector3.new(40, 8, 0), { Material = Enum.Material.Neon })
+			part("Amber", sig, Vector3.new(40, 7, 0), { Material = Enum.Material.Neon, Transparency = 0.7 })
+			part("Green", sig, Vector3.new(40, 6, 0), { Material = Enum.Material.Neon, Transparency = 0.7 })
+			part("PedRed", sig, Vector3.new(41, 4, 0), { Material = Enum.Material.Neon })
+			part("PedGreen", sig, Vector3.new(41, 3, 0), { Material = Enum.Material.Neon, Transparency = 0.7 })
+			-- Uhr: Minutenzeiger, Pivot = Uhrmitte, Grundstellung 12 Uhr
+			local clock = model("Uhrturm", "clock")
+			part("Minutenzeiger", clock, Vector3.new(60, 40, 0), { Size = Vector3.new(0.4, 4, 0.2) })
+			part("Stundenzeiger", clock, Vector3.new(60, 40, 0.3), { Size = Vector3.new(0.5, 3, 0.2) })
+			-- Hebebühne, Schranke, Hammer, Tresorrad, Zahnradkrone, Warnleuchte, Startampel, unbekannte Art
+			part("Buehne", animated, Vector3.new(80, 1, 0)):SetAttribute("Anim", "lift")
+			part("Schlagbaum", animated, Vector3.new(90, 3, 0)):SetAttribute("Anim", "barrier")
+			part("Hammer", animated, Vector3.new(100, 3, 0)):SetAttribute("Anim", "gavel")
+			part("Tresorrad", animated, Vector3.new(110, 9, 0)):SetAttribute("Anim", "vault")
+			local gear = part("Zahnradkrone", animated, Vector3.new(120, 17, 0))
+			gear:SetAttribute("Anim", "spin")
+			gear:SetAttribute("YawPeriod", 30)
+			part("Warnleuchte", animated, Vector3.new(130, 5, 0), { Material = Enum.Material.Neon }):SetAttribute("Anim", "beacon")
+			local tree = model("Startampel", "startlight")
+			for i = 1, 5 do
+				part("L" .. i, tree, Vector3.new(140, 2 + i, 0), { Material = Enum.Material.Neon, Transparency = 0.8 })
+			end
+			part("Raetsel", animated, Vector3.new(150, 1, 0)):SetAttribute("Anim", "voellig_unbekannt")
+			-- Worldgen-Uhr: Zeiger mit Nabe (Pivot) in Ruhestellung 10:10, Turmmitte (Hub) am Model
+			local tower = model("Uhrzeiger", "clock", { Hub = Vector3.new(200, 46, 0), Faces = 1 })
+			local hub = Vector3.new(200, 46, 7.76)
+			local out, up = Vector3.new(0, 0, 1), Vector3.new(0, 1, 0)
+			local right = up:Cross(out)
+			local a = math.rad(60)
+			local d = right * math.sin(a) + up * math.cos(a)
+			local hand = part("Minute_S", tower, hub + d * 1.8, { Size = Vector3.new(0.34, 4.4, 0.1) })
+			hand.CFrame = CFrame.fromMatrix(hub + d * 1.8, d:Cross(out), d, out)
+			hand:SetAttribute("Hand", "minute")
+			hand:SetAttribute("Pivot", hub)
+			hand:SetAttribute("Offset", 1.8)
+			-- Worldgen-Brunnen: Fontänen pulsieren, die Zahnradkrone dreht sich um Center
+			local fountain = model("Zahnradbrunnen", "fountain", { Crown = "Zahnradkrone", Center = Vector3.new(220, 17, 0), YawPeriod = 30, SpinPeriod = 12, Period = 2.4 })
+			part("Jet1", fountain, Vector3.new(232, 4, 0), { Size = Vector3.new(0.6, 6, 0.6) })
+			local crown = Instance.new("Model")
+			crown.Name = "Zahnradkrone"
+			part("Zahnrad", crown, Vector3.new(220, 17, 0), { Size = Vector3.new(1.2, 8, 8) })
+			part("Zahn", crown, Vector3.new(220, 21, 0), { Size = Vector3.new(1, 1.6, 1) })
+			crown.Parent = fountain
+			-- Verkehr auf einem Rundkurs mit Haltelinie an der Meile-Ampel
+			local loop = Instance.new("Folder")
+			loop.Name = "Loop_Test"
+			loop:SetAttribute("Stops", "0,-40,Meile")
+			loop.Parent = animated
+			local pts = { Vector3.new(-40, 0, -60), Vector3.new(40, 0, -60), Vector3.new(40, 0, 60), Vector3.new(-40, 0, 60) }
+			for i, v in ipairs(pts) do
+				part("WP" .. i, loop, v, { Transparency = 1, Size = Vector3.new(1, 1, 1) })
+			end
+			local car = part("Stadtauto", animated, Vector3.new(0, 1, -60))
+			car:SetAttribute("Anim", "traffic")
+			car:SetAttribute("Path", "Loop_Test")
+			car:SetAttribute("Speed", 40)
+			car:SetAttribute("StartOffset", 0)
+			-- weit entfernt (500 Studs): steht still
+			part("FernerKran", animated, Vector3.new(0, 10, 500)):SetAttribute("Anim", "crane")
+		end })
+		g.env.workspace.CurrentCamera.CFrame = CFrame.new(60, 30, 20)
+		local City = g:ClientModule(p, "Mini.CityClient")
+		local A = g:Find("Workspace.City.Animated")
+		local press = A.Schrottpresse
+		local base = {}
+		for _, c in ipairs(press:GetChildren()) do
+			base[c.Name] = c.CFrame
+		end
+		local bad0 = { A.Presse2.Frame.CFrame, A.Presse2.Rahmenhead.CFrame }
+		-- Zeitpunkt im Programm: kurz nach Beginn des Meile-Grüns
+		local function toPhase(target)
+			local now = g:Now()
+			g:Advance(((target - now % 32) % 32) + 0.01)
+		end
+		toPhase(0.4)
+		local lowest = math.huge
+		for _ = 1, 20 do
+			g:Advance(0.1)
+			lowest = math.min(lowest, press.Platen.Position.Y)
+		end
+		T.check(lowest < 18 - 5, "Platen fährt herunter (tiefster Punkt " .. lowest .. ")")
+		T.check(lowest >= 18 - 12.5 - 0.01, "höchstens 12,5 Studs Hub")
+		for _, name in ipairs({ "Bed", "Columns", "Crosshead", "Cylinders" }) do
+			T.check(press[name].CFrame == base[name], name .. " bleibt stehen")
+		end
+		-- Worldgen-Presse: in 6 s genau ein Hub, ca. 2,4 s oben in Ruhe
+		local plate, head0 = A.WorldgenPresse.Ram.Plate, A.WorldgenPresse.Querhaupt.CFrame
+		local restSamples, samples, low = 0, 0, math.huge
+		for _ = 1, 24 do
+			g:Advance(0.25)
+			samples += 1
+			low = math.min(low, plate.Position.Y)
+			if math.abs(plate.Position.Y - 17) < 1e-3 then
+				restSamples += 1
+			end
+		end
+		T.check(low < 17 - 10, "Worldgen-Presse fährt ganz herunter (" .. low .. ")")
+		T.check(restSamples >= 7 and restSamples <= 12, "Worldgen-Presse ruht oben etwa 2,4 s von 6 s (" .. restSamples .. "/" .. samples .. ")")
+		T.check(A.WorldgenPresse.Querhaupt.CFrame == head0, "Querhaupt bleibt stehen")
+		T.check(A.Presse2.Frame.CFrame == bad0[1] and A.Presse2.Rahmenhead.CFrame == bad0[2], "\"Frame\"/\"...head\" bewegen sich nie")
+		-- Ampel: Meile grün bei 0–14 s, rot ab 16 s; Fußgänger gegenläufig
+		toPhase(5)
+		g:Advance(0.6)
+		T.eq(A.Ampel.Green.Transparency, 0, "Meile grün")
+		T.eq(A.Ampel.Red.Transparency, 0.7, "Rot aus")
+		T.eq(A.Ampel.PedGreen.Transparency, 0.7, "Fußgänger rot, solange die Meile grün hat")
+		local car = A.Stadtauto
+		toPhase(20)
+		g:Advance(0.6)
+		T.eq(A.Ampel.Red.Transparency, 0, "Meile rot")
+		T.eq(A.Ampel.Green.Transparency, 0.7, "Grün aus")
+		T.eq(A.Ampel.PedGreen.Transparency, 0, "Fußgänger grün")
+		T.eq(City.SignalState("Markt", g:Now()), "green", "Markt grün, während die Meile rot hat")
+		-- Haltelinie "0,-40,Meile" liegt auf der Kante z = -60 bei x = 0: bei Rot (16–32 s) hält das Auto dort
+		toPhase(17)
+		g:Advance(9) -- 320 Studs Rundkurs bei 40 Studs/s: spätestens nach 8 s an der Linie
+		local stopped = car.Position
+		T.check((stopped - Vector3.new(0, 1, -60)).Magnitude < 2, "hält an der Haltelinie (" .. tostring(stopped) .. ")")
+		g:Advance(3)
+		T.check((car.Position - stopped).Magnitude < 0.01, "wartet bei Rot")
+		toPhase(0.5)
+		g:Advance(1)
+		T.check((car.Position - stopped).Magnitude > 5, "fährt bei Grün weiter")
+		-- Uhr nach Lighting.ClockTime
+		local Lighting = g.env.services.Lighting
+		g:Advance(0.6)
+		local minute = A.Uhrturm.Minutenzeiger
+		local up = minute.CFrame.UpVector
+		local turns = (Lighting.ClockTime % 1)
+		local expected = Vector3.new(math.sin(turns * 2 * math.pi), math.cos(turns * 2 * math.pi), 0)
+		T.check((up - expected).Magnitude < 0.08, "Minutenzeiger zeigt die Minute der Tageszeit")
+		-- Worldgen-Uhr: Minutenzeiger zeigt absolut die Minute (Ruhestellung 10:10 spielt keine Rolle)
+		local wm = A.Uhrzeiger.Minute_S
+		local dir = (wm.Position - Vector3.new(200, 46, 7.76)).Unit
+		local tt = (Lighting.ClockTime % 1) * 2 * math.pi
+		local want = Vector3.new(1, 0, 0) * math.sin(tt) + Vector3.new(0, 1, 0) * math.cos(tt)
+		T.check((dir - want).Magnitude < 0.08, "Worldgen-Zeiger: absoluter Winkel (" .. tostring(dir) .. " statt " .. tostring(want) .. ")")
+		T.near((wm.Position - Vector3.new(200, 46, 7.76)).Magnitude, 1.8, 0.01, "Worldgen-Zeiger bleibt an der Nabe")
+		-- Zahnradkrone dreht sich um ihre Mitte, schrumpft und wippt nicht
+		local gear, tooth = A.Zahnradbrunnen.Zahnradkrone.Zahnrad, A.Zahnradbrunnen.Zahnradkrone.Zahn
+		local tooth0 = tooth.Position
+		g:Advance(3)
+		T.near((gear.Position - Vector3.new(220, 17, 0)).Magnitude, 0, 0.01, "Kronenmitte bleibt stehen")
+		T.eq(gear.Size, Vector3.new(1.2, 8, 8), "Krone wird nicht wie ein Wasserstrahl gestaucht")
+		T.check((tooth.Position - tooth0).Magnitude > 0.5, "Krone dreht sich")
+		T.near((tooth.Position - Vector3.new(220, 17, 0)).Magnitude, 4, 0.01, "Zahn bleibt auf dem Kranz")
+		-- Hebebühne, Schranke, Hammer, Tresorrad, Zahnradkrone bewegen sich über eine Periode
+		local watch = { "Buehne", "Schlagbaum", "Hammer", "Tresorrad", "Zahnradkrone" }
+		local start0 = {}
+		for _, n in ipairs(watch) do
+			start0[n] = A[n].CFrame
+		end
+		local moved = {}
+		for _ = 1, 280 do
+			g:Advance(0.25)
+			for _, n in ipairs(watch) do
+				if A[n].CFrame ~= start0[n] then
+					moved[n] = true
+				end
+			end
+		end
+		for _, n in ipairs(watch) do
+			T.check(moved[n], n .. " animiert")
+		end
+		local counts = g:InClient(p, function()
+			return City.Counts()
+		end)
+		for _, kind in ipairs({ "press", "signal", "clock", "lift", "barrier", "gavel", "vault", "spin", "beacon", "startlight", "traffic" }) do
+			T.check((counts.kinds[kind] or 0) >= 1, "Art erkannt: " .. kind)
+		end
+		local litSeen = {}
+		for _ = 1, 40 do
+			g:Advance(0.25)
+			local n = 0
+			for i = 1, 5 do
+				if A.Startampel["L" .. i].Transparency == 0 then
+					n += 1
+				end
+			end
+			litSeen[n] = true
+		end
+		T.check(litSeen[0] and litSeen[3] and litSeen[5], "Startampel: Lampen gehen nacheinander an und wieder aus")
+		-- Unbekannte Art: einmal gewarnt
+		local warnedUnknown = false
+		for _, w in ipairs(g:Warnings()) do
+			if tostring(w):find("voellig_unbekannt", 1, true) then
+				warnedUnknown = true
+			end
+		end
+		T.check(warnedUnknown, "unbekannte Anim-Art wird gemeldet")
+		local warnedPress = false
+		for _, w in ipairs(g:Warnings()) do
+			if tostring(w):find("Presse2", 1, true) then
+				warnedPress = true
+			end
+		end
+		T.check(warnedPress, "Presse ohne Pressplatte wird gemeldet")
+		-- Sichtweite: 500 Studs entfernter Kran bewegt sich nicht
+		T.check(A.FernerKran.CFrame == CFrame.new(0, 10, 500), "jenseits von 300 Studs keine Animation")
+		T.eq(City.Cull, 300, "Sichtweite 300 Studs")
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+	end },
+
+	{ "Stadt-Animationen: Sichtweite 300, Nah-/Ferntakt, Prüfstand rüttelt nur aus der Nähe", function(T, H)
+		local g, p = start(H, { frameStep = 1 / 30, before = function(g)
+			local city = g:BuildCity({})
+			local animated = Instance.new("Folder")
+			animated.Name = "Animated"
+			animated.Parent = city
+			local function part(name, parent, pos)
+				local x = Instance.new("Part")
+				x.Name = name
+				x.Anchored = true
+				x.Size = Vector3.new(4, 4, 4)
+				x.CFrame = CFrame.new(pos)
+				x.Parent = parent
+				return x
+			end
+			part("Nah", animated, Vector3.new(0, 5, 50)):SetAttribute("Anim", "turntable")
+			part("Mittel", animated, Vector3.new(0, 5, 200)):SetAttribute("Anim", "turntable")
+			part("Fern", animated, Vector3.new(0, 5, 400)):SetAttribute("Anim", "turntable")
+			local dyno = Instance.new("Model")
+			dyno.Name = "Pruefstand"
+			dyno:SetAttribute("Anim", "dyno")
+			part("Rolle", dyno, Vector3.new(0, 0.5, 150))
+			local carBody = Instance.new("Model")
+			carBody.Name = "Auto"
+			part("Karosse", carBody, Vector3.new(0, 2, 150))
+			carBody.Parent = dyno
+			dyno.Parent = animated
+		end })
+		g.env.workspace.CurrentCamera.CFrame = CFrame.new(0, 10, 0)
+		local City = g:ClientModule(p, "Mini.CityClient")
+		local A = g:Find("Workspace.City.Animated")
+		local far0, body0 = A.Fern.CFrame, A.Pruefstand.Auto.Karosse.CFrame
+		local changes = { Nah = 0, Mittel = 0 }
+		local last = { Nah = A.Nah.CFrame, Mittel = A.Mittel.CFrame }
+		local rollerMoved = false
+		local roller0 = A.Pruefstand.Rolle.CFrame
+		for _ = 1, 120 do
+			g:Advance(1 / 30)
+			for n in pairs(changes) do
+				if A[n].CFrame ~= last[n] then
+					changes[n] += 1
+					last[n] = A[n].CFrame
+				end
+			end
+			if A.Pruefstand.Rolle.CFrame ~= roller0 then
+				rollerMoved = true
+			end
+			T.check(A.Pruefstand.Auto.Karosse.CFrame == body0, "Prüfstand-Auto rüttelt nicht aus 150 Studs")
+		end
+		T.check(changes.Nah > 60, "nah: jedes Frame (" .. changes.Nah .. ")")
+		T.check(changes.Mittel > 5 and changes.Mittel <= 20, "150–300 Studs: nur im 0,25-s-Takt (" .. changes.Mittel .. ")")
+		T.check(A.Fern.CFrame == far0, "jenseits von 300 Studs keine Animation")
+		for _ = 1, 52 do -- eine volle Prüfstand-Periode (12 s) im Ferntakt
+			g:Advance(0.25)
+			if A.Pruefstand.Rolle.CFrame ~= roller0 then
+				rollerMoved = true
+			end
+		end
+		T.check(rollerMoved, "Rollen drehen (Ferntakt)")
+		T.check(A.Pruefstand.Auto.Karosse.CFrame == body0, "aus 150 Studs kein Rütteln")
+		local counts = g:InClient(p, function()
+			return City.Counts()
+		end)
+		T.eq(counts.active, 3, "aktiv: nah, mittel, Prüfstand")
+		T.eq(counts.fast, 1, "jedes Frame nur der nahe Drehteller")
+		-- Kamera nah am Prüfstand: jetzt rüttelt das Auto (sobald die Rollen laufen)
+		g.env.workspace.CurrentCamera.CFrame = CFrame.new(0, 10, 140)
+		local shook = false
+		for _ = 1, 400 do
+			g:Advance(1 / 30)
+			if A.Pruefstand.Auto.Karosse.CFrame ~= body0 then
+				shook = true
+				break
+			end
+		end
+		T.check(shook, "aus der Nähe rüttelt das Auto")
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+	end },
+	{ "Schnellreise: deutsche Namen für alle Ankunftspunkte der Stadt, nie der rohe Schlüssel", function(T, H)
+		local keys = { "hub", "plaza", "arcade", "quiz", "auction", "shop", "parking", "dealer", "tuning", "press", "scrap_trader", "scrapyard", "carwash", "track", "scrapyard_gate", "park", "xyz_intern" }
+		local g, p = start(H, { before = function(g)
+			local arrivals = {}
+			for i, k in ipairs(keys) do
+				table.insert(arrivals, { key = k, pos = Vector3.new(i * 10, 0.5, -320) })
+			end
+			g:BuildCity({ arrivals = arrivals })
+		end })
+		local MapUI = g:ClientModule(p, "Mini.MapUI")
+		open(g, p, "map")
+		local _, MiniUI = mods(g, p)
+		local texts = {}
+		for _, x in ipairs(MiniUI.Pages.map:GetDescendants()) do
+			if x.ClassName == "TextLabel" then
+				texts[x.Text] = true
+			end
+		end
+		for _, k in ipairs(keys) do
+			T.check(not texts[k], "roher Schlüssel sichtbar: " .. k)
+		end
+		for k, name in pairs({ hub = "Minispiel-Zentrale", carwash = "Waschanlage", park = "Stadtpark", track = "Teststrecke", scrapyard_gate = "Schrottplatz-Tor", scrap_trader = "Schrotthändler" }) do
+			T.check(texts[name], "Name für " .. k .. ": " .. name)
+			T.eq(MapUI.Names[k], name, "Namenstabelle " .. k)
+		end
+		T.check(texts[MapUI.FallbackName], "unbekannter Schlüssel: deutscher Ersatzname")
+		-- Die echten Ankunftspunkte aus tools/worldgen haben alle einen Namen
+		local fixture = H.Garage({ noServer = true })
+		local real = fixture:Find("Workspace.City.Arrivals")
+		if real then
+			for _, a in ipairs(real:GetChildren()) do
+				T.check(MapUI.Names[a.Name] ~= nil or type(a:GetAttribute("DisplayName")) == "string", "Stadt-Ankunft ohne deutschen Namen: " .. a.Name)
+			end
+		end
+	end },
+
+	{ "Spielerliste (CoreGui) ist über dem Minispiel-Panel aus", function(T, H)
+		local g, p = start(H)
+		local MiniClient, MiniUI = mods(g, p)
+		local function listOn()
+			return g:InClient(p, function()
+				return game:GetService("StarterGui"):GetCoreGuiEnabled(Enum.CoreGuiType.PlayerList)
+			end)
+		end
+		g:Key(p, Enum.KeyCode.Tab) -- Tablet zu
+		g:Advance(0.6)
+		T.eq(MiniUI.IsOpen, false, "Panel zu")
+		T.eq(listOn(), true, "Spielerliste bei freier Sicht an")
+		open(g, p, "press")
+		T.eq(MiniUI.IsOpen, true, "Panel offen")
+		T.eq(listOn(), false, "Spielerliste über dem Panel aus")
+		g:Advance(1)
+		T.eq(listOn(), false, "bleibt aus (0,25-s-Schleife schaltet sie nicht wieder an)")
+		g:InClient(p, function()
+			MiniClient.Close()
+		end)
+		g:Advance(0.6)
+		T.eq(listOn(), true, "nach dem Schließen wieder an")
+	end },
+
+	{ "Presse: gesendete Klicks bleiben in der Anzeige, bis der Server sie bestätigt; Kauf-Speicherung verliert keine Klicks", function(T, H)
+		local g, p = start(H)
+		local MiniClient = mods(g, p)
+		open(g, p, "press")
+		local PressUI = g:ClientModule(p, "Mini.PressUI")
+		local _, MiniUI = mods(g, p)
+		local area = MiniUI.Pages.press:FindFirstChild("Presse", true)
+		local d = g:D(p)
+		d.games.press.upgrades = {}
+		g:Advance(1.2)
+		local input = { UserInputType = Enum.UserInputType.MouseButton1, Position = Vector3.new(10, 10, 0) }
+		-- Snapshot vor dem Senden merken (so sieht ein Tick-Snapshot aus, der vor dem Klickpaket gebaut wurde)
+		local stale = g:InClient(p, function()
+			local snap = MiniClient.Snapshot()
+			local copy = table.clone(snap)
+			copy.press = table.clone(snap.press)
+			return copy
+		end)
+		for _ = 1, 10 do
+			area.InputBegan:Fire(input)
+		end
+		local before = g:InClient(p, function()
+			return PressUI.PredictedGain()
+		end)
+		T.check(before > 0, "Vorhersage nach 10 Klicks")
+		local gainAfterStale = g:InClient(p, function()
+			PressUI.Flush()
+			PressUI.OnSnapshot(stale) -- älterer Snapshot ohne Bestätigung
+			return PressUI.PredictedGain()
+		end)
+		T.near(gainAfterStale, before, 1e-6, "gesendete, unbestätigte Klicks bleiben in der Vorhersage")
+		g:Advance(1.5)
+		local inFlight = g:InClient(p, function()
+			return PressUI.InFlight()
+		end)
+		T.eq(inFlight, 0, "bestätigtes Paket fällt aus der Vorhersage")
+		-- Robux-Kauf wird gespeichert (transacting): Klickpakete werden still verworfen und später wiederholt
+		local profile = g:Profile(p)
+		local clicks0 = d.games.press.clicks
+		local m = g:Mark()
+		profile.transacting = true
+		for i = 1, 30 do
+			area.InputBegan:Fire(input)
+			if i % 5 == 0 then
+				g:Advance(0.25)
+			end
+		end
+		g:Advance(1)
+		T.eq(d.games.press.clicks, clicks0, "während transacting keine Klicks gezählt")
+		local toasts = 0
+		for _, msg in ipairs(g:Toasts(p, m)) do
+			if tostring(msg):find("Kauf wird sicher gespeichert", 1, true) then
+				toasts += 1
+			end
+		end
+		T.eq(toasts, 0, "kein Toast pro Klickpaket während transacting")
+		local waiting = g:InClient(p, function()
+			return PressUI.InFlight()
+		end)
+		T.check(waiting > 0, "Pakete warten auf Bestätigung")
+		profile.transacting = false
+		g:Advance(4)
+		T.eq(d.games.press.clicks - clicks0, 30, "alle 30 Klicks nach dem Kauf gezählt (einmal)")
+		g:Advance(4)
+		T.eq(d.games.press.clicks - clicks0, 30, "Wiederholungen zählen nicht doppelt")
 		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
 	end },
 }

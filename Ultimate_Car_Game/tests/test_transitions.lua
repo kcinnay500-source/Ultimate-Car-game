@@ -107,7 +107,7 @@ return {
 		g:Advance(120)
 		g:Leave(player)
 		g:Advance(2)
-		T.eq(ds.calls.update + ds.calls.set, 0, "kein DataStore-Schreiben in Studio")
+		T.eq(ds.calls.update + ds.calls.set + ds.calls.ordered, 0, "kein DataStore-Schreiben in Studio")
 		noErrors(T, g)
 	end },
 
@@ -239,6 +239,34 @@ return {
 		T.eq(rec and rec.lock, nil, "keine Sperre")
 		T.eq(#g:Notices(player, "offline"), 0, "kein Hinweis nach dem Verlassen")
 		noErrors(T, g)
+	end },
+
+	{ "Verlassen während der Game-Pass-Prüfung verliert den Offline-Ertrag nicht", function(T, H)
+		local function run(leaveEarly)
+			local g = H.Garage({ before = function(g)
+				g:MiniShared("MiniConfig").GamePasses.DoubleScrap.id = 111
+				g.env.services.MarketplaceService.__data.yield = 2
+			end })
+			g:Seed(625, { version = 2, data = { version = 2, money = 500, level = 3, games = {
+				press = { scrap = 0, lifetime = 0, upgrades = { pu1 = 10, pu4 = 5 }, lastTick = g:Now() - 3600 },
+			} }, receipts = {} })
+			local player = g:Join(625, { name = "Lars" })
+			if leaveEarly then
+				g:Advance(0.5) -- Prüfung läuft noch (2 s)
+			else
+				g:Advance(3) -- Prüfung fertig, Offline-Ertrag gutgeschrieben
+			end
+			g:Leave(player)
+			g:Advance(5)
+			local rec = g:Record(625)
+			return rec.data.games.press, g
+		end
+		local early, g1 = run(true)
+		local normal, g2 = run(false)
+		T.check(normal.scrap > 1000, "Offline-Ertrag im Normalfall (" .. tostring(normal.scrap) .. ")")
+		T.check(early.scrap >= normal.scrap * 0.95, "frühes Verlassen behält den Offline-Ertrag (" .. tostring(early.scrap) .. " vs. " .. tostring(normal.scrap) .. ")")
+		T.check(early.lastTick > g1:Now() - 60, "Presse-Uhr gespeichert")
+		T.eq(#g1:Errors() + #g2:Errors(), 0, "keine Laufzeitfehler: " .. g1:ErrorText() .. g2:ErrorText())
 	end },
 
 	{ "Keine doppelten Verbindungen, Aktionen nach Verlassen wirkungslos", function(T, H)

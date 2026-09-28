@@ -281,10 +281,29 @@ return {
 			T.check(not names[u.name], "Name eindeutig: " .. u.name)
 			names[u.name] = true
 		end
-		T.check(#Cat.Questions >= 7, "mindestens die 7 HTML-Fragen")
-		for _, q in ipairs(Cat.Questions) do
+		-- Quizfragen mit Lösung nur auf dem Server (ServerScriptService.Garage.Mini.QuizBank)
+		local Bank = g:Require("ServerScriptService.Garage.Mini.QuizBank")
+		T.check(#Bank.Questions >= 7, "mindestens die 7 HTML-Fragen")
+		for _, q in ipairs(Bank.Questions) do
 			T.eq(#q.a, 4, "4 Antworten: " .. q.q)
 		end
+		T.eq(Cat.Questions, nil, "kein Fragenkatalog im geteilten MiniCatalog")
+		-- Kein Skript, das der Client sieht (ReplicatedStorage, StarterPlayer), enthält eine richtige Antwort
+		local leaks = {}
+		for _, root in ipairs({ "ReplicatedStorage", "StarterPlayer", "StarterGui", "ReplicatedFirst" }) do
+			local node = g:Find(root)
+			for _, x in ipairs(node and node:GetDescendants() or {}) do
+				if x:IsA("LuaSourceContainer") then
+					for _, q in ipairs(Bank.Questions) do
+						if string.find(x.Source, q.a[1], 1, true) and string.find(x.Source, q.q, 1, true) then
+							table.insert(leaks, x:GetFullName() .. ": " .. q.q)
+							break
+						end
+					end
+				end
+			end
+		end
+		T.eq(#leaks, 0, "Antwortschlüssel beim Client: " .. table.concat(leaks, "; "))
 		local L = g:Require("ReplicatedStorage.GarageShared.Locale")
 		for k, v in pairs(L.Catalog.en or {}) do
 			T.check(not tostring(k):find("Autopunkt") and not tostring(v):find("car points"), "keine alte Punktewährung im 2.4.0-Katalog: " .. tostring(k))

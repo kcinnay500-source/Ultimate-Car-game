@@ -23,12 +23,17 @@ local function flat(payload)
 	return out
 end
 
--- Mit Anfrage-ID (Kaufen, Abholen, Antworten …)
-function MiniRemote.Send(action, payload)
+-- Mit Anfrage-ID (Kaufen, Abholen, Antworten, Klickpakete …). Liefert die rid.
+-- rid (optional): eine frühere ID erneut senden (Wiederholung, wirkt auf dem Server höchstens einmal).
+function MiniRemote.Send(action, payload, rid)
 	local data = flat(payload)
-	nextRid += 1
-	data.rid = nextRid
+	if type(rid) ~= "number" then
+		nextRid += 1
+		rid = nextRid
+	end
+	data.rid = rid
 	Command:FireServer(action, data)
+	return rid
 end
 
 -- Ohne Anfrage-ID (z. B. Klickpakete, die der Server zählt und deckelt)

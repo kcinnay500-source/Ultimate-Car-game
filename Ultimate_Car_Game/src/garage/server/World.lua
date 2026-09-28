@@ -48,6 +48,25 @@ local function layout(w,d)
         point.Ring.Color=ready and Color3.fromRGB(62,217,166) or Color3.fromRGB(247,176,63)
     end
 end
+-- 3.0: Stadt-Dekoration je Slot (City.PlotSlots.Slot_N): Leer-Kit ausblenden, Hausnummer-Pylon beschriften.
+local hiddenVacant={}
+local function dressSlot(slot,player)
+    local city=workspace:FindFirstChild("City");local slots=city and city:FindFirstChild("PlotSlots")
+    local sf=slots and slots:FindFirstChild("Slot_"..slot);if not sf then return end
+    if player then
+        local vacant=sf:FindFirstChild("Vacant")
+        if vacant then hiddenVacant[slot]=vacant;vacant.Parent=SS end
+    elseif hiddenVacant[slot] then
+        hiddenVacant[slot].Parent=sf;hiddenVacant[slot]=nil
+    end
+    local pylon=sf:FindFirstChild("Pylon")
+    if pylon then
+        pylon:SetAttribute("Owner",player and player.DisplayName or "")
+        for _,d in ipairs(pylon:GetDescendants()) do
+            if d:IsA("TextLabel") and d.Name=="Owner" then d.Text=player and ("WILLKOMMEN, "..player.DisplayName) or "FREI" end
+        end
+    end
+end
 function W.Create(player,callback)
     local slot;for i=1,C.MaxPlots do if not W.slots[i] then slot=i;break end end
     if not slot then return end
@@ -57,9 +76,11 @@ function W.Create(player,callback)
     local s=C.PlotSlots and C.PlotSlots[slot]
     local pivot=s and CFrame.new(s.x,0,s.z)*CFrame.Angles(0,math.rad(s.rot or 0),0) or CFrame.new(((slot-1)%4)*330,0,math.floor((slot-1)/4)*260)
     model:PivotTo(pivot);model.Parent=folder
-    -- 3.0: Gibt es den globalen Stadt-Spawn, bleibt er der einzige; die Plot-Spawns sind aus.
+    pcall(dressSlot,slot,player) -- 3.0
+    -- 3.0: Gibt es den globalen Stadt-Spawn, bleibt er der einzige; die Plot-Spawns sind aus. Ohne Stadt gilt 2.4.0
+    -- (Plot-Spawn an), auch wenn tools/worldgen ihn in der Vorlage abgeschaltet hat.
     local city=workspace:FindFirstChild("City");local start=model:FindFirstChild("Start")
-    if city and city:FindFirstChild("CitySpawn") and start and start:IsA("SpawnLocation") then start.Enabled=false end
+    if start and start:IsA("SpawnLocation") then start.Enabled=not (city and city:FindFirstChild("CitySpawn")) end
     local w={model=model,slot=slot,cars={},callback=callback,owner=player,doorOpen=true};W.plots[player]=w
     model.RollerDoor:SetAttribute("Open",true)
     model.RollerDoor.Control.ProximityPrompt.Triggered:Connect(function(p) if p==player then callback("door") end end)
@@ -271,6 +292,6 @@ function W.Destroy(player)
     local w=W.plots[player];if not w then return end
     if w.doorTween then local tween=w.doorTween;w.doorTween=nil;tween:Cancel() end
     for id in pairs(w.cars) do W.Remove(w,id) end
-    w.model:Destroy();W.slots[w.slot]=nil;W.plots[player]=nil
+    w.model:Destroy();pcall(dressSlot,w.slot,nil);W.slots[w.slot]=nil;W.plots[player]=nil -- 3.0: Slot-Dekoration zurück
 end
 return W

@@ -1,6 +1,8 @@
 -- PressUI: Schrottpresse (Klickfläche, Schrotthändler, Rebirth, 100 Upgrades).
--- Klicks werden gesammelt und etwa alle 0,5 s als Anzahl gesendet (mini_press_click). Die Anzeige interpoliert nur;
--- den echten Stand bestimmt der Server. Eigene Klicks lassen zusätzlich die Presse in der Stadt stampfen (CityClient).
+-- Klicks werden gesammelt und etwa alle 0,5 s als Anzahl gesendet (mini_press_click, mit rid). Die Anzeige interpoliert nur;
+-- den echten Stand bestimmt der Server. Gesendete Pakete bleiben in der Vorhersage, bis ein Snapshot sie bestätigt
+-- (press.clickAcks); unbestätigte Pakete werden mit derselben rid erneut gesendet (der Server zählt jede rid höchstens
+-- einmal), z. B. wenn der Server sie während eines Robux-Kaufs (transacting) verworfen hat. Eigene Klicks lassen zusätzlich die Presse in der Stadt stampfen (CityClient).
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniConfig = require(Mini:WaitForChild("MiniConfig"))
 local MiniCatalog = require(Mini:WaitForChild("MiniCatalog"))
@@ -14,8 +16,9 @@ local T
 local refs = {}
 local state = nil -- letzter Snapshot
 local snapAt = 0
-local localGain = 0 -- vorhergesagter Klick-Ertrag seit dem letzten Snapshot
 local pending = 0 -- noch nicht gesendete Klicks
+local pendingGain = 0 -- deren vorhergesagter Ertrag
+local inFlight = {} -- gesendete, noch unbestätigte Pakete { rid, count, gain, sentAt, tries }
 local combo, comboUntil = 1, 0
 local clickWindowStart, clickWindowCount = 0, 0
 
@@ -26,6 +29,9 @@ local MAX_CPS = MiniConfig.MaxClicksPerSecond or 20
 local BASE_CLICK = MiniConfig.PressBaseClick or 5
 -- Snapshots kommen höchstens alle 0,5–1 s; bis zu 5 s weiter hochzählen, falls einer ausbleibt
 local INTERPOLATE_SECONDS = 5
+-- Unbestätigtes Paket nach dieser Zeit erneut senden; nach RESEND_TRIES Versuchen aus der Vorhersage nehmen
+local RESEND_AFTER = 1.5
+local RESEND_TRIES = 6
 
 local function dec(n, places)
 	local s = string.format("%." .. (places or 2) .. "f", n or 0)
@@ -108,7 +114,7 @@ local function onPress(inputPos)
 	comboUntil = t + COMBO_WINDOW
 	local perClick = state and state.press and state.press.clickPower or BASE_CLICK
 	local gain = perClick * combo
-	localGain += gain
+	pendingGain += gain
 
 	local area = refs.area
 	local x, y = 0.5, 0.4
@@ -215,7 +221,20 @@ function PressUI.DisplayScrap()
 		return 0
 	end
 	local p = state.press
-	return (p.scrap or 0) + (p.machinePerSecond or 0) * math.min(INTERPOLATE_SECONDS, os.clock() - snapAt) + localGain
+	return (p.scrap or 0) + (p.machinePerSecond or 0) * math.min(INTERPOLATE_SECONDS, os.clock() - snapAt) + PressUI.PredictedGain()
+end
+
+-- Vorhergesagter Klick-Ertrag, der im letzten Server-Wert noch fehlt: ungesendet + gesendet, aber unbestätigt
+function PressUI.PredictedGain()
+	local sum = pendingGain
+	for _, f in ipairs(inFlight) do
+		sum += f.gain
+	end
+	return sum
+end
+
+function PressUI.InFlight()
+	return #inFlight, pending
 end
 
 function PressUI.OnSnapshot(s)
@@ -224,14 +243,40 @@ function PressUI.OnSnapshot(s)
 	end
 	state = s
 	snapAt = os.clock()
-	-- Bereits gesendete Klicks sind im Server-Wert enthalten; nur noch nicht gesendete bleiben vorhergesagt
-	localGain = pending * ((s.press.clickPower or BASE_CLICK) * combo)
+	-- Bestätigte Pakete sind im Server-Wert enthalten und fallen aus der Vorhersage
+	local acks = {}
+	for _, rid in ipairs(type(s.press.clickAcks) == "table" and s.press.clickAcks or {}) do
+		acks[rid] = true
+	end
+	for i = #inFlight, 1, -1 do
+		if acks[inFlight[i].rid] then
+			table.remove(inFlight, i)
+		end
+	end
 end
 
 function PressUI.Flush()
-	if pending > 0 and Remote then
-		Remote.SendRaw("mini_press_click", { count = pending })
-		pending = 0
+	if not Remote then
+		return
+	end
+	local t = os.clock()
+	-- Unbestätigte Pakete wiederholen (gleiche rid: wirkt höchstens einmal), zu alte aus der Vorhersage nehmen
+	for i = #inFlight, 1, -1 do
+		local f = inFlight[i]
+		if t - f.sentAt >= RESEND_AFTER then
+			if f.tries >= RESEND_TRIES then
+				table.remove(inFlight, i)
+			else
+				f.tries += 1
+				f.sentAt = t
+				Remote.Send("mini_press_click", { count = f.count }, f.rid)
+			end
+		end
+	end
+	if pending > 0 then
+		local rid = Remote.Send("mini_press_click", { count = pending })
+		table.insert(inFlight, { rid = rid, count = pending, gain = pendingGain, sentAt = t, tries = 1 })
+		pending, pendingGain = 0, 0
 	end
 end
 

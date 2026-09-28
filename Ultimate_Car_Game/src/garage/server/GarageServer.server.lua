@@ -376,7 +376,10 @@ local function act(p,action,a)
 end
 local function request(player,action,a)
     local p=sessions[player];if not p or p.closing or type(action)~="string" or #action>32 then return end
-    if p.profile.transacting and action~="hello" and action~="abortInteraction" then return toast(p,"Dein Kauf wird sicher gespeichert. Bitte einen Moment warten.") end
+    if p.profile.transacting and action~="hello" and action~="abortInteraction" then
+        if action=="mini_press_click" then return end -- 3.0: Klickpakete still verwerfen (der Client wiederholt sie), kein Toast 2×/s
+        return toast(p,"Dein Kauf wird sicher gespeichert. Bitte einen Moment warten.")
+    end
     a=type(a)=="table" and a or {}
     local count=0;for k,v in pairs(a) do count=count+1;if count>10 or type(k)~="string" or #k>24 or (type(v)~="string" and type(v)~="number" and type(v)~="boolean") or (type(v)=="string" and #v>100) or (type(v)=="number" and (v~=v or math.abs(v)>1e25)) then return end end
     validateInteraction(p)
@@ -442,7 +445,8 @@ Players.PlayerRemoving:Connect(function(player)
     local p=sessions[player];if not p then return end
     advanceDays(p,now());p.closing=true;p.pending=nil
     Mini.OnLeave(p,p.profile.writable) -- 3.0: vor P.Save (Save gibt writable frei); blockiert nicht
-    P.Save(p.profile,true);sessions[player]=nil;W.Destroy(player)
+    local saved=P.Save(p.profile,true);Mini.OnSaved(p,saved) -- 3.0: Bestenliste nur nach gelungenem Speichern
+    sessions[player]=nil;W.Destroy(player)
 end)
 task.spawn(function()
     while true do
@@ -464,7 +468,7 @@ task.spawn(function()
 end)
 game:BindToClose(function()
     local remaining=0
-    for _,p in pairs(sessions) do remaining=remaining+1;advanceDays(p,now());p.closing=true;Mini.OnLeave(p,p.profile.writable);task.spawn(function() P.Save(p.profile,true);remaining=remaining-1 end) end
+    for _,p in pairs(sessions) do remaining=remaining+1;advanceDays(p,now());p.closing=true;Mini.OnLeave(p,p.profile.writable);task.spawn(function() local saved=P.Save(p.profile,true);Mini.OnSaved(p,saved);remaining=remaining-1 end) end -- 3.0: OnLeave/OnSaved
     -- 3.0: auch auf laufende Bestenlisten-Schreibvorgänge warten
     local deadline=os.clock()+25;while (remaining>0 or Mini.Pending()>0) and os.clock()<deadline do task.wait(0.1) end
 end)
