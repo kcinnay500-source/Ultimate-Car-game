@@ -19,6 +19,11 @@ local function send(action,args) Command:FireServer(action,args or {}) end
 local Effects=require(script.Parent:WaitForChild("ClientEffects"))
 local InputController=require(script.Parent:WaitForChild("InputController"))
 local effects=Effects.new(player,t)
+-- 3.0: Minispiele (StarterPlayerScripts.Mini.MiniClient). Begrenztes Warten und pcall: fehlen die Minispiele, bleibt die Werkstatt spielbar.
+local MiniClient do
+    local ok,mod=pcall(function() return require(script.Parent:WaitForChild("Mini",10):WaitForChild("MiniClient",10)) end)
+    if ok and type(mod)=="table" then MiniClient=mod else warn("[3.0] Minispiele nicht geladen: "..tostring(mod));MiniClient={IsOpen=function() return false end,Open=function() end,Toggle=function() end,Start=function() end} end
+end
 local inputControl
 local productInfo={}
 local productLoading={}
@@ -49,6 +54,7 @@ local function button(parent,value,x,y,width,callback,color)
 end
 local function fmt(n)
     n=tonumber(n) or 0
+    if MiniClient.Number then return MiniClient.Number(n) end -- 3.0: eine Zahlenformatierung für Werkstatt und Minispiele (MiniLocale.Number)
     for _,unit in ipairs({{1e18,"Tsd. Brd."},{1e15,"Brd."},{1e12,"Bio."},{1e9,"Mrd."},{1e6,"Mio."},{1e3,"Tsd."}}) do
         if math.abs(n)>=unit[1] then return string.format("%.1f %s",n/unit[1],unit[2]) end
     end
@@ -85,6 +91,8 @@ for i,key in ipairs(navOrder) do
     if shop then b.Size=UDim2.fromOffset(w,44);b.TextSize=18 end
     navButtons[key]=b;navX=navX+w+8
 end
+-- 3.0: Minispiele im Tablet (nur lokal, kein travel; öffnet das eigene Panel und schließt das Tablet)
+do local b=button(nav,"Minispiele",navX,0,150,function() MiniClient.Open() end,colors.blue);b.Name="Nav_minigames";navX=navX+158 end
 nav.CanvasSize=UDim2.fromOffset(navX,0)
 local body=make("ScrollingFrame",tablet,{Position=UDim2.fromOffset(20,140),Size=UDim2.new(1,-40,1,-178),CanvasSize=UDim2.new(),ScrollBarThickness=5,BackgroundTransparency=1,BorderSizePixel=0,AutomaticCanvasSize=Enum.AutomaticSize.None})
 local foot=text(tablet,"",22,height-30,-44,23,12,colors.muted)
@@ -94,6 +102,7 @@ local objective=text(hud,"Lade deine Werkstatt …",12,5,-24,39,16)
 local go=button(hud,"Zum Ziel",12,47,110,function() send("target",{id=state and state.selected}) end,colors.blue)
 local workButton=button(hud,"Arbeiten [E]",130,47,140,function() if state then send("work",{id=state.selected}) end end)
 local menu=button(hud,"Menü [Tab]",278,47,120,function() visible=not visible;tablet.Visible=visible;if visible and rebuild then rebuild() end end,colors.card)
+local miniButton=button(hud,"Minispiele [M]",406,47,140,function() MiniClient.Toggle() end,colors.card);miniButton.Name="MiniGames" -- 3.0: Einstieg neben "Menü" (Größe in resize)
 local toolButtons={}
 for i=1,C.HotbarSize do
     toolButtons[i]=button(hud,i.." · —",12+(i-1)*98,90,92,function()
@@ -314,7 +323,7 @@ showPage=function(key)
     local different=page~=key;page=key;visible=true;tablet.Visible=true;rebuild(different)
 end
 refresh=function()
-    hud.Visible=not visible and not overlay.Visible
+    hud.Visible=not visible and not overlay.Visible and not MiniClient.IsOpen() -- 3.0: HUD weicht dem Minispiel-Panel
     if not state then return end
     stats.Text=t("Lv. {level}  ·  {credits} Cr",{credits=fmt(d().money),level=d().level})
     local clock=R.DayClock(workspace:GetServerTimeNow(),state.dayEpoch)
@@ -386,7 +395,7 @@ local function refreshVehicleActions()
     local screen=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,800)
     vehicleActions.Size=UDim2.fromOffset(math.min(360,screen.X-24),count*42)
     vehicleActions.Position=UDim2.new(0,12,1,-150-count*42)
-    vehicleActions.Visible=count>0 and not visible and not overlay.Visible
+    vehicleActions.Visible=count>0 and not visible and not overlay.Visible and not MiniClient.IsOpen() -- 3.0: auch bei offenem Minispiel-Panel ausblenden
 end
 local function markTarget()
     local target=state and state.target
@@ -482,7 +491,21 @@ inputControl=InputController.new(player,{
     SelectTool=function(slot)
         if state and not overlay.Visible then send("tool",{id=state.data.loadout[slot]}) end
     end,
+    ToggleMini=function() MiniClient.Toggle() end, -- 3.0: Taste M
 })
+-- 3.0: Minispiele starten (eigene ScreenGui "Minispiele", eigener Listener für mini*-Kinds). Gegenseitiger Ausschluss:
+-- öffnet nicht während QTE/Diagnose, schließt beim Öffnen das Tablet, weicht dem Tablet; HUD blendet sich aus.
+task.spawn(function()
+    local ok,err=pcall(MiniClient.Start,{
+        isBlocked=function() return overlay.Visible or (inputControl~=nil and inputControl.locked) end,
+        isTabletOpen=function() return visible end,
+        closeTablet=function() visible=false;tablet.Visible=false;if protectCoreUI then protectCoreUI() end end,
+        openTablet=function(key) showPage(key) end,
+        hideHud=function() refresh();refreshVehicleActions() end,
+        toast=toast,
+    })
+    if not ok then warn("[3.0] Minispiele-Start fehlgeschlagen: "..tostring(err)) end
+end)
 local originalPlayerList=true
 pcall(function() originalPlayerList=StarterGui:GetCoreGuiEnabled(Enum.CoreGuiType.PlayerList) end)
 local lastListSetting
@@ -517,6 +540,14 @@ local function resize()
     local first=math.min(110,usable*0.26);go.Size=UDim2.fromOffset(first,38)
     workButton.Position=UDim2.fromOffset(18+first,47);workButton.Size=UDim2.fromOffset(usable*0.35,38)
     menu.Position=UDim2.fromOffset(24+first+usable*0.35,47);menu.Size=UDim2.fromOffset(math.min(120,usable*0.3-12),38)
+    -- 3.0: Minispiele-Knopf rechts neben "Menü"; ist die Zeile zu schmal (Handy hoch), teilen sich vier gleich breite Knöpfe die Zeile.
+    local menuEnd=24+first+usable*0.35+math.min(120,usable*0.3-12);local room=usable+12-menuEnd-6
+    if room>=110 then miniButton.Position=UDim2.fromOffset(menuEnd+6,47);miniButton.Size=UDim2.fromOffset(math.min(150,room),38);miniButton.TextSize=15
+    else
+        local w=(usable-18)/4
+        go.Size=UDim2.fromOffset(w,38);workButton.Position=UDim2.fromOffset(18+w,47);workButton.Size=UDim2.fromOffset(w,38)
+        menu.Position=UDim2.fromOffset(24+2*w,47);menu.Size=UDim2.fromOffset(w,38);miniButton.Position=UDim2.fromOffset(30+3*w,47);miniButton.Size=UDim2.fromOffset(w,38);miniButton.TextSize=13
+    end
     if state then rebuild() end
 end
 if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resize) end

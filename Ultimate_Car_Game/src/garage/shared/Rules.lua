@@ -1,5 +1,8 @@
 -- Authoritative economy and progression. No client-provided prices or rewards.
 local C=require(game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Config"))
+-- 3.0: Minispiel-Daten (d.games) und Querboni auf die Werkstatt.
+local Mini=game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
+local MiniRules,CrossBonus=require(Mini:WaitForChild("MiniRules")),require(Mini:WaitForChild("CrossBonus"))
 local R={}
 local function number(v,default,lo,hi)
     if type(v)~="number" or v~=v or v==math.huge or v==-math.huge then return default end
@@ -25,6 +28,7 @@ function R.NewData(now)
         toolLevel=1,jobs={},offers={},orders={},inventory={nexra_C_filter=3,nexra_C_oil=3},
         equipment={},equipmentBays={},serial=0,completed=0,loadout=clone(C.DefaultLoadout),yardReady={},parkedJobs={}}
     for _,e in ipairs(C.Equipment) do d.equipment[e.id]=e.starter or 0 end
+    d.games=MiniRules.DefaultGames() -- 3.0: Minispiele; data.version bleibt 2
     return d
 end
 function R.LoadData(raw,_,now)
@@ -107,6 +111,7 @@ function R.LoadData(raw,_,now)
             d.equipmentBays[e.id]=bay;equipmentSlots[bay]=true
         end
     end
+    d.games=MiniRules.LoadGames(raw.games,d,now) -- 3.0: whitelist-normalisiert, idempotent
     R.Advance(d,now)
     return d
 end
@@ -177,7 +182,7 @@ function R.FinishYard(d,key,time)
 end
 function R.RefreshOffers(d,random)
     random=random or math.random
-    local target=math.min(35,d.offerSlots)
+    local target=math.min(35,d.offerSlots+CrossBonus.OfferBonus(d)) -- 3.0: Parkplatz-Serie bringt Zusatzangebote
     local jobs,cars={},{}
     for _,j in ipairs(C.Jobs) do if j.level<=d.level then table.insert(jobs,j) end end
     for _,c in ipairs(C.Cars) do if c.level<=d.level then table.insert(cars,c) end end
@@ -268,7 +273,8 @@ function R.Order(d,sku,qty,now)
 end
 function R.StepDuration(d,step)
     local eq=step.equipment and (d.equipment[step.equipment] or 1) or 1
-    return math.max(1,(step.seconds or 5)/((1+(d.toolLevel-1)*0.08)*(1+(eq-1)*0.12)))
+    -- 3.0: Diagnosepunkte (Quiz) verkürzen die Reparatur um höchstens 35 % (richtige Richtung, anders als 3.0/HTML).
+    return math.max(1,(step.seconds or 5)*(1-CrossBonus.DiagReduction(d))/((1+(d.toolLevel-1)*0.08)*(1+(eq-1)*0.12)))
 end
 function R.StartWork(d,job,now)
     local step=C.JobById[job.kind].steps[job.step]
@@ -287,7 +293,8 @@ function R.Reward(d,job)
     local partQuality=0
     for _,sku in ipairs(job.usedParts) do partQuality=partQuality+C.PartById[sku].quality end
     if #job.usedParts>0 then partQuality=partQuality/#job.usedParts end
-    local base=def.reward*car.reward
+    -- 3.0: Querboni (Presse-Anteil ×0,6, Tuning-Stufe +4,5 %/Stufe, Parkplatz-Kundenbonus ≤ ×1,7), nil-sicher.
+    local base=def.reward*car.reward*CrossBonus.WorkshopReward(d)
     local reward=round(base*(1+job.quality*0.0025+partQuality*0.01))
     return math.min(C.NumberCap,reward),round(def.xp*car.xp)
 end

@@ -2,7 +2,7 @@
 local C = {}
 C.Title = "Ultimate Car Game"
 C.WorkshopName = "Schrauberwerkstatt"
-C.Version = "2.4.0"
+C.Version = "3.0.0" -- 3.0: Werkstatt + Minispiele + Stadt
 C.DaySeconds = 1200 -- Twenty real minutes per shared in-game day.
 C.DayStartHour = 8
 C.EnableSaving = true
@@ -14,6 +14,12 @@ C.LeaseSeconds = 180
 C.StartMoney = 800
 C.MaxBays = 4
 C.MaxPlots = 8
+-- 3.0: Grundstücks-Pivots (x, z in Studs, rot = Drehung um Y in Grad, 0 oder 180) für W.Create.
+-- Platzhalter = 2.4.0-Raster (330 × 260), bis der Stadtplan die endgültigen Werte liefert.
+C.PlotSlots = {
+    {x=0,z=0,rot=0}, {x=330,z=0,rot=0}, {x=660,z=0,rot=0}, {x=990,z=0,rot=0},
+    {x=0,z=260,rot=0}, {x=330,z=260,rot=0}, {x=660,z=260,rot=0}, {x=990,z=260,rot=0},
+}
 C.LiftHeight = 3.6
 C.NumberCap = 1e24
 C.HotbarSize = 5

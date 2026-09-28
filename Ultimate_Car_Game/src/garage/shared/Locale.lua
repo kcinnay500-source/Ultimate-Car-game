@@ -18,7 +18,7 @@ L.Catalog.en={
     ["Werkzeug wählen"]="Choose tool",["Motorhaube öffnen"]="Open hood",["Motorhaube schließen"]="Close hood",
     ["Hebebühne anheben"]="Raise lift",["Hebebühne absenken"]="Lower lift",["Messwerte auslesen"]="Read measurements",
     ["Endkontrolle"]="Final inspection",["Abrechnen"]="Collect payment",["Sofort verfügbar"]="Available immediately",
-    ["Nicht genug Werkstatt-Credits."]="Not enough workshop credits.",["Nicht genug Autopunkte."]="Not enough car points.",
+    ["Nicht genug Werkstatt-Credits."]="Not enough workshop credits.", -- 3.0: Eintrag der alten Punktewährung entfernt (Vorgabe A2)
 }
 function L.t(source,args,language)
     local key=tostring(source or "")

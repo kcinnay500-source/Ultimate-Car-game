@@ -5,6 +5,7 @@ local HttpService = game:GetService("HttpService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared")
 local Config = require(Shared:WaitForChild("Config"))
 local Rules = require(Shared:WaitForChild("Rules"))
+local MiniRules = require(Shared:WaitForChild("Mini"):WaitForChild("MiniRules")) -- 3.0: Speicherschutz
 local Profiles = {}
 local store
 local enabled = Config.EnableSaving and (not RunService:IsStudio() or Config.SaveInStudio)
@@ -63,8 +64,14 @@ function Profiles.Save(profile, release)
     end
     -- Another concurrent close/save may have released the lease while we waited.
     if not profile.writable or profile.receiptPending then return false end
-    profile.saving = true
     local snapshot = Rules.Snapshot(profile.data)
+    -- 3.0: Nie NaN/inf oder nicht speicherbare Werte schreiben; dieser Speicherlauf fällt dann aus.
+    if not MiniRules.IsClean(snapshot) then
+        profile.status = "Speichern ausgesetzt · ungültige Werte"
+        warn("[Profiles] Speichern abgelehnt: Profil enthält ungültige Werte")
+        return false
+    end
+    profile.saving = true
     local success = false
     for attempt = 1, 3 do
         local lostLock = false

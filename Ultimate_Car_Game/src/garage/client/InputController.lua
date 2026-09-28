@@ -46,6 +46,14 @@ function I.new(player,callbacks)
         end
         return Enum.ContextActionResult.Sink
     end,false,3000,Enum.KeyCode.One,Enum.KeyCode.Two,Enum.KeyCode.Three,Enum.KeyCode.Four,Enum.KeyCode.Five)
+    -- 3.0: Taste M schaltet die Minispiele um (optional; Tab, 1–5, Leertaste und E/F/H bleiben unverändert)
+    if callbacks.ToggleMini then
+        CAS:BindActionAtPriority("UCG_Minigames",function(_,state)
+            if UIS:GetFocusedTextBox() then return Enum.ContextActionResult.Pass end
+            if state==Enum.UserInputState.Begin and not control.locked then callbacks.ToggleMini() end
+            return Enum.ContextActionResult.Sink
+        end,false,5000,Enum.KeyCode.M)
+    end
     UIS.InputEnded:Connect(function(input)
         if input.KeyCode==Enum.KeyCode.Space or input.KeyCode==Enum.KeyCode.ButtonA then control.held=false end
     end)

@@ -53,7 +53,13 @@ function W.Create(player,callback)
     if not slot then return end
     W.slots[slot]=player
     local model=template:Clone();model.Name="Plot_"..player.UserId;model:SetAttribute("OwnerUserId",player.UserId)
-    model:PivotTo(CFrame.new(((slot-1)%4)*330,0,math.floor((slot-1)/4)*260));model.Parent=folder
+    -- 3.0: Grundstück aus C.PlotSlots (x, z, rot in Grad); ohne Eintrag gilt das 2.4.0-Raster.
+    local s=C.PlotSlots and C.PlotSlots[slot]
+    local pivot=s and CFrame.new(s.x,0,s.z)*CFrame.Angles(0,math.rad(s.rot or 0),0) or CFrame.new(((slot-1)%4)*330,0,math.floor((slot-1)/4)*260)
+    model:PivotTo(pivot);model.Parent=folder
+    -- 3.0: Gibt es den globalen Stadt-Spawn, bleibt er der einzige; die Plot-Spawns sind aus.
+    local city=workspace:FindFirstChild("City");local start=model:FindFirstChild("Start")
+    if city and city:FindFirstChild("CitySpawn") and start and start:IsA("SpawnLocation") then start.Enabled=false end
     local w={model=model,slot=slot,cars={},callback=callback,owner=player,doorOpen=true};W.plots[player]=w
     model.RollerDoor:SetAttribute("Open",true)
     model.RollerDoor.Control.ProximityPrompt.Triggered:Connect(function(p) if p==player then callback("door") end end)
@@ -72,11 +78,13 @@ function W.Create(player,callback)
 end
 function W.Bay(w,index) return w.model.Bays:FindFirstChild("Bay_"..index) end
 local function doorwayOccupied(w)
-    local origin=w.model.RollerDoor.ClosedOrigin.Position
+    -- 3.0: im Plotsystem gerechnet, damit gedrehte Grundstücke (rot=180) dieselbe Torzone prüfen.
+    local toPlot=w.model:GetPivot():Inverse()
+    local origin=toPlot*w.model.RollerDoor.ClosedOrigin.Position
     for _,player in ipairs(game:GetService("Players"):GetPlayers()) do
         local character=player.Character;local root=character and character:FindFirstChild("HumanoidRootPart")
         if root then
-            local delta=root.Position-origin
+            local delta=toPlot*root.Position-origin
             if math.abs(delta.X)<11 and math.abs(delta.Z)<2 and math.abs(delta.Y)<7 then return true end
         end
     end

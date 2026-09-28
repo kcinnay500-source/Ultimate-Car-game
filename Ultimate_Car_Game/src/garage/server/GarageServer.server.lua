@@ -4,6 +4,7 @@ local Shared=game:GetService("ReplicatedStorage"):WaitForChild("GarageShared")
 local C,R=require(Shared:WaitForChild("Config")),require(Shared:WaitForChild("Rules"))
 local P,F,W=require(script.Parent.Profiles),require(script.Parent.CarFactory),require(script.Parent.World)
 local Purchases=require(script.Parent.Purchases)
+local Mini=require(script.Parent:WaitForChild("Mini"):WaitForChild("MiniService")) -- 3.0: Minispiele und Stadt
 local RunService=game:GetService("RunService")
 local Remotes=Shared:WaitForChild("Remotes")
 local Command,Event=Remotes:WaitForChild("Command"),Remotes:WaitForChild("Event")
@@ -86,13 +87,16 @@ local function messageResult(p,ok,message)
 end
 local function moveTo(p,part)
     if not part or not p.player.Character then return end
-    local plotY=p.world.model.PrimaryPart.Position.Y
-    local destination=W.SafeArrival(p.world,part)
+    -- 3.0: drehsicher im Plotsystem (6 Studs vor dem Ziel, 3,5 über dem Plotboden); ein Kind-Part
+    -- "Arrival" am Ziel legt die Ankunft fest (z. B. für erhöhte Stationen).
+    local plot=p.world.model:GetPivot();local here=plot:Inverse()*part.Position
+    local arrival=part:FindFirstChild("Arrival")
+    local destination=W.SafeArrival(p.world,part) or (arrival and arrival:IsA("BasePart") and arrival.CFrame*CFrame.new(0,3.5,0))
     local ch=p.player.Character;local root=ch:FindFirstChild("HumanoidRootPart")
     local humanoid=ch:FindFirstChildOfClass("Humanoid")
     if not root or not humanoid or humanoid.Health<=0 then return end
     humanoid.Sit=false
-    ch:PivotTo(destination or CFrame.new(part.Position.X,plotY+3.5,part.Position.Z+6))
+    ch:PivotTo(destination or plot*CFrame.new(here.X,3.5,here.Z+6))
     root.AssemblyLinearVelocity=Vector3.new();root.AssemblyAngularVelocity=Vector3.new()
 end
 local function jobConditions(p,j,v)
@@ -183,7 +187,7 @@ local function expansionQuote(p)
 end
 local function act(p,action,a)
     local d=p.profile.data
-    if action=="hello" then return push(p) end
+    if action=="hello" then Mini.Hello(p);return push(p) end -- 3.0: Minispiel-Snapshot und Bestenliste
     if action=="travel" then
         if not C.StationNames[a.key] then return end
         if a.key=="shop" then resetInteraction(p);emit(p,"page","shop");return push(p) end
@@ -289,6 +293,7 @@ local function act(p,action,a)
             resetInteraction(p,pending)
             if p.player.Character~=pending.character or not near(p,point,8) or p.profile.transacting then emit(p,"interactionReset");return toast(p,"Außenarbeit abgebrochen. Versuche es erneut an der Station.") end
             if R.FinishYard(p.profile.data,a.id,now()) then
+                Mini.OnActivity(p) -- 3.0: zählt als "heute gespielt" für den Tagesauftrag
                 emit(p,"purchaseFX",{title=def.name,detail="+"..def.reward.." Cr · +"..def.xp.." XP"});changed(p)
             end
         end)
@@ -297,7 +302,7 @@ local function act(p,action,a)
     if action=="settle" then
         if not station(p,"workshop") then return toast(p,"Gehe zur Abrechnung an den Empfang.") end
         local receipt,msg=R.Settle(d,a.id,now())
-        if receipt then emit(p,"receipt",receipt);R.RefreshOffers(d) end
+        if receipt then emit(p,"receipt",receipt);R.RefreshOffers(d);Mini.OnSettled(p) end -- 3.0: jobsDone für Ziele
         return messageResult(p,receipt,msg)
     end
     if action=="confirm" then
@@ -378,15 +383,19 @@ local function request(player,action,a)
     local finishing=p.pending and a.token==p.pending.token and (action=="hit" or action=="abortInteraction")
     local time=now();p.budget=math.min(30,(p.budget or 30)+(time-(p.budgetTime or time))*20);p.budgetTime=time
     if not finishing then if p.budget<1 then return end;p.budget=p.budget-1 end
-    if action~="hello" and action~="hit" and action~="abortInteraction" then
+    -- 3.0: Minispiel-Aktionen haben eigene Abklingzeiten je Aktion und Ziel (Budget und Sperren gelten weiter).
+    if action~="hello" and action~="hit" and action~="abortInteraction" and not Mini.Handles(action) then
         if time-(p.cooldowns[action] or -10)<0.12 then return end;p.cooldowns[action]=time
     end
     local changedTime,arrived=R.Advance(p.profile.data,time)
     advanceDays(p,time)
     if arrived>0 then W.Deliver(p.world,arrived);toast(p,"Deine Teilelieferung ist angekommen.") end
     if changedTime then p.revision=p.revision+1;W.Sync(p.world,p.profile.data) end
+    if Mini.Handles(action) then return Mini.Handle(p,action,a) end -- 3.0
     act(p,action,a)
 end
+-- 3.0: Minispiele an dieselben Wege anbinden (ein Eingang, ein Profil, keine neuen Remotes).
+Mini.Init({emit=emit,toast=toast,changed=changed,push=push,getSession=function(player) return sessions[player] end,moveTo=moveTo,now=now})
 Command.OnServerEvent:Connect(request)
 Purchases.Init(function(player) return sessions[player] end,function(p,product)
     emit(p,"purchaseFX",{title="Credits erhalten",detail="+"..product.credits.." Credits"});changed(p)
@@ -411,6 +420,7 @@ local function join(player)
     local stats=Instance.new("Folder");stats.Name="leaderstats";stats.Parent=player
     for _,name in ipairs({"Credits","Level"}) do local n=Instance.new("NumberValue");n.Name=name;n.Parent=stats end
     R.RefreshOffers(profile.data);W.Sync(p.world,profile.data);W.Equipment(p.world,profile.data)
+    Mini.OnJoin(p) -- 3.0: Offline-Presse, Tageswechsel, Game Passes
     local function character(ch)
         local root=ch:WaitForChild("HumanoidRootPart",10)
         local humanoid=ch:WaitForChild("Humanoid",10)
@@ -430,7 +440,9 @@ Players.PlayerAdded:Connect(join)
 for _,player in ipairs(Players:GetPlayers()) do task.spawn(join,player) end
 Players.PlayerRemoving:Connect(function(player)
     local p=sessions[player];if not p then return end
-    advanceDays(p,now());p.closing=true;p.pending=nil;P.Save(p.profile,true);sessions[player]=nil;W.Destroy(player)
+    advanceDays(p,now());p.closing=true;p.pending=nil
+    Mini.OnLeave(p,p.profile.writable) -- 3.0: vor P.Save (Save gibt writable frei); blockiert nicht
+    P.Save(p.profile,true);sessions[player]=nil;W.Destroy(player)
 end)
 task.spawn(function()
     while true do
@@ -443,6 +455,7 @@ task.spawn(function()
             if change then p.revision=p.revision+1;W.Sync(p.world,p.profile.data) end
             if arrived>0 then W.Deliver(p.world,arrived);toast(p,"Teilelieferung angekommen. Die Ersatzteile liegen im Lager.") end
             push(p)
+            Mini.Tick(p,now()) -- 3.0: auch während transacting (nur Schrott, nie Geld)
         end end
     end
 end)
@@ -451,6 +464,7 @@ task.spawn(function()
 end)
 game:BindToClose(function()
     local remaining=0
-    for _,p in pairs(sessions) do remaining=remaining+1;advanceDays(p,now());p.closing=true;task.spawn(function() P.Save(p.profile,true);remaining=remaining-1 end) end
-    local deadline=os.clock()+25;while remaining>0 and os.clock()<deadline do task.wait(0.1) end
+    for _,p in pairs(sessions) do remaining=remaining+1;advanceDays(p,now());p.closing=true;Mini.OnLeave(p,p.profile.writable);task.spawn(function() P.Save(p.profile,true);remaining=remaining-1 end) end
+    -- 3.0: auch auf laufende Bestenlisten-Schreibvorgänge warten
+    local deadline=os.clock()+25;while (remaining>0 or Mini.Pending()>0) and os.clock()<deadline do task.wait(0.1) end
 end)
