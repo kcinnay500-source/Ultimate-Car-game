@@ -1,0 +1,4976 @@
+<?xml version="1.0" encoding="utf-8"?>
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+  <External>null</External>
+  <External>nil</External>
+  <Item class="Workspace" referent="RBX00000027"><Properties><string name="Name">Workspace</string></Properties>
+  </Item>
+  <Item class="ReplicatedStorage" referent="RBX00000029"><Properties><string name="Name">ReplicatedStorage</string></Properties>
+    <Item class="Folder" referent="RBX00000028"><Properties><string name="Name">Shared</string></Properties>
+      <Item class="ModuleScript" referent="RBX00000001"><Properties><string name="Name">Catalog</string><ProtectedString name="Source"><![CDATA[-- Catalog: Presse-Upgrades und Quizfragen.
+-- Presse-Upgrades bilden die 100 HTML-Clicker-Upgrades 1:1 ab (Typ = Index % 5, Kosten und Effekt wie HTML).
+local Config = require(script.Parent:WaitForChild("Config"))
+
+local Catalog = {}
+
+-- Typ 0 und 3: Klickstärke, Typ 1 und 4: Schrott pro Sekunde, Typ 2: Ruf- und Credit-Bonus beim Kauf
+local NAMES_BY_TYPE = {
+	[0] = { "Brecheisen", "Vorschlaghammer", "Hydraulikschere", "Trennschleifer", "Druckluftmeißel", "Rettungsspreizer", "Plasmaschneider", "Hydraulikzylinder", "Pressstempel", "Stahlbacken", "Titanbacken", "Doppelzylinder", "Schneidwerk", "Hochdruckpumpe", "Große Pressplatte", "Diamantschneide", "Turbo-Hydraulik", "Presskammer XXL", "Schwerlast-Kolben", "Meisterpresse" },
+	[1] = { "Förderband", "Magnetkran", "Schredder", "Schrottgreifer", "Paketierpresse", "Sortieranlage", "Rüttelsieb", "Wirbelstromabscheider", "Scherenpresse", "Kettenschredder", "Doppelschredder", "Verladekran", "Hammermühle", "Presslinie", "Robotergreifer", "Nachtpresse", "Groß-Schredder", "Recyclingstraße", "Hafenkran", "Schrott-Fabrik" },
+	[2] = { "Kleinanzeige", "Abschleppdienst-Deal", "Versicherungskontakt", "Autohaus-Vertrag", "Werkstatt-Netzwerk", "Kommunen-Vertrag", "Flottenrückläufer", "Messestand", "Stahlwerk-Vertrag", "Exportlizenz", "Bahnanschluss", "Großhändler", "Hafenlizenz", "Recycling-Zertifikat", "Umweltsiegel", "Branchenpreis", "Landesvertrag", "Europa-Netz", "Weltmarkt-Kontakt", "Schrott-Imperium" },
+	[3] = { "Arbeitshandschuhe", "Schlagschrauber", "Winkelschleifer", "Säbelsäge", "Druckluftschrauber", "Brennschneider", "Kettenzug", "Hebelzange", "Bolzenschneider", "Schneidbrenner Pro", "Akku-Schere", "Pneumatikhammer", "Hydraulikspreizer", "Laserschneider", "Wasserstrahlschneider", "Titanwerkzeug", "Präzisionsschere", "Carbon-Hammer", "Schwerlastzange", "Meisterwerkzeug" },
+	[4] = { "Praktikant", "Aushilfe", "Sortierer", "Pressenbediener", "Kranführer", "Schweißer", "Vorarbeiter", "Schichtleiter", "Nachtschicht", "Wochenendteam", "Meister", "Ingenieur", "Spezialistenteam", "Doppelschicht", "Logistikteam", "Werksleiter", "Qualitätsteam", "Zweite Halle", "Dritte Halle", "Konzernzentrale" },
+}
+
+Catalog.PressUpgradeTypeLabel = {
+	[0] = "Klick",
+	[1] = "Maschine",
+	[2] = "Händler",
+	[3] = "Klick",
+	[4] = "Mitarbeiter",
+}
+
+Catalog.PressUpgrades = {}
+Catalog.PressUpgradeById = {}
+for i = 0, Config.PressUpgradeCount - 1 do
+	local kind = i % 5
+	local u = {
+		id = "pu" .. i,
+		index = i + 1,
+		name = NAMES_BY_TYPE[kind][math.floor(i / 5) + 1],
+		type = kind,
+		baseCost = math.floor(Config.PressUpgradeCostBase * Config.PressUpgradeCostStep ^ i + 0.5),
+		baseEffect = 1 + math.floor(i / 5),
+	}
+	table.insert(Catalog.PressUpgrades, u)
+	Catalog.PressUpgradeById[u.id] = u
+end
+
+-- Fragen: Index 1 der Antworten ist richtig; die Reihenfolge mischt der Server pro Frage.
+Catalog.Questions = {
+	{ q = "Welche Ursache passt am ehesten zu einem zu niedrigen Ladedruck?", a = { "Defektes Wastegate", "Zu hoher Reifendruck", "Leere Wischwasseranlage", "Defekte Innenleuchte" } },
+	{ q = "Wofür steht OBD?", a = { "On-Board-Diagnose", "Öl-Brems-Druck", "Offene Batterie-Dose", "Online-Bauteil-Daten" } },
+	{ q = "Welche Sicherung schützt einen Stromkreis?", a = { "Schmelzsicherung", "Radlager", "Zündkerze", "Lambdasonde" } },
+	{ q = "Was misst eine Lambdasonde?", a = { "Restsauerstoff im Abgas", "Öldruck", "Kühlmittelstand", "Reifentemperatur" } },
+	{ q = "Was passiert bei Luft im Bremssystem?", a = { "Pedal kann weich werden", "Motor dreht höher", "Licht wird heller", "Reifen verlieren Profil" } },
+	{ q = "Welche Aufgabe hat der Ladeluftkühler?", a = { "Ansaugluft abkühlen", "Motoröl filtern", "Bremsen kühlen", "Kraftstoff erwärmen" } },
+	{ q = "Welche Spannung hat ein klassisches Pkw-Bordnetz meist?", a = { "12 Volt", "5 Volt", "48 Kilovolt", "230 Volt" } },
+	{ q = "Wozu dient der Zahnriemen bzw. die Steuerkette?", a = { "Nockenwelle und Kurbelwelle synchronisieren", "Klimaanlage befüllen", "Reifen auswuchten", "Scheinwerfer einstellen" } },
+	{ q = "Was zeigt die Motorkontrollleuchte an?", a = { "Einen gespeicherten Fehler der Motorsteuerung", "Leeren Tank", "Offene Tür", "Eingeschaltetes Fernlicht" } },
+	{ q = "Womit misst man den Säurezustand einer Blei-Batterie klassisch?", a = { "Säureheber (Aräometer)", "Drehmomentschlüssel", "Messschieber", "Kompressionstester" } },
+	{ q = "Was prüft ein Kompressionstest?", a = { "Dichtheit der Brennräume", "Reifendruck", "Bremsflüssigkeit", "Ladestrom der Lichtmaschine" } },
+	{ q = "Welche Aufgabe hat die Lichtmaschine?", a = { "Bordnetz versorgen und Batterie laden", "Scheinwerfer ausrichten", "Motor starten", "Kühlmittel pumpen" } },
+	{ q = "Woran erkennt man abgenutzte Bremsbeläge oft zuerst?", a = { "Quietschen oder Warnleuchte", "Höherer Ölstand", "Hellere Scheinwerfer", "Lauterer Blinker" } },
+	{ q = "Wozu dient ein Drehmomentschlüssel?", a = { "Schrauben mit vorgegebener Kraft anziehen", "Spannung messen", "Öl absaugen", "Reifen aufpumpen" } },
+	{ q = "Was bewirkt ein Thermostat im Kühlkreislauf?", a = { "Regelt, wann der große Kühlkreislauf öffnet", "Misst die Außentemperatur", "Heizt den Innenraum elektrisch", "Kühlt das Getriebeöl" } },
+	{ q = "Wofür ist der Katalysator zuständig?", a = { "Schadstoffe im Abgas umwandeln", "Kraftstoff einspritzen", "Motor schmieren", "Luft ansaugen" } },
+	{ q = "Was sollte man vor Arbeiten an einem Hochvolt-System tun?", a = { "System spannungsfrei schalten und prüfen", "Motor laufen lassen", "Nur Handschuhe aus Stoff tragen", "Batterie überbrücken" } },
+	{ q = "Was misst ein Multimeter im Modus Ohm?", a = { "Widerstand", "Druck", "Drehzahl", "Temperatur" } },
+	{ q = "Welches Bauteil zündet das Gemisch beim Benziner?", a = { "Zündkerze", "Glühkerze", "Einspritzpumpe", "Lambdasonde" } },
+	{ q = "Wofür steht ABS?", a = { "Antiblockiersystem", "Automatische Bremsschaltung", "Abgas-Behandlungs-System", "Achsbalance-Steuerung" } },
+}
+
+return Catalog
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000002"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[-- Config: alle Spielwerte an einer Stelle. Quelle der Formeln: reference/Ultimate_Car_Game.html
+local Config = {}
+
+Config.Version = "3.0.0"
+
+-- DataStore
+Config.ProfileStoreName = "UltimateCarGame_v2"
+Config.ProfileKeyPrefix = "player_"
+Config.SessionLockTimeout = 600 -- Sekunden, danach gilt eine fremde Sperre als verwaist
+Config.AutosaveInterval = 60
+Config.LeaderboardStoreName = "UltimateCarGame_ScrapLeaderboard_v1"
+Config.LeaderboardWriteInterval = 120 -- pro Spieler
+Config.LeaderboardReadInterval = 60 -- serverweit
+Config.LeaderboardTopCount = 50
+Config.LeaderboardScanPages = 5 -- je 100 Einträge, für die eigene Platzierung außerhalb der Top 50
+Config.LeaderboardBoardRows = 10
+Config.DataStoreRetries = 3
+
+-- Remote-Budget
+Config.ActionRate = 25 -- Aktionen pro Sekunde (Nachfüllrate)
+Config.ActionBurst = 40
+Config.RecentRequestIds = 64
+Config.StationRangeSlack = 6
+
+-- Karriere (HTML: xpNeeded, gainXP)
+Config.StartCredits = 800
+Config.StartParts = 3
+Config.LevelUpCreditsBase = 120
+Config.LevelUpCreditsPerLevel = 18
+Config.LevelUpReputation = 2
+
+-- Schrottpresse (HTML: Auto Clicker)
+Config.MaxClicksPerSecond = 20
+Config.ClickBurstSeconds = 2
+Config.ClickBatchInterval = 0.5
+Config.PressBaseClick = 5 -- HTML clickPower
+Config.PressBaseMachine = 1 -- HTML autoPower
+Config.PressStartScrap = 0
+Config.PressUpgradeCostGrowth = 1.145
+Config.PressUpgradeCostBase = 8
+Config.PressUpgradeCostStep = 1.19
+Config.PressGlobalPerLevel = 0.0025
+Config.PressMachineEffectFactor = 0.35
+Config.PressComboStep = 0.25
+Config.PressComboMax = 25
+Config.PressComboWindow = 1.8
+Config.PressOfflineCapHours = 8
+Config.PressWorkshopShare = 0.6 -- HTML clickerWorkshopMultiplier
+Config.PressTuningShare = 0.8 -- HTML clickerTuningMultiplier
+Config.PressUpgradeCount = 100
+
+-- Schrotthändler (HTML: sellCarPoints, Kurs 4 : 1 mit 20 % Abschlag, hier Schrott -> Credits)
+Config.ScrapPerCredit = 4
+Config.ScrapExchangePayout = 0.8
+Config.ScrapExchangePackages = { 100, 1000, 10000, 100000, 1000000, 10000000 }
+
+-- Rebirth (ersetzt HTML-Prestige für die Presse)
+Config.RebirthBaseThreshold = 1000000 -- Schrott in diesem Durchlauf
+Config.RebirthThresholdGrowth = 3
+Config.RebirthMultiplierPerRebirth = 0.10 -- HTML prestigeApMultiplier
+
+-- Game Passes (Platzhalter: 0 = nicht eingerichtet, kein Kauf möglich)
+Config.GamePasses = {
+	DoubleScrap = { id = 0, multiplier = 2 },
+	PressPlus = { id = 0, machineMultiplier = 1.5 },
+}
+
+-- Werkstatt (HTML: jobsCatalog, acceptJob, finishJob)
+Config.Jobs = {
+	{ name = "Ölwechsel", time = 18, cost = 40, reward = 150, xp = 16, parts = 1 },
+	{ name = "Bremsen vorne", time = 35, cost = 95, reward = 330, xp = 30, parts = 3 },
+	{ name = "Zündspulen prüfen", time = 28, cost = 70, reward = 260, xp = 25, parts = 2 },
+	{ name = "Fahrwerk reparieren", time = 55, cost = 180, reward = 620, xp = 55, parts = 5 },
+	{ name = "Turbolader ersetzen", time = 85, cost = 420, reward = 1350, xp = 105, parts = 8 },
+	{ name = "Steuerkette erneuern", time = 110, cost = 560, reward = 1850, xp = 145, parts = 10 },
+	{ name = "HV-System Diagnose", time = 70, cost = 210, reward = 920, xp = 80, parts = 4 },
+}
+Config.JobTierNames = { "Flottenauftrag", "Motorrevision", "Rennwagen-Aufbau", "Oldtimer-Restauration", "HV-Batterie-Instandsetzung", "Komplettumbau", "Prototypen-Service" }
+Config.MaxOffers = 35
+
+-- Ausbau (HTML: upgrades)
+Config.Upgrades = {
+	{ key = "bays", name = "Hebebühne", desc = "Mehr Aufträge gleichzeitig.", base = 1100, growth = 1.42, max = 50 },
+	{ key = "offerSlots", name = "Auftragsannahme", desc = "Mehr gleichzeitig sichtbare Aufträge.", base = 900, growth = 1.48, max = 30 },
+	{ key = "toolLevel", name = "Werkzeugqualität", desc = "Schnellere Reparaturen und mehr Schrottplatz-Teile.", base = 700, growth = 1.34, max = 100 },
+	{ key = "tuningLevel", name = "Tuning-Abteilung", desc = "Mehr Tuning-Ertrag und Werkstatt-Vergütung.", base = 850, growth = 1.38, max = 100 },
+	{ key = "scrapyardLevel", name = "Schrottplatz-Ausbau", desc = "Mehr Teile und seltene Funde.", base = 650, growth = 1.35, max = 100 },
+}
+Config.UpgradeXp = 25
+
+-- Idle Tuning Garage (HTML: tuneCar, idleRate, collectIdle)
+Config.TuningProjects = {
+	{ id = "folie", name = "Folierung", minutes = 5, unlock = 1 },
+	{ id = "fahrwerk", name = "Sportfahrwerk", minutes = 15, unlock = 1 },
+	{ id = "abgas", name = "Sportabgasanlage", minutes = 30, unlock = 2 },
+	{ id = "software", name = "Motorsoftware", minutes = 60, unlock = 3 },
+	{ id = "turbo", name = "Turbo-Umbau", minutes = 120, unlock = 5 },
+	{ id = "motor", name = "Motor-Revision", minutes = 240, unlock = 8 },
+	{ id = "restomod", name = "Restomod-Komplettaufbau", minutes = 480, unlock = 12 },
+}
+Config.TuningRewardBase = 60 -- Credits bei 1 Minute
+Config.TuningRewardExponent = 1.2 -- überproportional zur Laufzeit
+Config.TuningCostShare = 0.35
+Config.TuningXpPerMinute = 0.6
+Config.TuningSlotsBase = 1
+Config.TuningSlotsEvery = 10 -- +1 Slot je 10 Tuning-Stufen
+Config.TuningSlotsMax = 4
+Config.TuningIdleCapHours = 8
+Config.TuningLongMinutes = 480
+
+-- Schrottplatz (HTML: buyScrap, sellParts)
+Config.ScrapyardCarCost = 180
+Config.ScrapyardSellParts = 5
+Config.ScrapyardSellCredits = 220
+Config.ScrapyardScrapPerPart = 40 -- A8: Schrott beim Zerlegen
+Config.ScrapyardRareParts = 4
+
+-- Mechaniker-Quiz (HTML: answerQuestion)
+Config.QuizCorrectCredits = 90
+Config.QuizCorrectXp = 20
+Config.QuizWrongXp = 4
+Config.QuizCooldown = 1
+Config.DiagReductionPerPoint = 0.015
+Config.DiagReductionCap = 0.35
+
+-- Parkplatz-Chaos (HTML: startParking, tapSpot)
+Config.ParkingSize = 4
+Config.ParkingCars = 7
+Config.ParkingRewardBase = 120
+Config.ParkingRewardPerStreak = 15
+Config.ParkingXp = 16
+Config.CustomerBonusPerStreak = 0.03
+Config.CustomerBonusCap = 1.7
+Config.ParkingOfferBonusEvery = 5
+Config.ParkingOfferBonusMax = 5
+
+-- Tagesauftrag (HTML: claimDaily)
+Config.DailyCredits = 350
+Config.DailyParts = 3
+Config.DailyXp = 40
+
+-- Tagesziele: je Stufe ein Ziel, pro UTC-Tag deterministisch gewählt
+Config.DailyGoalPool = {
+	short = {
+		{ id = "d_clicks", text = "Presse {1}-mal klicken", stat = "clicks", target = 300, credits = 250 },
+		{ id = "d_scrap", text = "{1} Schrott pressen", stat = "pressed", target = 20000, credits = 300 },
+		{ id = "d_upg", text = "{1} Presse-Upgrades kaufen", stat = "pressUpgrades", target = 5, credits = 250 },
+	},
+	mid = {
+		{ id = "d_jobs", text = "{1} Werkstatt-Aufträge abrechnen", stat = "jobsDone", target = 3, credits = 450 },
+		{ id = "d_quiz", text = "{1} Quizfragen richtig beantworten", stat = "quizCorrect", target = 3, credits = 350 },
+		{ id = "d_park", text = "{1} Parkplätze freiräumen", stat = "parkingSolved", target = 2, credits = 350 },
+		{ id = "d_yard", text = "{1} Fahrzeuge zerlegen", stat = "dismantled", target = 2, credits = 400 },
+	},
+	long = {
+		{ id = "d_tune_start", text = "{1} Tuning-Projekt starten", stat = "tuningStarted", target = 1, credits = 300 },
+		{ id = "d_tune_collect", text = "{1} Tuning-Projekte abholen", stat = "tuningCollected", target = 1, credits = 500 },
+		{ id = "d_idle", text = "Passive Tuning-Einnahmen {1}-mal abholen", stat = "idleCollected", target = 2, credits = 300 },
+	},
+}
+
+-- Meilensteine (einmalige Belohnung)
+Config.Milestones = {
+	{ id = "m_scrap_10k", text = "10 Tsd. Schrott gepresst", stat = "lifetimeScrap", target = 10000, credits = 500, xp = 50 },
+	{ id = "m_scrap_1m", text = "1 Mio. Schrott gepresst", stat = "lifetimeScrap", target = 1000000, credits = 5000, xp = 300 },
+	{ id = "m_scrap_1b", text = "1 Mrd. Schrott gepresst", stat = "lifetimeScrap", target = 1000000000, credits = 50000, xp = 2000 },
+	{ id = "m_press_upg_25", text = "25 Presse-Upgrades gekauft", stat = "pressUpgrades", target = 25, credits = 1500, xp = 120 },
+	{ id = "m_rebirth_1", text = "Erstes Rebirth", stat = "rebirths", target = 1, credits = 10000, xp = 500 },
+	{ id = "m_jobs_10", text = "10 Aufträge abgerechnet", stat = "jobsDone", target = 10, credits = 1500, xp = 150 },
+	{ id = "m_jobs_100", text = "100 Aufträge abgerechnet", stat = "jobsDone", target = 100, credits = 12000, xp = 900 },
+	{ id = "m_tune_first", text = "Erstes Tuning-Projekt abgeholt", stat = "tuningCollected", target = 1, credits = 600, xp = 60 },
+	{ id = "m_tune_8h", text = "Erstes 8-Std.-Tuning abgeholt", stat = "longTuning", target = 1, credits = 8000, xp = 600 },
+	{ id = "m_park_5", text = "5er-Parkplatz-Serie", stat = "bestParkingStreak", target = 5, credits = 1200, xp = 120 },
+	{ id = "m_quiz_25", text = "25 Quizfragen richtig", stat = "quizCorrect", target = 25, credits = 2000, xp = 200 },
+	{ id = "m_yard_10", text = "10 Fahrzeuge zerlegt", stat = "dismantled", target = 10, credits = 1500, xp = 150 },
+	{ id = "m_level_25", text = "Level 25 erreicht", stat = "level", target = 25, credits = 5000, xp = 0 },
+}
+
+-- Server-Tick
+Config.TickInterval = 1
+Config.SyncInterval = 0.25
+
+return Config
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000003"><Properties><string name="Name">GoalRules</string><ProtectedString name="Source"><![CDATA[-- GoalRules: Meilensteine, Tagesauftrag, Tagesziele, "Nächstes Ziel", Boni-Übersicht.
+local Config = require(script.Parent:WaitForChild("Config"))
+local Catalog = require(script.Parent:WaitForChild("Catalog"))
+local Locale = require(script.Parent:WaitForChild("Locale"))
+local Rules = require(script.Parent:WaitForChild("Rules"))
+local PressRules = require(script.Parent:WaitForChild("PressRules"))
+local WorkshopRules = require(script.Parent:WaitForChild("WorkshopRules"))
+local TuningRules = require(script.Parent:WaitForChild("TuningRules"))
+
+local GoalRules = {}
+
+function GoalRules.Stat(p, key)
+	local g = p.games
+	if key == "lifetimeScrap" then
+		return g.press.lifetime
+	elseif key == "level" then
+		return p.level
+	elseif key == "bestParkingStreak" then
+		return g.parking.best
+	elseif key == "rebirths" then
+		return g.press.rebirths
+	end
+	return g.stats[key] or 0
+end
+
+function GoalRules.Milestone(id)
+	for _, m in ipairs(Config.Milestones) do
+		if m.id == id then
+			return m
+		end
+	end
+	return nil
+end
+
+function GoalRules.ClaimMilestone(p, id)
+	local m = type(id) == "string" and GoalRules.Milestone(id)
+	if not m then
+		return false, nil
+	end
+	if p.games.milestones[id] then
+		return false, nil
+	end
+	if GoalRules.Stat(p, m.stat) < m.target then
+		return false, "Ziel noch nicht erreicht."
+	end
+	p.games.milestones[id] = true
+	p.credits += m.credits
+	local xp = Rules.GainXP(p, m.xp)
+	return true, m, xp
+end
+
+-- Tageswechsel (UTC): setzt Tagesauftrag und Tagesziele zurück, sonst nichts.
+function GoalRules.EnsureDay(p, now)
+	local today = Rules.DayKey(now)
+	local dl = p.games.daily
+	if dl.day ~= today then
+		dl.day = today
+		dl.claimed = false
+		dl.active = false
+		dl.progress = {}
+		dl.goalsClaimed = {}
+		return true
+	end
+	return false
+end
+
+local TIERS = { "short", "mid", "long" }
+function GoalRules.DailyGoals(day)
+	local list = {}
+	for _, tier in ipairs(TIERS) do
+		local pool = Config.DailyGoalPool[tier]
+		local idx = (Rules.HashString(day .. ":" .. tier) % #pool) + 1
+		table.insert(list, pool[idx])
+	end
+	return list
+end
+
+function GoalRules.DailyGoalText(def)
+	return (string.gsub(def.text, "{1}", Locale.Number(def.target)))
+end
+
+function GoalRules.ClaimDailyGoal(p, id, now)
+	GoalRules.EnsureDay(p, now)
+	local dl = p.games.daily
+	local def
+	for _, d in ipairs(GoalRules.DailyGoals(dl.day)) do
+		if d.id == id then
+			def = d
+		end
+	end
+	if not def or dl.goalsClaimed[id] then
+		return false, nil
+	end
+	if (dl.progress[def.stat] or 0) < def.target then
+		return false, "Tagesziel noch nicht erreicht."
+	end
+	dl.goalsClaimed[id] = true
+	p.credits += def.credits
+	return true, def
+end
+
+-- HTML claimDaily: einmal pro UTC-Tag, sobald heute ein Bereich gespielt wurde.
+function GoalRules.ClaimDaily(p, now)
+	GoalRules.EnsureDay(p, now)
+	local dl = p.games.daily
+	if dl.claimed then
+		return false, nil
+	end
+	if not dl.active then
+		return false, "Spiele heute zuerst einen Bereich."
+	end
+	dl.claimed = true
+	p.credits += Config.DailyCredits
+	p.games.parts += Config.DailyParts
+	local xp = Rules.GainXP(p, Config.DailyXp)
+	return true, xp
+end
+
+function GoalRules.CheapestPressUpgrade(p)
+	local best, bestCost
+	for _, u in ipairs(Catalog.PressUpgrades) do
+		local cost = PressRules.UpgradeCost(u, PressRules.Level(p, u.id))
+		if not bestCost or cost < bestCost then
+			best, bestCost = u, cost
+		end
+	end
+	return best, bestCost
+end
+
+-- Das nächstliegende Ziel: zuerst Abholbares, sonst das Ziel mit dem größten Fortschritt.
+function GoalRules.NextGoal(p, now)
+	local g = p.games
+	local candidates = {}
+	local function add(text, progress, tab)
+		table.insert(candidates, { text = text, progress = math.clamp(progress, 0, 1), tab = tab })
+	end
+
+	for _, m in ipairs(Config.Milestones) do
+		if not g.milestones[m.id] then
+			local v = GoalRules.Stat(p, m.stat)
+			if v >= m.target then
+				add("Meilenstein abholen: " .. m.text, 1, "goals")
+			else
+				add("Meilenstein: " .. m.text, v / m.target, "goals")
+			end
+		end
+	end
+	if g.daily.day == Rules.DayKey(now) then
+		for _, def in ipairs(GoalRules.DailyGoals(g.daily.day)) do
+			if not g.daily.goalsClaimed[def.id] then
+				local v = g.daily.progress[def.stat] or 0
+				add((v >= def.target and "Tagesziel abholen: " or "Tagesziel: ") .. GoalRules.DailyGoalText(def), v / def.target, "goals")
+			end
+		end
+	end
+	for _, pj in ipairs(g.tuning.projects) do
+		local def = TuningRules.ProjectDef(pj.id)
+		local remaining = TuningRules.Remaining(pj, now)
+		local name = def and def.name or pj.id
+		if remaining <= 0 then
+			add("Tuning abholen: " .. name, 1, "tuning")
+		else
+			add("Tuning „" .. name .. "“ fertig in " .. Locale.Duration(remaining), 1 - remaining / pj.duration, "tuning")
+		end
+	end
+	for _, job in ipairs(g.jobs) do
+		if now >= job.endsAt then
+			add("Auftrag abrechnen: " .. job.name, 1, "workshop")
+		end
+	end
+	local u, cost = GoalRules.CheapestPressUpgrade(p)
+	if u then
+		local v = g.press.scrap
+		add((v >= cost and "Upgrade kaufbar: " or "Nächstes Upgrade: ") .. u.name .. " (" .. Locale.Number(cost) .. " Schrott)", v / cost, "press")
+	end
+
+	local best
+	for _, c in ipairs(candidates) do
+		if not best or c.progress > best.progress then
+			best = c
+		end
+	end
+	return best or { text = "Alle Ziele erreicht!", progress = 1, tab = "overview" }
+end
+
+function GoalRules.ActiveBoni(p, passes)
+	local list = {
+		"Presse → Werkstatt: +" .. Locale.Percent(PressRules.WorkshopMultiplier(p) - 1),
+		"Presse → Tuning: +" .. Locale.Percent(PressRules.TuningMultiplier(p) - 1),
+		"Rebirth-Schrott: ×" .. string.format("%.2f", PressRules.RebirthMultiplier(p)),
+		"Tuning-Stufe → Werkstatt: +" .. Locale.Percent(WorkshopRules.TuningWorkshopBonus(p) - 1),
+		"Diagnose → Reparaturzeit: −" .. Locale.Percent(WorkshopRules.DiagReduction(p)) .. " (max. " .. Locale.Percent(Config.DiagReductionCap) .. ")",
+		"Parkplatz-Serie → Auftragsqualität: ×" .. string.format("%.2f", WorkshopRules.CustomerBonus(p)) .. " (max. ×" .. string.format("%.2f", Config.CustomerBonusCap) .. ")",
+		"Werkzeug → Reparaturtempo und Teile: +" .. Locale.Percent((p.games.toolLevel - 1) * 0.08),
+	}
+	if passes and passes.doubleScrap then
+		table.insert(list, "Game Pass 2× Schrott: ×" .. Config.GamePasses.DoubleScrap.multiplier .. " (zählt nicht für die Bestenliste)")
+	end
+	if passes and passes.pressPlus then
+		table.insert(list, "Game Pass Schrottpresse+: Maschinen ×" .. Config.GamePasses.PressPlus.machineMultiplier .. " (zählt nicht für die Bestenliste)")
+	end
+	return list
+end
+
+return GoalRules
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000004"><Properties><string name="Name">Locale</string><ProtectedString name="Source"><![CDATA[-- Locale: deutsche Texte und Zahlenformatierung (Tsd., Mio., Mrd., ...)
+local Locale = {}
+
+local SUFFIXES = {
+	{ 1e24, "Quadr." },
+	{ 1e21, "Trd." },
+	{ 1e18, "Trio." },
+	{ 1e15, "Brd." },
+	{ 1e12, "Bio." },
+	{ 1e9, "Mrd." },
+	{ 1e6, "Mio." },
+	{ 1e3, "Tsd." },
+}
+
+local function isBad(n)
+	return type(n) ~= "number" or n ~= n or n == math.huge or n == -math.huge
+end
+
+-- Ganzzahl mit Tausenderpunkten: 12345 -> "12.345"
+function Locale.Group(n)
+	if isBad(n) then
+		return "0"
+	end
+	local negative = n < 0
+	local s = string.format("%.0f", math.floor(math.abs(n)))
+	local out = s:reverse():gsub("(%d%d%d)", "%1."):reverse()
+	if out:sub(1, 1) == "." then
+		out = out:sub(2)
+	end
+	return (negative and "-" or "") .. out
+end
+
+local function decimal(n, places)
+	local s = string.format("%." .. places .. "f", n)
+	s = s:gsub("%.", ",")
+	if places > 0 then
+		s = s:gsub(",?0+$", "")
+	end
+	return s
+end
+
+-- Große Zahlen kompakt: 1234 -> "1.234", 123456 -> "123,5 Tsd.", 1.2e6 -> "1,2 Mio."
+function Locale.Number(n)
+	if isBad(n) then
+		return "0"
+	end
+	local a = math.abs(n)
+	if a < 100000 then
+		return Locale.Group(n)
+	end
+	for _, entry in ipairs(SUFFIXES) do
+		if a >= entry[1] then
+			local v = a / entry[1]
+			if v >= 1000 and entry == SUFFIXES[1] then
+				break
+			end
+			local places = v < 100 and 1 or 0
+			if v >= 999.95 and places == 0 then
+				v = 999
+			end
+			return (n < 0 and "-" or "") .. decimal(v, places) .. " " .. entry[2]
+		end
+	end
+	local exponent = math.floor(math.log10(a))
+	local mantissa = a / 10 ^ exponent
+	return (n < 0 and "-" or "") .. decimal(mantissa, 2) .. "e" .. exponent
+end
+
+function Locale.Credits(n)
+	return Locale.Number(n) .. " Cr"
+end
+
+function Locale.Scrap(n)
+	return Locale.Number(n) .. " kg Schrott"
+end
+
+function Locale.Duration(seconds)
+	if isBad(seconds) or seconds < 0 then
+		seconds = 0
+	end
+	seconds = math.floor(seconds)
+	local h = math.floor(seconds / 3600)
+	local m = math.floor((seconds % 3600) / 60)
+	local s = seconds % 60
+	if h > 0 then
+		return string.format("%d Std. %02d Min.", h, m)
+	elseif m > 0 then
+		return string.format("%d Min. %02d Sek.", m, s)
+	end
+	return string.format("%d Sek.", s)
+end
+
+function Locale.Percent(fraction)
+	if isBad(fraction) then
+		return "0 %"
+	end
+	return tostring(math.floor(fraction * 100 + 0.5)) .. " %"
+end
+
+Locale.Strings = {
+	title = "Ultimate Car Game",
+	tab_overview = "Übersicht",
+	tab_press = "Schrottpresse",
+	tab_tuning = "Tuning-Garage",
+	tab_workshop = "Werkstatt",
+	tab_scrapyard = "Schrottplatz",
+	tab_quiz = "Mechaniker-Quiz",
+	tab_parking = "Parkplatz-Chaos",
+	tab_goals = "Ziele",
+	tab_leaderboard = "Bestenliste",
+	tab_shop = "Shop",
+	menu_button = "Minispiele",
+	close = "Schließen",
+	not_enough_credits = "Nicht genug Credits.",
+	not_enough_scrap = "Nicht genug Schrott.",
+	not_enough_parts = "Nicht genug Teile.",
+	offline_press = "Während du weg warst: +{1}",
+	leaderboard_unavailable = "Bestenliste gerade nicht verfügbar",
+	leaderboard_loading = "Bestenliste wird geladen …",
+	studio_nosave = "Speichern nicht aktiv: In Studio unter Game Settings > Security den API-Zugriff erlauben.",
+	profile_locked = "Dein Profil wird noch in einer anderen Sitzung verwendet. Bitte in einer Minute erneut beitreten.",
+	rebirth_confirm = "Rebirth durchführen? Schrott und Presse-Upgrades werden zurückgesetzt. Du erhältst dauerhaft ×{1} Schrott. Werkstatt, Credits, Level, Tuning und Meilensteine bleiben.",
+	level_up = "Level {1} erreicht! +{2}",
+	pass_not_configured = "Dieser Game Pass ist noch nicht eingerichtet.",
+}
+
+function Locale.T(key, ...)
+	local s = Locale.Strings[key] or key
+	local args = { ... }
+	s = s:gsub("{(%d+)}", function(i)
+		local v = args[tonumber(i)]
+		if v == nil then
+			return ""
+		end
+		return tostring(v)
+	end)
+	return s
+end
+
+return Locale
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000005"><Properties><string name="Name">Net</string><ProtectedString name="Source"><![CDATA[-- Net: Namen der Remotes und Aktionen. Ein RemoteEvent für alle Absichten (Client -> Server),
+-- eines für den Zustand (Server -> Client) und eines für Hinweise (Server -> Client).
+local Net = {}
+
+Net.Folder = "Remotes"
+Net.Action = "Action"
+Net.Sync = "Sync"
+Net.Notice = "Notice"
+
+-- Aktion -> erwartete Felder der Nutzlast (Typprüfung auf dem Server)
+Net.Actions = {
+	press_click = { count = "number" },
+	press_buy = { id = "string", level = "number" },
+	press_exchange = { index = "number" },
+	press_rebirth = { rebirths = "number" },
+	workshop_accept = { id = "number" },
+	workshop_finish = { id = "number" },
+	upgrade_buy = { key = "string", level = "number" },
+	tuning_start = { id = "string" },
+	tuning_collect = { slot = "number" },
+	tuning_idle = {},
+	scrapyard_buy = {},
+	scrapyard_dismantle = {},
+	scrapyard_sell = {},
+	quiz_new = {},
+	quiz_answer = { token = "number", choice = "number" },
+	parking_new = {},
+	parking_tap = { cell = "number" },
+	daily_claim = {},
+	daily_goal_claim = { id = "string" },
+	milestone_claim = { id = "string" },
+	leaderboard_refresh = {},
+	pass_prompt = { pass = "string" },
+	ui_ready = {},
+}
+
+return Net
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">PressRules</string><ProtectedString name="Source"><![CDATA[-- PressRules: reine Formeln der Schrottpresse (HTML: Auto Clicker).
+-- passes = { doubleScrap = bool, pressPlus = bool } kommt immer vom Server.
+local Config = require(script.Parent:WaitForChild("Config"))
+local Catalog = require(script.Parent:WaitForChild("Catalog"))
+local Rules = require(script.Parent:WaitForChild("Rules"))
+
+local PressRules = {}
+
+function PressRules.Level(p, id)
+	return p.games.press.upgrades[id] or 0
+end
+
+-- HTML clickerCost: max(1, floor(baseCost * 1.145^Stufe))
+function PressRules.UpgradeCost(u, level)
+	return math.max(1, math.floor(u.baseCost * Config.PressUpgradeCostGrowth ^ level))
+end
+
+function PressRules.TotalLevels(p)
+	local total = 0
+	for _, lvl in pairs(p.games.press.upgrades) do
+		total += lvl
+	end
+	return total
+end
+
+-- HTML clickerGlobalMultiplier
+function PressRules.GlobalMultiplier(p)
+	return 1 + PressRules.TotalLevels(p) * Config.PressGlobalPerLevel
+end
+
+function PressRules.RebirthMultiplier(p)
+	return 1 + p.games.press.rebirths * Config.RebirthMultiplierPerRebirth
+end
+
+local function bonuses(p)
+	local click, machine = 0, 0
+	for id, lvl in pairs(p.games.press.upgrades) do
+		local u = Catalog.PressUpgradeById[id]
+		if u then
+			if u.type == 0 or u.type == 3 then
+				click += lvl * u.baseEffect
+			elseif u.type == 1 or u.type == 4 then
+				machine += lvl * u.baseEffect * Config.PressMachineEffectFactor
+			end
+		end
+	end
+	return click, machine
+end
+
+-- Grundertrag pro Klick ohne Combo und ohne gekaufte Multiplikatoren (HTML clickPowerTotal)
+function PressRules.ClickPower(p)
+	local click = bonuses(p)
+	return math.max(1, (Config.PressBaseClick + click) * PressRules.GlobalMultiplier(p) * PressRules.RebirthMultiplier(p))
+end
+
+-- Grundertrag der Maschinen pro Sekunde (HTML autoPowerTotal)
+function PressRules.MachinePower(p)
+	local _, machine = bonuses(p)
+	return math.max(0, (Config.PressBaseMachine + machine) * PressRules.GlobalMultiplier(p) * PressRules.RebirthMultiplier(p))
+end
+
+-- Gekaufte Multiplikatoren (wirken auf das Guthaben, nie auf den Bestenlistenwert)
+function PressRules.PassClickMultiplier(passes)
+	return (passes and passes.doubleScrap) and Config.GamePasses.DoubleScrap.multiplier or 1
+end
+
+function PressRules.PassMachineMultiplier(passes)
+	local m = PressRules.PassClickMultiplier(passes)
+	if passes and passes.pressPlus then
+		m *= Config.GamePasses.PressPlus.machineMultiplier
+	end
+	return m
+end
+
+-- Querboni (HTML clickerWorkshopMultiplier / clickerTuningMultiplier)
+function PressRules.WorkshopMultiplier(p)
+	return 1 + (PressRules.GlobalMultiplier(p) - 1) * Config.PressWorkshopShare
+end
+
+function PressRules.TuningMultiplier(p)
+	return 1 + (PressRules.GlobalMultiplier(p) - 1) * Config.PressTuningShare
+end
+
+-- Schreibt Ertrag gut: ranked zählt für die Bestenliste, paid landet im Guthaben.
+local function credit(p, ranked, paid, now, passive)
+	local pr = p.games.press
+	pr.scrap += paid
+	pr.runScrap += paid
+	pr.lifetime += ranked
+	Rules.AddStat(p, "pressed", paid, now, passive)
+end
+
+-- Bucht n akzeptierte Klicks. t = Serverzeit (präzise), now = os.time()
+-- Rückgabe: bezahlter Ertrag, Combo danach
+function PressRules.ApplyClicks(p, n, t, now, passes)
+	local pr = p.games.press
+	n = Rules.SafeInt(n, 0, 0, 100000)
+	if n <= 0 then
+		return 0, pr.combo
+	end
+	local combo = pr.combo
+	local within = pr.comboAt > 0 and t >= pr.comboAt and (t - pr.comboAt) <= Config.PressComboWindow
+	if not within then
+		combo = 1
+	end
+	local base = PressRules.ClickPower(p)
+	local ranked = 0
+	for i = 1, n do
+		if i > 1 or within then
+			combo = math.min(Config.PressComboMax, combo + Config.PressComboStep)
+		end
+		ranked += base * combo
+	end
+	pr.combo = combo
+	pr.comboAt = t
+	pr.clicks += n
+	Rules.AddStat(p, "clicks", n, now)
+	local paid = ranked * PressRules.PassClickMultiplier(passes)
+	credit(p, ranked, paid, now)
+	return paid, combo
+end
+
+-- Maschinenertrag für eine Zeitspanne (Server-Tick und Offline)
+function PressRules.Produce(p, seconds, now, passes)
+	seconds = Rules.SafeNumber(seconds, 0, 0, Config.PressOfflineCapHours * 3600)
+	if seconds <= 0 then
+		return 0
+	end
+	local ranked = PressRules.MachinePower(p) * seconds
+	local paid = ranked * PressRules.PassMachineMultiplier(passes)
+	credit(p, ranked, paid, now, true)
+	return paid
+end
+
+-- Offline-Sekunden aus os.time()-Differenz: negativ/unplausibel -> 0, gedeckelt
+function PressRules.OfflineSeconds(lastTick, now)
+	if not Rules.IsFiniteNumber(lastTick) or not Rules.IsFiniteNumber(now) or lastTick <= 0 then
+		return 0
+	end
+	local diff = now - lastTick
+	if diff <= 0 then
+		return 0
+	end
+	return math.min(diff, Config.PressOfflineCapHours * 3600)
+end
+
+-- Kauf: expectedLevel ist die Stufe, die der Client gesehen hat. Doppelte Absicht -> abgelehnt.
+function PressRules.BuyUpgrade(p, id, expectedLevel, now)
+	local u = type(id) == "string" and Catalog.PressUpgradeById[id]
+	if not u then
+		return false, "Unbekanntes Upgrade."
+	end
+	local lvl = PressRules.Level(p, id)
+	if type(expectedLevel) ~= "number" or expectedLevel ~= lvl then
+		return false, nil -- veraltete oder doppelte Anfrage: still verwerfen
+	end
+	local cost = PressRules.UpgradeCost(u, lvl)
+	local pr = p.games.press
+	if pr.scrap < cost then
+		return false, "Nicht genug Schrott."
+	end
+	pr.scrap -= cost
+	pr.upgrades[id] = lvl + 1
+	Rules.AddStat(p, "pressUpgrades", 1, now)
+	if u.type == 2 then
+		p.games.reputation += 1
+		p.credits += math.max(1, math.floor(u.baseEffect * 0.5))
+	end
+	return true, u
+end
+
+-- Schrott -> Credits in festen Paketen. Es gibt keine Gegenrichtung.
+function PressRules.ExchangeCredits(scrap)
+	return math.floor(scrap / Config.ScrapPerCredit * Config.ScrapExchangePayout)
+end
+
+function PressRules.Exchange(p, packageIndex)
+	local amount = type(packageIndex) == "number" and Config.ScrapExchangePackages[packageIndex]
+	if not amount then
+		return false, "Unbekanntes Paket."
+	end
+	local pr = p.games.press
+	if pr.scrap < amount then
+		return false, "Nicht genug Schrott."
+	end
+	local credits = PressRules.ExchangeCredits(amount)
+	pr.scrap -= amount
+	p.credits += credits
+	return true, credits
+end
+
+function PressRules.RebirthThreshold(p)
+	return Config.RebirthBaseThreshold * Config.RebirthThresholdGrowth ^ p.games.press.rebirths
+end
+
+function PressRules.CanRebirth(p)
+	return p.games.press.runScrap >= PressRules.RebirthThreshold(p)
+end
+
+-- Setzt genau Schrott, Durchlauf und Presse-Upgrades zurück.
+function PressRules.Rebirth(p, expectedRebirths)
+	local pr = p.games.press
+	if type(expectedRebirths) ~= "number" or expectedRebirths ~= pr.rebirths then
+		return false, nil
+	end
+	if not PressRules.CanRebirth(p) then
+		return false, "Rebirth ist erst ab " .. math.floor(PressRules.RebirthThreshold(p)) .. " Schrott in diesem Durchlauf möglich."
+	end
+	pr.scrap = Config.PressStartScrap
+	pr.runScrap = 0
+	pr.upgrades = {}
+	pr.combo = 1
+	pr.comboAt = 0
+	pr.rebirths += 1
+	Rules.AddStat(p, "rebirths", 1, nil)
+	return true, PressRules.RebirthMultiplier(p)
+end
+
+-- Bestenlisten-Kodierung: OrderedDataStore speichert nur Ganzzahlen; Schrott kann 2^53 übersteigen.
+-- log10(1 + x) * 1e13 bleibt für alle Doubles unter 2^53 und ist monoton.
+local SCALE = 1e13
+function PressRules.EncodeScore(value)
+	if not Rules.IsFiniteNumber(value) or value <= 0 then
+		return 0
+	end
+	return math.floor(math.log10(1 + value) * SCALE)
+end
+
+function PressRules.DecodeScore(code)
+	if not Rules.IsFiniteNumber(code) or code <= 0 then
+		return 0
+	end
+	local v = 10 ^ (code / SCALE) - 1
+	if v < 2 ^ 53 then
+		v = math.floor(v + 0.5)
+	end
+	return v
+end
+
+return PressRules
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000007"><Properties><string name="Name">Rules</string><ProtectedString name="Source"><![CDATA[-- Rules: Profil-Normalisierung (Migration), Karriere (Level/XP), Hilfsfunktionen.
+-- Rein und ohne Roblox-Dienste, damit alles im Mock testbar ist.
+local Config = require(script.Parent:WaitForChild("Config"))
+
+local Rules = {}
+
+Rules.SCHEMA = 3
+local MAX_SAFE = 2 ^ 53
+
+-- Liefert eine endliche Zahl im Bereich [min, max], sonst den Standardwert.
+function Rules.SafeNumber(v, default, min, max)
+	if type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then
+		return default
+	end
+	if min ~= nil and v < min then
+		return min
+	end
+	if max ~= nil and v > max then
+		return max
+	end
+	return v
+end
+
+function Rules.SafeInt(v, default, min, max)
+	local n = Rules.SafeNumber(v, default, min, max)
+	return math.floor(n)
+end
+
+function Rules.IsFiniteNumber(v)
+	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+end
+
+function Rules.DayKey(now)
+	return os.date("!%Y-%m-%d", now)
+end
+
+-- Standardwerte aller Felder, die Version 3.0 benötigt.
+function Rules.DefaultGames()
+	return {
+		parts = Config.StartParts,
+		reputation = 0,
+		bays = 1,
+		offerSlots = 3,
+		toolLevel = 1,
+		tuningLevel = 1,
+		scrapyardLevel = 1,
+		jobs = {},
+		offers = {},
+		nextId = 1,
+		press = {
+			scrap = Config.PressStartScrap,
+			runScrap = 0,
+			lifetime = 0,
+			clicks = 0,
+			upgrades = {},
+			rebirths = 0,
+			lastTick = 0,
+			combo = 1,
+			comboAt = 0,
+		},
+		tuning = { projects = {}, lastIdle = 0, completed = 0 },
+		scrapyard = { vehicle = false },
+		quiz = { diagPoints = 0, current = false, lastAsked = 0 },
+		parking = { streak = 0, best = 0, puzzle = false },
+		stats = {},
+		milestones = {},
+		daily = { day = "", claimed = false, active = false, progress = {}, goalsClaimed = {} },
+	}
+end
+
+Rules.STAT_KEYS = {
+	"clicks", "pressed", "pressUpgrades", "rebirths", "jobsDone", "quizCorrect", "parkingSolved",
+	"dismantled", "tuningStarted", "tuningCollected", "longTuning", "idleCollected",
+}
+
+function Rules.DefaultProfile()
+	return {
+		schema = Rules.SCHEMA,
+		credits = Config.StartCredits,
+		level = 1,
+		xp = 0,
+		games = Rules.DefaultGames(),
+	}
+end
+
+local function tableOr(v)
+	if type(v) == "table" then
+		return v
+	end
+	return {}
+end
+
+local function normalizeJob(j)
+	if type(j) ~= "table" then
+		return nil
+	end
+	if type(j.id) ~= "number" or type(j.name) ~= "string" then
+		return nil
+	end
+	return {
+		id = Rules.SafeInt(j.id, 0, 0, MAX_SAFE),
+		name = j.name,
+		reward = Rules.SafeInt(j.reward, 0, 0, MAX_SAFE),
+		xp = Rules.SafeInt(j.xp, 0, 0, MAX_SAFE),
+		parts = Rules.SafeInt(j.parts, 0, 0, 10000),
+		cost = Rules.SafeInt(j.cost, 0, 0, MAX_SAFE),
+		time = Rules.SafeNumber(j.time, 1, 1, 86400),
+		startedAt = Rules.SafeNumber(j.startedAt, 0, 0, MAX_SAFE),
+		endsAt = Rules.SafeNumber(j.endsAt, 0, 0, MAX_SAFE),
+	}
+end
+
+function Rules.NormalizePuzzle(pz)
+	if type(pz) ~= "table" or type(pz.cars) ~= "table" then
+		return false
+	end
+	local cells = Config.ParkingSize * Config.ParkingSize
+	local cars, seen = {}, {}
+	for _, c in ipairs(pz.cars) do
+		if type(c) == "number" and c == math.floor(c) and c >= 0 and c < cells - 1 and not seen[c] then
+			seen[c] = true
+			table.insert(cars, c)
+		end
+	end
+	if type(pz.target) ~= "number" or not seen[pz.target] then
+		return false
+	end
+	return {
+		cars = cars,
+		target = pz.target,
+		exit = cells - 1,
+		moves = Rules.SafeInt(pz.moves, 0, 0, 1000),
+		solved = pz.solved == true,
+		crashed = pz.crashed == true,
+	}
+end
+
+-- Normalisiert ein geladenes Profil. Unbekannte Felder (z. B. aus 2.4.0) bleiben unverändert erhalten.
+-- Idempotent: LoadData(LoadData(x)) == LoadData(x).
+function Rules.LoadData(raw)
+	local p = type(raw) == "table" and raw or {}
+	local d = Rules.DefaultGames()
+
+	p.schema = Rules.SCHEMA
+	p.credits = Rules.SafeNumber(p.credits, Config.StartCredits, 0, MAX_SAFE)
+	p.level = Rules.SafeInt(p.level, 1, 1, 1000000)
+	p.xp = Rules.SafeNumber(p.xp, 0, 0, MAX_SAFE)
+
+	local g = tableOr(p.games)
+	p.games = g
+	g.parts = Rules.SafeInt(g.parts, d.parts, 0, MAX_SAFE)
+	g.reputation = Rules.SafeInt(g.reputation, 0, 0, MAX_SAFE)
+	for _, u in ipairs(Config.Upgrades) do
+		local start = u.key == "offerSlots" and 3 or 1
+		g[u.key] = Rules.SafeInt(g[u.key], start, start, u.max)
+	end
+	g.nextId = Rules.SafeInt(g.nextId, 1, 1, MAX_SAFE)
+
+	local jobs = {}
+	for _, j in ipairs(tableOr(g.jobs)) do
+		local nj = normalizeJob(j)
+		if nj and #jobs < g.bays then
+			table.insert(jobs, nj)
+			if nj.id >= g.nextId then
+				g.nextId = nj.id + 1
+			end
+		end
+	end
+	g.jobs = jobs
+	local offers = {}
+	for _, j in ipairs(tableOr(g.offers)) do
+		local nj = normalizeJob(j)
+		if nj and #offers < Config.MaxOffers then
+			table.insert(offers, nj)
+			if nj.id >= g.nextId then
+				g.nextId = nj.id + 1
+			end
+		end
+	end
+	g.offers = offers
+
+	local pr = tableOr(g.press)
+	g.press = pr
+	pr.scrap = Rules.SafeNumber(pr.scrap, d.press.scrap, 0, 1e300)
+	pr.runScrap = Rules.SafeNumber(pr.runScrap, 0, 0, 1e300)
+	pr.lifetime = Rules.SafeNumber(pr.lifetime, 0, 0, 1e300)
+	pr.clicks = Rules.SafeInt(pr.clicks, 0, 0, MAX_SAFE)
+	pr.rebirths = Rules.SafeInt(pr.rebirths, 0, 0, 100000)
+	pr.lastTick = Rules.SafeNumber(pr.lastTick, 0, 0, MAX_SAFE)
+	pr.combo = Rules.SafeNumber(pr.combo, 1, 1, Config.PressComboMax)
+	pr.comboAt = 0 -- Combo überlebt keinen Neustart
+	local ups = {}
+	for id, lvl in pairs(tableOr(pr.upgrades)) do
+		if type(id) == "string" and string.match(id, "^pu%d+$") then
+			local n = Rules.SafeInt(lvl, 0, 0, 100000)
+			if n > 0 then
+				ups[id] = n
+			end
+		end
+	end
+	pr.upgrades = ups
+
+	local tu = tableOr(g.tuning)
+	g.tuning = tu
+	tu.lastIdle = Rules.SafeNumber(tu.lastIdle, 0, 0, MAX_SAFE)
+	tu.completed = Rules.SafeInt(tu.completed, 0, 0, MAX_SAFE)
+	local projects = {}
+	local usedSlots = {}
+	for _, pj in ipairs(tableOr(tu.projects)) do
+		if type(pj) == "table" and type(pj.id) == "string" then
+			local slot = Rules.SafeInt(pj.slot, 0, 0, Config.TuningSlotsMax)
+			local startedAt = Rules.SafeNumber(pj.startedAt, 0, 0, MAX_SAFE)
+			local duration = Rules.SafeNumber(pj.duration, 0, 0, 7 * 86400)
+			if slot >= 1 and not usedSlots[slot] and duration > 0 then
+				usedSlots[slot] = true
+				table.insert(projects, { slot = slot, id = pj.id, startedAt = startedAt, duration = duration })
+			end
+		end
+	end
+	tu.projects = projects
+
+	local sy = tableOr(g.scrapyard)
+	g.scrapyard = sy
+	sy.vehicle = sy.vehicle == true
+
+	local qz = tableOr(g.quiz)
+	g.quiz = qz
+	qz.diagPoints = Rules.SafeInt(qz.diagPoints, 0, 0, MAX_SAFE)
+	qz.current = false -- offene Fragen werden nicht über Sitzungen gespeichert
+	qz.lastAsked = 0
+
+	local pk = tableOr(g.parking)
+	g.parking = pk
+	pk.streak = Rules.SafeInt(pk.streak, 0, 0, MAX_SAFE)
+	pk.best = Rules.SafeInt(pk.best, 0, 0, MAX_SAFE)
+	if pk.best < pk.streak then
+		pk.best = pk.streak
+	end
+	pk.puzzle = Rules.NormalizePuzzle(pk.puzzle)
+
+	local st = tableOr(g.stats)
+	g.stats = st
+	for _, key in ipairs(Rules.STAT_KEYS) do
+		st[key] = Rules.SafeNumber(st[key], 0, 0, 1e300)
+	end
+
+	local ms = {}
+	for id, v in pairs(tableOr(g.milestones)) do
+		if type(id) == "string" and v == true then
+			ms[id] = true
+		end
+	end
+	g.milestones = ms
+
+	local dl = tableOr(g.daily)
+	g.daily = dl
+	dl.day = type(dl.day) == "string" and dl.day or ""
+	dl.claimed = dl.claimed == true
+	dl.active = dl.active == true
+	local progress = {}
+	for k, v in pairs(tableOr(dl.progress)) do
+		if type(k) == "string" then
+			progress[k] = Rules.SafeNumber(v, 0, 0, 1e300)
+		end
+	end
+	dl.progress = progress
+	local claimed = {}
+	for k, v in pairs(tableOr(dl.goalsClaimed)) do
+		if type(k) == "string" and v == true then
+			claimed[k] = true
+		end
+	end
+	dl.goalsClaimed = claimed
+
+	return p
+end
+
+-- Prüft rekursiv, dass keine NaN/inf-Werte im Profil stehen (vor dem Speichern).
+function Rules.IsClean(v, depth)
+	depth = depth or 0
+	if depth > 20 then
+		return false
+	end
+	local t = type(v)
+	if t == "number" then
+		return Rules.IsFiniteNumber(v)
+	elseif t == "table" then
+		for k, x in pairs(v) do
+			if not Rules.IsClean(k, depth + 1) or not Rules.IsClean(x, depth + 1) then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+-- Karriere (HTML: xpNeeded, gainXP)
+function Rules.XpNeeded(level)
+	return math.floor(80 + level * 22 + level ^ 1.16 * 4)
+end
+
+-- Gibt { levels = n, credits = c } zurück.
+function Rules.GainXP(p, amount)
+	amount = Rules.SafeNumber(amount, 0, 0, MAX_SAFE)
+	p.xp += amount
+	local levels, credits = 0, 0
+	while p.xp >= Rules.XpNeeded(p.level) and levels < 10000 do
+		p.xp -= Rules.XpNeeded(p.level)
+		p.level += 1
+		levels += 1
+		local bonus = math.floor(Config.LevelUpCreditsBase + p.level * Config.LevelUpCreditsPerLevel + 0.5)
+		p.credits += bonus
+		credits += bonus
+		p.games.reputation += Config.LevelUpReputation
+	end
+	return { levels = levels, credits = credits }
+end
+
+-- Zählt eine Statistik hoch und führt den Tages-Fortschritt mit.
+-- passive = true (z. B. Maschinen): zählt für Ziele, gilt aber nicht als "heute gespielt".
+function Rules.AddStat(p, key, amount, now, passive)
+	local st = p.games.stats
+	st[key] = (st[key] or 0) + amount
+	local dl = p.games.daily
+	if now and dl.day == Rules.DayKey(now) then
+		dl.progress[key] = (dl.progress[key] or 0) + amount
+		if not passive then
+			dl.active = true
+		end
+	end
+end
+
+-- Pseudo-Zufall mit Roblox-Random-Schnittstelle, deterministisch pro Seed.
+function Rules.HashString(s)
+	local h = 5381
+	for i = 1, #s do
+		h = (h * 33 + string.byte(s, i)) % 2147483647
+	end
+	return h
+end
+
+function Rules.Round(n)
+	return math.floor(n + 0.5)
+end
+
+return Rules
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">SideGameRules</string><ProtectedString name="Source"><![CDATA[-- SideGameRules: Schrottplatz, Mechaniker-Quiz, Parkplatz-Chaos (HTML: buyScrap, sellParts, answerQuestion, startParking, tapSpot).
+local Config = require(script.Parent:WaitForChild("Config"))
+local Catalog = require(script.Parent:WaitForChild("Catalog"))
+local Rules = require(script.Parent:WaitForChild("Rules"))
+
+local SideGameRules = {}
+
+---------------------------------------------------------------- Schrottplatz
+function SideGameRules.ToolBonus(p)
+	return 1 + (p.games.toolLevel - 1) * 0.14 -- HTML scrapBonus
+end
+
+function SideGameRules.RareChance(p)
+	return 0.08 + p.games.scrapyardLevel * 0.025
+end
+
+function SideGameRules.BuyVehicle(p)
+	local sy = p.games.scrapyard
+	if sy.vehicle then
+		return false, "Es steht schon ein Fahrzeug zum Zerlegen bereit."
+	end
+	if p.credits < Config.ScrapyardCarCost then
+		return false, "Nicht genug Credits."
+	end
+	p.credits -= Config.ScrapyardCarCost
+	sy.vehicle = true
+	return true
+end
+
+-- Funde landen im Lager (games.parts); zusätzlich Schrott nach A8 (zählt nicht für die Bestenliste).
+function SideGameRules.Dismantle(p, rng, now)
+	local sy = p.games.scrapyard
+	if not sy.vehicle then
+		return false, nil
+	end
+	sy.vehicle = false
+	local g = p.games
+	local found = math.max(2, Rules.Round((2 + rng:NextNumber() * 6) * SideGameRules.ToolBonus(p) * (1 + (g.scrapyardLevel - 1) * 0.12)))
+	local rare = rng:NextNumber() < SideGameRules.RareChance(p)
+	local parts = found + (rare and Config.ScrapyardRareParts or 0)
+	local credits = rng:NextInteger(0, 90)
+	local scrap = found * Config.ScrapyardScrapPerPart
+	g.parts += parts
+	p.credits += credits
+	g.press.scrap += scrap
+	Rules.AddStat(p, "dismantled", 1, now)
+	local xp = Rules.GainXP(p, 8 + found)
+	return true, { parts = parts, rare = rare, credits = credits, scrap = scrap, xp = xp }
+end
+
+function SideGameRules.SellParts(p)
+	local g = p.games
+	if g.parts < Config.ScrapyardSellParts then
+		return false, "Du brauchst mindestens " .. Config.ScrapyardSellParts .. " Teile."
+	end
+	g.parts -= Config.ScrapyardSellParts
+	p.credits += Config.ScrapyardSellCredits
+	local xp = Rules.GainXP(p, 5)
+	return true, Config.ScrapyardSellCredits, xp
+end
+
+---------------------------------------------------------------- Quiz
+-- Die Frage liegt nur auf dem Server; der Client sieht Text und gemischte Antworten.
+function SideGameRules.NewQuestion(p, rng, t)
+	local qz = p.games.quiz
+	if qz.lastAsked > 0 and t - qz.lastAsked < Config.QuizCooldown then
+		return false, nil
+	end
+	local index = rng:NextInteger(1, #Catalog.Questions)
+	local order = { 1, 2, 3, 4 }
+	for i = #order, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		order[i], order[j] = order[j], order[i]
+	end
+	qz.token = (qz.token or 0) + 1
+	qz.current = { index = index, order = order, token = qz.token }
+	qz.lastAsked = t
+	return true, qz.current
+end
+
+function SideGameRules.QuestionView(p)
+	local cur = p.games.quiz.current
+	if not cur then
+		return nil
+	end
+	local q = Catalog.Questions[cur.index]
+	local answers = {}
+	for i, src in ipairs(cur.order) do
+		answers[i] = q.a[src]
+	end
+	return { text = q.q, answers = answers, token = cur.token }
+end
+
+-- choice = angezeigte Position 1..4. Jede Frage kann genau einmal beantwortet werden.
+function SideGameRules.Answer(p, token, choice, now)
+	local qz = p.games.quiz
+	local cur = qz.current
+	if not cur or token ~= cur.token then
+		return false, nil
+	end
+	if type(choice) ~= "number" or choice ~= math.floor(choice) or choice < 1 or choice > 4 then
+		return false, nil
+	end
+	qz.current = false
+	local correctPos = table.find(cur.order, 1)
+	if cur.order[choice] == 1 then
+		qz.diagPoints += 1
+		p.credits += Config.QuizCorrectCredits
+		Rules.AddStat(p, "quizCorrect", 1, now)
+		local xp = Rules.GainXP(p, Config.QuizCorrectXp)
+		return true, { correct = true, correctPos = correctPos, credits = Config.QuizCorrectCredits, xp = xp }
+	end
+	local xp = Rules.GainXP(p, Config.QuizWrongXp)
+	return true, { correct = false, correctPos = correctPos, credits = 0, xp = xp }
+end
+
+---------------------------------------------------------------- Parkplatz-Chaos
+-- Raster Size x Size, Zellen 0..Size²-1. Ausfahrt unten rechts.
+-- Das Zielauto fährt nach rechts bis zum Rand und dann nach unten zur Ausfahrt.
+-- Blockierende Autos wegfahren (antippen), dann das Zielauto antippen.
+-- Zielauto bei blockiertem Weg antippen = Blechschaden, die Serie endet.
+function SideGameRules.ParkingPath(target)
+	local n = Config.ParkingSize
+	local r, c = math.floor(target / n), target % n
+	local path = {}
+	for cc = c + 1, n - 1 do
+		table.insert(path, r * n + cc)
+	end
+	for rr = r + 1, n - 1 do
+		table.insert(path, rr * n + (n - 1))
+	end
+	return path
+end
+
+function SideGameRules.ParkingBlocked(puzzle)
+	local cars = {}
+	for _, c in ipairs(puzzle.cars) do
+		cars[c] = true
+	end
+	for _, cell in ipairs(SideGameRules.ParkingPath(puzzle.target)) do
+		if cars[cell] then
+			return true
+		end
+	end
+	return false
+end
+
+function SideGameRules.NewPuzzle(p, rng)
+	local pk = p.games.parking
+	local n = Config.ParkingSize
+	local exit = n * n - 1
+	local old = pk.puzzle
+	if old and not old.solved and not old.crashed and old.moves > 0 then
+		pk.streak = 0 -- abgebrochene Runde beendet die Serie
+	end
+	local cars = {}
+	local used = { [exit] = true }
+	while #cars < Config.ParkingCars do
+		local cell = rng:NextInteger(0, exit - 1)
+		if not used[cell] then
+			used[cell] = true
+			table.insert(cars, cell)
+		end
+	end
+	pk.puzzle = { cars = cars, target = cars[1], exit = exit, moves = 0, solved = false, crashed = false }
+	return pk.puzzle
+end
+
+function SideGameRules.Tap(p, cell, now)
+	local pk = p.games.parking
+	local pz = pk.puzzle
+	if not pz or pz.solved or pz.crashed then
+		return false, nil
+	end
+	if type(cell) ~= "number" or not table.find(pz.cars, cell) then
+		return false, nil
+	end
+	pz.moves += 1
+	if cell == pz.target then
+		if SideGameRules.ParkingBlocked(pz) then
+			pz.crashed = true
+			pk.streak = 0
+			return true, { crashed = true }
+		end
+		pz.solved = true
+		pk.streak += 1
+		if pk.streak > pk.best then
+			pk.best = pk.streak
+		end
+		local reward = Config.ParkingRewardBase + pk.streak * Config.ParkingRewardPerStreak
+		p.credits += reward
+		p.games.reputation += 1
+		Rules.AddStat(p, "parkingSolved", 1, now)
+		local xp = Rules.GainXP(p, Config.ParkingXp)
+		return true, { solved = true, credits = reward, xp = xp }
+	end
+	table.remove(pz.cars, table.find(pz.cars, cell))
+	return true, { moved = true }
+end
+
+return SideGameRules
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">Snapshot</string><ProtectedString name="Source"><![CDATA[-- Snapshot: der Zustand, den der Server an den Besitzer schickt. Rein, testbar.
+local Config = require(script.Parent:WaitForChild("Config"))
+local Rules = require(script.Parent:WaitForChild("Rules"))
+local PressRules = require(script.Parent:WaitForChild("PressRules"))
+local WorkshopRules = require(script.Parent:WaitForChild("WorkshopRules"))
+local TuningRules = require(script.Parent:WaitForChild("TuningRules"))
+local SideGameRules = require(script.Parent:WaitForChild("SideGameRules"))
+local GoalRules = require(script.Parent:WaitForChild("GoalRules"))
+
+local Snapshot = {}
+
+function Snapshot.Build(p, now, passes)
+	local g = p.games
+	local pr = g.press
+
+	local upgrades = {}
+	for _, u in ipairs(Config.Upgrades) do
+		table.insert(upgrades, {
+			key = u.key, name = u.name, desc = u.desc, level = g[u.key], max = u.max,
+			cost = WorkshopRules.UpgradeCost(p, u),
+		})
+	end
+
+	local exchange = {}
+	for i, amount in ipairs(Config.ScrapExchangePackages) do
+		table.insert(exchange, { index = i, amount = amount, credits = PressRules.ExchangeCredits(amount) })
+	end
+
+	local offers = {}
+	for _, j in ipairs(g.offers) do
+		local cash, useParts = WorkshopRules.CashCost(p, j)
+		table.insert(offers, {
+			id = j.id, name = j.name, time = math.ceil(j.time / WorkshopRules.RepairSpeed(p)), cash = cash, partUse = useParts,
+			parts = j.parts, reward = WorkshopRules.Reward(p, j), xp = j.xp,
+		})
+	end
+	local jobs = {}
+	for _, j in ipairs(g.jobs) do
+		table.insert(jobs, { id = j.id, name = j.name, startedAt = j.startedAt, endsAt = j.endsAt, reward = WorkshopRules.Reward(p, j) })
+	end
+
+	local projects = {}
+	for _, pj in ipairs(g.tuning.projects) do
+		local def = TuningRules.ProjectDef(pj.id)
+		table.insert(projects, {
+			slot = pj.slot, id = pj.id, name = def and def.name or pj.id, duration = pj.duration,
+			remaining = TuningRules.Remaining(pj, now), reward = def and TuningRules.Reward(p, def) or 0,
+		})
+	end
+	local catalog = {}
+	for _, def in ipairs(Config.TuningProjects) do
+		table.insert(catalog, {
+			id = def.id, name = def.name, minutes = def.minutes, unlock = def.unlock,
+			locked = g.tuningLevel < def.unlock, cost = TuningRules.Cost(def), reward = TuningRules.Reward(p, def),
+		})
+	end
+
+	local milestones = {}
+	for _, m in ipairs(Config.Milestones) do
+		table.insert(milestones, {
+			id = m.id, text = m.text, value = GoalRules.Stat(p, m.stat), target = m.target,
+			claimed = g.milestones[m.id] == true, credits = m.credits,
+		})
+	end
+	local today = Rules.DayKey(now)
+	local dailyGoals = {}
+	for i, def in ipairs(GoalRules.DailyGoals(today)) do
+		local sameDay = g.daily.day == today
+		table.insert(dailyGoals, {
+			id = def.id, tier = i, text = GoalRules.DailyGoalText(def),
+			value = sameDay and (g.daily.progress[def.stat] or 0) or 0, target = def.target,
+			claimed = sameDay and g.daily.goalsClaimed[def.id] == true, credits = def.credits,
+		})
+	end
+
+	local pz = g.parking.puzzle
+	local puzzle = nil
+	if pz then
+		puzzle = {
+			cars = pz.cars, target = pz.target, exit = pz.exit, moves = pz.moves, solved = pz.solved, crashed = pz.crashed,
+			path = SideGameRules.ParkingPath(pz.target), blocked = SideGameRules.ParkingBlocked(pz),
+		}
+	end
+
+	return {
+		version = Config.Version,
+		now = now,
+		credits = p.credits,
+		level = p.level,
+		xp = p.xp,
+		xpNeeded = Rules.XpNeeded(p.level),
+		reputation = g.reputation,
+		parts = g.parts,
+		upgrades = upgrades,
+		press = {
+			scrap = pr.scrap,
+			lifetime = pr.lifetime,
+			runScrap = pr.runScrap,
+			clicks = pr.clicks,
+			levels = pr.upgrades,
+			clickPower = PressRules.ClickPower(p) * PressRules.PassClickMultiplier(passes),
+			machinePerSecond = PressRules.MachinePower(p) * PressRules.PassMachineMultiplier(passes),
+			globalMultiplier = PressRules.GlobalMultiplier(p),
+			rebirths = pr.rebirths,
+			rebirthMultiplier = PressRules.RebirthMultiplier(p),
+			nextRebirthMultiplier = 1 + (pr.rebirths + 1) * Config.RebirthMultiplierPerRebirth,
+			rebirthThreshold = PressRules.RebirthThreshold(p),
+			canRebirth = PressRules.CanRebirth(p),
+			workshopMultiplier = PressRules.WorkshopMultiplier(p),
+			tuningMultiplier = PressRules.TuningMultiplier(p),
+			exchange = exchange,
+		},
+		workshop = {
+			bays = g.bays,
+			available = WorkshopRules.AvailableBays(p, now),
+			offers = offers,
+			jobs = jobs,
+			repairSpeed = WorkshopRules.RepairSpeed(p),
+		},
+		tuning = {
+			level = g.tuningLevel,
+			slots = TuningRules.Slots(p),
+			projects = projects,
+			catalog = catalog,
+			idleRate = TuningRules.IdleRate(p),
+			pendingIdle = TuningRules.PendingIdle(p, now),
+			idleSeconds = TuningRules.IdleSeconds(p, now),
+			idleCapSeconds = Config.TuningIdleCapHours * 3600,
+			completed = g.tuning.completed,
+		},
+		scrapyard = {
+			vehicle = g.scrapyard.vehicle,
+			carCost = Config.ScrapyardCarCost,
+			rareChance = SideGameRules.RareChance(p),
+			toolBonus = SideGameRules.ToolBonus(p),
+			sellParts = Config.ScrapyardSellParts,
+			sellCredits = Config.ScrapyardSellCredits,
+		},
+		quiz = {
+			diagPoints = g.quiz.diagPoints,
+			reduction = WorkshopRules.DiagReduction(p),
+			question = SideGameRules.QuestionView(p),
+		},
+		parking = {
+			streak = g.parking.streak,
+			best = g.parking.best,
+			size = Config.ParkingSize,
+			customerBonus = WorkshopRules.CustomerBonus(p),
+			puzzle = puzzle,
+		},
+		goals = {
+			milestones = milestones,
+			daily = {
+				claimed = g.daily.day == today and g.daily.claimed,
+				active = g.daily.day == today and g.daily.active,
+				credits = Config.DailyCredits, parts = Config.DailyParts, xp = Config.DailyXp,
+				goals = dailyGoals,
+			},
+			next = GoalRules.NextGoal(p, now),
+			boni = GoalRules.ActiveBoni(p, passes),
+		},
+		passes = {
+			doubleScrap = passes and passes.doubleScrap == true or false,
+			pressPlus = passes and passes.pressPlus == true or false,
+			doubleScrapConfigured = Config.GamePasses.DoubleScrap.id > 0,
+			pressPlusConfigured = Config.GamePasses.PressPlus.id > 0,
+		},
+	}
+end
+
+return Snapshot
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">TuningRules</string><ProtectedString name="Source"><![CDATA[-- TuningRules: Idle Tuning Garage (HTML: tuneCar, idleRate, pendingIdle, collectIdle).
+-- Alle Zeiten sind os.time()-Sekunden des Servers.
+local Config = require(script.Parent:WaitForChild("Config"))
+local Rules = require(script.Parent:WaitForChild("Rules"))
+local PressRules = require(script.Parent:WaitForChild("PressRules"))
+
+local TuningRules = {}
+
+function TuningRules.ProjectDef(id)
+	for _, def in ipairs(Config.TuningProjects) do
+		if def.id == id then
+			return def
+		end
+	end
+	return nil
+end
+
+function TuningRules.LevelFactor(p)
+	return 1 + (p.games.tuningLevel - 1) * 0.085 -- HTML tuneCar
+end
+
+-- Überproportional zur Laufzeit: Basis * Minuten^1,2
+function TuningRules.BaseReward(def)
+	return Rules.Round(Config.TuningRewardBase * def.minutes ^ Config.TuningRewardExponent)
+end
+
+function TuningRules.Reward(p, def)
+	return Rules.Round(TuningRules.BaseReward(def) * TuningRules.LevelFactor(p) * PressRules.TuningMultiplier(p))
+end
+
+function TuningRules.Cost(def)
+	return Rules.Round(TuningRules.BaseReward(def) * Config.TuningCostShare)
+end
+
+function TuningRules.Xp(def)
+	return math.max(1, Rules.Round(def.minutes * Config.TuningXpPerMinute))
+end
+
+function TuningRules.Slots(p)
+	return math.min(Config.TuningSlotsMax, Config.TuningSlotsBase + math.floor(p.games.tuningLevel / Config.TuningSlotsEvery))
+end
+
+function TuningRules.FindSlot(p, slot)
+	for i, pj in ipairs(p.games.tuning.projects) do
+		if pj.slot == slot then
+			return i, pj
+		end
+	end
+	return nil, nil
+end
+
+function TuningRules.FreeSlot(p)
+	for s = 1, TuningRules.Slots(p) do
+		if not TuningRules.FindSlot(p, s) then
+			return s
+		end
+	end
+	return nil
+end
+
+-- Restzeit; eine Serverzeit vor dem Start zählt als "nicht fertig", nie als negativ.
+function TuningRules.Remaining(pj, now)
+	if now < pj.startedAt then
+		return pj.duration
+	end
+	return math.max(0, pj.startedAt + pj.duration - now)
+end
+
+function TuningRules.Start(p, id, now)
+	local def = type(id) == "string" and TuningRules.ProjectDef(id)
+	if not def then
+		return false, "Unbekanntes Projekt."
+	end
+	if p.games.tuningLevel < def.unlock then
+		return false, "Benötigt Tuning-Stufe " .. def.unlock .. "."
+	end
+	local slot = TuningRules.FreeSlot(p)
+	if not slot then
+		return false, "Alle Tuning-Plätze sind belegt."
+	end
+	local cost = TuningRules.Cost(def)
+	if p.credits < cost then
+		return false, "Nicht genug Credits."
+	end
+	p.credits -= cost
+	table.insert(p.games.tuning.projects, { slot = slot, id = def.id, startedAt = now, duration = def.minutes * 60 })
+	Rules.AddStat(p, "tuningStarted", 1, now)
+	return true, slot
+end
+
+function TuningRules.Collect(p, slot, now)
+	local idx, pj = TuningRules.FindSlot(p, slot)
+	if not idx then
+		return false, nil -- schon abgeholt
+	end
+	if TuningRules.Remaining(pj, now) > 0 then
+		return false, "Das Projekt läuft noch."
+	end
+	local def = TuningRules.ProjectDef(pj.id)
+	table.remove(p.games.tuning.projects, idx)
+	if not def then
+		return true, 0, { levels = 0, credits = 0 }
+	end
+	local reward = TuningRules.Reward(p, def)
+	p.credits += reward
+	p.games.reputation += 2
+	p.games.tuning.completed += 1
+	Rules.AddStat(p, "tuningCollected", 1, now)
+	if def.minutes >= Config.TuningLongMinutes then
+		Rules.AddStat(p, "longTuning", 1, now)
+	end
+	local xp = Rules.GainXP(p, TuningRules.Xp(def))
+	return true, reward, xp
+end
+
+-- HTML idleRate: Credits pro Minute
+function TuningRules.IdleRate(p)
+	local g = p.games
+	return (10 + g.tuningLevel * 4 + g.tuning.completed ^ 1.12 * 1.5) * PressRules.TuningMultiplier(p)
+end
+
+function TuningRules.IdleSeconds(p, now)
+	local last = p.games.tuning.lastIdle
+	if last <= 0 or now <= last then
+		return 0
+	end
+	return math.min(Config.TuningIdleCapHours * 3600, now - last)
+end
+
+function TuningRules.PendingIdle(p, now)
+	return math.floor(TuningRules.IdleSeconds(p, now) / 60 * TuningRules.IdleRate(p))
+end
+
+function TuningRules.CollectIdle(p, now)
+	local value = TuningRules.PendingIdle(p, now)
+	if value < 1 then
+		return false, "Noch keine Einnahmen."
+	end
+	p.credits += value
+	p.games.tuning.lastIdle = now
+	Rules.AddStat(p, "idleCollected", 1, now)
+	local xp = Rules.GainXP(p, math.max(1, math.floor(value / 80)))
+	return true, value, xp
+end
+
+return TuningRules
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX0000000B"><Properties><string name="Name">WorkshopRules</string><ProtectedString name="Source"><![CDATA[-- WorkshopRules: Werkstatt-Aufträge und Ausbau (HTML: refreshOffers, acceptJob, finishJob, upgrades).
+local Config = require(script.Parent:WaitForChild("Config"))
+local Rules = require(script.Parent:WaitForChild("Rules"))
+local PressRules = require(script.Parent:WaitForChild("PressRules"))
+
+local WorkshopRules = {}
+
+-- HTML workshopBonus (ohne Karriere-Prestige, das nicht Teil von 3.0 ist)
+function WorkshopRules.TuningWorkshopBonus(p)
+	return 1 + (p.games.tuningLevel - 1) * 0.045
+end
+
+-- HTML diagReduction, gedeckelt auf 35 %
+function WorkshopRules.DiagReduction(p)
+	return math.min(Config.DiagReductionCap, p.games.quiz.diagPoints * Config.DiagReductionPerPoint)
+end
+
+-- HTML customerBonus, gedeckelt auf 1,7
+function WorkshopRules.CustomerBonus(p)
+	return math.min(Config.CustomerBonusCap, 1 + p.games.parking.streak * Config.CustomerBonusPerStreak)
+end
+
+function WorkshopRules.RepairSpeed(p)
+	return (1 + (p.games.toolLevel - 1) * 0.08) * (1 - WorkshopRules.DiagReduction(p))
+end
+
+function WorkshopRules.AvailableBays(p, now)
+	return p.games.bays - #p.games.jobs
+end
+
+function WorkshopRules.DesiredOffers(p)
+	local g = p.games
+	return math.min(Config.MaxOffers, math.max(3, g.offerSlots) + math.min(Config.ParkingOfferBonusMax, math.floor(g.parking.streak / Config.ParkingOfferBonusEvery)))
+end
+
+-- Füllt die Angebotsliste auf. rng: Objekt mit NextNumber() und NextInteger(a, b)
+function WorkshopRules.RefreshOffers(p, rng)
+	local g = p.games
+	local desired = WorkshopRules.DesiredOffers(p)
+	while #g.offers < desired do
+		local maxIndex = math.min(#Config.Jobs, 3 + math.floor(p.level / 20))
+		local src = Config.Jobs[rng:NextInteger(1, maxIndex)]
+		local job = { name = src.name, time = src.time, cost = src.cost, reward = src.reward, xp = src.xp, parts = src.parts }
+		local tier = math.max(0, math.floor(p.level / 75))
+		if tier > 0 and rng:NextNumber() < math.min(0.75, tier * 0.035) then
+			job.name = Config.JobTierNames[(tier % #Config.JobTierNames) + 1] .. " T" .. tier
+			job.time = Rules.Round(job.time * (1 + tier * 0.18))
+			job.cost = Rules.Round(job.cost * (1 + tier * 0.25))
+			job.parts = Rules.Round(job.parts * (1 + tier * 0.12))
+			job.reward = Rules.Round(job.reward * (1 + tier * 0.55))
+			job.xp = Rules.Round(job.xp * (1 + tier * 0.32))
+		end
+		local quality = WorkshopRules.CustomerBonus(p)
+		job.reward = Rules.Round(job.reward * quality)
+		job.xp = Rules.Round(job.xp * (1 + (quality - 1) * 0.5))
+		job.id = g.nextId
+		job.startedAt = 0
+		job.endsAt = 0
+		g.nextId += 1
+		table.insert(g.offers, job)
+	end
+end
+
+function WorkshopRules.CashCost(p, job)
+	local useParts = math.min(p.games.parts, job.parts)
+	local remaining = job.parts - useParts
+	return Rules.Round(job.cost * (remaining / math.max(1, job.parts))), useParts
+end
+
+local function findIndex(list, id)
+	for i, j in ipairs(list) do
+		if j.id == id then
+			return i
+		end
+	end
+	return nil
+end
+
+function WorkshopRules.Accept(p, id, now, rng)
+	local g = p.games
+	local idx = type(id) == "number" and findIndex(g.offers, id)
+	if not idx then
+		return false, nil -- Angebot schon angenommen oder unbekannt
+	end
+	if WorkshopRules.AvailableBays(p, now) <= 0 then
+		return false, "Keine Hebebühne frei."
+	end
+	local job = g.offers[idx]
+	local cash, useParts = WorkshopRules.CashCost(p, job)
+	if p.credits < cash then
+		return false, "Du brauchst " .. cash .. " Cr oder mehr Teile."
+	end
+	g.parts -= useParts
+	p.credits -= cash
+	table.remove(g.offers, idx)
+	local duration = job.time / WorkshopRules.RepairSpeed(p)
+	job.time = duration
+	job.startedAt = now
+	job.endsAt = now + math.ceil(duration)
+	table.insert(g.jobs, job)
+	WorkshopRules.RefreshOffers(p, rng)
+	return true, job
+end
+
+function WorkshopRules.Reward(p, job)
+	return Rules.Round(job.reward * WorkshopRules.TuningWorkshopBonus(p) * PressRules.WorkshopMultiplier(p))
+end
+
+function WorkshopRules.Finish(p, id, now, rng)
+	local g = p.games
+	local idx = type(id) == "number" and findIndex(g.jobs, id)
+	if not idx then
+		return false, nil
+	end
+	local job = g.jobs[idx]
+	if now < job.endsAt then
+		return false, "Die Reparatur läuft noch."
+	end
+	table.remove(g.jobs, idx)
+	local reward = WorkshopRules.Reward(p, job)
+	p.credits += reward
+	g.reputation += 1 + math.floor(g.tuningLevel / 3)
+	Rules.AddStat(p, "jobsDone", 1, now)
+	local xp = Rules.GainXP(p, job.xp)
+	WorkshopRules.RefreshOffers(p, rng)
+	return true, reward, xp
+end
+
+-- Ausbau (HTML upgradeCost/buyUpgrade)
+function WorkshopRules.UpgradeDef(key)
+	for _, u in ipairs(Config.Upgrades) do
+		if u.key == key then
+			return u
+		end
+	end
+	return nil
+end
+
+function WorkshopRules.UpgradeCost(p, u)
+	return Rules.Round(u.base * u.growth ^ (p.games[u.key] - 1))
+end
+
+function WorkshopRules.BuyUpgrade(p, key, expectedLevel, now, rng)
+	local u = type(key) == "string" and WorkshopRules.UpgradeDef(key)
+	if not u then
+		return false, "Unbekannter Ausbau."
+	end
+	local lvl = p.games[u.key]
+	if type(expectedLevel) ~= "number" or expectedLevel ~= lvl then
+		return false, nil
+	end
+	if lvl >= u.max then
+		return false, "Maximale Stufe erreicht."
+	end
+	local cost = WorkshopRules.UpgradeCost(p, u)
+	if p.credits < cost then
+		return false, "Nicht genug Credits."
+	end
+	p.credits -= cost
+	p.games[u.key] = lvl + 1
+	local xp = Rules.GainXP(p, Config.UpgradeXp)
+	if u.key == "offerSlots" then
+		WorkshopRules.RefreshOffers(p, rng)
+	end
+	return true, u, xp
+end
+
+return WorkshopRules
+]]></ProtectedString></Properties></Item>
+    </Item>
+  </Item>
+  <Item class="ServerScriptService" referent="RBX0000002B"><Properties><string name="Name">ServerScriptService</string></Properties>
+    <Item class="Folder" referent="RBX0000002A"><Properties><string name="Name">Server</string></Properties>
+      <Item class="ModuleScript" referent="RBX0000000C"><Properties><string name="Name">Actions</string><ProtectedString name="Source"><![CDATA[-- Actions: nimmt Absichten vom Client an, prüft Budget, Form und Wiederholungen und ruft den Handler.
+-- Der Client sendet nie Beträge, Preise, Ergebnisse oder Zeitstempel.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Net = require(Shared:WaitForChild("Net"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local Actions = {}
+Actions.Handlers = {}
+
+function Actions.Register(name, handler)
+	assert(Net.Actions[name], "Aktion nicht in Net.Actions: " .. tostring(name))
+	assert(Actions.Handlers[name] == nil, "Aktion doppelt registriert: " .. name)
+	Actions.Handlers[name] = handler
+end
+
+-- Token-Bucket: true, wenn die Aktion ins Budget passt
+local function takeToken(session)
+	local t = Core.Precise()
+	if session.actionAt == 0 then
+		session.actionTokens = Config.ActionBurst
+	else
+		local dt = math.max(0, t - session.actionAt)
+		session.actionTokens = math.min(Config.ActionBurst, session.actionTokens + dt * Config.ActionRate)
+	end
+	session.actionAt = t
+	if session.actionTokens < 1 then
+		return false
+	end
+	session.actionTokens -= 1
+	return true
+end
+
+local function validPayload(name, payload)
+	local schema = Net.Actions[name]
+	if payload == nil then
+		payload = {}
+	end
+	if type(payload) ~= "table" then
+		return nil
+	end
+	local clean = {}
+	for field, kind in pairs(schema) do
+		local v = payload[field]
+		if type(v) ~= kind then
+			return nil
+		end
+		if kind == "number" and (v ~= v or v == math.huge or v == -math.huge) then
+			return nil
+		end
+		if kind == "string" and #v > 64 then
+			return nil
+		end
+		clean[field] = v
+	end
+	-- Anfrage-ID gegen Doppelausführung (optional, vom Client je Nutzeraktion erzeugt)
+	local rid = payload.rid
+	if type(rid) == "number" and rid == rid and rid ~= math.huge and rid ~= -math.huge then
+		clean.rid = math.floor(rid)
+	end
+	return clean
+end
+
+local function seen(session, rid)
+	if rid == nil then
+		return false
+	end
+	if session.recent[rid] then
+		return true
+	end
+	session.recent[rid] = true
+	table.insert(session.recentOrder, rid)
+	while #session.recentOrder > Config.RecentRequestIds do
+		local old = table.remove(session.recentOrder, 1)
+		session.recent[old] = nil
+	end
+	return false
+end
+
+-- Rückgabe (für Tests): "ok" | "dropped" | "invalid" | "duplicate" | "error"
+function Actions.Handle(player, name, payload)
+	local session = Core.Get(player)
+	if not session then
+		return "dropped"
+	end
+	if type(name) ~= "string" or not Actions.Handlers[name] then
+		return "invalid"
+	end
+	if not takeToken(session) then
+		return "dropped"
+	end
+	local clean = validPayload(name, payload)
+	if not clean then
+		return "invalid"
+	end
+	if seen(session, clean.rid) then
+		return "duplicate"
+	end
+	local ok, err = pcall(Actions.Handlers[name], session, clean)
+	if not ok then
+		warn("[Actions] " .. name .. ": " .. tostring(err))
+		return "error"
+	end
+	Core.MarkDirty(session)
+	return "ok"
+end
+
+function Actions.Connect(remote)
+	return remote.OnServerEvent:Connect(function(player, name, payload)
+		Actions.Handle(player, name, payload)
+	end)
+end
+
+return Actions
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX0000000D"><Properties><string name="Name">Core</string><ProtectedString name="Source"><![CDATA[-- Core: gemeinsame Server-Infrastruktur (Sitzungen, Uhr, Hinweise, Sync-Markierung).
+-- Jede Sitzung gehört genau einem Spieler; kein Handler greift auf fremde Sitzungen zu.
+local Core = {}
+
+Core.Sessions = {} -- [Player] = Session
+Core.Remotes = nil -- { Action, Sync, Notice }
+
+-- Uhr (in Tests ersetzbar)
+function Core.Now()
+	return os.time()
+end
+
+function Core.Precise()
+	return os.clock()
+end
+
+function Core.NewRandom()
+	return Random.new()
+end
+
+function Core.NewSession(player)
+	local session = {
+		player = player,
+		userId = player.UserId,
+		profile = nil,
+		loaded = false,
+		persistent = false,
+		closing = false,
+		passes = { doubleScrap = false, pressPlus = false },
+		rng = Core.NewRandom(),
+		-- Remote-Budget (Token-Bucket)
+		actionTokens = 0,
+		actionAt = 0,
+		-- Klick-Budget
+		clickTokens = 0,
+		clickAt = 0,
+		recent = {}, -- zuletzt verarbeitete Anfrage-IDs
+		recentOrder = {},
+		dirty = true,
+		lastTickPrecise = 0,
+		lastSave = 0,
+		leaderboardWrittenAt = 0,
+		leaderboardWrittenCode = -1,
+		connections = {},
+	}
+	Core.Sessions[player] = session
+	return session
+end
+
+function Core.Get(player)
+	local s = Core.Sessions[player]
+	if s and s.loaded and not s.closing then
+		return s
+	end
+	return nil
+end
+
+function Core.Remove(player)
+	local s = Core.Sessions[player]
+	if not s then
+		return
+	end
+	for _, c in ipairs(s.connections) do
+		if typeof(c) == "RBXScriptConnection" then
+			c:Disconnect()
+		elseif typeof(c) == "thread" then
+			pcall(task.cancel, c)
+		end
+	end
+	s.connections = {}
+	Core.Sessions[player] = nil
+end
+
+function Core.MarkDirty(session)
+	session.dirty = true
+end
+
+-- Hinweis an genau einen Spieler
+function Core.Notify(player, kind, data)
+	if Core.Remotes and player.Parent ~= nil then
+		Core.Remotes.Notice:FireClient(player, kind, data)
+	end
+end
+
+function Core.Toast(player, text)
+	if text then
+		Core.Notify(player, "toast", { text = text })
+	end
+end
+
+-- Level-Aufstieg melden (xp = Ergebnis von Rules.GainXP)
+function Core.ReportXp(session, xp)
+	if xp and xp.levels and xp.levels > 0 then
+		Core.Notify(session.player, "levelup", { level = session.profile.level, credits = xp.credits })
+	end
+end
+
+return Core
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX0000000E"><Properties><string name="Name">DataUtil</string><ProtectedString name="Source"><![CDATA[-- DataUtil: pcall mit Wiederholung und Tiefenkopie.
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"))
+
+local DataUtil = {}
+
+DataUtil.Wait = function(seconds)
+	task.wait(seconds)
+end
+
+-- Führt fn bis zu attempts-mal aus. Rückgabe: ok, Ergebnis oder letzter Fehler
+function DataUtil.Retry(fn, attempts)
+	attempts = attempts or Config.DataStoreRetries
+	local lastErr
+	for i = 1, attempts do
+		local ok, result = pcall(fn)
+		if ok then
+			return true, result
+		end
+		lastErr = result
+		if i < attempts then
+			DataUtil.Wait(i)
+		end
+	end
+	return false, lastErr
+end
+
+function DataUtil.DeepCopy(v, depth)
+	depth = depth or 0
+	if type(v) ~= "table" or depth > 30 then
+		return v
+	end
+	local out = {}
+	for k, x in pairs(v) do
+		out[DataUtil.DeepCopy(k, depth + 1)] = DataUtil.DeepCopy(x, depth + 1)
+	end
+	return out
+end
+
+return DataUtil
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX0000000F"><Properties><string name="Name">GoalsService</string><ProtectedString name="Source"><![CDATA[-- GoalsService: Tagesauftrag, Tagesziele und Meilensteine auf dem Server.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+local GoalRules = require(Shared:WaitForChild("GoalRules"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local GoalsService = {}
+
+function GoalsService.Tick(session, now)
+	GoalRules.EnsureDay(session.profile, now)
+end
+
+function GoalsService.Register(Actions)
+	Actions.Register("daily_claim", function(session)
+		local ok, res = GoalRules.ClaimDaily(session.profile, Core.Now())
+		if ok then
+			Core.Toast(session.player, "Tagesauftrag erledigt! Belohnung erhalten.")
+			Core.ReportXp(session, res)
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("daily_goal_claim", function(session, data)
+		local ok, res = GoalRules.ClaimDailyGoal(session.profile, data.id, Core.Now())
+		if ok then
+			Core.Toast(session.player, "Tagesziel erledigt: +" .. Locale.Credits(res.credits))
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("milestone_claim", function(session, data)
+		local ok, res, xp = GoalRules.ClaimMilestone(session.profile, data.id)
+		if ok then
+			Core.Toast(session.player, "Meilenstein: " .. res.text .. " (+" .. Locale.Credits(res.credits) .. ")")
+			Core.ReportXp(session, xp)
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+end
+
+return GoalsService
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000010"><Properties><string name="Name">LeaderboardService</string><ProtectedString name="Source"><![CDATA[-- LeaderboardService: globale Bestenliste für lebenslang gepressten Schrott (A4).
+-- Schreiben: höchstens alle 120 s pro Spieler und beim Verlassen. Lesen: serverweiter Cache, höchstens alle 60 s.
+-- Werte werden log-skaliert kodiert (PressRules.EncodeScore), damit auch Werte > 2^53 korrekt sortieren.
+local DataStoreService = game:GetService("DataStoreService")
+local Players = game:GetService("Players")
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local PressRules = require(Shared:WaitForChild("PressRules"))
+local DataUtil = require(script.Parent:WaitForChild("DataUtil"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local LeaderboardService = {}
+
+LeaderboardService.Store = nil
+LeaderboardService.Cache = { available = nil, entries = {}, complete = false, fetchedAt = 0 }
+LeaderboardService.Fetching = false
+LeaderboardService.Names = {}
+LeaderboardService.OnUpdated = nil -- function(cache), z. B. für die Tafel auf dem Hof
+LeaderboardService.Reads = 0
+LeaderboardService.Writes = 0
+
+function LeaderboardService.Init()
+	local ok, store = pcall(function()
+		return DataStoreService:GetOrderedDataStore(Config.LeaderboardStoreName)
+	end)
+	if ok and store then
+		LeaderboardService.Store = store
+	else
+		warn("[Leaderboard] OrderedDataStore nicht verfügbar: " .. tostring(store))
+	end
+end
+
+local function keyFor(userId)
+	return tostring(userId)
+end
+
+-- Schreibt den Wert eines Spielers, wenn er sich geändert hat und die Drosselung es erlaubt.
+function LeaderboardService.Write(session, force)
+	if not LeaderboardService.Store or not session.persistent then
+		return false
+	end
+	local now = Core.Now()
+	if not force and now - session.leaderboardWrittenAt < Config.LeaderboardWriteInterval then
+		return false
+	end
+	local code = PressRules.EncodeScore(session.profile.games.press.lifetime)
+	if code <= session.leaderboardWrittenCode then
+		return false
+	end
+	session.leaderboardWrittenAt = now
+	LeaderboardService.Writes += 1
+	local ok, err = DataUtil.Retry(function()
+		LeaderboardService.Store:SetAsync(keyFor(session.userId), code)
+	end)
+	if ok then
+		session.leaderboardWrittenCode = code
+	else
+		warn("[Leaderboard] Schreiben fehlgeschlagen: " .. tostring(err))
+	end
+	return ok
+end
+
+local function nameFor(userId)
+	local cached = LeaderboardService.Names[userId]
+	if cached then
+		return cached
+	end
+	local player = Players:GetPlayerByUserId(userId)
+	if player then
+		LeaderboardService.Names[userId] = player.DisplayName
+		return player.DisplayName
+	end
+	local ok, name = pcall(function()
+		return Players:GetNameFromUserIdAsync(userId)
+	end)
+	local result = (ok and type(name) == "string") and name or ("Spieler " .. tostring(userId))
+	LeaderboardService.Names[userId] = result
+	return result
+end
+
+-- Liest die Bestenliste neu, höchstens alle LeaderboardReadInterval Sekunden (serverweit).
+function LeaderboardService.Refresh(force)
+	local cache = LeaderboardService.Cache
+	local now = Core.Now()
+	if LeaderboardService.Fetching then
+		return false
+	end
+	if not force and cache.fetchedAt > 0 and now - cache.fetchedAt < Config.LeaderboardReadInterval then
+		return false
+	end
+	cache.fetchedAt = now
+	if not LeaderboardService.Store then
+		cache.available = false
+		return false
+	end
+	LeaderboardService.Fetching = true
+	LeaderboardService.Reads += 1
+	local ok, result = DataUtil.Retry(function()
+		local entries = {}
+		local complete = false
+		local pages = LeaderboardService.Store:GetSortedAsync(false, 100)
+		for page = 1, Config.LeaderboardScanPages do
+			for _, item in ipairs(pages:GetCurrentPage()) do
+				local userId = tonumber(item.key)
+				if userId and type(item.value) == "number" then
+					table.insert(entries, { userId = userId, code = item.value })
+				end
+			end
+			if pages.IsFinished then
+				complete = true
+				break
+			end
+			if page < Config.LeaderboardScanPages then
+				pages:AdvanceToNextPageAsync()
+			end
+		end
+		return { entries = entries, complete = complete }
+	end)
+	LeaderboardService.Fetching = false
+	if ok then
+		for i, e in ipairs(result.entries) do
+			if i <= Config.LeaderboardTopCount then
+				e.name = nameFor(e.userId)
+			end
+			e.value = PressRules.DecodeScore(e.code)
+		end
+		cache.entries = result.entries
+		cache.complete = result.complete
+		cache.available = true
+	else
+		warn("[Leaderboard] Lesen fehlgeschlagen: " .. tostring(result))
+		cache.available = false
+	end
+	if LeaderboardService.OnUpdated then
+		LeaderboardService.OnUpdated(cache)
+	end
+	return ok
+end
+
+-- Ansicht für einen Spieler: Top 50 und eigene Platzierung (auch außerhalb der Top 50).
+function LeaderboardService.View(session)
+	local cache = LeaderboardService.Cache
+	if cache.available ~= true then
+		return { available = cache.available == nil and "loading" or false }
+	end
+	local rows = {}
+	for i = 1, math.min(Config.LeaderboardTopCount, #cache.entries) do
+		local e = cache.entries[i]
+		table.insert(rows, { rank = i, name = e.name or ("Spieler " .. e.userId), value = e.value, self = e.userId == session.userId })
+	end
+	-- Eigene Platzierung aus dem aktuellen Wert: Einträge mit höherem Wert zählen (ohne sich selbst)
+	local ownValue = session.profile.games.press.lifetime
+	local ownCode = PressRules.EncodeScore(ownValue)
+	local higher = 0
+	for _, e in ipairs(cache.entries) do
+		if e.userId ~= session.userId and e.code > ownCode then
+			higher += 1
+		end
+	end
+	local own = { value = ownValue }
+	if higher < #cache.entries or cache.complete then
+		own.rank = higher + 1
+	else
+		own.rank = nil
+		own.atLeast = #cache.entries + 1
+	end
+	return { available = true, rows = rows, own = own }
+end
+
+function LeaderboardService.Push(session)
+	Core.Notify(session.player, "leaderboard", LeaderboardService.View(session))
+end
+
+function LeaderboardService.Register(Actions)
+	Actions.Register("leaderboard_refresh", function(session)
+		task.spawn(function()
+			LeaderboardService.Write(session, false)
+			LeaderboardService.Refresh(false)
+			if Core.Get(session.player) then
+				LeaderboardService.Push(session)
+			end
+		end)
+	end)
+end
+
+return LeaderboardService
+]]></ProtectedString></Properties></Item>
+      <Item class="Script" referent="RBX00000011"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><ProtectedString name="Source"><![CDATA[-- Main: startet den Server. Baut die Welt, legt Remotes an, verwaltet Beitritt/Verlassen,
+-- Server-Tick (Maschinen, Tageswechsel), Sync an die Clients, Autosave und Bestenliste.
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Locale = require(Shared:WaitForChild("Locale"))
+local Net = require(Shared:WaitForChild("Net"))
+local Snapshot = require(Shared:WaitForChild("Snapshot"))
+local GoalRules = require(Shared:WaitForChild("GoalRules"))
+
+local Server = script.Parent
+local Core = require(Server:WaitForChild("Core"))
+local Profiles = require(Server:WaitForChild("Profiles"))
+local Actions = require(Server:WaitForChild("Actions"))
+local World = require(Server:WaitForChild("World"))
+local PressService = require(Server:WaitForChild("PressService"))
+local WorkshopService = require(Server:WaitForChild("WorkshopService"))
+local TuningService = require(Server:WaitForChild("TuningService"))
+local SideGamesService = require(Server:WaitForChild("SideGamesService"))
+local GoalsService = require(Server:WaitForChild("GoalsService"))
+local LeaderboardService = require(Server:WaitForChild("LeaderboardService"))
+local Purchases = require(Server:WaitForChild("Purchases"))
+
+-- Welt zuerst, damit Spieler auf festem Boden erscheinen
+World.Build()
+
+-- Remotes
+local folder = Instance.new("Folder")
+folder.Name = Net.Folder
+local function remote(name)
+	local r = Instance.new("RemoteEvent")
+	r.Name = name
+	r.Parent = folder
+	return r
+end
+Core.Remotes = {
+	Action = remote(Net.Action),
+	Sync = remote(Net.Sync),
+	Notice = remote(Net.Notice),
+}
+folder.Parent = ReplicatedStorage
+
+Profiles.Init()
+LeaderboardService.Init()
+LeaderboardService.OnUpdated = function(cache)
+	World.UpdateBoard(cache)
+	for _, session in pairs(Core.Sessions) do
+		if session.loaded and not session.closing then
+			LeaderboardService.Push(session)
+		end
+	end
+end
+Purchases.Init()
+
+PressService.Register(Actions)
+WorkshopService.Register(Actions)
+TuningService.Register(Actions)
+SideGamesService.Register(Actions)
+GoalsService.Register(Actions)
+LeaderboardService.Register(Actions)
+Purchases.Register(Actions)
+Actions.Register("ui_ready", function(session)
+	Core.MarkDirty(session)
+	LeaderboardService.Push(session)
+	if not session.persistent then
+		Core.Toast(session.player, Locale.T("studio_nosave"))
+	end
+end)
+Actions.Connect(Core.Remotes.Action)
+
+local function sendSync(session)
+	session.dirty = false
+	Core.Remotes.Sync:FireClient(session.player, Snapshot.Build(session.profile, Core.Now(), session.passes))
+end
+
+local function onPlayerAdded(player)
+	if Core.Sessions[player] then
+		return
+	end
+	local session = Core.NewSession(player)
+	local profile, persistent, status = Profiles.Load(player.UserId)
+	if player.Parent == nil or Core.Sessions[player] ~= session then
+		-- Spieler hat während des Ladens verlassen: Sperre sofort freigeben
+		if persistent and profile then
+			session.profile = profile
+			session.persistent = true
+			Profiles.Save(session, true)
+		end
+		Core.Sessions[player] = nil
+		return
+	end
+	if status == "locked" then
+		Core.Remove(player)
+		player:Kick(Locale.T("profile_locked"))
+		return
+	end
+	session.profile = profile
+	session.persistent = persistent
+	session.lastSave = Core.Now()
+	GoalRules.EnsureDay(profile, Core.Now())
+	Purchases.OnJoin(session)
+	PressService.OnJoin(session)
+	WorkshopService.OnJoin(session)
+	TuningService.OnJoin(session)
+	session.leaderboardWrittenCode = -1
+	session.loaded = true
+	Core.MarkDirty(session)
+end
+
+local function onPlayerRemoving(player)
+	local session = Core.Sessions[player]
+	if not session or session.closing then
+		return
+	end
+	session.closing = true
+	if session.loaded then
+		PressService.Tick(session, Core.Now())
+		LeaderboardService.Write(session, true)
+		Profiles.Save(session, true)
+	end
+	Core.Remove(player)
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(onPlayerAdded, player)
+end
+
+-- Prompts auf dem Hof öffnen die Oberfläche nur für den auslösenden Spieler (mit Reichweitenprüfung)
+for _, entry in ipairs(World.Prompts) do
+	entry.prompt.Triggered:Connect(function(player)
+		if not Core.Get(player) then
+			return
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local anchor = entry.prompt.Parent
+		if not root or not anchor:IsA("BasePart") then
+			return
+		end
+		if (root.Position - anchor.Position).Magnitude > entry.prompt.MaxActivationDistance + Config.StationRangeSlack then
+			return
+		end
+		Core.Notify(player, "open", { tab = entry.tab })
+	end)
+end
+
+game:BindToClose(function()
+	local pending = 0
+	for _, session in pairs(Core.Sessions) do
+		if session.loaded and not session.closing then
+			session.closing = true
+			pending += 1
+			task.spawn(function()
+				LeaderboardService.Write(session, true)
+				Profiles.Save(session, true)
+				pending -= 1
+			end)
+		end
+	end
+	-- höchstens etwa 25 s warten (Roblox beendet nach 30 s)
+	for _ = 1, 100 do
+		if pending <= 0 then
+			break
+		end
+		task.wait(0.25)
+	end
+end)
+
+-- Server-Tick: Maschinen, Tageswechsel, Autosave, Bestenliste
+task.spawn(function()
+	while true do
+		task.wait(Config.TickInterval)
+		local now = Core.Now()
+		for _, session in pairs(Core.Sessions) do
+			if session.loaded and not session.closing then
+				PressService.Tick(session, now)
+				GoalsService.Tick(session, now)
+				Core.MarkDirty(session)
+				if now - session.lastSave >= Config.AutosaveInterval then
+					session.lastSave = now
+					task.spawn(Profiles.Save, session, false)
+				end
+				if now - session.leaderboardWrittenAt >= Config.LeaderboardWriteInterval then
+					task.spawn(LeaderboardService.Write, session, false)
+				end
+			end
+		end
+		task.spawn(LeaderboardService.Refresh, false)
+	end
+end)
+
+-- Sync: geänderte Zustände gebündelt an die Besitzer
+task.spawn(function()
+	while true do
+		task.wait(Config.SyncInterval)
+		for _, session in pairs(Core.Sessions) do
+			if session.loaded and not session.closing and session.dirty and session.player.Parent ~= nil then
+				sendSync(session)
+			end
+		end
+	end
+end)
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">PressService</string><ProtectedString name="Source"><![CDATA[-- PressService: Schrottpresse auf dem Server (Klicks, Maschinen-Tick, Offline-Ertrag, Händler, Rebirth).
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Locale = require(Shared:WaitForChild("Locale"))
+local PressRules = require(Shared:WaitForChild("PressRules"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local PressService = {}
+
+-- Klick-Budget: höchstens MaxClicksPerSecond je vergangener Sekunde, kleiner Puffer für gebündelte Pakete.
+function PressService.AcceptClicks(session, count, t)
+	local cap = Config.MaxClicksPerSecond * Config.ClickBurstSeconds
+	if session.clickAt == 0 then
+		session.clickTokens = Config.MaxClicksPerSecond
+	else
+		local dt = math.max(0, t - session.clickAt)
+		session.clickTokens = math.min(cap, session.clickTokens + dt * Config.MaxClicksPerSecond)
+	end
+	session.clickAt = t
+	local wanted = math.floor(math.clamp(count, 0, 1000))
+	local accepted = math.min(wanted, math.floor(session.clickTokens))
+	session.clickTokens -= accepted
+	return accepted
+end
+
+function PressService.OnJoin(session)
+	local p = session.profile
+	local now = Core.Now()
+	local seconds = PressRules.OfflineSeconds(p.games.press.lastTick, now)
+	local gain = PressRules.Produce(p, seconds, now, session.passes)
+	p.games.press.lastTick = now
+	session.lastTickPrecise = Core.Precise()
+	if gain >= 1 then
+		Core.Notify(session.player, "offline", { text = Locale.T("offline_press", Locale.Scrap(gain)), scrap = gain, seconds = seconds })
+	end
+end
+
+-- Maschinen produzieren ausschließlich hier (Server-Tick).
+function PressService.Tick(session, now)
+	local t = Core.Precise()
+	local dt = t - session.lastTickPrecise
+	session.lastTickPrecise = t
+	if dt > 0 then
+		PressRules.Produce(session.profile, math.min(dt, 10), now, session.passes)
+	end
+	session.profile.games.press.lastTick = now
+end
+
+function PressService.Register(Actions)
+	Actions.Register("press_click", function(session, data)
+		local t = Core.Precise()
+		local accepted = PressService.AcceptClicks(session, data.count, t)
+		if accepted > 0 then
+			PressRules.ApplyClicks(session.profile, accepted, t, Core.Now(), session.passes)
+		end
+	end)
+
+	Actions.Register("press_buy", function(session, data)
+		local ok, res = PressRules.BuyUpgrade(session.profile, data.id, data.level, Core.Now())
+		if not ok then
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("press_exchange", function(session, data)
+		local ok, res = PressRules.Exchange(session.profile, data.index)
+		if ok then
+			Core.Toast(session.player, "Schrotthändler: +" .. Locale.Credits(res))
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("press_rebirth", function(session, data)
+		local ok, res = PressRules.Rebirth(session.profile, data.rebirths)
+		if ok then
+			Core.Notify(session.player, "rebirth", { multiplier = res })
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+end
+
+return PressService
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">Profiles</string><ProtectedString name="Source"><![CDATA[-- Profiles: Laden und Speichern über den DataStore "UltimateCarGame_v2" mit Sitzungssperre.
+-- Ohne DataStore-Zugriff (z. B. Studio ohne API-Freigabe) läuft das Spiel mit einem
+-- nicht gespeicherten Sitzungsprofil weiter; ein solches Profil überschreibt nie echte Daten.
+local DataStoreService = game:GetService("DataStoreService")
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Rules = require(Shared:WaitForChild("Rules"))
+local DataUtil = require(script.Parent:WaitForChild("DataUtil"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local Profiles = {}
+
+Profiles.Store = nil
+Profiles.Available = false
+Profiles.JobId = "server"
+Profiles.LockRetries = 5
+Profiles.LockWait = 3
+
+function Profiles.Init()
+	Profiles.JobId = (game.JobId ~= nil and game.JobId ~= "") and game.JobId or ("studio-" .. tostring(math.floor(os.clock() * 1000)))
+	local ok, store = pcall(function()
+		return DataStoreService:GetDataStore(Config.ProfileStoreName)
+	end)
+	if ok and store then
+		Profiles.Store = store
+		Profiles.Available = true
+	else
+		warn("[Profiles] DataStore nicht verfügbar: " .. tostring(store))
+		Profiles.Available = false
+	end
+end
+
+function Profiles.Key(userId)
+	return Config.ProfileKeyPrefix .. tostring(userId)
+end
+
+local function lockIsForeign(lock, now)
+	return type(lock) == "table" and lock.job ~= Profiles.JobId and type(lock.t) == "number" and now - lock.t < Config.SessionLockTimeout and now >= lock.t
+end
+
+-- Rückgabe: profile, persistent, status ("ok" | "unavailable" | "locked")
+function Profiles.Load(userId)
+	if not Profiles.Available then
+		return Rules.LoadData(nil), false, "unavailable"
+	end
+	local key = Profiles.Key(userId)
+	for attempt = 1, Profiles.LockRetries do
+		local lockedByOther = false
+		local ok, result = DataUtil.Retry(function()
+			return Profiles.Store:UpdateAsync(key, function(old)
+				local now = Core.Now()
+				local data = type(old) == "table" and old or {}
+				if lockIsForeign(data._lock, now) then
+					lockedByOther = true
+					return nil
+				end
+				data._lock = { job = Profiles.JobId, t = now }
+				return data
+			end)
+		end)
+		if not ok then
+			warn("[Profiles] Laden fehlgeschlagen: " .. tostring(result))
+			return Rules.LoadData(nil), false, "unavailable"
+		end
+		if not lockedByOther then
+			return Rules.LoadData(result), true, "ok"
+		end
+		if attempt < Profiles.LockRetries then
+			DataUtil.Wait(Profiles.LockWait)
+		end
+	end
+	return nil, false, "locked"
+end
+
+-- Speichert das Profil einer Sitzung. release = Sperre freigeben (beim Verlassen).
+-- Speichervorgänge einer Sitzung laufen nacheinander; nach der Freigabe wird nie wieder gesperrt.
+function Profiles.Save(session, release)
+	if not session.persistent or not session.profile then
+		return true
+	end
+	while session.saving do
+		DataUtil.Wait(0.1)
+	end
+	if session.released then
+		return true
+	end
+	session.saving = true
+	local ok, result = pcall(Profiles.SaveNow, session, release)
+	session.saving = false
+	if release then
+		session.released = true
+	end
+	return ok and result == true
+end
+
+function Profiles.SaveNow(session, release)
+	local data = Rules.LoadData(DataUtil.DeepCopy(session.profile))
+	if not Rules.IsClean(data) then
+		warn("[Profiles] Profil enthält ungültige Zahlen, Speichern übersprungen")
+		return false
+	end
+	local key = Profiles.Key(session.userId)
+	local stolen = false
+	local ok, err = DataUtil.Retry(function()
+		return Profiles.Store:UpdateAsync(key, function(old)
+			local now = Core.Now()
+			if type(old) == "table" and lockIsForeign(old._lock, now) then
+				stolen = true
+				return nil
+			end
+			data._lock = (not release) and { job = Profiles.JobId, t = now } or nil
+			return data
+		end)
+	end)
+	if not ok then
+		warn("[Profiles] Speichern fehlgeschlagen: " .. tostring(err))
+		return false
+	end
+	if stolen then
+		warn("[Profiles] Sperre gehört einer anderen Sitzung, nicht gespeichert")
+		session.persistent = false
+		return false
+	end
+	session.lastSave = Core.Now()
+	return true
+end
+
+return Profiles
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">Purchases</string><ProtectedString name="Source"><![CDATA[-- Purchases: Game-Pass-Vorbereitung ("2× Schrott", "Schrottpresse+").
+-- Ohne eingetragene ID (0) startet kein Kauf. Keine zufallsbasierten Bezahl-Belohnungen.
+-- Game Passes wirken nur auf das Schrott-Guthaben, nie auf den Bestenlistenwert.
+local MarketplaceService = game:GetService("MarketplaceService")
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Locale = require(Shared:WaitForChild("Locale"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local Purchases = {}
+
+local PASS_FIELDS = {
+	DoubleScrap = "doubleScrap",
+	PressPlus = "pressPlus",
+}
+
+local function owns(userId, passId)
+	if passId <= 0 then
+		return false
+	end
+	local ok, result = pcall(function()
+		return MarketplaceService:UserOwnsGamePassAsync(userId, passId)
+	end)
+	return ok and result == true
+end
+
+function Purchases.OnJoin(session)
+	for name, field in pairs(PASS_FIELDS) do
+		session.passes[field] = owns(session.userId, Config.GamePasses[name].id)
+	end
+end
+
+function Purchases.Init()
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
+		if not purchased then
+			return
+		end
+		local session = Core.Get(player)
+		if not session then
+			return
+		end
+		for name, field in pairs(PASS_FIELDS) do
+			local id = Config.GamePasses[name].id
+			if id > 0 and id == passId then
+				session.passes[field] = true
+				Core.MarkDirty(session)
+				Core.Toast(player, "Danke! Game Pass aktiv.")
+			end
+		end
+	end)
+end
+
+function Purchases.Register(Actions)
+	Actions.Register("pass_prompt", function(session, data)
+		local def = Config.GamePasses[data.pass]
+		if not def or not PASS_FIELDS[data.pass] then
+			return
+		end
+		if def.id <= 0 then
+			Core.Toast(session.player, Locale.T("pass_not_configured"))
+			return
+		end
+		if session.passes[PASS_FIELDS[data.pass]] then
+			Core.Toast(session.player, "Du besitzt diesen Game Pass bereits.")
+			return
+		end
+		MarketplaceService:PromptGamePassPurchase(session.player, def.id)
+	end)
+end
+
+return Purchases
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">SideGamesService</string><ProtectedString name="Source"><![CDATA[-- SideGamesService: Schrottplatz, Mechaniker-Quiz und Parkplatz-Chaos auf dem Server.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+local SideGameRules = require(Shared:WaitForChild("SideGameRules"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local SideGamesService = {}
+
+function SideGamesService.Register(Actions)
+	Actions.Register("scrapyard_buy", function(session)
+		local ok, res = SideGameRules.BuyVehicle(session.profile)
+		Core.Toast(session.player, ok and "Fahrzeug gekauft. Jetzt zerlegen!" or res)
+	end)
+
+	Actions.Register("scrapyard_dismantle", function(session)
+		local ok, res = SideGameRules.Dismantle(session.profile, session.rng, Core.Now())
+		if ok then
+			Core.Notify(session.player, "scrapyard", res)
+			Core.ReportXp(session, res.xp)
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("scrapyard_sell", function(session)
+		local ok, res, xp = SideGameRules.SellParts(session.profile)
+		if ok then
+			Core.Toast(session.player, "Teile verkauft: +" .. Locale.Credits(res))
+			Core.ReportXp(session, xp)
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("quiz_new", function(session)
+		SideGameRules.NewQuestion(session.profile, session.rng, Core.Precise())
+	end)
+
+	Actions.Register("quiz_answer", function(session, data)
+		local ok, res = SideGameRules.Answer(session.profile, data.token, data.choice, Core.Now())
+		if ok then
+			Core.Notify(session.player, "quiz", { correct = res.correct, correctPos = res.correctPos, choice = data.choice, credits = res.credits })
+			Core.ReportXp(session, res.xp)
+		end
+	end)
+
+	Actions.Register("parking_new", function(session)
+		SideGameRules.NewPuzzle(session.profile, session.rng)
+	end)
+
+	Actions.Register("parking_tap", function(session, data)
+		local ok, res = SideGameRules.Tap(session.profile, data.cell, Core.Now())
+		if ok then
+			if res.crashed then
+				Core.Toast(session.player, "Blechschaden! Der Weg war blockiert. Serie beendet.")
+			elseif res.solved then
+				Core.Toast(session.player, "Parkplatz frei! +" .. Locale.Credits(res.credits))
+				Core.ReportXp(session, res.xp)
+			end
+		end
+	end)
+end
+
+return SideGamesService
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">TuningService</string><ProtectedString name="Source"><![CDATA[-- TuningService: Idle Tuning Garage auf dem Server. Echtzeit über os.time(), läuft offline weiter.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+local TuningRules = require(Shared:WaitForChild("TuningRules"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local TuningService = {}
+
+function TuningService.OnJoin(session)
+	local tu = session.profile.games.tuning
+	local now = Core.Now()
+	-- Erstes Spiel oder Serveruhr in der Vergangenheit: Sammeln beginnt jetzt
+	if tu.lastIdle <= 0 or tu.lastIdle > now then
+		tu.lastIdle = now
+	end
+end
+
+function TuningService.Register(Actions)
+	Actions.Register("tuning_start", function(session, data)
+		local ok, res = TuningRules.Start(session.profile, data.id, Core.Now())
+		if ok then
+			Core.Toast(session.player, "Tuning-Projekt gestartet (Platz " .. res .. ").")
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("tuning_collect", function(session, data)
+		local ok, res, xp = TuningRules.Collect(session.profile, data.slot, Core.Now())
+		if ok then
+			Core.Toast(session.player, "Tuning abgeholt: +" .. Locale.Credits(res))
+			Core.ReportXp(session, xp)
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("tuning_idle", function(session)
+		local ok, res, xp = TuningRules.CollectIdle(session.profile, Core.Now())
+		if ok then
+			Core.Toast(session.player, "Passive Einnahmen: +" .. Locale.Credits(res))
+			Core.ReportXp(session, xp)
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+end
+
+return TuningService
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">WorkshopService</string><ProtectedString name="Source"><![CDATA[-- WorkshopService: Werkstatt-Aufträge und Ausbau auf dem Server.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+local WorkshopRules = require(Shared:WaitForChild("WorkshopRules"))
+local Core = require(script.Parent:WaitForChild("Core"))
+
+local WorkshopService = {}
+
+function WorkshopService.OnJoin(session)
+	WorkshopRules.RefreshOffers(session.profile, session.rng)
+end
+
+function WorkshopService.Register(Actions)
+	Actions.Register("workshop_accept", function(session, data)
+		local ok, res = WorkshopRules.Accept(session.profile, data.id, Core.Now(), session.rng)
+		if ok then
+			Core.Toast(session.player, res.name .. " läuft auf der Hebebühne.")
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("workshop_finish", function(session, data)
+		local ok, res, xp = WorkshopRules.Finish(session.profile, data.id, Core.Now(), session.rng)
+		if ok then
+			Core.Toast(session.player, "Auftrag abgerechnet: +" .. Locale.Credits(res))
+			Core.ReportXp(session, xp)
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+
+	Actions.Register("upgrade_buy", function(session, data)
+		local ok, res, xp = WorkshopRules.BuyUpgrade(session.profile, data.key, data.level, Core.Now(), session.rng)
+		if ok then
+			Core.Toast(session.player, res.name .. " verbessert.")
+			Core.ReportXp(session, xp)
+		else
+			Core.Toast(session.player, res)
+		end
+	end)
+end
+
+return WorkshopService
+]]></ProtectedString></Properties></Item>
+      <Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">World</string><ProtectedString name="Source"><![CDATA[-- World: baut den Hof mit allen Stationen aus nativen Parts (keine externen Assets).
+-- Jede Station hat einen ProximityPrompt, der die passende 2D-Oberfläche öffnet.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+local Config = require(Shared:WaitForChild("Config"))
+
+local World = {}
+
+World.Root = nil
+World.Prompts = {} -- { {prompt = ProximityPrompt, tab = string} }
+World.BoardRows = {}
+World.BoardStatus = nil
+
+local function part(parent, props)
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Material = Enum.Material.SmoothPlastic
+	for k, v in pairs(props) do
+		p[k] = v
+	end
+	p.Parent = parent
+	return p
+end
+
+local function label(parent, face, text, textColor, bgColor, ppS)
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = face
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = ppS or 30
+	gui.LightInfluence = 0
+	gui.Parent = parent
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.fromScale(1, 1)
+	t.BackgroundColor3 = bgColor or Color3.fromRGB(18, 25, 35)
+	t.BackgroundTransparency = bgColor and 0 or 1
+	t.TextColor3 = textColor or Color3.fromRGB(238, 244, 251)
+	t.Font = Enum.Font.GothamBold
+	t.TextScaled = true
+	t.Text = text
+	t.Parent = gui
+	return t
+end
+
+-- Auto aus Parts. cf zeigt mit LookVector in Fahrtrichtung.
+local function car(parent, cf, color, wrecked)
+	local model = Instance.new("Model")
+	model.Name = wrecked and "Schrottauto" or "Auto"
+	local bodyColor = color or Color3.fromRGB(53, 208, 127)
+	local mat = wrecked and Enum.Material.CorrodedMetal or Enum.Material.SmoothPlastic
+	local body = part(model, { Name = "Karosserie", Size = Vector3.new(4.4, 1.4, 9), CFrame = cf * CFrame.new(0, 1.5, 0), Color = bodyColor, Material = mat })
+	part(model, { Name = "Kabine", Size = Vector3.new(4, 1.3, 4.6), CFrame = cf * CFrame.new(0, 2.85, 0.4) * (wrecked and CFrame.Angles(0.05, 0, 0.08) or CFrame.new()), Color = bodyColor:Lerp(Color3.new(0, 0, 0), 0.25), Material = mat })
+	part(model, { Name = "Scheibe", Size = Vector3.new(3.6, 1, 0.2), CFrame = cf * CFrame.new(0, 2.9, -1.95), Color = Color3.fromRGB(120, 170, 210), Material = Enum.Material.Glass, Transparency = wrecked and 0.6 or 0.2 })
+	for _, x in ipairs({ -2.2, 2.2 }) do
+		for _, z in ipairs({ -3, 3 }) do
+			part(model, {
+				Name = "Rad",
+				Shape = Enum.PartType.Cylinder,
+				Size = Vector3.new(0.9, 2, 2),
+				CFrame = cf * CFrame.new(x, 1, z),
+				Color = Color3.fromRGB(25, 25, 28),
+			})
+		end
+	end
+	model.PrimaryPart = body
+	model.Parent = parent
+	return model
+end
+
+local function sign(parent, cf, text, color)
+	local board = part(parent, { Name = "Schild", Size = Vector3.new(12, 3, 0.4), CFrame = cf, Color = Color3.fromRGB(18, 25, 35) })
+	label(board, Enum.NormalId.Front, text, Color3.fromRGB(238, 244, 251), color, 25)
+	for _, x in ipairs({ -5.5, 5.5 }) do
+		part(parent, { Name = "Pfosten", Size = Vector3.new(0.4, cf.Position.Y, 0.4), CFrame = CFrame.new((cf * CFrame.new(x, 0, 0)).Position.X, cf.Position.Y / 2, (cf * CFrame.new(x, 0, 0)).Position.Z), Color = Color3.fromRGB(60, 70, 85) })
+	end
+	return board
+end
+
+local function prompt(parent, tab, objectText)
+	local p = Instance.new("ProximityPrompt")
+	p.ActionText = "Öffnen"
+	p.ObjectText = objectText
+	p.HoldDuration = 0
+	p.MaxActivationDistance = 12
+	p.RequiresLineOfSight = false
+	p.KeyboardKeyCode = Enum.KeyCode.E
+	p.Parent = parent
+	table.insert(World.Prompts, { prompt = p, tab = tab })
+	return p
+end
+
+-- Station: Bodenplatte, Schild, Prompt-Anker. cf schaut zur Hofmitte.
+local function station(root, name, tab, cf, color)
+	local folder = Instance.new("Model")
+	folder.Name = name
+	folder.Parent = root
+	part(folder, { Name = "Platte", Size = Vector3.new(18, 0.3, 18), CFrame = cf * CFrame.new(0, 0.25, 0), Color = color:Lerp(Color3.fromRGB(30, 35, 45), 0.7), Material = Enum.Material.Concrete })
+	sign(folder, cf * CFrame.new(0, 9, 7), name, color)
+	local anchor = part(folder, { Name = "PromptAnker", Size = Vector3.new(1.5, 3, 1.5), CFrame = cf * CFrame.new(0, 1.9, -5), Color = color, Material = Enum.Material.Neon })
+	prompt(anchor, tab, name)
+	return folder
+end
+
+local function facing(pos)
+	return CFrame.lookAt(pos, Vector3.new(0, pos.Y, 0))
+end
+
+function World.Build()
+	if World.Root then
+		return World.Root
+	end
+	local root = Instance.new("Folder")
+	root.Name = "Hof"
+
+	part(root, { Name = "Wiese", Size = Vector3.new(400, 2, 400), CFrame = CFrame.new(0, -1, 0), Color = Color3.fromRGB(70, 120, 60), Material = Enum.Material.Grass })
+	part(root, { Name = "Asphalt", Size = Vector3.new(150, 0.2, 150), CFrame = CFrame.new(0, 0.1, 0), Color = Color3.fromRGB(45, 48, 54), Material = Enum.Material.Asphalt })
+
+	local spawn = Instance.new("SpawnLocation")
+	spawn.Name = "Start"
+	spawn.Anchored = true
+	spawn.Size = Vector3.new(8, 0.4, 8)
+	spawn.CFrame = CFrame.new(0, 0.3, 0)
+	spawn.Color = Color3.fromRGB(74, 163, 255)
+	spawn.Material = Enum.Material.Neon
+	spawn.Duration = 0
+	spawn.Neutral = true
+	spawn.Parent = root
+
+	-- Schrottpresse (kurz)
+	do
+		local cf = facing(Vector3.new(0, 0, -48))
+		local m = station(root, "Schrottpresse", "press", cf, Color3.fromRGB(255, 189, 62))
+		local steel = Color3.fromRGB(90, 96, 108)
+		part(m, { Name = "Säule", Size = Vector3.new(1.5, 12, 1.5), CFrame = cf * CFrame.new(-4.5, 6, 1), Color = steel, Material = Enum.Material.DiamondPlate })
+		part(m, { Name = "Säule", Size = Vector3.new(1.5, 12, 1.5), CFrame = cf * CFrame.new(4.5, 6, 1), Color = steel, Material = Enum.Material.DiamondPlate })
+		part(m, { Name = "Traverse", Size = Vector3.new(11, 1.5, 3), CFrame = cf * CFrame.new(0, 12.5, 1), Color = Color3.fromRGB(255, 189, 62), Material = Enum.Material.Metal })
+		part(m, { Name = "Pressplatte", Size = Vector3.new(8, 0.8, 10), CFrame = cf * CFrame.new(0, 8, 1), Color = steel, Material = Enum.Material.Metal })
+		car(m, cf * CFrame.new(0, 0.3, 1) * CFrame.Angles(0, math.rad(90), 0), Color3.fromRGB(150, 80, 50), true)
+	end
+
+	-- Schrotthändler
+	do
+		local cf = facing(Vector3.new(34, 0, -38))
+		local m = station(root, "Schrotthändler", "press", cf, Color3.fromRGB(255, 189, 62))
+		part(m, { Name = "Tresen", Size = Vector3.new(8, 3, 2), CFrame = cf * CFrame.new(0, 1.8, 2), Color = Color3.fromRGB(120, 85, 55), Material = Enum.Material.Wood })
+		part(m, { Name = "Dach", Size = Vector3.new(10, 0.5, 6), CFrame = cf * CFrame.new(0, 6, 3), Color = Color3.fromRGB(200, 60, 60) })
+		part(m, { Name = "Waage", Size = Vector3.new(3, 0.3, 3), CFrame = cf * CFrame.new(-2, 3.45, 2), Color = Color3.fromRGB(160, 165, 175), Material = Enum.Material.Metal })
+	end
+
+	-- Idle Tuning Garage (lang)
+	do
+		local cf = facing(Vector3.new(50, 0, 0))
+		local m = station(root, "Tuning-Garage", "tuning", cf, Color3.fromRGB(74, 163, 255))
+		part(m, { Name = "Wand", Size = Vector3.new(16, 9, 1), CFrame = cf * CFrame.new(0, 4.6, 8), Color = Color3.fromRGB(30, 40, 60), Material = Enum.Material.Brick })
+		part(m, { Name = "Dach", Size = Vector3.new(16, 0.8, 10), CFrame = cf * CFrame.new(0, 9.4, 3.5), Color = Color3.fromRGB(40, 50, 70) })
+		car(m, cf * CFrame.new(0, 0.4, 2) * CFrame.Angles(0, math.rad(90), 0), Color3.fromRGB(74, 163, 255), false)
+		part(m, { Name = "Unterbodenlicht", Size = Vector3.new(9, 0.1, 4), CFrame = cf * CFrame.new(0, 0.45, 2) * CFrame.Angles(0, math.rad(90), 0), Color = Color3.fromRGB(74, 163, 255), Material = Enum.Material.Neon })
+	end
+
+	-- Werkstatt (mittel)
+	do
+		local cf = facing(Vector3.new(-50, 0, 0))
+		local m = station(root, "Werkstatt", "workshop", cf, Color3.fromRGB(53, 208, 127))
+		part(m, { Name = "Wand", Size = Vector3.new(16, 9, 1), CFrame = cf * CFrame.new(0, 4.6, 8), Color = Color3.fromRGB(60, 70, 60), Material = Enum.Material.Brick })
+		part(m, { Name = "Dach", Size = Vector3.new(16, 0.8, 10), CFrame = cf * CFrame.new(0, 9.4, 3.5), Color = Color3.fromRGB(50, 60, 55) })
+		part(m, { Name = "Hebebühne", Size = Vector3.new(1, 4, 1), CFrame = cf * CFrame.new(-3.5, 2, 2), Color = Color3.fromRGB(200, 60, 60), Material = Enum.Material.Metal })
+		part(m, { Name = "Hebebühne", Size = Vector3.new(1, 4, 1), CFrame = cf * CFrame.new(3.5, 2, 2), Color = Color3.fromRGB(200, 60, 60), Material = Enum.Material.Metal })
+		car(m, cf * CFrame.new(0, 2, 2) * CFrame.Angles(0, math.rad(90), 0), Color3.fromRGB(220, 220, 225), false)
+	end
+
+	-- Schrottplatz (mittel)
+	do
+		local cf = facing(Vector3.new(-36, 0, -36))
+		local m = station(root, "Schrottplatz", "scrapyard", cf, Color3.fromRGB(255, 90, 103))
+		car(m, cf * CFrame.new(-3, 0.3, 3) * CFrame.Angles(0, math.rad(70), 0), Color3.fromRGB(110, 90, 70), true)
+		car(m, cf * CFrame.new(3, 0.3, 4) * CFrame.Angles(0, math.rad(110), 0), Color3.fromRGB(80, 90, 110), true)
+		car(m, cf * CFrame.new(0, 3.2, 3.5) * CFrame.Angles(0.1, math.rad(95), 0.12), Color3.fromRGB(130, 60, 50), true)
+	end
+
+	-- Mechaniker-Quiz (mittel)
+	do
+		local cf = facing(Vector3.new(36, 0, 36))
+		local m = station(root, "Mechaniker-Quiz", "quiz", cf, Color3.fromRGB(180, 120, 255))
+		part(m, { Name = "Terminal", Size = Vector3.new(4, 5, 1.5), CFrame = cf * CFrame.new(0, 2.8, 2), Color = Color3.fromRGB(35, 40, 55), Material = Enum.Material.Metal })
+		local screen = part(m, { Name = "Bildschirm", Size = Vector3.new(3.4, 2.2, 0.2), CFrame = cf * CFrame.new(0, 3.8, 1.2), Color = Color3.fromRGB(20, 30, 45) })
+		label(screen, Enum.NormalId.Front, "OBD?", Color3.fromRGB(180, 120, 255), Color3.fromRGB(10, 15, 25), 40)
+	end
+
+	-- Parkplatz-Chaos (mittel)
+	do
+		local cf = facing(Vector3.new(-36, 0, 36))
+		local m = station(root, "Parkplatz-Chaos", "parking", cf, Color3.fromRGB(74, 163, 255))
+		for i = -1, 1 do
+			part(m, { Name = "Linie", Size = Vector3.new(0.3, 0.05, 7), CFrame = cf * CFrame.new(i * 5 - 2.5, 0.43, 3), Color = Color3.fromRGB(240, 240, 240) })
+		end
+		car(m, cf * CFrame.new(-5, 0.4, 3), Color3.fromRGB(255, 189, 62), false)
+		car(m, cf * CFrame.new(5, 0.4, 3), Color3.fromRGB(255, 90, 103), false)
+	end
+
+	-- Bestenliste als Tafel auf dem Hof
+	do
+		local cf = facing(Vector3.new(0, 0, 50))
+		local m = Instance.new("Model")
+		m.Name = "Bestenliste"
+		m.Parent = root
+		local board = part(m, { Name = "Tafel", Size = Vector3.new(22, 16, 0.6), CFrame = cf * CFrame.new(0, 10, 0), Color = Color3.fromRGB(12, 17, 24) })
+		for _, x in ipairs({ -10, 10 }) do
+			part(m, { Name = "Stütze", Size = Vector3.new(0.8, 18, 0.8), CFrame = cf * CFrame.new(x, 9, 0.8), Color = Color3.fromRGB(60, 70, 85) })
+		end
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = Enum.NormalId.Front
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = 30
+		gui.LightInfluence = 0
+		gui.Parent = board
+		local layout = Instance.new("UIListLayout")
+		layout.Padding = UDim.new(0, 4)
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+		layout.Parent = gui
+		local title = Instance.new("TextLabel")
+		title.Size = UDim2.new(1, 0, 0, 60)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.GothamBlack
+		title.TextScaled = true
+		title.TextColor3 = Color3.fromRGB(255, 189, 62)
+		title.Text = "Bestenliste · Schrott gepresst"
+		title.LayoutOrder = 0
+		title.Parent = gui
+		World.BoardStatus = title
+		for i = 1, Config.LeaderboardBoardRows do
+			local row = Instance.new("TextLabel")
+			row.Size = UDim2.new(1, 0, 0, 36)
+			row.BackgroundTransparency = 1
+			row.Font = Enum.Font.GothamMedium
+			row.TextScaled = true
+			row.TextXAlignment = Enum.TextXAlignment.Left
+			row.TextColor3 = Color3.fromRGB(238, 244, 251)
+			row.Text = ""
+			row.LayoutOrder = i
+			row.Parent = gui
+			World.BoardRows[i] = row
+		end
+		local anchor = part(m, { Name = "PromptAnker", Size = Vector3.new(1.5, 3, 1.5), CFrame = cf * CFrame.new(0, 1.9, -3), Color = Color3.fromRGB(255, 189, 62), Material = Enum.Material.Neon })
+		prompt(anchor, "leaderboard", "Bestenliste")
+	end
+
+	root.Parent = workspace
+	World.Root = root
+	World.UpdateBoard({ available = nil, entries = {} })
+	return root
+end
+
+function World.UpdateBoard(cache)
+	if not World.BoardStatus then
+		return
+	end
+	if cache.available == false then
+		World.BoardStatus.Text = Locale.T("leaderboard_unavailable")
+	elseif cache.available == nil then
+		World.BoardStatus.Text = Locale.T("leaderboard_loading")
+	else
+		World.BoardStatus.Text = "Bestenliste · Schrott gepresst"
+	end
+	for i, row in ipairs(World.BoardRows) do
+		local e = cache.available and cache.entries[i]
+		if e then
+			row.Text = string.format("  %d. %s  –  %s", i, e.name or ("Spieler " .. e.userId), Locale.Number(e.value))
+		else
+			row.Text = ""
+		end
+	end
+end
+
+return World
+]]></ProtectedString></Properties></Item>
+    </Item>
+  </Item>
+  <Item class="StarterPlayer" referent="RBX0000002E"><Properties><string name="Name">StarterPlayer</string></Properties>
+    <Item class="StarterPlayerScripts" referent="RBX0000002D"><Properties><string name="Name">StarterPlayerScripts</string></Properties>
+        <Item class="LocalScript" referent="RBX00000019"><Properties><string name="Name">Main</string><bool name="Disabled">false</bool><ProtectedString name="Source"><![CDATA[-- Main (Client): baut die Oberfläche, bindet die Spiel-Module ein und verarbeitet Sync und Hinweise.
+-- Der Client zeigt nur an und sendet Absichten; alle Ergebnisse kommen vom Server.
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Locale = require(Shared:WaitForChild("Locale"))
+
+-- Place-Build: Module liegen im Ordner "Client" neben diesem Skript; Rojo: Skript liegt selbst im Ordner "Client"
+local Client = script.Parent.Name == "Client" and script.Parent or script.Parent:WaitForChild("Client")
+local UI = require(Client:WaitForChild("UI"))
+local Remote = require(Client:WaitForChild("Remote"))
+local Effects = require(Client:WaitForChild("Effects"))
+
+local Modules = {
+	overview = require(Client:WaitForChild("OverviewUI")),
+	press = require(Client:WaitForChild("PressUI")),
+	tuning = require(Client:WaitForChild("TuningUI")),
+	workshop = require(Client:WaitForChild("WorkshopUI")),
+	scrapyard = require(Client:WaitForChild("ScrapyardUI")),
+	quiz = require(Client:WaitForChild("QuizUI")),
+	parking = require(Client:WaitForChild("ParkingUI")),
+	goals = require(Client:WaitForChild("GoalsUI")),
+	leaderboard = require(Client:WaitForChild("LeaderboardUI")),
+	shop = require(Client:WaitForChild("ShopUI")),
+}
+
+UI.Build()
+local ctx = { UI = UI, Remote = Remote, Effects = Effects }
+for _, tab in ipairs(UI.Tabs) do
+	Modules[tab.key].Build(UI.Pages[tab.key], ctx)
+end
+
+local latest = nil
+
+local function renderVisible()
+	if not latest or not UI.IsOpen then
+		return
+	end
+	local m = Modules[UI.CurrentTab]
+	if m and m.Render then
+		m.Render(latest)
+	end
+end
+
+local function renderHud()
+	if not latest then
+		return
+	end
+	UI.HudCredits.Text = Locale.Credits(latest.credits)
+	UI.HudScrap.Text = Locale.Scrap(Modules.press.DisplayScrap())
+	UI.HudLevel.Text = "Level " .. latest.level .. " · Ruf " .. latest.reputation
+	UI.SetProgress(UI.HudXp, latest.xp / latest.xpNeeded)
+	UI.GoalText.Text = "Ziel: " .. latest.goals.next.text
+	UI.GoalTab = latest.goals.next.tab
+	UI.SetProgress(UI.GoalFill, latest.goals.next.progress)
+	UI.HeaderInfo.Text = Locale.Credits(latest.credits) .. " · " .. Locale.Scrap(Modules.press.DisplayScrap()) .. " · Level " .. latest.level
+end
+
+UI.OnTabShown = function(key)
+	renderVisible()
+	if key == "leaderboard" then
+		Remote.Send("leaderboard_refresh")
+	end
+end
+
+Remote.Sync.OnClientEvent:Connect(function(snapshot)
+	if type(snapshot) ~= "table" then
+		return
+	end
+	latest = snapshot
+	Modules.press.OnSnapshot(snapshot)
+	renderHud()
+	renderVisible()
+end)
+
+Remote.Notice.OnClientEvent:Connect(function(kind, data)
+	data = type(data) == "table" and data or {}
+	if kind == "toast" then
+		UI.Toast(data.text)
+	elseif kind == "open" then
+		UI.Open(data.tab)
+	elseif kind == "offline" then
+		UI.Toast(data.text)
+	elseif kind == "levelup" then
+		UI.Toast(Locale.T("level_up", data.level, Locale.Credits(data.credits or 0)))
+	elseif kind == "rebirth" then
+		UI.Toast("Rebirth geschafft! Schrott-Multiplikator jetzt ×" .. string.format("%.2f", data.multiplier or 1):gsub("%.", ","))
+	elseif kind == "quiz" then
+		Modules.quiz.OnResult(data)
+	elseif kind == "scrapyard" then
+		Modules.scrapyard.OnResult(data)
+	elseif kind == "leaderboard" then
+		Modules.leaderboard.OnData(data)
+	end
+end)
+
+-- Klickpakete etwa alle 0,5 s
+task.spawn(function()
+	while true do
+		task.wait(Config.ClickBatchInterval)
+		Modules.press.Flush()
+	end
+end)
+
+-- Pro Frame: nur leichte Anzeige-Updates des sichtbaren Bereichs
+local hudTimer = 0
+RunService.Heartbeat:Connect(function(dt)
+	if UI.IsOpen then
+		local m = Modules[UI.CurrentTab]
+		if m and m.Step then
+			m.Step()
+		end
+	end
+	hudTimer += dt
+	if hudTimer >= 0.1 then
+		hudTimer = 0
+		renderHud()
+	end
+end)
+
+Remote.Send("ui_ready")
+]]></ProtectedString></Properties></Item>
+        <Item class="Folder" referent="RBX0000002C"><Properties><string name="Name">Client</string></Properties>
+          <Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">Effects</string><ProtectedString name="Source"><![CDATA[-- Effects: Klick-Feedback nur auf dem Client, gepoolt (keine Instanzflut, kein Speicherleck).
+local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+
+local Effects = {}
+
+local POOL_SIZE = 16
+local SPARKS = 10
+local popPool, popIndex = {}, 0
+local sparkPool, sparkIndex = {}, 0
+local sound
+
+function Effects.Init(host)
+	for i = 1, POOL_SIZE do
+		local l = Instance.new("TextLabel")
+		l.BackgroundTransparency = 1
+		l.Size = UDim2.new(0, 160, 0, 30)
+		l.AnchorPoint = Vector2.new(0.5, 0.5)
+		l.Font = Enum.Font.GothamBlack
+		l.TextSize = 22
+		l.TextColor3 = Color3.fromRGB(255, 189, 62)
+		l.TextStrokeTransparency = 0.4
+		l.Visible = false
+		l.ZIndex = 12
+		l.Parent = host
+		popPool[i] = l
+	end
+	for i = 1, SPARKS do
+		local s = Instance.new("Frame")
+		s.BorderSizePixel = 0
+		s.Size = UDim2.new(0, 6, 0, 6)
+		s.AnchorPoint = Vector2.new(0.5, 0.5)
+		s.BackgroundColor3 = Color3.fromRGB(255, 220, 120)
+		s.Visible = false
+		s.ZIndex = 11
+		s.Parent = host
+		sparkPool[i] = s
+	end
+	sound = Instance.new("Sound")
+	sound.Name = "PressClick"
+	sound.SoundId = "rbxasset://sounds/clickfast.wav"
+	sound.Volume = 0.35
+	sound.Parent = SoundService
+end
+
+-- Zahl fliegt hoch (Position relativ zum Host, 0..1)
+function Effects.Pop(text, x, y)
+	popIndex = popIndex % POOL_SIZE + 1
+	local l = popPool[popIndex]
+	if not l then
+		return
+	end
+	l.Text = text
+	l.Position = UDim2.fromScale(x, y)
+	l.TextTransparency = 0
+	l.TextStrokeTransparency = 0.4
+	l.Visible = true
+	local tween = TweenService:Create(l, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = UDim2.fromScale(x, y - 0.35),
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	})
+	tween:Play()
+end
+
+function Effects.Sparks(x, y)
+	for _ = 1, 3 do
+		sparkIndex = sparkIndex % SPARKS + 1
+		local s = sparkPool[sparkIndex]
+		if s then
+			s.Position = UDim2.fromScale(x, y)
+			s.BackgroundTransparency = 0
+			s.Visible = true
+			local dx = (math.random() - 0.5) * 0.3
+			local dy = -math.random() * 0.25
+			TweenService:Create(s, TweenInfo.new(0.35), { Position = UDim2.fromScale(x + dx, y + dy), BackgroundTransparency = 1 }):Play()
+		end
+	end
+end
+
+-- Wackeln: Rotation kurz hin und zurück
+function Effects.Shake(frame)
+	frame.Rotation = (math.random() < 0.5) and -3 or 3
+	TweenService:Create(frame, TweenInfo.new(0.08), { Rotation = 0 }):Play()
+end
+
+function Effects.Click()
+	if sound then
+		sound.PlaybackSpeed = 0.9 + math.random() * 0.2
+		sound:Play()
+	end
+end
+
+return Effects
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX0000001B"><Properties><string name="Name">GoalsUI</string><ProtectedString name="Source"><![CDATA[-- GoalsUI: Tagesauftrag, drei Tagesziele und Meilensteine mit Fortschrittsbalken.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+
+local GoalsUI = {}
+
+local UI, Remote, T
+local refs = {}
+local TIER_NAMES = { "Kurz", "Mittel", "Lang" }
+
+local function goalRow(parent, i, onClaim)
+	local row, left, right = UI.Row(parent, 10 + i)
+	local name = UI.Label(left, "", { Font = Enum.Font.GothamBold, TextSize = 15, LayoutOrder = 1 })
+	local sub = UI.Small(left, "", 2)
+	local _, fill = UI.Progress(left, T.accent, 3)
+	local item = { root = row, name = name, sub = sub, fill = fill }
+	item.button = UI.Button(right, "Abholen", T.accent, function()
+		if item.id then
+			onClaim(item.id)
+		end
+	end, { TextSize = 14 })
+	return item
+end
+
+function GoalsUI.Build(page, ctx)
+	UI, Remote = ctx.UI, ctx.Remote
+	T = UI.Theme
+
+	local daily = UI.Card(page, 1)
+	UI.Title(daily, "Tagesauftrag", 1)
+	refs.dailyText = UI.Small(daily, "", 2)
+	refs.dailyButton = UI.Button(daily, "Tagesauftrag abholen", T.accent, function()
+		Remote.Send("daily_claim")
+	end, { LayoutOrder = 3 })
+
+	local goals = UI.Card(page, 2)
+	UI.Title(goals, "Tagesziele (setzen sich um 0 Uhr UTC zurück)", 1)
+	refs.daily = UI.Pool(goals, function(parent, i)
+		return goalRow(parent, i, function(id)
+			Remote.Send("daily_goal_claim", { id = id })
+		end)
+	end)
+
+	local ms = UI.Card(page, 3)
+	UI.Title(ms, "Meilensteine", 1)
+	refs.milestones = UI.Pool(ms, function(parent, i)
+		return goalRow(parent, i, function(id)
+			Remote.Send("milestone_claim", { id = id })
+		end)
+	end)
+end
+
+local function fill(item, id, name, sub, value, target, claimed)
+	item.id = id
+	item.name.Text = name
+	item.sub.Text = sub
+	UI.SetProgress(item.fill, value / target)
+	if claimed then
+		item.button.Text = "Erledigt ✓"
+		UI.SetEnabled(item.button, false)
+	else
+		item.button.Text = value >= target and "Abholen" or (Locale.Number(math.min(value, target)) .. " / " .. Locale.Number(target))
+		UI.SetEnabled(item.button, value >= target)
+	end
+end
+
+function GoalsUI.Render(s)
+	local d = s.goals.daily
+	refs.dailyText.Text = string.format("Spiele heute einen beliebigen Bereich und erhalte %s, %d Teile und %d XP.%s", Locale.Credits(d.credits), d.parts, d.xp, d.claimed and " Heute bereits abgeholt." or "")
+	refs.dailyButton.Text = d.claimed and "Heute erledigt ✓" or "Tagesauftrag abholen"
+	UI.SetEnabled(refs.dailyButton, d.active and not d.claimed)
+
+	refs.daily:Ensure(#d.goals)
+	for i, g in ipairs(d.goals) do
+		fill(refs.daily.items[i], g.id, (TIER_NAMES[g.tier] or "") .. ": " .. g.text, "Belohnung: " .. Locale.Credits(g.credits), g.value, g.target, g.claimed)
+	end
+	refs.milestones:Ensure(#s.goals.milestones)
+	for i, m in ipairs(s.goals.milestones) do
+		fill(refs.milestones.items[i], m.id, m.text, "Belohnung: " .. Locale.Credits(m.credits), m.value, m.target, m.claimed)
+	end
+end
+
+return GoalsUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX0000001C"><Properties><string name="Name">LeaderboardUI</string><ProtectedString name="Source"><![CDATA[-- LeaderboardUI: globale Bestenliste (Top 50) und eigene Platzierung.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Locale = require(Shared:WaitForChild("Locale"))
+
+local LeaderboardUI = {}
+
+local UI, Remote, T
+local refs = {}
+
+function LeaderboardUI.Build(page, ctx)
+	UI, Remote = ctx.UI, ctx.Remote
+	T = UI.Theme
+	local card = UI.Card(page, 1)
+	UI.Title(card, "Bestenliste · lebenslang gepresster Schrott", 1)
+	UI.Small(card, "Gezählt wird Schrott aus Klicks und Maschinen. Umtausch und Rebirth senken den Wert nicht, Game Passes erhöhen ihn nicht. Aktualisierung höchstens einmal pro Minute.", 2)
+	refs.status = UI.Label(card, Locale.T("leaderboard_loading"), { LayoutOrder = 3, TextColor3 = T.warn })
+	refs.own = UI.Label(card, "", { LayoutOrder = 4, Font = Enum.Font.GothamBold })
+	refs.refresh = UI.Button(card, "Aktualisieren", T.accent2, function()
+		Remote.Send("leaderboard_refresh")
+	end, { LayoutOrder = 5 })
+	local list = UI.Card(page, 2)
+	refs.rows = {}
+	for i = 1, Config.LeaderboardTopCount do
+		refs.rows[i] = UI.Label(list, "", { LayoutOrder = i, TextSize = 15, Visible = false })
+	end
+end
+
+function LeaderboardUI.OnData(view)
+	if not refs.status then
+		return
+	end
+	if view.available ~= true then
+		refs.status.Visible = true
+		refs.status.Text = view.available == "loading" and Locale.T("leaderboard_loading") or Locale.T("leaderboard_unavailable")
+		refs.own.Text = ""
+		for _, r in ipairs(refs.rows) do
+			r.Visible = false
+		end
+		return
+	end
+	refs.status.Visible = #view.rows == 0
+	refs.status.Text = "Noch keine Einträge."
+	local own = view.own
+	if own.rank then
+		refs.own.Text = string.format("Dein Platz: %d · %s", own.rank, Locale.Scrap(own.value))
+	else
+		refs.own.Text = string.format("Dein Platz: jenseits von %d · %s", own.atLeast - 1, Locale.Scrap(own.value))
+	end
+	for i, r in ipairs(refs.rows) do
+		local row = view.rows[i]
+		r.Visible = row ~= nil
+		if row then
+			r.Text = string.format("%d. %s – %s", row.rank, row.name, Locale.Number(row.value))
+			r.TextColor3 = row.self and T.warn or T.text
+		end
+	end
+end
+
+return LeaderboardUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">OverviewUI</string><ProtectedString name="Source"><![CDATA[-- OverviewUI: Karriere, nächstes Ziel, Kurzüberblick aller Spiele und aktive Boni.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+
+local OverviewUI = {}
+
+local UI, T
+local refs = {}
+
+function OverviewUI.Build(page, ctx)
+	UI = ctx.UI
+	T = UI.Theme
+
+	local career = UI.Card(page, 1)
+	UI.Title(career, "Deine Karriere", 1)
+	refs.career = UI.Label(career, "", { LayoutOrder = 2 })
+	local _, xpFill = UI.Progress(career, T.accent2, 3)
+	refs.xpFill = xpFill
+
+	local nextCard = UI.Card(page, 2)
+	UI.Title(nextCard, "Nächstes Ziel", 1)
+	refs.next = UI.Label(nextCard, "", { LayoutOrder = 2 })
+	local _, nextFill = UI.Progress(nextCard, T.accent, 3)
+	refs.nextFill = nextFill
+	refs.nextButton = UI.Button(nextCard, "Hingehen", T.accent, function()
+		UI.Show(refs.nextTab or "overview")
+	end, { LayoutOrder = 4 })
+
+	local games = UI.Card(page, 3)
+	UI.Title(games, "Spiele", 1)
+	UI.Small(games, "Kurz: Schrottpresse · Mittel: Werkstatt, Schrottplatz, Quiz, Parkplatz · Lang: Tuning-Garage, Tagesziele, Meilensteine, Rebirth", 2)
+	refs.games = UI.Label(games, "", { LayoutOrder = 3, TextSize = 15 })
+
+	local boni = UI.Card(page, 4)
+	UI.Title(boni, "Aktive Boni", 1)
+	refs.boni = UI.Label(boni, "", { LayoutOrder = 2, TextSize = 15 })
+end
+
+function OverviewUI.Render(s)
+	refs.career.Text = string.format("Level %d · %s XP von %s · Ruf %d\n%s · %s · Lager %d Teile", s.level, Locale.Number(s.xp), Locale.Number(s.xpNeeded), s.reputation, Locale.Credits(s.credits), Locale.Scrap(s.press.scrap), s.parts)
+	UI.SetProgress(refs.xpFill, s.xp / s.xpNeeded)
+	local n = s.goals.next
+	refs.next.Text = n.text
+	refs.nextTab = n.tab
+	UI.SetProgress(refs.nextFill, n.progress)
+
+	local ready = 0
+	for _, j in ipairs(s.workshop.jobs) do
+		if s.now >= j.endsAt then
+			ready += 1
+		end
+	end
+	local tuningReady = 0
+	for _, pj in ipairs(s.tuning.projects) do
+		if pj.remaining <= 0 then
+			tuningReady += 1
+		end
+	end
+	refs.games.Text = table.concat({
+		string.format("🚘 Schrottpresse: %s/Sek. · Rebirths %d", Locale.Number(s.press.machinePerSecond), s.press.rebirths),
+		string.format("🔧 Werkstatt: %d Aufträge laufen, %d fertig, %d Bühne(n) frei", #s.workshop.jobs, ready, math.max(0, s.workshop.available)),
+		string.format("🏁 Tuning: %d/%d Plätze belegt, %d abholbereit, passiv %s bereit", #s.tuning.projects, s.tuning.slots, tuningReady, Locale.Credits(s.tuning.pendingIdle)),
+		string.format("♻️ Schrottplatz: %s", s.scrapyard.vehicle and "Fahrzeug wartet aufs Zerlegen" or "kein Fahrzeug"),
+		string.format("🧠 Quiz: %d Diagnosepunkte", s.quiz.diagPoints),
+		string.format("🚙 Parkplatz: Serie %d", s.parking.streak),
+	}, "\n")
+	refs.boni.Text = "• " .. table.concat(s.goals.boni, "\n• ")
+end
+
+return OverviewUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">ParkingUI</string><ProtectedString name="Source"><![CDATA[-- ParkingUI: Parkplatz-Chaos als 2D-Rätsel. Die Lösung prüft der Server.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Locale = require(Shared:WaitForChild("Locale"))
+
+local ParkingUI = {}
+
+local UI, Remote, T
+local refs = {}
+
+function ParkingUI.Build(page, ctx)
+	UI, Remote = ctx.UI, ctx.Remote
+	T = UI.Theme
+	local card = UI.Card(page, 1)
+	UI.Title(card, "Parkplatz-Chaos", 1)
+	UI.Small(card, "Das gelbe Auto 🚘 muss zur Ausfahrt: erst nach rechts, dann nach unten. Tippe blockierende Autos an, um sie wegzufahren, dann das gelbe Auto. Ist der Weg noch blockiert, gibt es Blechschaden und die Serie endet.", 2)
+	refs.info = UI.Small(card, "", 3)
+
+	local holder = UI.Frame(card, { BackgroundTransparency = 1, LayoutOrder = 4 })
+	local limit = Instance.new("UISizeConstraint")
+	limit.MaxSize = Vector2.new(360, math.huge)
+	limit.Parent = holder
+	local grid = Instance.new("UIGridLayout")
+	grid.CellSize = UDim2.new(1 / Config.ParkingSize, -6, 0, 64)
+	grid.CellPadding = UDim2.new(0, 6, 0, 6)
+	grid.SortOrder = Enum.SortOrder.LayoutOrder
+	grid.Parent = holder
+	refs.cells = {}
+	for cell = 0, Config.ParkingSize * Config.ParkingSize - 1 do
+		refs.cells[cell] = UI.Button(holder, "", T.panel, function()
+			Remote.Send("parking_tap", { cell = cell })
+		end, { LayoutOrder = cell, TextSize = 26, TextColor3 = T.text })
+	end
+	refs.status = UI.Label(card, "", { LayoutOrder = 5 })
+	refs.new = UI.Button(card, "Neue Runde", T.accent2, function()
+		Remote.Send("parking_new")
+	end, { LayoutOrder = 6 })
+end
+
+function ParkingUI.Render(s)
+	local pk = s.parking
+	refs.info.Text = string.format("Serie: %d · Beste Serie: %d · Auftragsqualität ×%s (höchstens ×%s)", pk.streak, pk.best, (string.format("%.2f", pk.customerBonus):gsub("%.", ",")), (string.format("%.2f", Config.CustomerBonusCap):gsub("%.", ",")))
+	local pz = pk.puzzle
+	local cars, path = {}, {}
+	if pz then
+		for _, c in ipairs(pz.cars) do
+			cars[c] = true
+		end
+		for _, c in ipairs(pz.path) do
+			path[c] = true
+		end
+	end
+	for cell, b in pairs(refs.cells) do
+		local text, color = "", T.panel
+		if pz and cell == pz.exit then
+			text, color = "🚪", T.line
+		elseif pz and cars[cell] then
+			text = cell == pz.target and "🚘" or "🚙"
+			color = cell == pz.target and T.warn or (path[cell] and T.danger or T.panel2)
+		elseif pz and path[cell] then
+			color = Color3.fromRGB(30, 45, 60)
+		end
+		b.Text = text
+		b.BackgroundColor3 = color
+		b:SetAttribute("disabled", not (pz and cars[cell] and not pz.solved and not pz.crashed))
+	end
+	if not pz then
+		refs.status.Text = "Starte eine neue Runde."
+	elseif pz.solved then
+		refs.status.Text = "Geschafft in " .. pz.moves .. " Zügen! Serie " .. pk.streak .. "."
+	elseif pz.crashed then
+		refs.status.Text = "Blechschaden! Die Serie ist beendet."
+	else
+		refs.status.Text = pz.moves .. " Züge · " .. (pz.blocked and "Weg noch blockiert (rot markiert)" or "Weg frei – jetzt das gelbe Auto!")
+	end
+	refs.new.Text = (pz and not pz.solved and not pz.crashed and pz.moves > 0) and "Neue Runde (beendet die Serie)" or "Neue Runde"
+end
+
+return ParkingUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">PressUI</string><ProtectedString name="Source"><![CDATA[-- PressUI: Schrottpresse (Klickfläche, Händler, Rebirth, 100 Upgrades).
+-- Klicks werden gesammelt und etwa alle 0,5 s als Anzahl gesendet. Die Anzeige interpoliert nur.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+local Catalog = require(Shared:WaitForChild("Catalog"))
+local Locale = require(Shared:WaitForChild("Locale"))
+local PressRules = require(Shared:WaitForChild("PressRules"))
+
+local PressUI = {}
+
+local UI, Effects, Remote
+local T
+local refs = {}
+local state = nil -- letzter Snapshot
+local snapAt = 0
+local localGain = 0 -- vorhergesagter Klick-Ertrag seit dem letzten Snapshot
+local pending = 0 -- noch nicht gesendete Klicks
+local combo, comboUntil = 1, 0
+local clickWindowStart, clickWindowCount = 0, 0
+
+local function effectText(u)
+	if u.type == 0 or u.type == 3 then
+		return "+" .. u.baseEffect .. " Klickstärke je Stufe"
+	elseif u.type == 1 or u.type == 4 then
+		return "+" .. string.format("%.2f", u.baseEffect * Config.PressMachineEffectFactor):gsub("%.", ",") .. " Schrott/Sek. je Stufe"
+	end
+	return "+1 Ruf und +" .. math.max(1, math.floor(u.baseEffect * 0.5)) .. " Cr je Kauf"
+end
+
+local function buildCar(parent)
+	local T2 = UI.Theme
+	local car = Instance.new("Frame")
+	car.BackgroundTransparency = 1
+	car.Size = UDim2.new(0, 220, 0, 110)
+	car.AnchorPoint = Vector2.new(0.5, 0.5)
+	car.Position = UDim2.fromScale(0.5, 0.55)
+	car.Parent = parent
+	local body = Instance.new("Frame")
+	body.BackgroundColor3 = Color3.fromRGB(150, 80, 50)
+	body.BorderSizePixel = 0
+	body.Size = UDim2.new(1, 0, 0, 45)
+	body.Position = UDim2.new(0, 0, 0, 40)
+	body.Parent = car
+	UI.Corner(body, 14)
+	local cabin = Instance.new("Frame")
+	cabin.BackgroundColor3 = Color3.fromRGB(120, 65, 40)
+	cabin.BorderSizePixel = 0
+	cabin.Size = UDim2.new(0.5, 0, 0, 38)
+	cabin.Position = UDim2.new(0.22, 0, 0, 8)
+	cabin.Rotation = 4
+	cabin.Parent = car
+	UI.Corner(cabin, 10)
+	local window = Instance.new("Frame")
+	window.BackgroundColor3 = Color3.fromRGB(120, 170, 210)
+	window.BackgroundTransparency = 0.4
+	window.BorderSizePixel = 0
+	window.Size = UDim2.new(0.8, 0, 0, 20)
+	window.Position = UDim2.new(0.1, 0, 0, 7)
+	window.Parent = cabin
+	UI.Corner(window, 6)
+	for _, x in ipairs({ 0.2, 0.8 }) do
+		local wheel = Instance.new("Frame")
+		wheel.BackgroundColor3 = Color3.fromRGB(25, 25, 28)
+		wheel.BorderSizePixel = 0
+		wheel.Size = UDim2.new(0, 42, 0, 42)
+		wheel.AnchorPoint = Vector2.new(0.5, 0.5)
+		wheel.Position = UDim2.new(x, 0, 0, 86)
+		wheel.Parent = car
+		UI.Corner(wheel, 21)
+		local hub = Instance.new("Frame")
+		hub.BackgroundColor3 = T2.muted
+		hub.BorderSizePixel = 0
+		hub.Size = UDim2.new(0, 14, 0, 14)
+		hub.AnchorPoint = Vector2.new(0.5, 0.5)
+		hub.Position = UDim2.fromScale(0.5, 0.5)
+		hub.Parent = wheel
+		UI.Corner(hub, 7)
+	end
+	return car
+end
+
+local function onPress(inputPos)
+	-- Lokal höchstens MaxClicksPerSecond zählen (der Server deckelt ohnehin)
+	local t = os.clock()
+	if t - clickWindowStart >= 1 then
+		clickWindowStart, clickWindowCount = t, 0
+	end
+	if clickWindowCount >= Config.MaxClicksPerSecond then
+		return
+	end
+	clickWindowCount += 1
+	pending += 1
+	combo = (t < comboUntil) and math.min(Config.PressComboMax, combo + Config.PressComboStep) or 1
+	comboUntil = t + Config.PressComboWindow
+	local perClick = state and state.press.clickPower or Config.PressBaseClick
+	local gain = perClick * combo
+	localGain += gain
+
+	local area = refs.area
+	local x, y = 0.5, 0.4
+	if inputPos and area.AbsoluteSize.X > 0 then
+		x = math.clamp((inputPos.X - area.AbsolutePosition.X) / area.AbsoluteSize.X, 0.05, 0.95)
+		y = math.clamp((inputPos.Y - area.AbsolutePosition.Y) / area.AbsoluteSize.Y, 0.1, 0.9)
+	end
+	Effects.Pop("+" .. Locale.Number(gain), x, y)
+	Effects.Sparks(x, y)
+	Effects.Shake(refs.car)
+	Effects.Click()
+end
+
+function PressUI.Build(page, ctx)
+	UI, Effects, Remote = ctx.UI, ctx.Effects, ctx.Remote
+	T = UI.Theme
+
+	local press = UI.Card(page, 1)
+	UI.Title(press, "Schrottpresse", 1)
+	UI.Small(press, "Tippe auf das Schrottauto. Jeder Tipp presst Schrott, schnelle Serien erhöhen die Combo bis ×" .. Config.PressComboMax .. ".", 2)
+	refs.scrap = UI.Label(press, "0 kg Schrott", { Font = Enum.Font.GothamBlack, TextSize = 26, TextColor3 = T.warn, LayoutOrder = 3 })
+	refs.stats = UI.Small(press, "", 4)
+
+	local area = Instance.new("TextButton")
+	area.Name = "Presse"
+	area.Text = ""
+	area.AutoButtonColor = false
+	area.BackgroundColor3 = T.bg
+	area.Size = UDim2.new(1, 0, 0, 190)
+	area.LayoutOrder = 5
+	area.ClipsDescendants = true
+	area.Parent = press
+	UI.Corner(area, 12)
+	refs.area = area
+	refs.car = buildCar(area)
+	area.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			onPress(input.Position)
+		end
+	end)
+	Effects.Init(area)
+
+	refs.combo = UI.Small(press, "Combo ×1,0", 6)
+	local _, comboFill = UI.Progress(press, T.warn, 7)
+	refs.comboFill = comboFill
+
+	-- Schrotthändler
+	local dealer = UI.Card(page, 2)
+	UI.Title(dealer, "Schrotthändler", 1)
+	UI.Small(dealer, "Verkaufe Schrott in festen Paketen gegen Credits. Credits lassen sich nicht in Schrott tauschen.", 2)
+	local grid = UI.Frame(dealer, { BackgroundTransparency = 1, LayoutOrder = 3 })
+	local gl = Instance.new("UIGridLayout")
+	gl.CellSize = UDim2.new(0.5, -4, 0, UI.MinTouch + 6)
+	gl.CellPadding = UDim2.new(0, 8, 0, 8)
+	gl.SortOrder = Enum.SortOrder.LayoutOrder
+	gl.Parent = grid
+	refs.exchange = {}
+	for i, amount in ipairs(Config.ScrapExchangePackages) do
+		refs.exchange[i] = UI.Button(grid, Locale.Number(amount) .. " → " .. Locale.Credits(PressRules.ExchangeCredits(amount)), T.warn, function()
+			Remote.Send("press_exchange", { index = i })
+		end, { LayoutOrder = i, TextSize = 14 })
+	end
+
+	-- Rebirth
+	local rebirth = UI.Card(page, 3)
+	UI.Title(rebirth, "Rebirth", 1)
+	refs.rebirthText = UI.Small(rebirth, "", 2)
+	local _, rebirthFill = UI.Progress(rebirth, T.purple, 3)
+	refs.rebirthFill = rebirthFill
+	refs.rebirthButton = UI.Button(rebirth, "Rebirth durchführen", T.purple, function()
+		if not state or not state.press.canRebirth then
+			return
+		end
+		local expected = state.press.rebirths
+		UI.Confirm(Locale.T("rebirth_confirm", string.format("%.2f", state.press.nextRebirthMultiplier):gsub("%.", ",")), function()
+			Remote.Send("press_rebirth", { rebirths = expected })
+		end)
+	end, { LayoutOrder = 4 })
+
+	-- Upgrades
+	local ups = UI.Card(page, 4)
+	UI.Title(ups, "Presse-Upgrades", 1)
+	UI.Small(ups, "Werkzeuge erhöhen die Klickstärke, Maschinen und Mitarbeiter pressen automatisch. Jede Stufe erhöht zusätzlich alle Erträge um 0,25 %.", 2)
+	refs.upgradeRows = {}
+	for i, u in ipairs(Catalog.PressUpgrades) do
+		local row, left, right = UI.Row(ups, 2 + i)
+		local name = UI.Label(left, "", { Font = Enum.Font.GothamBold, TextSize = 15, LayoutOrder = 1 })
+		UI.Small(left, Catalog.PressUpgradeTypeLabel[u.type] .. " · " .. effectText(u), 2)
+		local button = UI.Button(right, "", T.accent, function()
+			if state then
+				Remote.Send("press_buy", { id = u.id, level = state.press.levels[u.id] or 0 })
+			end
+		end, { TextSize = 14 })
+		refs.upgradeRows[i] = { row = row, name = name, button = button, u = u }
+	end
+end
+
+-- Aktuelle Anzeige: Server-Wert + Maschinen seit dem Snapshot + vorhergesagte Klicks
+function PressUI.DisplayScrap()
+	if not state then
+		return 0
+	end
+	return state.press.scrap + state.press.machinePerSecond * math.min(2, os.clock() - snapAt) + localGain
+end
+
+function PressUI.OnSnapshot(s)
+	state = s
+	snapAt = os.clock()
+	-- Bereits gesendete Klicks sind im Server-Wert enthalten; nur noch nicht gesendete bleiben vorhergesagt
+	localGain = pending * (s.press.clickPower * combo)
+end
+
+function PressUI.Flush()
+	if pending > 0 then
+		Remote.SendRaw("press_click", { count = pending })
+		pending = 0
+	end
+end
+
+-- Jedes Frame: Zahl und Combo aktualisieren (nur wenn sichtbar)
+function PressUI.Step()
+	if not state or not refs.scrap then
+		return
+	end
+	local t = os.clock()
+	if t > comboUntil then
+		combo = 1
+	end
+	refs.scrap.Text = Locale.Scrap(PressUI.DisplayScrap())
+	refs.combo.Text = "Combo ×" .. string.format("%.2f", combo):gsub("%.", ",")
+	UI.SetProgress(refs.comboFill, combo / Config.PressComboMax)
+end
+
+function PressUI.Render(s)
+	local p = s.press
+	refs.stats.Text = Locale.Number(p.clickPower) .. " pro Klick · " .. Locale.Number(p.machinePerSecond) .. " pro Sek. · Gesamt-Multiplikator ×" .. string.format("%.3f", p.globalMultiplier):gsub("%.", ",")
+
+	for i, amount in ipairs(Config.ScrapExchangePackages) do
+		UI.SetEnabled(refs.exchange[i], p.scrap >= amount, T.warn)
+	end
+
+	refs.rebirthText.Text = string.format(
+		"Rebirths: %d · Schrott-Multiplikator ×%s. Nächstes Rebirth ab %s Schrott in diesem Durchlauf (aktuell %s). Setzt Schrott und Presse-Upgrades zurück; Werkstatt, Credits, Level, Tuning, Meilensteine und die Bestenliste bleiben.",
+		p.rebirths, (string.format("%.2f", p.rebirthMultiplier):gsub("%.", ",")), Locale.Number(p.rebirthThreshold), Locale.Number(p.runScrap)
+	)
+	UI.SetProgress(refs.rebirthFill, p.runScrap / p.rebirthThreshold)
+	UI.SetEnabled(refs.rebirthButton, p.canRebirth, T.purple)
+
+	local scrap = PressUI.DisplayScrap()
+	for _, r in ipairs(refs.upgradeRows) do
+		local lvl = p.levels[r.u.id] or 0
+		local cost = PressRules.UpgradeCost(r.u, lvl)
+		r.name.Text = r.u.index .. ". " .. r.u.name .. " · Stufe " .. lvl
+		r.button.Text = Locale.Number(cost) .. " Schrott"
+		UI.SetEnabled(r.button, scrap >= cost)
+	end
+end
+
+return PressUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">QuizUI</string><ProtectedString name="Source"><![CDATA[-- QuizUI: Mechaniker-Quiz. Auswertung passiert ausschließlich auf dem Server.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+
+local QuizUI = {}
+
+local UI, Remote, T
+local refs = {}
+local shownToken = nil
+local answered = false
+
+function QuizUI.Build(page, ctx)
+	UI, Remote = ctx.UI, ctx.Remote
+	T = UI.Theme
+	local card = UI.Card(page, 1)
+	UI.Title(card, "Mechaniker-Quiz", 1)
+	refs.info = UI.Small(card, "", 2)
+	refs.question = UI.Label(card, "Starte eine Frage. Richtige Antworten geben Diagnosepunkte, die alle Reparaturen verkürzen.", { LayoutOrder = 3, TextSize = 17 })
+	refs.answers = {}
+	for i = 1, 4 do
+		refs.answers[i] = UI.Button(card, "", T.panel, function()
+			if shownToken and not answered then
+				answered = true
+				for _, b in ipairs(refs.answers) do
+					UI.SetEnabled(b, false)
+				end
+				Remote.Send("quiz_answer", { token = shownToken, choice = i })
+			end
+		end, { LayoutOrder = 3 + i, TextColor3 = T.text, Visible = false })
+	end
+	refs.next = UI.Button(card, "Neue Frage", T.purple, function()
+		Remote.Send("quiz_new")
+	end, { LayoutOrder = 9 })
+end
+
+function QuizUI.OnResult(res)
+	for i, b in ipairs(refs.answers) do
+		if i == res.correctPos then
+			b.BackgroundColor3 = T.accent
+			b.TextColor3 = Color3.fromRGB(7, 17, 27)
+		elseif i == res.choice then
+			b.BackgroundColor3 = T.danger
+		end
+	end
+	UI.Toast(res.correct and ("Richtig! +" .. Locale.Credits(res.credits) .. " und ein Diagnosepunkt") or "Nicht ganz. Die richtige Antwort ist grün markiert.")
+end
+
+function QuizUI.Render(s)
+	local q = s.quiz
+	refs.info.Text = string.format("Diagnosepunkte: %d · Reparaturzeit −%s (höchstens 35 %%)", q.diagPoints, Locale.Percent(q.reduction))
+	local view = q.question
+	if view and view.token ~= shownToken then
+		shownToken = view.token
+		answered = false
+		refs.question.Text = view.text
+		for i, b in ipairs(refs.answers) do
+			b.Text = view.answers[i] or ""
+			b.Visible = true
+			b:SetAttribute("disabled", false)
+			b.BackgroundColor3 = T.panel
+			b.TextColor3 = T.text
+			b.AutoButtonColor = true
+		end
+	end
+	refs.next.Text = (view and not answered) and "Andere Frage" or "Neue Frage"
+end
+
+return QuizUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">Remote</string><ProtectedString name="Source"><![CDATA[-- Remote: sendet Absichten an den Server. Jede Nutzeraktion bekommt eine Anfrage-ID,
+-- damit Wiederholungen (Lag, Doppeltipp) auf dem Server nur einmal wirken.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
+
+local Remote = {}
+
+local folder = ReplicatedStorage:WaitForChild(Net.Folder)
+Remote.Action = folder:WaitForChild(Net.Action)
+Remote.Sync = folder:WaitForChild(Net.Sync)
+Remote.Notice = folder:WaitForChild(Net.Notice)
+
+local nextRid = math.floor((os.clock() * 1000) % 1000000) * 1000
+
+function Remote.Send(action, payload)
+	payload = payload or {}
+	nextRid += 1
+	payload.rid = nextRid
+	Remote.Action:FireServer(action, payload)
+end
+
+-- Ohne Anfrage-ID (z. B. Klickpakete, die gezählt und gedeckelt werden)
+function Remote.SendRaw(action, payload)
+	Remote.Action:FireServer(action, payload or {})
+end
+
+return Remote
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">ScrapyardUI</string><ProtectedString name="Source"><![CDATA[-- ScrapyardUI: Fahrzeug kaufen, zerlegen, Teile verkaufen. Funde landen im Lager, dazu etwas Schrott.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+
+local ScrapyardUI = {}
+
+local UI, Remote, T
+local refs = {}
+
+function ScrapyardUI.Build(page, ctx)
+	UI, Remote = ctx.UI, ctx.Remote
+	T = UI.Theme
+	local card = UI.Card(page, 1)
+	UI.Title(card, "Schrottplatz", 1)
+	UI.Small(card, "Kaufe ein Unfallfahrzeug und zerlege es. Gefundene Teile landen im Lager der Werkstatt, das Blech als Schrott bei der Presse.", 2)
+	refs.info = UI.Small(card, "", 3)
+	refs.buy = UI.Button(card, "", T.danger, function()
+		Remote.Send("scrapyard_buy")
+	end, { LayoutOrder = 4 })
+	refs.dismantle = UI.Button(card, "Fahrzeug zerlegen", T.warn, function()
+		Remote.Send("scrapyard_dismantle")
+	end, { LayoutOrder = 5 })
+	refs.result = UI.Label(card, "", { LayoutOrder = 6, TextColor3 = T.accent })
+
+	local sell = UI.Card(page, 2)
+	UI.Title(sell, "Teile verkaufen", 1)
+	refs.sellInfo = UI.Small(sell, "", 2)
+	refs.sell = UI.Button(sell, "", T.accent, function()
+		Remote.Send("scrapyard_sell")
+	end, { LayoutOrder = 3 })
+end
+
+function ScrapyardUI.OnResult(res)
+	if not refs.result then
+		return
+	end
+	local text = string.format("Ausgebaut: %d Teile%s, %s Schrott und %s im Handschuhfach.", res.parts, res.rare and " inklusive seltenem Turboteil" or "", Locale.Number(res.scrap), Locale.Credits(res.credits))
+	refs.result.Text = text
+	UI.Toast(text)
+end
+
+function ScrapyardUI.Render(s)
+	local sy = s.scrapyard
+	refs.info.Text = string.format("Lager: %d Teile · Werkzeugbonus +%s · Chance auf seltene Funde %s", s.parts, Locale.Percent(sy.toolBonus - 1), Locale.Percent(sy.rareChance))
+	refs.buy.Text = "Fahrzeug kaufen (" .. Locale.Credits(sy.carCost) .. ")"
+	UI.SetEnabled(refs.buy, not sy.vehicle and s.credits >= sy.carCost, T.danger)
+	UI.SetEnabled(refs.dismantle, sy.vehicle, T.warn)
+	refs.sellInfo.Text = string.format("%d Teile für %s verkaufen.", sy.sellParts, Locale.Credits(sy.sellCredits))
+	refs.sell.Text = "Verkaufen (+" .. Locale.Credits(sy.sellCredits) .. ")"
+	UI.SetEnabled(refs.sell, s.parts >= sy.sellParts)
+end
+
+return ScrapyardUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">ShopUI</string><ProtectedString name="Source"><![CDATA[-- ShopUI: Game Passes (Platzhalter-IDs in Config; ohne ID startet kein Kauf).
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Config = require(Shared:WaitForChild("Config"))
+
+local ShopUI = {}
+
+local UI, Remote, T
+local refs = {}
+
+function ShopUI.Build(page, ctx)
+	UI, Remote = ctx.UI, ctx.Remote
+	T = UI.Theme
+	local card = UI.Card(page, 1)
+	UI.Title(card, "Game Passes", 1)
+	UI.Small(card, "Game Passes wirken nur auf dein Schrott-Guthaben, nie auf die Bestenliste. Keine Zufallsbelohnungen.", 2)
+	refs.double = UI.Label(card, "", { LayoutOrder = 3 })
+	refs.doubleButton = UI.Button(card, "2× Schrott kaufen", T.warn, function()
+		Remote.Send("pass_prompt", { pass = "DoubleScrap" })
+	end, { LayoutOrder = 4 })
+	refs.plus = UI.Label(card, "", { LayoutOrder = 5 })
+	refs.plusButton = UI.Button(card, "Schrottpresse+ kaufen", T.warn, function()
+		Remote.Send("pass_prompt", { pass = "PressPlus" })
+	end, { LayoutOrder = 6 })
+end
+
+function ShopUI.Render(s)
+	local p = s.passes
+	refs.double.Text = "2× Schrott: Klicks und Maschinen ×" .. Config.GamePasses.DoubleScrap.multiplier .. (p.doubleScrap and " · aktiv ✓" or "") .. (p.doubleScrapConfigured and "" or " · noch nicht eingerichtet")
+	refs.plus.Text = "Schrottpresse+: Maschinen ×" .. tostring(Config.GamePasses.PressPlus.machineMultiplier):gsub("%.", ",") .. (p.pressPlus and " · aktiv ✓" or "") .. (p.pressPlusConfigured and "" or " · noch nicht eingerichtet")
+	UI.SetEnabled(refs.doubleButton, p.doubleScrapConfigured and not p.doubleScrap, T.warn)
+	UI.SetEnabled(refs.plusButton, p.pressPlusConfigured and not p.pressPlus, T.warn)
+end
+
+return ShopUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">TuningUI</string><ProtectedString name="Source"><![CDATA[-- TuningUI: Idle Tuning Garage (Echtzeit-Projekte, passive Einnahmen).
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+
+local TuningUI = {}
+
+local UI, Remote, T
+local refs = {}
+local state
+local snapClock = 0
+
+function TuningUI.Build(page, ctx)
+	UI, Remote = ctx.UI, ctx.Remote
+	T = UI.Theme
+
+	local head = UI.Card(page, 1)
+	UI.Title(head, "Idle Tuning Garage", 1)
+	UI.Small(head, "Tuning-Projekte laufen in Echtzeit weiter, auch wenn du offline bist. Längere Projekte bringen überproportional mehr.", 2)
+	refs.info = UI.Small(head, "", 3)
+
+	local idle = UI.Card(page, 2)
+	UI.Title(idle, "Passive Einnahmen", 1)
+	refs.idleText = UI.Small(idle, "", 2)
+	local _, idleFill = UI.Progress(idle, T.accent2, 3)
+	refs.idleFill = idleFill
+	refs.idleButton = UI.Button(idle, "Einnahmen abholen", T.accent2, function()
+		Remote.Send("tuning_idle")
+	end, { LayoutOrder = 4 })
+
+	local running = UI.Card(page, 3)
+	UI.Title(running, "Laufende Projekte", 1)
+	refs.none = UI.Small(running, "Kein Projekt aktiv. Starte unten eins.", 2)
+	refs.projects = UI.Pool(running, function(parent, i)
+		local row, left, right = UI.Row(parent, 10 + i)
+		local name = UI.Label(left, "", { Font = Enum.Font.GothamBold, TextSize = 15, LayoutOrder = 1 })
+		local sub = UI.Small(left, "", 2)
+		local _, fill = UI.Progress(left, T.accent2, 3)
+		local item = { root = row, name = name, sub = sub, fill = fill }
+		item.button = UI.Button(right, "", T.accent, function()
+			if item.slot then
+				Remote.Send("tuning_collect", { slot = item.slot })
+			end
+		end, { TextSize = 14 })
+		return item
+	end)
+
+	local catalog = UI.Card(page, 4)
+	UI.Title(catalog, "Projekt starten", 1)
+	refs.catalog = UI.Pool(catalog, function(parent, i)
+		local row, left, right = UI.Row(parent, 10 + i)
+		local name = UI.Label(left, "", { Font = Enum.Font.GothamBold, TextSize = 15, LayoutOrder = 1 })
+		local sub = UI.Small(left, "", 2)
+		local item = { root = row, name = name, sub = sub }
+		item.button = UI.Button(right, "", T.accent2, function()
+			if item.id then
+				Remote.Send("tuning_start", { id = item.id })
+			end
+		end, { TextSize = 14 })
+		return item
+	end)
+end
+
+function TuningUI.Step()
+	if not state then
+		return
+	end
+	local elapsed = os.clock() - snapClock
+	for i, pj in ipairs(state.tuning.projects) do
+		local item = refs.projects.items[i]
+		if item then
+			local remaining = math.max(0, pj.remaining - elapsed)
+			UI.SetProgress(item.fill, 1 - remaining / pj.duration)
+			if remaining > 0 then
+				item.button.Text = Locale.Duration(remaining)
+				UI.SetEnabled(item.button, false)
+			else
+				item.button.Text = "Abholen"
+				UI.SetEnabled(item.button, true)
+			end
+		end
+	end
+end
+
+function TuningUI.Render(s)
+	state = s
+	snapClock = os.clock()
+	local tu = s.tuning
+	refs.info.Text = string.format("Tuning-Stufe %d · Plätze %d · Abgeschlossene Projekte %d · Presse-Bonus +%s", tu.level, tu.slots, tu.completed, Locale.Percent(s.press.tuningMultiplier - 1))
+	refs.idleText.Text = string.format("%s Cr pro Minute. Bereit: %s. Es werden höchstens %s gesammelt.", Locale.Number(tu.idleRate), Locale.Credits(tu.pendingIdle), Locale.Duration(tu.idleCapSeconds))
+	UI.SetProgress(refs.idleFill, tu.idleSeconds / tu.idleCapSeconds)
+	UI.SetEnabled(refs.idleButton, tu.pendingIdle >= 1, T.accent2)
+
+	refs.none.Visible = #tu.projects == 0
+	refs.projects:Ensure(#tu.projects)
+	for i, pj in ipairs(tu.projects) do
+		local item = refs.projects.items[i]
+		item.slot = pj.slot
+		item.name.Text = "Platz " .. pj.slot .. ": " .. pj.name
+		item.sub.Text = "Belohnung: " .. Locale.Credits(pj.reward)
+	end
+
+	local free = #tu.projects < tu.slots
+	refs.catalog:Ensure(#tu.catalog)
+	for i, def in ipairs(tu.catalog) do
+		local item = refs.catalog.items[i]
+		item.id = def.id
+		item.name.Text = def.name .. " · " .. Locale.Duration(def.minutes * 60)
+		if def.locked then
+			item.sub.Text = "Ab Tuning-Stufe " .. def.unlock .. " (Ausbau in der Werkstatt)"
+		else
+			item.sub.Text = "Kosten " .. Locale.Credits(def.cost) .. " · Belohnung " .. Locale.Credits(def.reward)
+		end
+		item.button.Text = def.locked and "Gesperrt" or "Starten"
+		UI.SetEnabled(item.button, free and not def.locked and s.credits >= def.cost, T.accent2)
+	end
+	TuningUI.Step()
+end
+
+return TuningUI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">UI</string><ProtectedString name="Source"><![CDATA[-- UI: Grundgerüst der 2D-Oberfläche (ScreenGui, HUD, Menü mit Tabs, Toasts, Bestätigungsdialog)
+-- und kleine Bausteine. Touch-Flächen sind mindestens 44 px hoch.
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local UI = {}
+
+UI.Theme = {
+	bg = Color3.fromRGB(9, 13, 18),
+	panel = Color3.fromRGB(18, 25, 35),
+	panel2 = Color3.fromRGB(24, 34, 49),
+	text = Color3.fromRGB(238, 244, 251),
+	muted = Color3.fromRGB(145, 161, 181),
+	accent = Color3.fromRGB(53, 208, 127),
+	accent2 = Color3.fromRGB(74, 163, 255),
+	warn = Color3.fromRGB(255, 189, 62),
+	danger = Color3.fromRGB(255, 90, 103),
+	line = Color3.fromRGB(39, 52, 70),
+	purple = Color3.fromRGB(180, 120, 255),
+}
+local T = UI.Theme
+UI.MinTouch = 44
+
+UI.Tabs = {
+	{ key = "overview", label = "Übersicht" },
+	{ key = "press", label = "Schrottpresse" },
+	{ key = "tuning", label = "Tuning" },
+	{ key = "workshop", label = "Werkstatt" },
+	{ key = "scrapyard", label = "Schrottplatz" },
+	{ key = "quiz", label = "Quiz" },
+	{ key = "parking", label = "Parkplatz" },
+	{ key = "goals", label = "Ziele" },
+	{ key = "leaderboard", label = "Bestenliste" },
+	{ key = "shop", label = "Shop" },
+}
+
+UI.Pages = {} -- [key] = Frame
+UI.TabButtons = {}
+UI.CurrentTab = nil
+UI.IsOpen = false
+UI.OnTabShown = nil -- function(key)
+
+---------------------------------------------------------------- Bausteine
+function UI.Corner(parent, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius or 10)
+	c.Parent = parent
+	return c
+end
+
+function UI.Padding(parent, px)
+	local p = Instance.new("UIPadding")
+	p.PaddingLeft = UDim.new(0, px)
+	p.PaddingRight = UDim.new(0, px)
+	p.PaddingTop = UDim.new(0, px)
+	p.PaddingBottom = UDim.new(0, px)
+	p.Parent = parent
+	return p
+end
+
+function UI.List(parent, gap, horizontal)
+	local l = Instance.new("UIListLayout")
+	l.Padding = UDim.new(0, gap or 8)
+	l.SortOrder = Enum.SortOrder.LayoutOrder
+	l.FillDirection = horizontal and Enum.FillDirection.Horizontal or Enum.FillDirection.Vertical
+	l.Parent = parent
+	return l
+end
+
+function UI.Frame(parent, props)
+	local f = Instance.new("Frame")
+	f.BackgroundColor3 = T.panel2
+	f.BorderSizePixel = 0
+	f.Size = UDim2.new(1, 0, 0, 0)
+	f.AutomaticSize = Enum.AutomaticSize.Y
+	for k, v in pairs(props or {}) do
+		f[k] = v
+	end
+	f.Parent = parent
+	return f
+end
+
+function UI.Card(parent, order)
+	local f = UI.Frame(parent, { LayoutOrder = order or 0 })
+	UI.Corner(f, 12)
+	UI.Padding(f, 10)
+	UI.List(f, 6)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = T.line
+	stroke.Thickness = 1
+	stroke.Parent = f
+	return f
+end
+
+function UI.Label(parent, text, props)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Size = UDim2.new(1, 0, 0, 0)
+	l.AutomaticSize = Enum.AutomaticSize.Y
+	l.Font = Enum.Font.GothamMedium
+	l.TextSize = 16
+	l.TextColor3 = T.text
+	l.TextWrapped = true
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.RichText = false
+	l.Text = text or ""
+	for k, v in pairs(props or {}) do
+		l[k] = v
+	end
+	l.Parent = parent
+	return l
+end
+
+function UI.Title(parent, text, order)
+	return UI.Label(parent, text, { Font = Enum.Font.GothamBold, TextSize = 19, LayoutOrder = order or 0 })
+end
+
+function UI.Small(parent, text, order)
+	return UI.Label(parent, text, { TextSize = 14, TextColor3 = T.muted, LayoutOrder = order or 0 })
+end
+
+-- Button mit Entprellung (0,3 s), damit ein Doppeltipp nur eine Absicht erzeugt.
+function UI.Button(parent, text, color, onClick, props)
+	local b = Instance.new("TextButton")
+	b.AutoButtonColor = true
+	b.BackgroundColor3 = color or T.accent
+	b.BorderSizePixel = 0
+	b.Size = UDim2.new(1, 0, 0, UI.MinTouch)
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 16
+	b.TextColor3 = Color3.fromRGB(7, 17, 27)
+	b.TextWrapped = true
+	b.Text = text
+	for k, v in pairs(props or {}) do
+		b[k] = v
+	end
+	UI.Corner(b, 10)
+	local last = 0
+	b.Activated:Connect(function()
+		local t = os.clock()
+		if t - last < 0.3 or b:GetAttribute("disabled") then
+			return
+		end
+		last = t
+		if onClick then
+			onClick()
+		end
+	end)
+	b.Parent = parent
+	return b
+end
+
+function UI.SetEnabled(button, enabled, color)
+	button:SetAttribute("disabled", not enabled)
+	button.BackgroundColor3 = enabled and (color or T.accent) or T.line
+	button.TextColor3 = enabled and Color3.fromRGB(7, 17, 27) or T.muted
+	button.AutoButtonColor = enabled
+end
+
+function UI.Progress(parent, color, order)
+	local bar = UI.Frame(parent, { Size = UDim2.new(1, 0, 0, 10), AutomaticSize = Enum.AutomaticSize.None, BackgroundColor3 = T.bg, LayoutOrder = order or 0 })
+	UI.Corner(bar, 5)
+	local fill = UI.Frame(bar, { Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.None, BackgroundColor3 = color or T.accent })
+	UI.Corner(fill, 5)
+	return bar, fill
+end
+
+function UI.SetProgress(fill, fraction)
+	if fraction ~= fraction then
+		fraction = 0
+	end
+	fill.Size = UDim2.new(math.clamp(fraction, 0, 1), 0, 1, 0)
+end
+
+-- Zeile: Text links, Button rechts
+function UI.Row(parent, order)
+	local row = UI.Frame(parent, { BackgroundTransparency = 1, LayoutOrder = order or 0 })
+	local left = UI.Frame(row, { BackgroundTransparency = 1, Size = UDim2.new(1, -150, 0, 0) })
+	UI.List(left, 2)
+	local right = UI.Frame(row, { BackgroundTransparency = 1, Size = UDim2.new(0, 140, 0, UI.MinTouch), AutomaticSize = Enum.AutomaticSize.None, Position = UDim2.new(1, -140, 0, 0) })
+	return row, left, right
+end
+
+-- Wiederverwendbare Liste: Zeilen werden nur neu angelegt, wenn mehr gebraucht werden.
+function UI.Pool(parent, create)
+	local pool = { items = {}, parent = parent }
+	function pool:Ensure(n)
+		for i = #self.items + 1, n do
+			self.items[i] = create(self.parent, i)
+		end
+		for i, item in ipairs(self.items) do
+			item.root.Visible = i <= n
+		end
+	end
+	return pool
+end
+
+---------------------------------------------------------------- Gerüst
+function UI.Build()
+	local player = Players.LocalPlayer
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "UltimateCarGame"
+	gui.ResetOnSpawn = false
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.IgnoreGuiInset = false
+	gui.Parent = player:WaitForChild("PlayerGui")
+	UI.Gui = gui
+
+	-- HUD
+	local hud = UI.Frame(gui, {
+		Name = "HUD", BackgroundColor3 = T.panel, BackgroundTransparency = 0.1,
+		Size = UDim2.new(0, 260, 0, 0), Position = UDim2.new(0, 10, 0, 10),
+	})
+	UI.Corner(hud, 12)
+	UI.Padding(hud, 8)
+	UI.List(hud, 4)
+	UI.HudCredits = UI.Label(hud, "0 Cr", { Font = Enum.Font.GothamBold, TextSize = 18, LayoutOrder = 1 })
+	UI.HudScrap = UI.Label(hud, "0 kg Schrott", { TextSize = 15, TextColor3 = T.warn, LayoutOrder = 2 })
+	UI.HudLevel = UI.Label(hud, "Level 1", { TextSize = 14, TextColor3 = T.muted, LayoutOrder = 3 })
+	local _, xpFill = UI.Progress(hud, T.accent2, 4)
+	UI.HudXp = xpFill
+	UI.Hud = hud
+
+	-- Nächstes Ziel (antippbar)
+	local goal = Instance.new("TextButton")
+	goal.Name = "NextGoal"
+	goal.AutoButtonColor = true
+	goal.BackgroundColor3 = T.panel
+	goal.BackgroundTransparency = 0.1
+	goal.Size = UDim2.new(0, 300, 0, 56)
+	goal.AnchorPoint = Vector2.new(1, 0)
+	goal.Position = UDim2.new(1, -10, 0, 10)
+	goal.Text = ""
+	goal.Parent = gui
+	UI.Corner(goal, 12)
+	UI.Padding(goal, 8)
+	UI.List(goal, 4)
+	UI.GoalText = UI.Label(goal, "Nächstes Ziel", { TextSize = 14, LayoutOrder = 1, TextTruncate = Enum.TextTruncate.AtEnd, TextWrapped = false, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, 0, 0, 18) })
+	local _, goalFill = UI.Progress(goal, T.accent, 2)
+	UI.GoalFill = goalFill
+	UI.GoalButton = goal
+	goal.Activated:Connect(function()
+		UI.Open(UI.GoalTab or "overview")
+	end)
+
+	-- Menü-Knopf
+	UI.MenuButton = UI.Button(gui, "Minispiele", T.accent, function()
+		if UI.IsOpen then
+			UI.Close()
+		else
+			UI.Open(UI.CurrentTab or "overview")
+		end
+	end, { Size = UDim2.new(0, 170, 0, 52), AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -12), TextSize = 18 })
+
+	-- Panel
+	local panel = UI.Frame(gui, {
+		Name = "Panel", BackgroundColor3 = T.bg, AutomaticSize = Enum.AutomaticSize.None,
+		AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0.97, 0, 0.94, 0), Visible = false, ZIndex = 5,
+	})
+	UI.Corner(panel, 14)
+	local limit = Instance.new("UISizeConstraint")
+	limit.MaxSize = Vector2.new(820, 700)
+	limit.Parent = panel
+	UI.Panel = panel
+
+	local header = UI.Frame(panel, { BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, -20, 0, 48), Position = UDim2.new(0, 10, 0, 6) })
+	UI.HeaderInfo = UI.Label(header, "", { Font = Enum.Font.GothamBold, TextSize = 16, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, -60, 1, 0), TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Center })
+	UI.Button(header, "✕", T.danger, function()
+		UI.Close()
+	end, { Size = UDim2.new(0, 48, 0, 48), Position = UDim2.new(1, -48, 0, 0), TextSize = 20 })
+
+	local tabs = Instance.new("ScrollingFrame")
+	tabs.BackgroundTransparency = 1
+	tabs.BorderSizePixel = 0
+	tabs.Size = UDim2.new(1, -20, 0, 54)
+	tabs.Position = UDim2.new(0, 10, 0, 58)
+	tabs.CanvasSize = UDim2.new(0, 0, 0, 0)
+	tabs.AutomaticCanvasSize = Enum.AutomaticSize.X
+	tabs.ScrollingDirection = Enum.ScrollingDirection.X
+	tabs.ScrollBarThickness = 4
+	tabs.Parent = panel
+	UI.List(tabs, 6, true)
+
+	local content = Instance.new("ScrollingFrame")
+	content.BackgroundTransparency = 1
+	content.BorderSizePixel = 0
+	content.Size = UDim2.new(1, -20, 1, -124)
+	content.Position = UDim2.new(0, 10, 0, 116)
+	content.CanvasSize = UDim2.new(0, 0, 0, 0)
+	content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	content.ScrollingDirection = Enum.ScrollingDirection.Y
+	content.ScrollBarThickness = 6
+	content.Parent = panel
+	UI.Content = content
+
+	for i, tab in ipairs(UI.Tabs) do
+		local b = UI.Button(tabs, tab.label, T.panel2, function()
+			UI.Show(tab.key)
+		end, { Size = UDim2.new(0, 0, 0, UI.MinTouch), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = i, TextColor3 = T.text })
+		UI.Padding(b, 12)
+		UI.TabButtons[tab.key] = b
+		local page = UI.Frame(content, { BackgroundTransparency = 1, Visible = false, Size = UDim2.new(1, -8, 0, 0) })
+		UI.List(page, 10)
+		UI.Pages[tab.key] = page
+	end
+
+	-- Toasts
+	local toasts = UI.Frame(gui, {
+		BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(0, 360, 0, 0),
+		AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -76), ZIndex = 20,
+	})
+	local tl = UI.List(toasts, 6)
+	tl.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	tl.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	UI.ToastHost = toasts
+
+	-- Bestätigungsdialog
+	local shade = UI.Frame(gui, { BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.4, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 30 })
+	local box = UI.Card(shade)
+	box.ZIndex = 31
+	box.AnchorPoint = Vector2.new(0.5, 0.5)
+	box.Position = UDim2.fromScale(0.5, 0.5)
+	box.Size = UDim2.new(0.9, 0, 0, 0)
+	local boxLimit = Instance.new("UISizeConstraint")
+	boxLimit.MaxSize = Vector2.new(460, 600)
+	boxLimit.Parent = box
+	UI.ConfirmText = UI.Label(box, "", { LayoutOrder = 1, ZIndex = 32 })
+	UI.ConfirmYes = UI.Button(box, "Ja", T.warn, function()
+		shade.Visible = false
+		local cb = UI.ConfirmCallback
+		UI.ConfirmCallback = nil
+		if cb then
+			cb()
+		end
+	end, { LayoutOrder = 2, ZIndex = 32 })
+	UI.Button(box, "Abbrechen", T.line, function()
+		shade.Visible = false
+		UI.ConfirmCallback = nil
+	end, { LayoutOrder = 3, ZIndex = 32, TextColor3 = T.text })
+	UI.Shade = shade
+
+	return gui
+end
+
+function UI.Confirm(text, onYes)
+	UI.ConfirmText.Text = text
+	UI.ConfirmCallback = onYes
+	UI.Shade.Visible = true
+end
+
+function UI.Toast(text)
+	if not UI.ToastHost or type(text) ~= "string" or text == "" then
+		return
+	end
+	local children = UI.ToastHost:GetChildren()
+	local count = 0
+	for _, c in ipairs(children) do
+		if c:IsA("TextLabel") then
+			count += 1
+		end
+	end
+	if count >= 4 then
+		for _, c in ipairs(children) do
+			if c:IsA("TextLabel") then
+				c:Destroy()
+				break
+			end
+		end
+	end
+	local l = UI.Label(UI.ToastHost, text, {
+		BackgroundTransparency = 0, BackgroundColor3 = T.text, TextColor3 = Color3.fromRGB(7, 17, 27),
+		Font = Enum.Font.GothamBold, TextSize = 15, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 21,
+	})
+	UI.Corner(l, 12)
+	UI.Padding(l, 8)
+	task.delay(2.4, function()
+		if l.Parent then
+			l:Destroy()
+		end
+	end)
+end
+
+function UI.Show(key)
+	if not UI.Pages[key] then
+		key = "overview"
+	end
+	UI.CurrentTab = key
+	for k, page in pairs(UI.Pages) do
+		page.Visible = k == key
+		UI.TabButtons[k].BackgroundColor3 = k == key and T.accent2 or T.panel2
+	end
+	UI.Content.CanvasPosition = Vector2.new(0, 0)
+	if UI.OnTabShown then
+		UI.OnTabShown(key)
+	end
+end
+
+function UI.Open(key)
+	UI.IsOpen = true
+	UI.Panel.Visible = true
+	UI.Hud.Visible = false
+	UI.GoalButton.Visible = false
+	UI.MenuButton.Visible = false
+	UI.Show(key or UI.CurrentTab or "overview")
+	UI.Panel.Size = UDim2.new(0.9, 0, 0.88, 0)
+	TweenService:Create(UI.Panel, TweenInfo.new(0.12), { Size = UDim2.new(0.97, 0, 0.94, 0) }):Play()
+end
+
+function UI.Close()
+	UI.IsOpen = false
+	UI.Panel.Visible = false
+	UI.Hud.Visible = true
+	UI.GoalButton.Visible = true
+	UI.MenuButton.Visible = true
+end
+
+return UI
+]]></ProtectedString></Properties></Item>
+          <Item class="ModuleScript" referent="RBX00000026"><Properties><string name="Name">WorkshopUI</string><ProtectedString name="Source"><![CDATA[-- WorkshopUI: Werkstatt-Aufträge (Hebebühnen) und Ausbau.
+local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
+
+local WorkshopUI = {}
+
+local UI, Remote, T
+local refs = {}
+local state
+
+local function serverNow()
+	return workspace:GetServerTimeNow()
+end
+
+function WorkshopUI.Build(page, ctx)
+	UI, Remote = ctx.UI, ctx.Remote
+	T = UI.Theme
+
+	local head = UI.Card(page, 1)
+	UI.Title(head, "Werkstatt", 1)
+	refs.info = UI.Small(head, "", 2)
+
+	local active = UI.Card(page, 2)
+	UI.Title(active, "Auf den Hebebühnen", 1)
+	refs.noJobs = UI.Small(active, "Noch keine laufenden Reparaturen.", 2)
+	refs.jobs = UI.Pool(active, function(parent, i)
+		local row, left, right = UI.Row(parent, 10 + i)
+		local name = UI.Label(left, "", { Font = Enum.Font.GothamBold, TextSize = 15, LayoutOrder = 1 })
+		local sub = UI.Small(left, "", 2)
+		local _, fill = UI.Progress(left, T.accent, 3)
+		local item = { root = row, name = name, sub = sub, fill = fill }
+		item.button = UI.Button(right, "", T.accent, function()
+			if item.id then
+				Remote.Send("workshop_finish", { id = item.id })
+			end
+		end, { TextSize = 14 })
+		return item
+	end)
+
+	local offers = UI.Card(page, 3)
+	UI.Title(offers, "Auftragsangebote", 1)
+	UI.Small(offers, "Teile aus dem Lager ersetzen Reparaturkosten. Diagnosepunkte verkürzen die Reparaturzeit, Parkplatz-Serien verbessern die Angebote.", 2)
+	refs.offers = UI.Pool(offers, function(parent, i)
+		local row, left, right = UI.Row(parent, 10 + i)
+		local name = UI.Label(left, "", { Font = Enum.Font.GothamBold, TextSize = 15, LayoutOrder = 1 })
+		local sub = UI.Small(left, "", 2)
+		local item = { root = row, name = name, sub = sub }
+		item.button = UI.Button(right, "Annehmen", T.accent, function()
+			if item.id then
+				Remote.Send("workshop_accept", { id = item.id })
+			end
+		end, { TextSize = 14 })
+		return item
+	end)
+
+	local upgrades = UI.Card(page, 4)
+	UI.Title(upgrades, "Ausbau", 1)
+	refs.upgrades = UI.Pool(upgrades, function(parent, i)
+		local row, left, right = UI.Row(parent, 10 + i)
+		local name = UI.Label(left, "", { Font = Enum.Font.GothamBold, TextSize = 15, LayoutOrder = 1 })
+		local sub = UI.Small(left, "", 2)
+		local item = { root = row, name = name, sub = sub }
+		item.button = UI.Button(right, "", T.accent2, function()
+			if item.key then
+				Remote.Send("upgrade_buy", { key = item.key, level = item.level })
+			end
+		end, { TextSize = 14 })
+		return item
+	end)
+end
+
+function WorkshopUI.Step()
+	if not state then
+		return
+	end
+	local now = serverNow()
+	for i, job in ipairs(state.workshop.jobs) do
+		local item = refs.jobs.items[i]
+		if item then
+			local remaining = math.max(0, job.endsAt - now)
+			local total = math.max(1, job.endsAt - job.startedAt)
+			UI.SetProgress(item.fill, 1 - remaining / total)
+			if remaining > 0 then
+				item.button.Text = Locale.Duration(remaining)
+				UI.SetEnabled(item.button, false)
+			else
+				item.button.Text = "Abrechnen"
+				UI.SetEnabled(item.button, true)
+			end
+		end
+	end
+end
+
+function WorkshopUI.Render(s)
+	state = s
+	local w = s.workshop
+	refs.info.Text = string.format("Hebebühnen frei: %d von %d · Lager: %d Teile · Reparaturtempo ×%s", math.max(0, w.available), w.bays, s.parts, (string.format("%.2f", w.repairSpeed):gsub("%.", ",")))
+
+	refs.noJobs.Visible = #w.jobs == 0
+	refs.jobs:Ensure(#w.jobs)
+	for i, job in ipairs(w.jobs) do
+		local item = refs.jobs.items[i]
+		item.id = job.id
+		item.name.Text = job.name
+		item.sub.Text = "Vergütung: " .. Locale.Credits(job.reward)
+	end
+
+	refs.offers:Ensure(#w.offers)
+	for i, o in ipairs(w.offers) do
+		local item = refs.offers.items[i]
+		item.id = o.id
+		item.name.Text = o.name .. " · " .. Locale.Duration(o.time)
+		item.sub.Text = string.format("Vergütung: %s · %d XP\nKosten: %s + %d Lagerteil(e)", Locale.Credits(o.reward), o.xp, Locale.Credits(o.cash), o.partUse)
+		UI.SetEnabled(item.button, w.available > 0 and s.credits >= o.cash)
+	end
+
+	refs.upgrades:Ensure(#s.upgrades)
+	for i, u in ipairs(s.upgrades) do
+		local item = refs.upgrades.items[i]
+		item.key = u.key
+		item.level = u.level
+		item.name.Text = u.name .. " · Stufe " .. u.level
+		item.sub.Text = u.desc
+		local max = u.level >= u.max
+		item.button.Text = max and "MAX" or Locale.Credits(u.cost)
+		UI.SetEnabled(item.button, not max and s.credits >= u.cost, T.accent2)
+	end
+	WorkshopUI.Step()
+end
+
+return WorkshopUI
+]]></ProtectedString></Properties></Item>
+        </Item>
+    </Item>
+  </Item>
+</roblox>

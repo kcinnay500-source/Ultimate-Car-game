@@ -1,0 +1,25 @@
+Key,Source,Context,Example,de
+title,Ultimate Car Game,,,Ultimate Car Game
+tab_overview,Übersicht,,,Übersicht
+tab_press,Schrottpresse,,,Schrottpresse
+tab_tuning,Tuning-Garage,,,Tuning-Garage
+tab_workshop,Werkstatt,,,Werkstatt
+tab_scrapyard,Schrottplatz,,,Schrottplatz
+tab_quiz,Mechaniker-Quiz,,,Mechaniker-Quiz
+tab_parking,Parkplatz-Chaos,,,Parkplatz-Chaos
+tab_goals,Ziele,,,Ziele
+tab_leaderboard,Bestenliste,,,Bestenliste
+tab_shop,Shop,,,Shop
+menu_button,Minispiele,,,Minispiele
+close,Schließen,,,Schließen
+not_enough_credits,Nicht genug Credits.,,,Nicht genug Credits.
+not_enough_scrap,Nicht genug Schrott.,,,Nicht genug Schrott.
+not_enough_parts,Nicht genug Teile.,,,Nicht genug Teile.
+offline_press,Während du weg warst: +{1},,,Während du weg warst: +{1}
+leaderboard_unavailable,Bestenliste gerade nicht verfügbar,,,Bestenliste gerade nicht verfügbar
+leaderboard_loading,Bestenliste wird geladen …,,,Bestenliste wird geladen …
+studio_nosave,Speichern nicht aktiv: In Studio unter Game Settings > Security den API-Zugriff erlauben.,,,Speichern nicht aktiv: In Studio unter Game Settings > Security den API-Zugriff erlauben.
+profile_locked,Dein Profil wird noch in einer anderen Sitzung verwendet. Bitte in einer Minute erneut beitreten.,,,Dein Profil wird noch in einer anderen Sitzung verwendet. Bitte in einer Minute erneut beitreten.
+rebirth_confirm,"Rebirth durchführen? Schrott und Presse-Upgrades werden zurückgesetzt. Du erhältst dauerhaft ×{1} Schrott. Werkstatt, Credits, Level, Tuning und Meilensteine bleiben.",,,"Rebirth durchführen? Schrott und Presse-Upgrades werden zurückgesetzt. Du erhältst dauerhaft ×{1} Schrott. Werkstatt, Credits, Level, Tuning und Meilensteine bleiben."
+level_up,Level {1} erreicht! +{2},,,Level {1} erreicht! +{2}
+pass_not_configured,Dieser Game Pass ist noch nicht eingerichtet.,,,Dieser Game Pass ist noch nicht eingerichtet.
