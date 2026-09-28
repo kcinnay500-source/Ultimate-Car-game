@@ -3,20 +3,24 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "Shared": {
-        "$path": "src/shared"
+      "GarageShared": {
+        "$path": "src/garage/shared",
+        "$ignoreUnknownInstances": true,
+        "Mini": { "$path": "src/mini/shared" }
       }
     },
     "ServerScriptService": {
-      "Server": {
-        "$path": "src/server"
+      "Garage": {
+        "$path": "src/garage/server",
+        "$ignoreUnknownInstances": true,
+        "Mini": { "$path": "src/mini/server" }
       }
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "Client": {
-          "$path": "src/client"
-        }
+        "$path": "src/garage/client",
+        "$ignoreUnknownInstances": true,
+        "Mini": { "$path": "src/mini/client" }
       }
     }
   }
