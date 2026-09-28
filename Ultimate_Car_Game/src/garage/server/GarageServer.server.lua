@@ -96,7 +96,7 @@ local function moveTo(p,part)
     local humanoid=ch:FindFirstChildOfClass("Humanoid")
     if not root or not humanoid or humanoid.Health<=0 then return end
     humanoid.Sit=false
-    ch:PivotTo(destination or plot*CFrame.new(here.X,3.5,here.Z+6))
+    ch:PivotTo(destination or plot*CFrame.new(here.X,3.5,here.Z+6)) -- 3.0: plotlokal statt Welt-X/Z
     root.AssemblyLinearVelocity=Vector3.new();root.AssemblyAngularVelocity=Vector3.new()
 end
 local function jobConditions(p,j,v)

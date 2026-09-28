@@ -38,6 +38,9 @@ Mini.Sessions = {} -- [Player] = Minispiel-Sitzung (ms)
 
 local ctx = nil
 local MAX_COOLDOWN_KEYS = 256
+-- Spielraum für Zeitvergleiche: der Tick läuft alle 0,5 s, die Serverzeit ist eine große Gleitkommazahl.
+-- Ohne ihn fiele "alle 1 s" durch Rundung (0,9999998 < 1) regelmäßig auf 1,5 s.
+local EPSILON = 0.02
 
 local function now()
 	return ctx and ctx.now() or os.time()
@@ -119,7 +122,7 @@ local function flush(ms, t)
 	if not ctx or not ms.player.Parent then
 		return
 	end
-	local since = t - ms.lastSent
+	local since = t - ms.lastSent + EPSILON
 	if since < MiniConfig.SnapshotMinInterval then
 		return
 	end
@@ -286,7 +289,7 @@ function Mini.Handle(p, action, args)
 		ms.worldChanged = false
 		-- Geld/Lager geändert: ctx.changed (Revision, W.Sync, 2.4.0-Zustand). Höchstens 2×/s, weil jede
 		-- Revision das Tablet neu aufbaut; dazwischen zeigt push den neuen Kontostand sofort.
-		if t - ms.lastChanged >= MiniConfig.SnapshotMinInterval then
+		if t - ms.lastChanged + EPSILON >= MiniConfig.SnapshotMinInterval then
 			ms.lastChanged = t
 			ms.changePending = false
 			ctx.changed(p)
@@ -347,7 +350,7 @@ function Mini.Tick(p, t)
 	end
 	local ok, err = pcall(function()
 		local d = p.profile.data
-		if ms.changePending and t - ms.lastChanged >= MiniConfig.SnapshotMinInterval then
+		if ms.changePending and t - ms.lastChanged + EPSILON >= MiniConfig.SnapshotMinInterval then
 			ms.changePending = false
 			ms.lastChanged = t
 			ctx.changed(p) -- nachgeholte, gedrosselte Revision (siehe Handle)

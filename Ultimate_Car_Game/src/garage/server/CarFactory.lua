@@ -227,7 +227,7 @@ function Factory.WorkEffect(car,toolId,point,duration,effect)
         local root=car:GetPivot();local side=root*Vector3.new(-1,0,0)-root.Position
         local wheel=part("RotatingWheel",Vector3.new(0.7,2.2,2.2),point.Position+side,{49,55,65},Enum.PartType.Cylinder)
         wheel.Material=Enum.Material.SmoothPlastic
-        local spoke=part("WheelStripe",Vector3.new(0.08,1.8,0.12),wheel.Position+side*0.4,{203,218,224})
+        local spoke=part("WheelStripe",Vector3.new(0.08,1.8,0.12),wheel.Position+side*0.4,{203,218,224}) -- 3.0: side statt Welt-X
         spoke.Anchored=false;spoke.Massless=true
         local link=Instance.new("WeldConstraint");link.Part0=wheel;link.Part1=spoke;link.Parent=spoke
         Tween:Create(wheel,TweenInfo.new(math.min(2,duration),Enum.EasingStyle.Linear,Enum.EasingDirection.InOut,2),{CFrame=wheel.CFrame*CFrame.Angles(math.pi,0,0)}):Play()

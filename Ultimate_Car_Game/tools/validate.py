@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
-"""Prüft den gebauten Place und das Projekt.
+"""Prüft den gebauten Place und das Projekt (3.0 = 2.4.0-Basisplace + src/garage + src/mini + Welt).
 
-1. Place-Struktur: alle Skripte aus src/ an der richtigen Stelle, Quelltext identisch
-2. Luau-Compiler: alle Skripte und Tests kompilieren
-3. Statische Prüfungen: requires, Remote-Aktionen, verbotene Begriffe, externe Assets
-4. Automatisierte Tests (tests/run_tests.lua im Roblox-Mock)
+1. Place: exakt so gebaut wie tools/build_place.py (Basisplace + src/** + tools/worldgen); jedes Skript
+   im Place stammt aus src/, genau die erwarteten Skripte, Klassen und Quelltexte stimmen, Skriptnamen eindeutig
+2. Basis: außer Skript-Quelltexten ist der Basisplace unverändert ("nur Skripte geändert"); jede Änderung an
+   src/garage gegenüber 2.4.0 ist mit "-- 3.0:" kommentiert; src/garage enthält genau die 2.4.0-Skripte
+3. Luau-Compiler: alle Skripte in src/ und alle Test-Dateien
+4. Statische Prüfungen: requires, Aktionen (MiniNet <-> Handler <-> Client), Client sendet keine Beträge,
+   Begriff A2, keine externen Asset-IDs, Version 3.0.0, DataStore-Identität, Lokalisierungstabelle
+5. Test-Fixtures aktuell (tools/export_fixture.py --check)
+6. Automatisierte Tests (tests/run_tests.lua im Roblox-Mock)
 
 Aufruf: python tools/validate.py Ultimate_Car_Game.rbxlx
 Der Luau-Runner wird bei Bedarf mit cargo aus tools/luaurun gebaut.
 """
+import csv
+import difflib
+import importlib.util
+import io
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -21,6 +31,14 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 RUNNER_DIR = ROOT / "tools" / "luaurun"
 RUNNER = RUNNER_DIR / "target" / "release" / ("luaurun.exe" if os.name == "nt" else "luaurun")
+
+# Erwartete Identität (darf sich durch den Merge nicht ändern)
+VERSION = "3.0.0"
+PROFILE_STORE = "UltimateCarGame_v2"
+STUDIO_STORE = "UltimateCarGame_Studio_v2"
+LEADERBOARD_STORE = "UltimateCarGame_ScrapLeaderboard_v1"
+# Nutzlast-Felder, die ein Client nie senden darf (Serverautorität)
+FORBIDDEN_FIELDS = {"amount", "price", "cost", "credits", "money", "scrap", "reward", "gain", "xp", "time", "now", "timestamp", "result", "correct"}
 
 errors = []
 warnings = []
@@ -33,6 +51,13 @@ def check(cond, msg):
     if not cond:
         errors.append(msg)
     return cond
+
+
+def load_builder():
+    spec = importlib.util.spec_from_file_location("build_place_validate", ROOT / "tools" / "build_place.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def find_runner():
@@ -48,143 +73,256 @@ def find_runner():
     return None
 
 
+def rel(p: Path):
+    return p.relative_to(ROOT).as_posix()
+
+
 def lua_sources():
     return sorted(p for p in SRC.rglob("*.lua"))
 
 
-def expected_location(path: Path):
-    rel = path.relative_to(SRC)
-    name = path.name
-    if name.endswith(".server.lua"):
-        cls, inst = "Script", name[:-11]
-    elif name.endswith(".client.lua"):
-        cls, inst = "LocalScript", name[:-11]
-    else:
-        cls, inst = "ModuleScript", name[:-4]
-    top = rel.parts[0]
-    if top == "shared":
-        parent = ("ReplicatedStorage", "Shared")
-    elif top == "server":
-        parent = ("ServerScriptService", "Server")
-    else:
-        parent = ("StarterPlayer", "StarterPlayerScripts") if cls == "LocalScript" else ("StarterPlayer", "StarterPlayerScripts", "Client")
-    return parent, inst, cls
+def test_sources():
+    return sorted(p for p in (ROOT / "tests").rglob("*.lua"))
 
 
-def place_index(place: Path):
-    tree = ET.parse(place)
-    index = {}
-
-    def walk(item, path):
-        props = item.find("Properties")
-        name = None
-        source = None
-        if props is not None:
-            for p in props:
-                if p.get("name") == "Name":
-                    name = p.text
-                if p.get("name") == "Source":
-                    source = p.text or ""
-        here = path + (name,)
-        if source is not None:
-            index[here] = (item.get("class"), source)
-        for child in item.findall("Item"):
-            walk(child, here)
-
-    for item in tree.getroot().findall("Item"):
-        walk(item, ())
-    return index
+def side_of(path: Path):
+    parts = path.relative_to(SRC).parts
+    return parts[0], parts[1] if len(parts) > 2 else ""  # ("garage"|"mini", "shared"|"server"|"client")
 
 
-def validate_place(place: Path):
-    print(f"[1] Place-Struktur: {place.name}")
-    if not check(place.exists(), f"Place fehlt: {place}"):
+def module_name(path: Path):
+    return re.sub(r"\.(server|client)\.lua$|\.lua$", "", path.name)
+
+
+# ---------------------------------------------------------------- 1. Place
+def validate_place(place: Path, builder):
+    print(f"[1] Place: {place.name}")
+    if not check(place.exists(), f"Place fehlt: {place} (python3 tools/build_place.py {place.name})"):
         return
-    index = place_index(place)
-    sources = lua_sources()
-    for path in sources:
-        parent, name, cls = expected_location(path)
-        key = parent + (name,)
-        entry = index.get(key)
-        if check(entry is not None, f"{path.relative_to(ROOT)} fehlt im Place unter {'.'.join(key)}"):
-            check(entry[0] == cls, f"{'.'.join(key)}: Klasse {entry[0]} statt {cls}")
-            check(entry[1] == path.read_text(encoding="utf-8"), f"{'.'.join(key)}: Quelltext veraltet – Place neu bauen")
-    check(len(index) == len(sources), f"Place enthält {len(index)} Skripte, src/ hat {len(sources)}")
+    # a) exakt wie build_place.py: Basis + Skripte + Welt, in einem frischen Builder gebaut
+    fresh = load_builder()
+    tree = fresh.load_base()
+    fresh.apply_scripts(tree)
+    world = fresh.apply_worldgen(tree)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "expected.rbxlx"
+        fresh.write(tree, out)
+        same = out.read_bytes() == place.read_bytes()
+    check(same, f"{place.name} entspricht nicht Basisplace + src/**" + (" + tools/worldgen" if world else "") + " – neu bauen: python3 tools/build_place.py " + place.name)
+    # b) Skripte im Place: genau die aus src/, gleiche Klasse, gleicher Quelltext
+    root = ET.parse(place).getroot()
+    in_place = builder.place_scripts(root)
+    expected = builder.src_files()
+    for key, (cls, f) in expected.items():
+        item = in_place.get(key)
+        if check(item is not None, f"{rel(f)} fehlt im Place unter {'.'.join(key)}"):
+            check(item.get("class") == cls, f"{'.'.join(key)}: Klasse {item.get('class')} statt {cls}")
+            source = builder.prop(item, "Source")
+            check(source is not None and (source.text or "") == builder.read_source(f).replace("\r\n", "\n").replace("\r", "\n"),
+                  f"{'.'.join(key)}: Quelltext weicht von {rel(f)} ab – Place neu bauen")
+    for key in in_place:
+        check(key in expected, f"Skript {'.'.join(key)} im Place stammt nicht aus src/")
+    check(len(in_place) == len(expected), f"Place enthält {len(in_place)} Skripte, src/ hat {len(expected)}")
+    # c) Skriptnamen im ganzen Place eindeutig (Vertrag §1)
+    names = {}
+    for key in in_place:
+        names.setdefault(key[-1], []).append(".".join(key))
+    for name, where in sorted(names.items()):
+        check(len(where) == 1, f"Skriptname {name} mehrfach im Place: {', '.join(where)}")
+    # d) keine externen Assets im ganzen Place
+    text = place.read_text(encoding="utf-8")
+    check("rbxassetid://" not in text and "roblox.com/asset" not in text, f"{place.name}: externe Asset-ID (rbxassetid) gefunden")
+    print(f"    {len(in_place)} Skripte, Welt: {world or 'ohne tools/worldgen'}")
 
 
+# ---------------------------------------------------------------- 2. Basis und 2.4.0-Änderungen
+def validate_base(builder):
+    print("[2] Basis 2.4.0 und markierte Änderungen")
+    with io.StringIO() as buf:
+        stdout = sys.stdout
+        sys.stdout = buf
+        try:
+            ok = builder.cmd_roundtrip()
+        finally:
+            sys.stdout = stdout
+        msg = buf.getvalue().strip()
+    print("    " + msg)
+    check(ok, "Basisplace + src/garage: " + msg)
+    base_root = builder.load_base().getroot()
+    base_scripts = builder.place_scripts(base_root)
+    garage_targets = {tuple(t) for r, t in builder.MAPPING if r.startswith("garage/")}
+    garage_files = {k: v for k, v in builder.src_files().items() if k[:-1] in garage_targets}
+    for key in garage_files:
+        check(key in base_scripts, f"src/garage enthält ein Skript, das es in 2.4.0 nicht gibt: {'.'.join(key)} (neue Skripte gehören nach src/mini)")
+    unmarked = 0
+    changed_files = 0
+    for key, item in base_scripts.items():
+        entry = garage_files.get(key)
+        if not check(entry is not None, f"2.4.0-Skript {'.'.join(key)} fehlt in src/garage"):
+            continue
+        old = (builder.prop(item, "Source").text or "").split("\n")
+        new = builder.read_source(entry[1]).split("\n")
+        if old == new:
+            continue
+        changed_files += 1
+        sm = difflib.SequenceMatcher(a=old, b=new, autojunk=False)
+        for tag, i1, i2, j1, j2 in sm.get_opcodes():
+            if tag == "equal":
+                continue
+            window = new[max(0, j1 - 2): min(len(new), j2 + 2)]
+            if not any("3.0" in line and "--" in line for line in window):
+                unmarked += 1
+                check(False, f"{rel(entry[1])}: Änderung in Zeile {j1 + 1} ohne Kommentar '-- 3.0:'")
+    print(f"    {changed_files} 2.4.0-Skripte geändert, {unmarked} Änderungen ohne '-- 3.0:'")
+
+
+# ---------------------------------------------------------------- 3. Compiler
 def validate_compile(runner):
-    print("[2] Luau-Compiler")
-    files = [str(p) for p in lua_sources()] + [str(p) for p in sorted((ROOT / "tests").glob("*.lua"))]
+    print("[3] Luau-Compiler")
+    files = [str(p) for p in lua_sources()] + [str(p) for p in test_sources()]
     result = subprocess.run([str(runner), "check", *files], cwd=ROOT, capture_output=True, text=True)
     out = (result.stdout + result.stderr).strip()
     print("    " + out.replace("\n", "\n    "))
     check(result.returncode == 0, "Luau-Compiler meldet Fehler")
 
 
+# ---------------------------------------------------------------- 4. Statische Prüfungen
+def block(text, start):
+    i = text.index(start)
+    rest = text[i:]
+    return rest[: rest.index("\n}")]
+
+
 def validate_static():
-    print("[3] Statische Prüfungen")
-    texts = {p: p.read_text(encoding="utf-8") for p in lua_sources()}
-    modules = {
-        "shared": {p.name[:-4] for p in (SRC / "shared").glob("*.lua")},
-        "server": {re.sub(r"\.(server\.)?lua$", "", p.name) for p in (SRC / "server").glob("*.lua")},
-        "client": {re.sub(r"\.(client\.)?lua$", "", p.name) for p in (SRC / "client").glob("*.lua")},
-    }
-    all_modules = modules["shared"] | modules["server"] | modules["client"]
+    print("[4] Statische Prüfungen")
+    sources = lua_sources()
+    texts = {p: p.read_text(encoding="utf-8") for p in sources}
+    modules = {}  # Name -> Seite ("shared"/"server"/"client")
+    for p in sources:
+        if not p.name.endswith((".server.lua", ".client.lua")):
+            modules[module_name(p)] = side_of(p)[1]
 
-    # requires zeigen auf vorhandene Module
-    for path, text in texts.items():
-        for m in re.finditer(r'require\([^\n]*?WaitForChild\("([A-Za-z]+)"\)\)', text):
-            check(m.group(1) in all_modules, f"{path.relative_to(ROOT)}: require auf unbekanntes Modul {m.group(1)}")
-        # Client darf keine Server-Module laden, Shared keine Client/Server-Module
-        top = path.relative_to(SRC).parts[0]
-        for m in re.finditer(r'require\([^\n]*?WaitForChild\("([A-Za-z]+)"\)\)', text):
-            name = m.group(1)
-            if top == "client":
-                check(name not in modules["server"] or name in modules["shared"] or name in modules["client"], f"{path.name}: Client lädt Server-Modul {name}")
-            if top == "shared":
-                check(name in modules["shared"], f"{path.name}: Shared lädt {name}")
+    # requires zeigen auf vorhandene Module; Client lädt keine Server-Module, Shared nur Shared
+    req_patterns = [
+        re.compile(r'WaitForChild\("([A-Za-z]+)"(?:\s*,\s*\d+)?\)\s*\)'),
+        re.compile(r'require\(\s*script\.Parent(?:\.Parent)?\.([A-Za-z]+)\s*\)'),
+        re.compile(r'require\(\s*game:GetService\("ReplicatedStorage"\)\.GarageShared\.([A-Za-z]+)\s*\)'),
+        re.compile(r'require\(\s*[A-Za-z]+\.([A-Za-z]+)\s*\)'),
+    ]
+    required = 0
+    for p, text in texts.items():
+        side = side_of(p)[1]
+        for line in text.split("\n"):
+            if "require(" not in line:
+                continue
+            for pat in req_patterns:
+                for name in pat.findall(line):
+                    if name in ("Mini", "GarageShared", "Remotes", "Parent"):
+                        continue
+                    required += 1
+                    if not check(name in modules, f"{rel(p)}: require auf unbekanntes Modul {name}"):
+                        continue
+                    target = modules[name]
+                    if side == "client":
+                        check(target != "server", f"{rel(p)}: Client lädt Server-Modul {name}")
+                    if side == "shared":
+                        check(target == "shared", f"{rel(p)}: Shared lädt {target}-Modul {name}")
+                    if side == "server":
+                        check(target != "client", f"{rel(p)}: Server lädt Client-Modul {name}")
 
-    # Remote-Aktionen: jede definierte Aktion hat genau einen Server-Handler, jede gesendete ist definiert
-    net = texts[SRC / "shared" / "Net.lua"]
-    block = net[net.index("Net.Actions = {"):]
-    block = block[: block.index("\n}")]
-    actions = set(re.findall(r"^\t([a-z_]+) = \{", block, re.M))
-    check(len(actions) >= 20, f"Net.Actions unvollständig ({len(actions)})")
+    # Aktionen: MiniNet.Actions <-> genau ein Handler; Client sendet nur definierte Aktionen ohne Beträge
+    net = texts[SRC / "mini" / "shared" / "MiniNet.lua"]
+    actions = {}
+    for name, fields in re.findall(r"^\t(mini_[a-z_]+) = \{([^}]*)\}", block(net, "MiniNet.Actions = {"), re.M):
+        actions[name] = set(re.findall(r"([a-zA-Z_]+)\s*=", fields))
+    check(len(actions) >= 20, f"MiniNet.Actions unvollständig ({len(actions)})")
+    for name, fields in actions.items():
+        for f in fields:
+            check(f not in FORBIDDEN_FIELDS, f"MiniNet.Actions.{name}: Feld {f} wäre ein Client-Betrag")
     registered = []
-    for path, text in texts.items():
-        if path.parent.name == "server":
+    for p, text in texts.items():
+        if side_of(p) == ("mini", "server"):
             registered += re.findall(r'Actions\.Register\("([a-z_]+)"', text)
     for a in actions:
         check(registered.count(a) == 1, f"Aktion {a}: {registered.count(a)} Server-Handler")
     for a in registered:
         check(a in actions, f"Handler für undefinierte Aktion {a}")
-    for path, text in texts.items():
-        if path.parent.name == "client":
-            for a in re.findall(r'Remote\.Send(?:Raw)?\("([a-z_]+)"', text):
-                check(a in actions, f"{path.name}: sendet undefinierte Aktion {a}")
+    sent_mini = set()
+    for p, text in texts.items():
+        if side_of(p) == ("mini", "client"):
+            for m in re.finditer(r'[Rr]emote\.Send(?:Raw)?\(\s*"([a-z_]+)"(?:\s*,\s*\{([^}]*)\})?', text):
+                a = m.group(1)
+                sent_mini.add(a)
+                check(a in actions, f"{rel(p)}: sendet undefinierte Aktion {a}")
+                for field in re.findall(r"([a-zA-Z_]+)\s*=", m.group(2) or ""):
+                    check(field not in FORBIDDEN_FIELDS, f"{rel(p)}: Client sendet verbotenes Feld {field} ({a})")
+                    check(field in actions.get(a, set()), f"{rel(p)}: {a} sendet Feld {field}, das MiniNet nicht kennt")
+            check("Command:FireServer" not in text or p.name == "MiniRemote.lua", f"{rel(p)}: sendet am MiniRemote vorbei")
+    for a in actions:
+        if a != "mini_sync":
+            check(a in sent_mini, f"Aktion {a} wird vom Client nie gesendet")
+    # 2.4.0-Client: jede gesendete Aktion hat eine Behandlung in GarageServer (act/request)
+    server = texts[SRC / "garage" / "server" / "GarageServer.server.lua"]
+    handled = set(re.findall(r'action==\"([A-Za-z]+)\"', server)) | set(re.findall(r'request\(player,\"([A-Za-z]+)\"', server))
+    client = texts[SRC / "garage" / "client" / "GarageClient.client.lua"]
+    for a in set(re.findall(r'\bsend\("([A-Za-z]+)"', client)):
+        check(a in handled, f"GarageClient sendet {a}, GarageServer behandelt es nicht")
+    check("Mini.Handles(action)" in server and "Mini.Handle(p,action,a)" in server, "GarageServer.request leitet Minispiel-Aktionen nicht an MiniService weiter")
+    for hook in ("Mini.Init(", "Mini.Hello(p)", "Mini.OnJoin(p)", "Mini.Tick(p,", "Mini.OnSettled(p)", "Mini.OnActivity(p)", "Mini.OnLeave(p,", "Mini.Pending()"):
+        check(hook in server, f"GarageServer: Anbindung {hook} fehlt (Vertrag §3)")
+    remotes = set(re.findall(r'Instance\.new\("(Remote(?:Event|Function)|UnreliableRemoteEvent)"', "\n".join(texts.values())))
+    check(not remotes, "src/ legt eigene Remotes an (Vertrag: keine neuen Remotes)")
 
-    # A2: der Begriff Autopunkte/AP kommt nirgends vor; keine externen Asset-IDs
-    for path, text in texts.items():
-        check("Autopunkt" not in text, f"{path.name}: Begriff 'Autopunkte' gefunden")
-        check(re.search(r"\bAP\b", text) is None, f"{path.name}: Begriff 'AP' gefunden")
-        check("rbxassetid://" not in text and "roblox.com/asset" not in text, f"{path.name}: externe Asset-ID")
-        # Client sendet keine Beträge/Preise/Zeitstempel
-        if path.parent.name == "client":
-            for m in re.finditer(r'Remote\.Send(?:Raw)?\("[a-z_]+",\s*\{([^}]*)\}', text):
-                for field in re.findall(r"([a-zA-Z_]+)\s*=", m.group(1)):
-                    check(field not in {"amount", "price", "cost", "credits", "scrap", "reward", "time", "now", "timestamp"},
-                          f"{path.name}: Client sendet verbotenes Feld {field}")
-        # keine Debug-Ausgaben im Spielcode
-        if re.search(r"^\s*print\(", text, re.M):
-            warnings.append(f"{path.name}: print() im Spielcode")
+    # A2: der Begriff der alten Punktewährung kommt nirgends vor; keine externen Asset-IDs; keine Debug-Ausgaben
+    for p, text in texts.items():
+        check("Autopunkt" not in text and "car points" not in text.lower(), f"{rel(p)}: Begriff 'Autopunkte' gefunden")
+        check(re.search(r"\bAP\b", text) is None, f"{rel(p)}: Begriff 'AP' gefunden")
+        check("rbxassetid://" not in text and "roblox.com/asset" not in text, f"{rel(p)}: externe Asset-ID")
+        if side_of(p)[0] == "mini" and re.search(r"^\s*print\(", text, re.M):
+            warnings.append(f"{rel(p)}: print() im Spielcode")
 
-    # Version
-    check('Config.Version = "3.0.0"' in texts[SRC / "shared" / "Config.lua"], "Version ist nicht 3.0.0")
-    check('Config.ProfileStoreName = "UltimateCarGame_v2"' in texts[SRC / "shared" / "Config.lua"], "DataStore-Identität geändert")
+    # Version und DataStore-Identität
+    config = texts[SRC / "garage" / "shared" / "Config.lua"]
+    m = re.search(r'^C\.Version\s*=\s*"([^"]+)"', config, re.M)
+    check(m is not None and m.group(1) == VERSION, f"C.Version ist {m and m.group(1)} statt {VERSION}")
+    m = re.search(r'^C\.DataStoreName\s*=\s*"([^"]+)"', config, re.M)
+    check(m is not None and m.group(1) == PROFILE_STORE, f"DataStore-Identität geändert: C.DataStoreName = {m and m.group(1)}")
+    m = re.search(r'^C\.StudioDataStoreName\s*=\s*"([^"]+)"', config, re.M)
+    check(m is not None and m.group(1) == STUDIO_STORE, f"Studio-DataStore geändert: {m and m.group(1)}")
+    rules = texts[SRC / "garage" / "shared" / "Rules.lua"]
+    check(re.search(r"local d=\{version=2,", rules) is not None, "R.NewData: data.version ist nicht mehr 2")
+    check("version = 2, data = data" in texts[SRC / "garage" / "server" / "Profiles.lua"], "Profiles: Hülle {version=2,data,receipts,lock} geändert")
+    mini_config = texts[SRC / "mini" / "shared" / "MiniConfig.lua"]
+    check(f'MiniConfig.LeaderboardStoreName = "{LEADERBOARD_STORE}"' in mini_config, "Bestenlisten-Store umbenannt (Werte gingen verloren)")
+    slots = re.search(r"C\.PlotSlots\s*=\s*\{(.*?)\n\}", config, re.S)
+    if check(slots is not None, "C.PlotSlots fehlt in GarageShared.Config"):
+        entries = re.findall(r"\{\s*x\s*=\s*-?[\d.]+\s*,\s*z\s*=\s*-?[\d.]+\s*,\s*rot\s*=\s*(\d+)\s*\}", slots.group(1))
+        max_plots = re.search(r"^C\.MaxPlots\s*=\s*(\d+)", config, re.M)
+        check(max_plots is not None and len(entries) == int(max_plots.group(1)), f"C.PlotSlots hat {len(entries)} Einträge statt C.MaxPlots")
+        check(all(r in ("0", "180") for r in entries), "C.PlotSlots: rot nur 0 oder 180")
+
+    # Lokalisierungstabelle aktuell (build_place.py exportiert sie aus MiniLocale)
+    locale = texts[SRC / "mini" / "shared" / "MiniLocale.lua"]
+    rows = re.findall(r'^\t([a-z_]+) = "((?:[^"\\]|\\.)*)",$', block(locale, "MiniLocale.Strings = {"), re.M)
+    csv_path = ROOT / "localization" / "Locale_de.csv"
+    if check(csv_path.exists(), "localization/Locale_de.csv fehlt – python3 tools/build_place.py"):
+        with csv_path.open(encoding="utf-8", newline="") as f:
+            table = [(r[0], r[4]) for r in list(csv.reader(f))[1:]]
+        check(table == rows, "localization/Locale_de.csv ist veraltet – python3 tools/build_place.py")
+    print(f"    {len(actions)} Minispiel-Aktionen, {len(registered)} Handler, {len(sent_mini)} vom Client gesendet, {required} requires geprüft")
+
+
+# ---------------------------------------------------------------- 5./6. Fixtures und Tests
+def validate_fixtures():
+    print("[5] Test-Fixtures")
+    result = subprocess.run([sys.executable, str(ROOT / "tools" / "export_fixture.py"), "--check"], cwd=ROOT, capture_output=True, text=True)
+    out = (result.stdout + result.stderr).strip()
+    print("    " + out.replace("\n", "\n    "))
+    check(result.returncode == 0, "Test-Fixtures veraltet – python3 tools/export_fixture.py")
 
 
 def validate_tests(runner):
-    print("[4] Automatisierte Tests (Roblox-Mock)")
+    print("[6] Automatisierte Tests (Roblox-Mock)")
     result = subprocess.run([str(runner), "run", "tests/run_tests.lua", "."], cwd=ROOT, capture_output=True, text=True)
     lines = [l for l in (result.stdout + result.stderr).splitlines() if l.startswith("FEHLER") or l.startswith("Tests:")]
     for l in lines:
@@ -199,15 +337,17 @@ def main():
     place = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "Ultimate_Car_Game.rbxlx"
     if not place.is_absolute():
         place = Path.cwd() / place
-    validate_place(place)
+    builder = load_builder()
+    validate_place(place, builder)
+    validate_base(builder)
     runner = find_runner()
     test_checks = 0
     if check(runner is not None, "Luau-Runner fehlt (Rust/cargo installieren oder LUAURUN setzen)"):
         validate_compile(runner)
-        validate_static()
+    validate_static()
+    validate_fixtures()
+    if runner is not None:
         test_checks = validate_tests(runner)
-    else:
-        validate_static()
     print()
     for w in warnings:
         print("WARNUNG " + w)

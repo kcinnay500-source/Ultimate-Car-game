@@ -1,0 +1,52 @@
+== NPC loops (car disc r=5)
+ loop A: 31 wp, length 2260, off-asphalt samples 0 []
+ loop B1: 28 wp, length 1616, off-asphalt samples 0 []
+ loop B2: 28 wp, length 1697, off-asphalt samples 0 []
+ loop T: 26 wp, length 779, off-asphalt samples 0 []
+== loop interactions
+ A-B1: same-lane samples 0, crossing zones [(-156, 0), (156, 0)]
+ A-B2: same-lane samples 0, crossing zones [(-156, 0), (156, 0)]
+ A-T: same-lane samples 0, crossing zones []
+ B1-B2: same-lane samples 0, crossing zones []
+ B1-T: same-lane samples 0, crossing zones []
+ B2-T: same-lane samples 0, crossing zones []
+== B1 corner radius used 14.0
+== plot dressing
+ street lamps 52 on asphalt: []
+ lamp conflicts: []
+   Meile 20 (306,-14.5) (-306,14.5) (-310,-14.5) (310,14.5) (336,-14.5) (456,-14.5) (-336,14.5) (-456,14.5) (-460,-14.5) (-340,-14.5) (460,14.5) (340,14.5) (-100,-14.5) (-100,14.5) (-20,14.5) (-20,-14.5) (20,-14.5) (20,14.5) (100,14.5) (100,-14.5)
+   Bogen 4 (-186,-18) (-186,18) (186,-18) (186,18)
+   Kreisel 4 (-545,32.2) (-545,-32.2) (545,32.2) (545,-32.2)
+   MarktW 8 (-137.5,-305) (-166.5,-265) (-137.5,-215) (-166.5,-145) (-137.5,-80) (-166.5,45) (-137.5,105) (-166.5,175)
+   MarktO 8 (137.5,-305) (166.5,-265) (137.5,-215) (166.5,-145) (137.5,-80) (166.5,45) (137.5,105) (166.5,175)
+   Nordring 4 (-100,-327.5) (-35,-327.5) (35,-327.5) (100,-327.5)
+   Suedring 4 (-100,185.5) (-35,185.5) (35,185.5) (100,185.5)
+  slot 1 Nr5 pivot (262,0,-109) rot 0 fp X178..318 Z-153..-25 hall X188.0..296.4 Z-142.4..-75.6 Empfang X188..208 door (198.5,-75.6) arr (198,-77.5) home (198,-83.5) roll (219,-77.4) pylon (198,-21.4) tree (218,-16) drive X232..292 rollapproach X209..229
+  slot 2 Nr4 pivot (-262,0,109) rot 180 fp X-318..-178 Z25..153 hall X-296.4..-188.0 Z75.6..142.4 Empfang X-208..-188 door (-198.5,75.6) arr (-198,77.5) home (-198,83.5) roll (-219,77.4) pylon (-198,21.4) tree (-218,16) drive X-292..-232 rollapproach X-229..-209
+  slot 3 Nr3 pivot (-234,0,-109) rot 0 fp X-318..-178 Z-153..-25 hall X-308.0..-199.6 Z-142.4..-75.6 Empfang X-308..-288 door (-297.5,-75.6) arr (-298,-77.5) home (-298,-83.5) roll (-277,-77.4) pylon (-298,-21.4) tree (-278,-16) drive X-264..-204 rollapproach X-287..-267
+  slot 4 Nr6 pivot (234,0,109) rot 180 fp X178..318 Z25..153 hall X199.6..308.0 Z75.6..142.4 Empfang X288..308 door (297.5,75.6) arr (298,77.5) home (298,83.5) roll (277,77.4) pylon (298,21.4) tree (278,16) drive X204..264 rollapproach X267..287
+  slot 5 Nr7 pivot (412,0,-109) rot 0 fp X328..468 Z-153..-25 hall X338.0..446.4 Z-142.4..-75.6 Empfang X338..358 door (348.5,-75.6) arr (348,-77.5) home (348,-83.5) roll (369,-77.4) pylon (348,-21.4) tree (368,-16) drive X382..442 rollapproach X359..379
+  slot 6 Nr2 pivot (-412,0,109) rot 180 fp X-468..-328 Z25..153 hall X-446.4..-338.0 Z75.6..142.4 Empfang X-358..-338 door (-348.5,75.6) arr (-348,77.5) home (-348,83.5) roll (-369,77.4) pylon (-348,21.4) tree (-368,16) drive X-442..-382 rollapproach X-379..-359
+  slot 7 Nr1 pivot (-384,0,-109) rot 0 fp X-468..-328 Z-153..-25 hall X-458.0..-349.6 Z-142.4..-75.6 Empfang X-458..-438 door (-447.5,-75.6) arr (-448,-77.5) home (-448,-83.5) roll (-427,-77.4) pylon (-448,-21.4) tree (-428,-16) drive X-414..-354 rollapproach X-437..-417
+  slot 8 Nr8 pivot (384,0,109) rot 180 fp X328..468 Z25..153 hall X349.6..458.0 Z75.6..142.4 Empfang X438..458 door (447.5,75.6) arr (448,77.5) home (448,83.5) roll (427,77.4) pylon (448,21.4) tree (428,16) drive X354..414 rollapproach X417..437
+== Magnetkran reach (mast (-420,-262), usable r 12..62)
+  Aufgabebunker (-392,-211) r=58.2 OK
+  Haufen 1 (-445,-315) r=58.6 OK
+  Haufen 2 (-390,-305) r=52.4 OK
+  Haufen 3 (-452,-215) r=56.9 OK
+  chimney (-304,-246) r=117.1 (must be >66 so jib never meets it)
+  press hall nearest r=41.8, hall roof top 41 < jib underside 54
+== building/building overlaps
+  unintended overlaps: 0
+== track box vs roads/buildings: [] []
+== enterable interiors ceiling >= 24:
+   Spielhalle ceil 26 OK
+   Meisterschule ceil 24 OK
+   Auktionshaus ceil 30 OK
+   Credit-Center ceil 24 OK
+   Ankunftshalle ceil 24 OK
+   Autohaus Showroom ceil 26 OK
+   Uebergabe-Halle ceil 24 OK
+   Presse-Halle ceil 30 OK
+   Tuning-Zentrum Halle ceil 32 OK
+   Waschstrasse ceil 24 OK

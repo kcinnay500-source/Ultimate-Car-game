@@ -84,7 +84,7 @@ local function doorwayOccupied(w)
     for _,player in ipairs(game:GetService("Players"):GetPlayers()) do
         local character=player.Character;local root=character and character:FindFirstChild("HumanoidRootPart")
         if root then
-            local delta=toPlot*root.Position-origin
+            local delta=toPlot*root.Position-origin -- 3.0: plotlokal
             if math.abs(delta.X)<11 and math.abs(delta.Z)<2 and math.abs(delta.Y)<7 then return true end
         end
     end

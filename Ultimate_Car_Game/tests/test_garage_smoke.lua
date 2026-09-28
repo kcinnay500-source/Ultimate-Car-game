@@ -133,12 +133,14 @@ for _, mode in ipairs(MODES) do
 		local p = g:Join(1001)
 		g:Advance(0.6)
 		for _, key in ipairs({ "tools", "parts", "upgrades", "workshop" }) do
+			g:Advance(0.2) -- request() hat 0,12 s Abklingzeit je Aktionsname
 			local m = g:Mark()
 			g:Send(p, "travel", { key = key })
 			T.eq(g:Last(p, "page", m), key, "page nach travel " .. key)
 			local d = (g:Root(p).Position - g:Station(p, key).Position).Magnitude
 			T.check(d <= (key == "tools" and 9 or 10), "travel " .. key .. " landet in Reichweite (" .. string.format("%.1f", d) .. ")")
 		end
+		g:Advance(0.2)
 		local m = g:Mark()
 		g:Send(p, "travel", { key = "nirgendwo" })
 		T.eq(#g:Events(p, nil, m), 0, "unbekanntes Ziel wird ignoriert")
@@ -165,7 +167,8 @@ for _, mode in ipairs(MODES) do
 		local g = H.Garage({ scripts = mode })
 		local p = g:Join(1001)
 		g:Advance(0.6)
-		g:Teleport(p, g:Station(p, "parts"), Vector3.new(0, 0, 25))
+		-- Werkzeugkiste liegt > 50 Studs vom Empfang entfernt
+		g:Teleport(p, g:Station(p, "tools"), Vector3.new(0, 0, 3))
 		local offer = findOffer(g, p, "inspection")
 		local m = g:Mark()
 		g:Send(p, "accept", { id = offer.id })
@@ -373,6 +376,33 @@ for _, mode in ipairs(MODES) do
 		local rec = g:Record(1001)
 		T.eq(rec.lock and rec.lock.token, "anderer-server", "fremde Sperre unangetastet")
 		T.eq(rec.data.money, 999, "gespeicherte Daten unangetastet")
+	end)
+
+	case("Robux-Kauf (ProcessReceipt): Gutschrift genau einmal, Beleg gespeichert", function(T, H)
+		local g = H.Garage({ scripts = mode })
+		local C = g:Config()
+		local product = C.CreditProducts[1]
+		product.productId = 424242 -- in 2.4.0 noch 0 (Platzhalter); nur für den Test gesetzt
+		local p = g:Join(1001)
+		g:Advance(1)
+		local money0 = g:Data(p).money
+		local m = g:Mark()
+		local decision, done = g:Purchase(p, 424242, "kauf-A")
+		T.check(done, "ProcessReceipt kehrt zurück")
+		T.eq(decision, Enum.ProductPurchaseDecision.PurchaseGranted, "PurchaseGranted")
+		T.eq(g:Data(p).money, money0 + product.credits, "Credits gutgeschrieben")
+		T.check(g:Last(p, "purchaseFX", m) ~= nil, "purchaseFX gesendet")
+		local rec = g:Record(1001)
+		T.check(rec and rec.receipts["kauf-A"] ~= nil, "Beleg im DataStore")
+		T.eq(rec and rec.data.money, money0 + product.credits, "Geld sofort gespeichert")
+		-- Wiederholung desselben Belegs: gewährt, aber keine zweite Gutschrift
+		decision = g:Purchase(p, 424242, "kauf-A")
+		T.eq(decision, Enum.ProductPurchaseDecision.PurchaseGranted, "Wiederholung PurchaseGranted")
+		T.eq(g:Data(p).money, money0 + product.credits, "keine Doppelgutschrift")
+		-- Unbekanntes Produkt
+		decision = g:Purchase(p, 999, "kauf-B")
+		T.eq(decision, Enum.ProductPurchaseDecision.NotProcessedYet, "unbekanntes Produkt nicht verarbeitet")
+		noErrors(T, g)
 	end)
 
 	case("BindToClose speichert alle und gibt Sperren frei", function(T, H)

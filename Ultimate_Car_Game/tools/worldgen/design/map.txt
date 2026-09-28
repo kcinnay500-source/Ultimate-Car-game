@@ -1,0 +1,87 @@
+Z\X   -600      -500      -400      -300      -200      -100      0         100       200       300       400       500       
+ -400                                                                                                                         
+ -390 ************************************************************************************************************************
+ -380 *                                                                                                                      *
+ -370 *                                                                                                                      *
+ -360 *            +++++++++++++++++++++++++++++   ############################## : ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,            *
+ -350 *            +xxxxxxxxxxxxxxxxxxxxxxxxxxx+   ############################## : ,mmmmmmmmmmmmmmmmmmmmmmmmmm,,            *
+ -340 *            +xxxxxxxxxxxxxxxxxxxxxxxxxxx+ #################################: ,mmmmmmmmmmmmmmmmmmmmmmmmmm,,            *
+ -330 *            +xxxxxxxxxxxxxxxxxxxxxxxxxxx+ ###::::::::::::::::::::::::::::##: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,            *
+ -320 *            +xxxxxxxxxxxxxxxxxxxxxxxxxxx+ ###:ppppppppppppppppppppGGGGGG:##: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,            *
+ -310 *            +xxxxxxxxxxxxxxxxxxxxxxxxxxx+ ###:ppppppppggggggggggppGGGGGG:##: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,            *
+ -300 *            +xxxxxxxxxxxxxxxxxxxxxxxxxxx+ ###:ppppppppggggggggggppGGGGGG:##: ,,,,,,,,,,,,,,,,,nnnnnnnnnn,,            *
+ -290 *            +xxxxYxxxxxxxxxxxxxxxxxxxxxx+ ###:ppppppppggggggggggppGGGGGG:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -280 *            +xxxxxxxxxxxxxxxxxxxxxxxxxxx+ ###:ppppppppggggggggggppGGGGGG:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -270 *            +xxxYxxxxxxxxxxxxxxxxxxxxxxx+ ###:ppppppppggggggggggppGGGGGG:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -260 *            +xxxxxxxxxxxxxxxxxxxxxxxxxxx+ ###:ppppppppggggggggggppGGGGGG:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -250 *            +xxxxxxxxRRRRRRRRxxxxxxDDDDx+ ###:ppppppppppppppppppppGGGGGG:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -240 *            +xxxxxxxxRRRRRRRxxxxxxxDDDDx+ ###:pppppppppppppppppppppppppp:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -230 *            +xxxxxxxxRRRRRRRxxxxxxxDDDDx+ ###:,,,,,,,,         ,,,,,,,,,:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -220 *            +xxxxxxRRRRRRRRRxxxxxxxxxxxx+ ###:,,,,,,,,AAAAAAAAA,,,,,,,,,:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -210 *            +xxxxxxRRRRRRRRRxxxxxxxxxxxxx #z#:,,,,,,,,AAAAA@AAA,,,,,,,,,:#z: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -200 *            +xxxxxxxxRRRRRRRxxxxxxxxxxxxx ###:,,,,,,,,AAAAAAAAA,,,,,,,,,:##: ,,,TTTTTTTTTTTT,,nnnnnnnnnn,,            *
+ -190 *            +xxxxxxxxRRRRRRRxxZZZZZxxxxx+ ###:,,,,,,,,AAAAAAAAA,,,,,,,,,:##: ,,,TTTTTTTTTTTT,,,,,,,,,,,,,,            *
+ -180 *            +xxxxxxxxxxxxxxxxxZZZZZxxxxx+ ###:MMMMMM ............ CCCCCC:##: ,,,TTTTTTTTTTTT,,,,,,,,,,,,,,            *
+ -170 *            ++++++++++++++x++++++++++++++ ###:MMMMMM ............ CCCCCC:##: ,P,,,,,,,,,,,,,,,,,,,,,,,,,,,            *
+ -160 *                                          ###:MMMMMM ............ CCCCCC:##:                                          *
+ -150 *            ______________ ______________ ###:MMMMMM ...b.....b.. CCCCCC:##: ______________ ______________            *
+ -140 *            _WWWWWWWWWWW__ _WWWWWWWWWWW__ ###:MMMMMM ............ CCCCCC:##: _WWWWWWWWWWW__ _WWWWWWWWWWW__            *
+ -130 *            _WWWWWWWWWWW__ _WWWWWWWWWWW__ ###:MMMMMM ............       :##: _WWWWWWWWWWW__ _WWWWWWWWWWW__            *
+ -120 *            _WWWWWWWWWWW__ _WWWWWWWWWWW__ ###:       ............ KKKKKK:##: _WWWWWWWWWWW__ _WWWWWWWWWWW__            *
+ -110 *            _WWWW#1WrWWW__ _WWWW#3WrWWW__ ###:SSSSSS .....oo..... KKKKKK:##: _WWWW#5WrWWW__ _WWWW#7WrWWW__            *
+ -100 *            _WWWWWWWWWWW__ _WWWWWWWWWWW__ ###:SSSSSS .....oo..... KKKKKK:##: _WWWWWWWWWWW__ _WWWWWWWWWWW__            *
+  -90 *            _EEWWWWWWWWW__ _EEWWWWWWWWW__ ###:SSSSSS ............ KKKKKK:##: _EEWWWWWWWWW__ _EEWWWWWWWWW__            *
+  -80 *            ______________ ______________ ###:SSSSSS ............ KKKKKK:##: ______________ ______________            *
+  -70 *            ______________ ______________ ###:SSSSSS ............ KKKKKK:##: ______________ ______________            *
+  -60 *            ______________ ______________ ###:SSSSSS ............ KKKKKK:##: ______________ ______________            *
+  -50 *      ::    ______________ ______________ ###:SSSSSS ............ KKKKKK:##: ______________ ______________    ::      *
+  -40 *    ::###:  ______________ ______________ ###:SSSSSS ............ KKKKKK:##: ______________ ______________  :###::    *
+  -30 *   :######:                               #z#:       ............       :#z:                               :######:   *
+  -20 *   :#######:::::::::::::::::::::::::::::::###::::::::::::::::::::::::::::##::::::::::::::::::::::::::::::::#######:   *
+  -10 *   ###^^###:############################=####################################=############################:###^^###   *
+    0 *   ###^^###:###############z#############z#+##z############z###########z##+#z#############z###############:###^^###   *
+   10 *   :#######:::::::::::::::::::::::::::::=:###::::::::::::::::::::::::::::##::=:::::::::::::::::::::::::::::#######:   *
+   20 *   :######: ______________ ______________ #z#:,,,,,,,,,,,,,,,,,,,,,,,,,,:#z: ______________ ______________ :######:   *
+   30 *    ::###:  ______________ ______________ ###:llllll,,,,,,,,,,,,,,,,,,,,:##: ______________ ______________  :###::    *
+   40 *      ::    ______________ ______________ ###:llllll,HHHHHHHHHHHH,,,,,,,:##: ______________ ______________    ::      *
+   50 *            ______________ ______________ ###:llllll,HHHHHHHHHHHH,,,,,,,:##: ______________ ______________            *
+   60 *            ______________ ______________ ###:llllll,HHHHHHHHHHHH,,hhhh,:##: ______________ ______________            *
+   70 *            ______________ ______________ ###:llllll,HHHHHHHHHHHH,,hhhh,:##: ______________ ______________            *
+   80 *            __WWWWWWWWWEE_ __WWWWWWWWWEE_ ###:llllll,HHHHHHHHHHHH,,hhhh,:##: __WWWWWWWWWEE_ __WWWWWWWWWEE_            *
+   90 *            __WWWWWWWWWWW_ __WWWWWWWWWWW_ ###:llllll,HHHHHHHHHHHH,,hhhh,:##: __WWWWWWWWWWW_ __WWWWWWWWWWW_            *
+  100 *            __WWWr#2WWWWW_ __WWWr#4WWWWW_ ###:llllll,HHHHHHHHHHHH,,,,,,,:##: __WWWr#6WWWWW_ __WWWr#8WWWWW_            *
+  110 *            __WWWWWWWWWWW_ __WWWWWWWWWWW_ ###:llllll,,,,,,,,,,,,,,,,,,,,:##: __WWWWWWWWWWW_ __WWWWWWWWWWW_            *
+  120 *            __WWWWWWWWWWW_ __WWWWWWWWWWW_ ###:llllll,,,,,,,,,,,,,,,,,,,,:##: __WWWWWWWWWWW_ __WWWWWWWWWWW_            *
+  130 *            __WWWWWWWWWWW_ __WWWWWWWWWWW_ ###:llllll,,,,,,,,,,,,,,,,,,,,:##: __WWWWWWWWWWW_ __WWWWWWWWWWW_            *
+  140 *            ______________ ______________ ###:llllll,,,,,,,,,,,,,,,,,,,,:##: ______________ ______________            *
+  150 *                                          ###:,,,,,,,,,,,,,,,,,,,,,,,,,,:##:                                          *
+  160 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; #z#:,,,,,,,,,,,,,,,,,,,,,,,,,,:#z: P,,,,,,,,,,,,,,,,,,,,,                   *
+  170 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ###:,,,,,,,,,,,,,,,,,,,,,,,,,,:##: ,,FFFFFF,fff,,,,,,,,,,                   *
+  180 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ###::::::::::::::::::::::::::::##: ,,FFFFFF,fff,wwwwww,,,                   *
+  190 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; #################################: ,,FFFFFF,fff,wwwwww,,,                   *
+  200 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   ###############z############## : ,,FFFFFF,,,,,,,,,,,,,,                   *
+  210 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   :::::::::::::::::::::::::::::: : ,,,,,,,,,,,,,,,,,,,,,,                   *
+  220 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                           ##       ,,,,,,,,,,,,,,,,,,,,,,                   *
+  230 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;            BBBBBBBBBBBB   ##       ,,,,,,,,,,,,,,,,,,,,,,                   *
+  240 *            ;;;;;;;;;;;;;~~~~;;;;;;;;;;;;            BBBBBBBBBBBB   ##       ,,,,,,,,,,,,,,,,,,,,,,                   *
+  250 *            ;;;;;;;;;;;;~~~~~~;;;;;;;;;;;                           ##       ,,,,,,,,,,,,,,,,,,,,,,                   *
+  260 *            ;;;;;;;;;;;;~~~~~~;;;;;;;;;;;      %%%%%%%%%%%%%%%%%%%%%%%%                                               *
+  270 *            ;;;;;;;;;;;;~~~~~~;;;;;;;;;;;     %%%%%%%%%%%%%%%%%%%%%%%%%%                                              *
+  280 *            ;;;;;;;;;;;;;~~~~;;;;;;;;;;;;   %%%%%                    %%%%%                                            *
+  290 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   %%%                        %%%                                            *
+  300 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  %%%                          %%%                                           *
+  310 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  %%                            %%                                           *
+  320 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; %%%                            %%%                                          *
+  330 *            ;;;;;;;;;;;;;;;;;;;;;;;;;;;;; %%%                            %%%                                          *
+  340 *                                          %%%                            %%%                                          *
+  350 *                                          %%%                            %%%                                          *
+  360 *                                           %%                            %%                                           *
+  370 *                                           %%%                          %%%                                           *
+  380 *                                            %%%                        %%%                                            *
+  390 *                                            %%%%%                    %%%%%                                            *
+  400 *                                              %%%%%%%%%%%%%%%%%%%%%%%%%%                                              *
+  410 *                                               %%%%%%%%%%%%%%%%%%%%%%%%                                               *
+  420 *                                                                                                                      *
+  430 *                                                                                                                      *
+  440 *                                                                                                                      *
+  450 ************************************************************************************************************************

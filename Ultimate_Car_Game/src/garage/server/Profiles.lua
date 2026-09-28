@@ -71,7 +71,7 @@ function Profiles.Save(profile, release)
         warn("[Profiles] Speichern abgelehnt: Profil enthält ungültige Werte")
         return false
     end
-    profile.saving = true
+    profile.saving = true -- 3.0: erst nach der Prüfung oben gesetzt
     local success = false
     for attempt = 1, 3 do
         local lostLock = false

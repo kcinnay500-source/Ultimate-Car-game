@@ -1,313 +1,386 @@
--- Übergänge: Beitritt/Verlassen, Sitzungssperre, Studio ohne DataStore, Herunterfahren, Aufräumen, Stationen
+-- Übergänge im echten Server: Beitritt/Verlassen, Sitzungssperre (2.4.0-Profiles), Studio, DataStore-Ausfall,
+-- Herunterfahren, Aufräumen, Remote-Budget, Robux-Kauf während Minispielen, transacting-Sperre, Stationen der Stadt.
+local function noErrors(T, g, what)
+	return T.eq(#g:Errors(), 0, (what or "keine Laufzeitfehler") .. ": " .. g:ErrorText())
+end
+
 return {
-	{ "Profil wird gespeichert, Sperre beim Verlassen freigegeben", function(T, H)
-		local srv = H.Server()
-		local player = H.Join(srv, 601, "Quinn")
-		local store = H.Store(srv)
-		local key = srv.Profiles.Key(601)
-		T.eq(type(store.data[key]._lock), "table", "Sperre beim Laden gesetzt")
-		T.eq(store.data[key]._lock.job, "job-A", "Sperre gehört diesem Server")
-		H.Profile(srv, player).credits = 4242
-		H.Leave(srv, player)
-		T.eq(store.data[key].credits, 4242, "beim Verlassen gespeichert")
-		T.eq(store.data[key]._lock, nil, "Sperre freigegeben")
-		T.eq(srv.Core.Sessions[player], nil, "Sitzung entfernt")
-		T.eq(#H.Errors(srv.env), 0, "keine Laufzeitfehler")
+	{ "Profil samt games wird beim Verlassen gespeichert, Sperre frei, Sitzungen entfernt", function(T, H)
+		local g = H.Garage()
+		local player = g:Join(601, { name = "Quinn" })
+		g:Advance(1)
+		local rec = g:Record(601)
+		T.eq(type(rec.lock), "table", "Sperre beim Laden gesetzt")
+		local d = g:D(player)
+		d.money = 4242
+		d.games.parts = 13
+		d.games.press.rebirths = 2
+		g:Leave(player)
+		g:Advance(1)
+		rec = g:Record(601)
+		T.eq(rec.data.money, 4242, "beim Verlassen gespeichert")
+		T.eq(rec.data.games.parts, 13, "Altteile gespeichert")
+		T.eq(rec.data.games.press.rebirths, 2, "Rebirths gespeichert")
+		T.eq(rec.lock, nil, "Sperre freigegeben")
+		T.eq(g:Mini().Sessions[player], nil, "Minispiel-Sitzung entfernt")
+		T.check(g:Plot(player) == nil, "Grundstück entfernt")
+		noErrors(T, g)
 	end },
 
-	{ "Fremde Sitzungssperre: warten, dann Hinweis; verwaiste Sperre wird übernommen", function(T, H)
-		local srv = H.Server()
-		local store = H.Store(srv)
-		local ds = srv.env.services.DataStoreService.__data
-		local store2 = store or ds.stores[srv.S.Config.ProfileStoreName]
-		local key = srv.Profiles.Key(602)
-		store2.data[key] = { credits = 99, level = 3, _lock = { job = "job-B", t = srv.env.clock.now } }
-		local player = H.Join(srv, 602, "Rosa")
-		T.eq(srv.Core.Get(player), nil, "noch nicht geladen, solange gesperrt")
-		H.Advance(srv, 20)
-		T.check(player.__data.kicked ~= nil, "nach Wartezeit mit Hinweis getrennt")
-		T.eq(store2.data[key].credits, 99, "fremde Daten unverändert")
-		T.eq(store2.data[key]._lock.job, "job-B", "fremde Sperre unverändert")
-		-- verwaiste Sperre
-		local key3 = srv.Profiles.Key(603)
-		store2.data[key3] = { credits = 55, _lock = { job = "job-B", t = srv.env.clock.now - 10000 } }
-		local p3 = H.Join(srv, 603, "Sam")
-		T.check(srv.Core.Get(p3) ~= nil, "verwaiste Sperre übernommen")
-		T.eq(H.Profile(srv, p3).credits, 55, "Daten geladen")
-		T.eq(store2.data[key3]._lock.job, "job-A", "Sperre übernommen")
+	{ "Fremde Sitzungssperre: temporär spielbar, nichts überschrieben; abgelaufene Sperre wird übernommen", function(T, H)
+		local g = H.Garage()
+		local MiniRules = g:MiniShared("MiniRules")
+		local games = MiniRules.DefaultGames()
+		games.parts = 77
+		g:Seed(602, { version = 2, data = { version = 2, money = 99, level = 3, games = games }, receipts = {},
+			lock = { token = "anderer-server", expires = g:Now() + 170 } })
+		local player = g:Join(602, { name = "Rosa" })
+		g:Advance(1)
+		T.check(g:Session(player) ~= nil, "Sitzung trotz Sperre")
+		T.eq(g:Profile(player).writable, false, "nicht beschreibbar")
+		T.eq(g:Act(player, "mini_press_click", { count = 3 }), "ok", "Minispiele spielbar")
+		g:Advance(100)
+		g:Leave(player)
+		g:Advance(2)
+		local rec = g:Record(602)
+		T.eq(rec.data.money, 99, "fremde Daten unverändert")
+		T.eq(rec.data.games.parts, 77, "fremde Minispiel-Daten unverändert")
+		T.eq(rec.lock.token, "anderer-server", "fremde Sperre unverändert")
+		-- verwaiste (abgelaufene) Sperre
+		g:Seed(603, { version = 2, data = { version = 2, money = 55, level = 2 }, receipts = {},
+			lock = { token = "abgestuerzt", expires = g:Now() - 10 } })
+		local p3 = g:Join(603, { name = "Sam" })
+		g:Advance(1)
+		T.eq(g:Profile(p3).writable, true, "verwaiste Sperre übernommen")
+		T.eq(g:D(p3).money, 55, "Daten geladen")
+		T.check(g:Record(603).lock.token ~= "abgestuerzt", "Sperre übernommen")
+		noErrors(T, g)
 	end },
 
 	{ "Verlassen während des Ladens gibt die Sperre frei", function(T, H)
-		local srv = H.Server()
-		local ds = srv.env.services.DataStoreService.__data
-		ds.updateYield = 2
-		local player = H.Join(srv, 604, "Tina")
-		H.Advance(srv, 0.5)
-		H.Leave(srv, player)
-		H.Advance(srv, 10)
-		local store = H.Store(srv)
-		local key = srv.Profiles.Key(604)
-		T.eq(store.data[key] and store.data[key]._lock, nil, "keine hängende Sperre")
-		T.eq(srv.Core.Sessions[player], nil, "keine hängende Sitzung")
-		T.eq(#H.Errors(srv.env), 0, "keine Laufzeitfehler")
-		ds.updateYield = 0
-		local again = H.Join(srv, 604, "Tina")
-		T.check(srv.Core.Get(again) ~= nil, "sofortiger Wiederbeitritt möglich")
+		local g = H.Garage({ dataStore = { updateYield = 2 } })
+		local player = g:Join(604, { name = "Tina" })
+		g:Advance(0.5)
+		g:Leave(player)
+		g:Advance(10)
+		local rec = g:Record(604)
+		T.eq(rec and rec.lock, nil, "keine hängende Sperre")
+		T.eq(g:Mini().Sessions[player], nil, "keine hängende Minispiel-Sitzung")
+		noErrors(T, g)
+		g:DataStoreMock().updateYield = 0
+		local again = g:Join(604, { name = "Tina" })
+		g:Advance(1)
+		T.eq(g:Profile(again) and g:Profile(again).writable, true, "sofortiger Wiederbeitritt möglich")
 	end },
 
-	{ "Autosave gleichzeitig mit Verlassen sperrt nicht erneut", function(T, H)
-		local srv = H.Server()
-		local ds = srv.env.services.DataStoreService.__data
-		local player = H.Join(srv, 605, "Uwe")
+	{ "Autosave gleichzeitig mit Verlassen sperrt nicht erneut; Autosave-Rhythmus", function(T, H)
+		local g = H.Garage()
+		local C = g:Config()
+		local ds = g:DataStoreMock()
+		local player = g:Join(605, { name = "Uwe" })
+		g:Advance(1)
 		ds.updateYield = 1
-		-- Autosave startet (nach 60 s), Spieler verlässt, während er läuft
-		H.Advance(srv, 60.25)
-		H.Leave(srv, player)
-		H.Advance(srv, 10)
-		local store = H.Store(srv)
-		T.eq(store.data[srv.Profiles.Key(605)]._lock, nil, "Sperre nach beiden Speichervorgängen frei")
-		T.eq(#H.Errors(srv.env), 0, "keine Laufzeitfehler")
-	end },
-
-	{ "Autosave-Rhythmus", function(T, H)
-		local srv = H.Server()
-		local ds = srv.env.services.DataStoreService.__data
-		H.Join(srv, 606, "Vera")
+		g:Advance(C.AutosaveSeconds - 0.75) -- Autosave läuft gerade
+		g:Leave(player)
+		g:Advance(10)
+		T.eq(g:Record(605).lock, nil, "Sperre nach beiden Speichervorgängen frei")
+		noErrors(T, g)
+		ds.updateYield = 0
+		g:Join(606, { name = "Vera" })
+		g:Advance(1)
 		local before = ds.calls.update
-		H.Advance(srv, 300)
+		g:Advance(300)
 		local saves = ds.calls.update - before
-		T.check(saves >= 4 and saves <= 6, "etwa alle 60 s gespeichert (" .. saves .. ")")
+		local expected = 300 / C.AutosaveSeconds
+		T.check(saves >= math.floor(expected) - 1 and saves <= math.ceil(expected) + 1, "etwa alle " .. C.AutosaveSeconds .. " s gespeichert (" .. saves .. ")")
 	end },
 
-	{ "Studio ohne DataStore: spielbar, nicht gespeichert, Hinweis", function(T, H)
-		local srv = H.Server({ dataStoreGetFail = true, studio = true })
-		local player = H.Join(srv, 607, "Wim")
-		local session = srv.Core.Get(player)
-		T.check(session ~= nil, "Sitzung geladen")
-		T.eq(session.persistent, false, "nicht persistent")
-		local toasts = H.Notices(srv, player, "toast")
-		local found = false
-		for _, t in ipairs(toasts) do
-			found = found or t.text == srv.S.Locale.T("studio_nosave")
-		end
-		T.check(found, "Hinweis auf fehlendes Speichern")
-		H.Act(srv, player, "press_click", { count = 5 })
-		H.Advance(srv, 120)
-		H.Leave(srv, player)
-		T.eq(#H.Errors(srv.env), 0, "keine Laufzeitfehler")
+	{ "Studio ohne Speichern: spielbar, nichts geschrieben", function(T, H)
+		local g = H.Garage({ studio = true })
+		local ds = g:DataStoreMock()
+		local player = g:Join(607, { name = "Wim" })
+		g:Advance(1)
+		T.check(g:Session(player) ~= nil, "Sitzung geladen")
+		T.eq(g:Profile(player).writable, false, "nicht beschreibbar")
+		T.eq(g:State(player).saveStatus, "Nur diese Sitzung", "Status für den Client")
+		T.eq(g:Act(player, "mini_press_click", { count = 5 }), "ok", "Minispiele laufen")
+		g:Advance(120)
+		g:Leave(player)
+		g:Advance(2)
+		T.eq(ds.calls.update + ds.calls.set, 0, "kein DataStore-Schreiben in Studio")
+		noErrors(T, g)
 	end },
 
-	{ "DataStore-Ausfall beim Laden überschreibt keine echten Daten", function(T, H)
-		local srv = H.Server({ studio = true })
-		local ds = srv.env.services.DataStoreService.__data
-		local store = ds.stores[srv.S.Config.ProfileStoreName] or H.Store(srv)
-		H.Join(srv, 699, "Init")
-		store = H.Store(srv)
-		local key = srv.Profiles.Key(608)
-		store.data[key] = { credits = 123456, level = 40 }
+	{ "DataStore-Ausfall beim Laden überschreibt keine echten Daten; später lädt der echte Stand", function(T, H)
+		local g = H.Garage()
+		local ds = g:DataStoreMock()
+		g:Seed(608, { version = 2, data = { version = 2, money = 123456, level = 40 }, receipts = {} })
 		ds.fail = true
-		local player = H.Join(srv, 608, "Xaver")
-		T.eq(srv.Core.Get(player), nil, "während der Wiederholungen noch nicht geladen")
-		H.Advance(srv, 5)
-		local session = srv.Core.Get(player)
-		T.eq(session.persistent, false, "temporäres Profil")
+		local player = g:Join(608, { name = "Xaver" })
+		g:Advance(5)
+		T.check(g:Session(player) ~= nil, "temporäre Sitzung (spielbar)")
+		T.eq(g:Profile(player).writable, false, "temporäres Profil")
+		T.eq(g:Profile(player).status, "Laden fehlgeschlagen · temporär", "Status")
 		ds.fail = false
-		H.Advance(srv, 120)
-		H.Leave(srv, player)
-		T.eq(store.data[key].credits, 123456, "echte Daten unverändert")
-		T.eq(store.data[key].level, 40, "Level unverändert")
+		g:D(player).money = 5
+		g:Advance(120)
+		g:Leave(player)
+		g:Advance(2)
+		local rec = g:Record(608)
+		T.eq(rec.data.money, 123456, "echte Daten unverändert")
+		T.eq(rec.data.level, 40, "Level unverändert")
+		local again = g:Join(608, { name = "Xaver" })
+		g:Advance(1)
+		T.eq(g:D(again).money, 123456, "Wiederbeitritt lädt echte Daten")
+		T.eq(type(g:D(again).games), "table", "games angelegt")
 	end },
 
 	{ "Keine NaN/inf im gespeicherten Profil", function(T, H)
-		local srv = H.Server()
-		local player = H.Join(srv, 609, "Yara")
-		local prof = H.Profile(srv, player)
-		prof.credits = 0 / 0
-		prof.games.press.scrap = math.huge
-		H.Leave(srv, player)
-		local stored = H.Store(srv).data[srv.Profiles.Key(609)]
-		T.check(srv.S.Rules.IsClean(stored), "gespeichertes Profil sauber")
-		T.eq(stored.credits, srv.S.Config.StartCredits, "NaN-Credits normalisiert")
+		local g = H.Garage()
+		local MiniRules = g:MiniShared("MiniRules")
+		local player = g:Join(609, { name = "Yara" })
+		g:Advance(1)
+		g:D(player).games.parts = 21
+		g:Send(player, "save")
+		g:Advance(1)
+		T.eq(g:Record(609).data.games.parts, 21, "sauberer Stand gespeichert")
+		g:D(player).games.press.scrap = math.huge
+		g:D(player).money = 0 / 0
+		g:Leave(player)
+		g:Advance(2)
+		local rec = g:Record(609)
+		T.check(MiniRules.IsClean(rec), "gespeicherter Datensatz sauber")
+		T.eq(rec.data.games.parts, 21, "letzter sauberer Stand bleibt")
+		local warned = false
+		for _, w in ipairs(g:Warnings()) do
+			warned = warned or w:find("ungültige Werte", 1, true) ~= nil
+		end
+		T.check(warned, "Speichern abgelehnt und protokolliert")
+		noErrors(T, g)
 	end },
 
-	{ "Herunterfahren speichert alle und gibt Sperren frei", function(T, H)
-		local srv = H.Server()
-		local a = H.Join(srv, 610, "Anton")
-		local b = H.Join(srv, 611, "Berta")
-		H.Profile(srv, a).credits = 1111
-		H.Profile(srv, b).credits = 2222
-		H.Close(srv)
-		local store = H.Store(srv)
-		T.eq(store.data[srv.Profiles.Key(610)].credits, 1111, "A gespeichert")
-		T.eq(store.data[srv.Profiles.Key(611)].credits, 2222, "B gespeichert")
-		T.eq(store.data[srv.Profiles.Key(610)]._lock, nil, "A freigegeben")
-		T.eq(store.data[srv.Profiles.Key(611)]._lock, nil, "B freigegeben")
-		-- danach verlassen: kein erneutes Sperren
-		H.Leave(srv, a)
-		T.eq(store.data[srv.Profiles.Key(610)]._lock, nil, "bleibt frei")
-	end },
-
-	{ "Keine doppelten Verbindungen, Aktionen nach Verlassen wirkungslos", function(T, H)
-		local srv = H.Server()
-		local remotes = srv.env.services.ReplicatedStorage.Remotes
-		local players = srv.env.services.Players
-		local promptCounts = {}
-		for i, e in ipairs(srv.World.Prompts) do
-			promptCounts[i] = e.prompt.Triggered:ConnectionCount()
-		end
-		local actionCount = remotes.Action.OnServerEvent:ConnectionCount()
-		for round = 1, 5 do
-			local p = H.Join(srv, 612, "Carl")
-			H.Act(srv, p, "press_click", { count = 1 })
-			H.Leave(srv, p)
-			T.eq(H.Act(srv, p, "press_buy", { id = "pu0", level = 0, rid = round }), "dropped", "Aktion nach Verlassen verworfen")
-		end
-		T.eq(remotes.Action.OnServerEvent:ConnectionCount(), actionCount, "Remote-Verbindungen konstant")
-		T.eq(players.PlayerAdded:ConnectionCount(), 1, "eine PlayerAdded-Verbindung")
-		T.eq(players.PlayerRemoving:ConnectionCount(), 1, "eine PlayerRemoving-Verbindung")
-		for i, e in ipairs(srv.World.Prompts) do
-			T.eq(e.prompt.Triggered:ConnectionCount(), promptCounts[i], "Prompt-Verbindungen konstant")
-		end
-		local count = 0
-		for _ in pairs(srv.Core.Sessions) do
-			count += 1
-		end
-		T.eq(count, 0, "keine Sitzungen übrig")
-		-- doppeltes PlayerAdded erzeugt keine zweite Sitzung
-		local p = H.Join(srv, 613, "Dana")
-		local s1 = srv.Core.Get(p)
-		srv.env.services.Players.PlayerAdded:Fire(p)
-		T.eq(srv.Core.Get(p), s1, "gleiche Sitzung")
-	end },
-
-	{ "Remote-Budget verwirft Flut still", function(T, H)
-		local srv = H.Server()
-		local p = H.Join(srv, 614, "Ede")
-		local dropped = 0
-		for i = 1, 200 do
-			if H.Act(srv, p, "quiz_new", { rid = i }) == "dropped" then
-				dropped += 1
-			end
-		end
-		T.check(dropped >= 150, "Flut verworfen (" .. dropped .. ")")
-		H.Advance(srv, 2)
-		T.eq(H.Act(srv, p, "quiz_new", { rid = 1000 }), "ok", "danach wieder Budget")
-	end },
-
-	{ "Stationen: Reichweite, nur eigene Oberfläche", function(T, H)
-		local srv = H.Server()
-		local a = H.Join(srv, 615, "Fee")
-		local b = H.Join(srv, 616, "Gus")
-		local entry = srv.World.Prompts[1]
-		T.eq(#srv.World.Prompts, 8, "8 Stationen mit Prompt")
-		local anchor = entry.prompt.Parent
-		local function character(pos)
-			local c = Instance.new("Model")
-			local root = Instance.new("Part")
-			root.Name = "HumanoidRootPart"
-			root.Position = pos
-			root.Parent = c
-			return c
-		end
-		anchor.Position = Vector3.new(0, 2, -43)
-		a.Character = character(Vector3.new(0, 3, -40))
-		b.Character = character(Vector3.new(0, 3, 40))
-		entry.prompt.Triggered:Fire(a)
-		entry.prompt.Triggered:Fire(b)
-		T.eq(#H.Notices(srv, a, "open"), 1, "A in Reichweite: öffnet")
-		T.eq(H.Notices(srv, a, "open")[1].tab, entry.tab, "richtiger Bereich")
-		T.eq(#H.Notices(srv, b, "open"), 0, "B außer Reichweite: nichts")
-	end },
-
-	{ "Live-Server mit DataStore-Ausfall: Hinweis und erneut beitreten, keine Daten überschrieben", function(T, H)
-		local srv = H.Server({ studio = false })
-		local ds = srv.env.services.DataStoreService.__data
-		H.Join(srv, 620, "Init")
-		local store = H.Store(srv)
-		local key = srv.Profiles.Key(621)
-		store.data[key] = { credits = 777, level = 20 }
-		ds.fail = true
-		local player = H.Join(srv, 621, "Hugo")
-		H.Advance(srv, 5)
-		T.eq(srv.Core.Get(player), nil, "keine Sitzung mit Ersatzprofil")
-		T.eq(player.__data.kicked, srv.S.Locale.T("profile_failed"), "Hinweis zum erneuten Beitreten")
-		ds.fail = false
-		T.eq(store.data[key].credits, 777, "Daten unverändert")
-		local again = H.Join(srv, 621, "Hugo")
-		T.eq(H.Profile(srv, again).credits, 777, "Wiederbeitritt lädt echte Daten")
+	{ "Herunterfahren: alle gespeichert, Sperren frei, Bestenliste geschrieben", function(T, H)
+		local g = H.Garage()
+		local MC = g:MiniShared("MiniConfig")
+		local a = g:Join(610, { name = "Anton" })
+		local b = g:Join(611, { name = "Berta" })
+		g:Advance(1)
+		g:D(a).money = 1111
+		g:D(b).money = 2222
+		g:Advance(5)
+		g:Close()
+		noErrors(T, g, "BindToClose")
+		T.eq(g:Record(610).data.money, 1111, "A gespeichert")
+		T.eq(g:Record(611).data.money, 2222, "B gespeichert")
+		T.eq(g:Record(610).lock, nil, "A freigegeben")
+		T.eq(g:Record(611).lock, nil, "B freigegeben")
+		local ordered = g:DataStoreMock().ordered[MC.LeaderboardStoreName].data
+		T.check(ordered["610"] ~= nil and ordered["611"] ~= nil, "Bestenliste beim Herunterfahren geschrieben")
+		g:Leave(a)
+		g:Advance(2)
+		T.eq(g:Record(610).lock, nil, "bleibt frei")
 	end },
 
 	{ "Letzter Spieler verlässt, Server fährt herunter: Speichern wird abgewartet", function(T, H)
-		local srv = H.Server()
-		local ds = srv.env.services.DataStoreService.__data
-		local player = H.Join(srv, 622, "Ines")
-		H.Profile(srv, player).credits = 3333
+		local g = H.Garage()
+		local ds = g:DataStoreMock()
+		local player = g:Join(622, { name = "Ines" })
+		g:Advance(1)
+		g:D(player).money = 3333
 		ds.updateYield = 2
-		H.Leave(srv, player) -- Speichern läuft noch (wartet auf den DataStore)
+		g:Leave(player) -- Speichern läuft noch (wartet auf den DataStore)
 		local done = false
-		srv.env.scheduler:spawn(function()
-			for _, fn in ipairs(srv.env.game.__data.closeCallbacks) do
+		g:Activate()
+		g.env.scheduler:spawnIn(g.env.serverCtx, function()
+			for _, fn in ipairs(g.env.game.__data.closeCallbacks) do
 				fn()
 			end
 			done = true
 		end)
+		g:Flush()
 		T.eq(done, false, "BindToClose wartet auf laufendes Speichern")
-		T.eq(srv.Core.PendingSaves, 1, "ein Speichervorgang offen")
-		H.Advance(srv, 5)
+		g:Advance(5)
 		T.eq(done, true, "BindToClose endet danach")
-		local stored = H.Store(srv).data[srv.Profiles.Key(622)]
-		T.eq(stored.credits, 3333, "gespeichert")
-		T.eq(stored._lock, nil, "Sperre freigegeben")
+		local rec = g:Record(622)
+		T.eq(rec.data.money, 3333, "gespeichert")
+		T.eq(rec.lock, nil, "Sperre freigegeben")
 	end },
 
 	{ "Schneller Wiederbeitritt auf demselben Server lädt den neuesten Stand", function(T, H)
-		local srv = H.Server()
-		local ds = srv.env.services.DataStoreService.__data
-		local player = H.Join(srv, 623, "Jonas")
-		H.Profile(srv, player).credits = 4444
+		local g = H.Garage()
+		local ds = g:DataStoreMock()
+		local player = g:Join(623, { name = "Jonas" })
+		g:Advance(1)
+		g:D(player).money = 4444
+		g:D(player).games.parts = 44
 		ds.updateYield = 1
-		H.Leave(srv, player)
-		local again = H.Join(srv, 623, "Jonas") -- während das Freigabe-Speichern noch läuft
-		H.Advance(srv, 15)
-		T.eq(H.Profile(srv, again).credits, 4444, "neuester Stand geladen")
-		H.Advance(srv, 70) -- Autosave der neuen Sitzung
-		T.eq(H.Store(srv).data[srv.Profiles.Key(623)].credits, 4444, "nichts überschrieben")
-		T.eq(#H.Errors(srv.env), 0, "keine Laufzeitfehler")
+		g:Leave(player)
+		local again = g:Join(623, { name = "Jonas" }) -- während das Freigabe-Speichern noch läuft
+		g:Advance(15)
+		T.eq(g:Profile(again) and g:Profile(again).writable, true, "keine temporäre Sitzung")
+		T.eq(g:D(again).money, 4444, "neuester Stand geladen")
+		T.eq(g:D(again).games.parts, 44, "neueste Minispiel-Daten geladen")
+		g:Advance(70) -- Autosave der neuen Sitzung
+		T.eq(g:Record(623).data.money, 4444, "nichts überschrieben")
+		noErrors(T, g)
 	end },
 
-	{ "Verlassen während der Game-Pass-Prüfung hinterlässt keine Sperre", function(T, H)
-		local srv = H.Server({
-			before = function(srv)
-				srv.S.Config.GamePasses.DoubleScrap.id = 111
-			end,
-		})
-		srv.env.services.MarketplaceService.__data.yield = 2
-		local player = H.Join(srv, 624, "Kim")
-		H.Advance(srv, 0.5)
-		H.Leave(srv, player)
-		H.Advance(srv, 10)
-		T.eq(srv.Core.Sessions[player], nil, "keine Sitzung")
-		local stored = H.Store(srv)
-		T.check(stored == nil or stored.data[srv.Profiles.Key(624)] == nil or stored.data[srv.Profiles.Key(624)]._lock == nil, "keine Sperre")
-		srv.S.Config.GamePasses.DoubleScrap.id = 0
+	{ "Verlassen während der Game-Pass-Prüfung hinterlässt keine Sperre und keine Sitzung", function(T, H)
+		local g = H.Garage({ before = function(g)
+			g:MiniShared("MiniConfig").GamePasses.DoubleScrap.id = 111
+			g.env.services.MarketplaceService.__data.yield = 2
+		end })
+		local player = g:Join(624, { name = "Kim" })
+		g:Advance(0.5)
+		g:Leave(player)
+		g:Advance(10)
+		T.eq(g:Mini().Sessions[player], nil, "keine Minispiel-Sitzung")
+		local rec = g:Record(624)
+		T.eq(rec and rec.lock, nil, "keine Sperre")
+		T.eq(#g:Notices(player, "offline"), 0, "kein Hinweis nach dem Verlassen")
+		noErrors(T, g)
 	end },
 
-	{ "Fehler einer Sitzung stoppt Tick und Sync der anderen nicht", function(T, H)
-		local srv = H.Server()
-		local a = H.Join(srv, 625, "Lars")
-		local b = H.Join(srv, 626, "Mona")
-		H.Profile(srv, a).games.press = nil -- kaputte Sitzung
-		H.Advance(srv, 3)
-		local before = #H.Sent(srv, "Sync", b)
-		H.Advance(srv, 3)
-		T.check(#H.Sent(srv, "Sync", b) > before, "B erhält weiter Snapshots")
-		T.check(#srv.env.warnings > 0, "Fehler protokolliert")
-		T.eq(#H.Errors(srv.env), 0, "Schleifen laufen weiter: " .. table.concat(H.Errors(srv.env), " | "))
+	{ "Keine doppelten Verbindungen, Aktionen nach Verlassen wirkungslos", function(T, H)
+		local g = H.Garage({ before = function(g)
+			g:BuildCity({ stations = { { key = "presse", tab = "press", pos = Vector3.new(0, 1, -350) } } })
+		end })
+		g:Advance(1)
+		local command = g:Remote("Command")
+		local players = g.env.services.Players
+		local prompt = g:Find("Workspace.City.Stations.presse"):FindFirstChildOfClass("ProximityPrompt")
+		local promptCount = prompt.Triggered:ConnectionCount()
+		local actionCount = command.OnServerEvent:ConnectionCount()
+		local added, removing = players.PlayerAdded:ConnectionCount(), players.PlayerRemoving:ConnectionCount()
+		for round = 1, 5 do
+			local p = g:Join(612, { name = "Carl" })
+			g:Advance(0.5)
+			g:Act(p, "mini_press_click", { count = 1 })
+			g:Leave(p)
+			g:Advance(0.5)
+			T.eq(g:Act(p, "mini_press_buy", { id = "pu0", level = 0, rid = round }), "dropped", "Aktion nach Verlassen verworfen")
+		end
+		T.eq(command.OnServerEvent:ConnectionCount(), actionCount, "Remote-Verbindungen konstant")
+		T.eq(players.PlayerAdded:ConnectionCount(), added, "PlayerAdded-Verbindungen konstant")
+		T.eq(players.PlayerRemoving:ConnectionCount(), removing, "PlayerRemoving-Verbindungen konstant")
+		T.eq(prompt.Triggered:ConnectionCount(), promptCount, "Stations-Prompt-Verbindungen konstant")
+		T.eq(promptCount, 1, "Station genau einmal gebunden")
+		T.eq(next(g:Mini().Sessions), nil, "keine Minispiel-Sitzungen übrig")
+		-- doppeltes PlayerAdded erzeugt keine zweite Sitzung
+		local p = g:Join(613, { name = "Dana" })
+		g:Advance(0.5)
+		local s1 = g:Session(p)
+		players.PlayerAdded:Fire(p)
+		g:Advance(0.5)
+		T.eq(g:Session(p), s1, "gleiche Sitzung")
+		noErrors(T, g)
 	end },
 
-	{ "Tafel zeigt Hinweis, wenn die Bestenliste fehlt", function(T, H)
-		local srv = H.Server({ dataStoreGetFail = true, studio = true })
-		H.Advance(srv, 2)
-		T.eq(srv.World.BoardStatus.Text, srv.S.Locale.T("leaderboard_unavailable"), "nicht mehr 'wird geladen'")
+	{ "Remote-Budget verwirft Flut still", function(T, H)
+		local g = H.Garage()
+		local p = g:Join(614, { name = "Ede" })
+		g:Advance(3)
+		local dropped = 0
+		for i = 1, 200 do
+			if g:Act(p, "mini_quiz_new", { rid = i }) == "dropped" then
+				dropped += 1
+			end
+		end
+		T.check(dropped >= 150, "Flut verworfen (" .. dropped .. ")")
+		g:Advance(2)
+		T.eq(g:Act(p, "mini_quiz_new", { rid = 1000 }), "ok", "danach wieder Budget")
+	end },
+
+	{ "Robux-Kauf während Minispiel-Aktionen: kein Geldverlust, transacting sperrt Minispiele", function(T, H)
+		local g = H.Garage()
+		local C = g:Config()
+		local product = C.CreditProducts[1]
+		product.productId = 424242
+		local ds = g:DataStoreMock()
+		local p = g:Join(615, { name = "Fee" })
+		g:Advance(1)
+		local d = g:D(p)
+		d.games.parts = 12
+		d.games.press.upgrades = { pu1 = 10 }
+		-- Minispiel-Geld vor dem Kauf
+		g:Act(p, "mini_scrapyard_sell", { rid = 1 })
+		local before = d.money
+		T.eq(d.games.parts, 7, "Altteile verkauft")
+		-- Kauf startet, DataStore antwortet langsam
+		ds.updateYield = 2
+		local decision, done = g:Purchase(p, 424242, "kauf-race")
+		T.eq(done, false, "Kauf wartet auf den DataStore")
+		T.eq(g:Profile(p).transacting, true, "transacting gesetzt")
+		local scrap0 = d.games.press.scrap
+		local m = g:Mark()
+		T.eq(g:Act(p, "mini_scrapyard_sell", { rid = 2 }), "dropped", "Minispiel-Aktion während transacting gesperrt")
+		T.eq(g:Act(p, "mini_press_exchange", { index = 1, rid = 3 }), "dropped", "Umtausch gesperrt")
+		T.check(g:HasToast(p, "Dein Kauf wird sicher gespeichert", m), "Hinweis an den Spieler")
+		T.eq(d.games.parts, 7, "keine Altteile verkauft")
+		-- Direkter Aufruf (doppelte Sicherung in MiniService)
+		T.eq(g:Mini().Handle(g:Session(p), "mini_scrapyard_sell", { rid = 4 }), "dropped", "MiniService sperrt selbst")
+		g:Advance(1.2)
+		T.check(d.games.press.scrap > scrap0, "Presse produziert während transacting weiter (Schrott)")
+		T.eq(d.money, before, "Geld während transacting unverändert")
+		g:Advance(3)
+		T.eq(g:Profile(p).transacting, false, "Kauf abgeschlossen")
+		T.eq(d.money, before + product.credits, "Credits gutgeschrieben, Minispiel-Geld erhalten")
+		T.eq(g:Record(615).data.money, before + product.credits, "gespeicherter Stand stimmt")
+		T.eq(g:Record(615).receipts["kauf-race"], true, "Beleg gespeichert")
+		ds.updateYield = 0
+		g:Advance(0.2)
+		T.eq(g:Act(p, "mini_scrapyard_sell", { rid = 5 }), "ok", "danach wieder spielbar")
+		T.eq(d.money, before + product.credits + 220, "Verkauf nach dem Kauf")
+		local _ = decision
+		noErrors(T, g)
+	end },
+
+	{ "Fehler einer Sitzung stoppt Tick und Snapshots der anderen nicht", function(T, H)
+		local g = H.Garage()
+		local a = g:Join(625, { name = "Lars" })
+		local b = g:Join(626, { name = "Mona" })
+		g:Advance(1)
+		g:D(a).games.press = nil -- kaputte Sitzung
+		g:Advance(3)
+		local m = g:Mark()
+		g:Advance(3)
+		T.check(#g:Events(b, "mini", m) > 0, "B erhält weiter Snapshots")
+		T.check(#g:Events(a, "state", m) > 0, "A erhält weiter den 2.4.0-Zustand")
+		T.check(#g:Warnings() > 0, "Fehler protokolliert")
+		noErrors(T, g, "Schleifen laufen weiter")
+	end },
+
+	{ "Stationen der Stadt: Reichweite, Tab öffnen, eröffnet bald, eigene Werkstatt", function(T, H)
+		local g = H.Garage({ before = function(g)
+			g:BuildCity({ stations = {
+				{ key = "presse", tab = "press", pos = Vector3.new(0, 1, -350) },
+				{ key = "autohaus", tab = "dealer", pos = Vector3.new(40, 1, -350) },
+				{ key = "heim", tab = "workshop", pos = Vector3.new(80, 1, -350) },
+			} })
+		end })
+		local a = g:Join(615, { name = "Fee" })
+		local b = g:Join(616, { name = "Gus" })
+		g:Advance(1)
+		local function prompt(key)
+			return g:Find("Workspace.City.Stations." .. key):FindFirstChildOfClass("ProximityPrompt")
+		end
+		g:Teleport(a, Vector3.new(0, 3, -345))
+		g:Teleport(b, Vector3.new(0, 3, -300))
+		local m = g:Mark()
+		g:Trigger(a, prompt("presse"), { force = true })
+		g:Trigger(b, prompt("presse"), { force = true })
+		local opened = g:Events(a, "mini_open", m)
+		T.eq(#opened, 1, "A in Reichweite: öffnet")
+		T.eq(opened[1] and opened[1].tab, "press", "richtiger Bereich")
+		T.eq(#g:Events(b, "mini_open", m), 0, "B außer Reichweite: nichts")
+		g:Teleport(a, Vector3.new(40, 3, -345))
+		m = g:Mark()
+		g:Trigger(a, prompt("autohaus"), { force = true })
+		T.check(g:HasToast(a, "Das Autohaus eröffnet bald.", m), "unbekannter Bereich: eröffnet bald")
+		g:Teleport(a, Vector3.new(80, 3, -345))
+		g:Trigger(a, prompt("heim"), { force = true })
+		local home = g:Station(a, "home")
+		T.check((g:Root(a).Position - home.Position).Magnitude < 12, "Station 'workshop' bringt in die eigene Werkstatt")
+		noErrors(T, g)
 	end },
 }

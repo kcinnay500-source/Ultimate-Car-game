@@ -21,7 +21,7 @@ Zuordnung (wie in default.project.json):
 Aufrufe:
   python tools/build_place.py Ultimate_Car_Game.rbxlx        Place bauen
   python tools/build_place.py --extract                      Skripte aus dem Basisplace nach src/garage schreiben
-  python tools/build_place.py --roundtrip                    Prüfen: Basis + unverändertes src/garage == Basis
+  python tools/build_place.py --roundtrip                    Prüfen: Basis + src/garage == Basis (bis auf Skript-Quelltexte)
 """
 import csv
 import hashlib
@@ -265,20 +265,49 @@ def cmd_extract():
     print(f"{len(scripts)} Skripte extrahiert")
 
 
+def _without_sources(root):
+    """Serialisiert den Baum mit geleerten Skript-Quelltexten (für den Vergleich "nur Skripte geändert")."""
+    for item in place_scripts(root).values():
+        prop(item, "Source").text = ""
+    return ET.tostring(root, encoding="utf-8")
+
+
 def cmd_roundtrip():
-    """Nur src/garage einsetzen (ohne Mini, ohne Welt) und mit der Basis vergleichen."""
+    """Basis + src/garage (ohne Mini, ohne Welt) mit der Basis vergleichen.
+
+    Solange src/garage unverändert ist, muss das Ergebnis byte-identisch sein. Seit dem 3.0-Merge ändert
+    src/garage einzelne Skripte (Kommentar "-- 3.0:"); dann gilt: dieselben Skripte an denselben Stellen,
+    und außer den Quelltexten ist der Place byte-identisch ("nur Skripte geändert")."""
     tree = load_base()
     root = tree.getroot()
     existing = place_scripts(root)
     files = src_files()
+    missing = [".".join(k) for k in existing if k not in files]
+    if missing:
+        print("Roundtrip WEICHT AB: Skripte ohne Datei in src/: " + ", ".join(missing))
+        return False
+    changed = []
     for key, item in existing.items():
-        prop(item, "Source").text = read_source(files[key][1])
+        cls, f = files[key]
+        if cls != item.get("class"):
+            print(f"Roundtrip WEICHT AB: {'.'.join(key)} ist {item.get('class')} im Basisplace, {cls} in src/")
+            return False
+        source = read_source(f)
+        if (prop(item, "Source").text or "") != source:
+            changed.append(".".join(key))
+        prop(item, "Source").text = source
     out = ROOT / "base" / ".roundtrip.rbxlx"
     write(tree, out)
     same = out.read_bytes() == BASE.read_bytes()
     out.unlink()
-    print("Roundtrip byte-identisch" if same else "Roundtrip WEICHT AB")
-    return same
+    if same:
+        print("Roundtrip byte-identisch")
+        return True
+    if _without_sources(root) == _without_sources(ET.parse(BASE).getroot()):
+        print(f"Roundtrip: nur Skripte geändert ({len(changed)}: {', '.join(changed)})")
+        return True
+    print("Roundtrip WEICHT AB: außer den Skripten hat sich der Place geändert")
+    return False
 
 
 def cmd_build(out: Path):

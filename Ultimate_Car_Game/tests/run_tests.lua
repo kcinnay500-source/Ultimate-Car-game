@@ -38,139 +38,48 @@ local function tryList(dir)
 	return ok and list or {}
 end
 
--- Alte 3.0-Ordner (werden nach src/mini portiert); fehlen sie, bleiben die Listen leer
-local FILES = {
-	shared = tryList(ROOT .. "/src/shared"),
-	server = tryList(ROOT .. "/src/server"),
-	client = tryList(ROOT .. "/src/client"),
-}
-
----------------------------------------------------------------- Harness (alte 3.0-Tests)
 local H = { Mock = Mock, T = T, ROOT = ROOT }
 
-function H.Env(opts)
-	local env = Mock.NewEnv(opts)
-	Mock.Activate(env)
-	Mock.LoadPlace(env, ROOT, FILES)
-	return env
+-- Lädt eine Hilfsdatei aus tests/ (z. B. tests/lib/garage_flow.lua)
+function H.Load(path)
+	return load(path)
 end
 
-function H.Shared(env)
-	local folder = env.services.ReplicatedStorage.Shared
-	local mods = {}
-	for _, inst in ipairs(folder:GetChildren()) do
-		mods[inst.Name] = require(inst)
+function H.Copy(v)
+	if type(v) ~= "table" then
+		return v
 	end
-	return mods
-end
-
-function H.ServerModule(env, name)
-	return require(env.services.ServerScriptService.Server:WaitForChild(name))
-end
-
--- Startet den kompletten alten 3.0-Server (Main.server.lua) mit Mock-Uhr
-function H.Server(opts)
-	opts = opts or {}
-	local env = H.Env(opts)
-	if opts.dataStoreGetFail then
-		env.services.DataStoreService.__data.getFail = true
+	local o = {}
+	for k, x in pairs(v) do
+		o[k] = H.Copy(x)
 	end
-	local srv = { env = env }
-	srv.S = H.Shared(env)
-	srv.Core = H.ServerModule(env, "Core")
-	srv.Core.Now = function()
-		return env.clock.now
+	return o
+end
+
+-- Tiefer Vergleich; liefert bei Abweichung den ersten Pfad als zweiten Wert
+function H.DeepEqual(a, b, path)
+	path = path or "."
+	if type(a) ~= type(b) then
+		return false, path
 	end
-	srv.Core.Precise = function()
-		return env.clock.precise
+	if type(a) ~= "table" then
+		if a ~= a and b ~= b then
+			return true
+		end
+		return a == b, path
 	end
-	srv.Core.NewRandom = function()
-		return Random.new(opts.seed or 4242)
-	end
-	for _, name in ipairs({ "Actions", "Profiles", "PressService", "LeaderboardService", "World", "DataUtil", "Purchases" }) do
-		srv[name] = H.ServerModule(env, name)
-	end
-	if opts.before then
-		opts.before(srv)
-	end
-	Mock.RunScript(env, env.services.ServerScriptService.Server.Main)
-	T.check(#env.scheduler.errors == 0, "Serverstart ohne Laufzeitfehler: " .. table.concat(env.scheduler.errors, " | "))
-	return srv
-end
-
-function H.Join(srv, userId, name)
-	Mock.Activate(srv.env)
-	local p = Mock.NewPlayer(srv.env, userId, name)
-	Mock.Join(srv.env, p)
-	return p
-end
-
-function H.Leave(srv, player)
-	Mock.Activate(srv.env)
-	Mock.Leave(srv.env, player)
-end
-
-function H.Session(srv, player)
-	return srv.Core.Get(player)
-end
-
-function H.Profile(srv, player)
-	local s = srv.Core.Get(player)
-	return s and s.profile
-end
-
-function H.Act(srv, player, action, payload)
-	Mock.Activate(srv.env)
-	return srv.Actions.Handle(player, action, payload)
-end
-
-function H.Advance(srv, seconds)
-	Mock.Activate(srv.env)
-	srv.env.clock:Advance(seconds)
-end
-
--- Alle Nachrichten eines Remotes an einen Spieler
-function H.Sent(srv, remoteName, player)
-	local remote = srv.env.services.ReplicatedStorage.Remotes[remoteName]
-	local out = {}
-	for _, e in ipairs(remote.__data.sent or {}) do
-		if e.player == player then
-			table.insert(out, e.args)
+	for k, v in pairs(a) do
+		local ok, where = H.DeepEqual(v, b[k], path .. "/" .. tostring(k))
+		if not ok then
+			return false, where
 		end
 	end
-	return out
-end
-
-function H.Notices(srv, player, kind)
-	local out = {}
-	for _, args in ipairs(H.Sent(srv, "Notice", player)) do
-		if args[1] == kind then
-			table.insert(out, args[2])
+	for k in pairs(b) do
+		if a[k] == nil then
+			return false, path .. "/" .. tostring(k)
 		end
 	end
-	return out
-end
-
-function H.LastSync(srv, player)
-	local list = H.Sent(srv, "Sync", player)
-	return list[#list] and list[#list][1]
-end
-
-function H.Store(srv)
-	local ds = srv.env.services.DataStoreService.__data
-	return ds.stores[srv.S.Config.ProfileStoreName], ds
-end
-
-function H.Close(srv)
-	Mock.Activate(srv.env)
-	for _, fn in ipairs(srv.env.game.__data.closeCallbacks) do
-		srv.env.scheduler:spawn(fn)
-	end
-	srv.env.clock:Advance(30)
-end
-
-function H.Errors(env)
-	return env.scheduler.errors
+	return true
 end
 
 ---------------------------------------------------------------- Fixture (Basisbaum) mit Aktualitätsprüfung
@@ -400,6 +309,20 @@ function Garage:StartServer()
 		end
 	end
 	Mock.Flush(self.env)
+	-- Ergebnis von MiniService.Handle mitschreiben (GarageServer ruft Mini.Handle über das Modul-Table auf)
+	local inst = self:Find("ServerScriptService.Garage.Mini.MiniService")
+	if inst then
+		local Mini = Mock.Require(self.env, inst)
+		if not Mini.__testWrapped then
+			local original = Mini.Handle
+			Mini.Handle = function(...)
+				local result = original(...)
+				self.lastMiniResult = result
+				return result
+			end
+			Mini.__testWrapped = true
+		end
+	end
 	return self
 end
 
@@ -569,6 +492,12 @@ function Garage:Trigger(player, prompt, opts)
 	return Mock.TriggerPrompt(self.env, prompt, player, opts)
 end
 
+-- Developer-Product-Kauf wie Roblox (ruft MarketplaceService.ProcessReceipt); liefert Entscheidung, fertig?
+function Garage:Purchase(player, productId, purchaseId)
+	self:Activate()
+	return Mock.Purchase(self.env, player, productId, purchaseId)
+end
+
 function Garage:DataStoreMock()
 	return self.env.services.DataStoreService.__data
 end
@@ -658,6 +587,168 @@ function Garage:FindGui(player, what, opts)
 		end
 	end
 	return nil
+end
+
+---------------------------------------------------------------- Minispiele (src/mini) im echten Server
+-- MiniService (dieselbe Modulinstanz wie in GarageServer)
+function Garage:Mini()
+	return self:Require("ServerScriptService.Garage.Mini.MiniService")
+end
+
+-- Geteiltes Mini-Modul (ReplicatedStorage.GarageShared.Mini.<name>) oder Server-Mini-Modul
+function Garage:MiniShared(name)
+	return self:Require("ReplicatedStorage.GarageShared.Mini." .. name)
+end
+
+function Garage:MiniServer(name)
+	return self:Require("ServerScriptService.Garage.Mini." .. name)
+end
+
+-- Minispiel-Sitzung (ms) bzw. GarageServer-Sitzung (p = ms.p) eines Spielers
+function Garage:MiniState(player)
+	return self:Mini().Sessions[player]
+end
+
+function Garage:Session(player)
+	local ms = self:MiniState(player)
+	return ms and ms.p
+end
+
+function Garage:Profile(player)
+	local s = self:Session(player)
+	return s and s.profile
+end
+
+-- Live-Profildaten (profile.data) auf dem Server
+function Garage:D(player)
+	local prof = self:Profile(player)
+	return prof and prof.data
+end
+
+-- Minispiel-Aktion über den echten Weg (Remotes.Command -> request -> Mini.Handle).
+-- Rückgabe: Ergebnis von Mini.Handle ("ok", "invalid", "cooldown", "duplicate", "error", "dropped")
+-- oder "dropped", wenn request() die Aktion vorher verworfen hat (Budget, transacting, Arg-Filter, keine Sitzung).
+function Garage:Act(player, action, payload)
+	self.lastMiniResult = nil
+	self:Send(player, action, payload or {})
+	return self.lastMiniResult or "dropped"
+end
+
+-- mini_notice-Hinweise einer Art
+function Garage:Notices(player, kind, since)
+	local out = {}
+	for _, n in ipairs(self:Events(player, "mini_notice", since)) do
+		if type(n) == "table" and n.kind == kind then
+			table.insert(out, n)
+		end
+	end
+	return out
+end
+
+function Garage:MiniSnapshot(player, since)
+	return self:Last(player, "mini", since)
+end
+
+-- Führt fn im Client-Kontext des Spielers aus (require liefert dann die Client-Modulinstanzen)
+function Garage:InClient(player, fn, ...)
+	self:Activate()
+	local client = self.env.clients[player]
+	assert(client, "InClient: für diesen Spieler läuft kein Client")
+	local results
+	local args = table.pack(...)
+	self.env.scheduler:spawnIn(client.ctx, function()
+		results = table.pack(fn(table.unpack(args, 1, args.n)))
+	end)
+	Mock.Flush(self.env)
+	assert(results, "InClient: Funktion hat gewartet oder ist fehlgeschlagen: " .. self:ErrorText())
+	return table.unpack(results, 1, results.n)
+end
+
+-- Client-Modul aus PlayerScripts (z. B. "Mini.MiniUI") im Client-Kontext laden
+function Garage:ClientModule(player, path)
+	local node = player:FindFirstChild("PlayerScripts")
+	for part in string.gmatch(path, "[^%.]+") do
+		node = node and node:FindFirstChild(part)
+	end
+	assert(node, "Client-Modul fehlt: " .. path)
+	return self:InClient(player, function()
+		return require(node)
+	end)
+end
+
+-- Server -> Client-Ereignis wie Event:FireClient (für Hinweise, die der Server gerade nicht erzeugt)
+function Garage:FireClient(player, kind, data)
+	self:Activate()
+	self:Remote("Event"):FireClient(player, kind, data)
+	Mock.Flush(self.env)
+end
+
+-- Kleine Stadt für Tests (worldgen liefert die echte): Stationen mit Prompt, Ankunftspunkte, Tafel, CitySpawn.
+-- opts.stations = { {key, tab, pos = Vector3, title?} }, opts.arrivals = { {key, pos = Vector3} }
+function Garage:BuildCity(opts)
+	self:Activate()
+	opts = opts or {}
+	local env = self.env
+	local function part(name, parent, pos, size)
+		local p = env.Instance.new("Part")
+		p.Name = name
+		p.Anchored = true
+		p.Size = size or Vector3.new(4, 1, 4)
+		p.CFrame = CFrame.new(pos)
+		p.Parent = parent
+		return p
+	end
+	local city = env.Instance.new("Model")
+	city.Name = "City"
+	local stations = env.Instance.new("Folder")
+	stations.Name = "Stations"
+	stations.Parent = city
+	for _, s in ipairs(opts.stations or {}) do
+		local st = part(s.key, stations, s.pos)
+		st:SetAttribute("MiniTab", s.tab)
+		if s.title then
+			st:SetAttribute("MiniTitle", s.title)
+		end
+		local prompt = env.Instance.new("ProximityPrompt")
+		prompt.ActionText = "Öffnen"
+		prompt.MaxActivationDistance = 10
+		prompt.RequiresLineOfSight = false
+		prompt.Parent = st
+	end
+	local arrivals = env.Instance.new("Folder")
+	arrivals.Name = "Arrivals"
+	arrivals.Parent = city
+	for _, a in ipairs(opts.arrivals or {}) do
+		local ap = part(a.key, arrivals, a.pos)
+		ap.Transparency = 1
+		ap.CanCollide = false
+	end
+	if opts.board ~= false then
+		local board = env.Instance.new("Model")
+		board.Name = "LeaderboardBoard"
+		board.Parent = city
+		local screen = part("Tafel", board, Vector3.new(0, 10, -400), Vector3.new(20, 12, 1))
+		local gui = env.Instance.new("SurfaceGui")
+		gui.Parent = screen
+		local status = env.Instance.new("TextLabel")
+		status.Name = "Status"
+		status.Parent = gui
+		for i = 1, 10 do
+			local row = env.Instance.new("TextLabel")
+			row.Name = "Row" .. i
+			row.Parent = gui
+		end
+	end
+	if opts.spawn ~= false then
+		local spawn = env.Instance.new("SpawnLocation")
+		spawn.Name = "CitySpawn"
+		spawn.Anchored = true
+		spawn.Size = Vector3.new(12, 1, 12)
+		spawn.CFrame = CFrame.new(opts.spawnAt or Vector3.new(0, 0.5, -300))
+		spawn.Parent = city
+	end
+	city.Parent = env.workspace
+	return city
 end
 
 H.GarageMeta = Garage
