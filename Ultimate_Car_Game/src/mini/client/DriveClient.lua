@@ -1,23 +1,26 @@
 -- DriveClient: Fahren mit dem eigenen Auto (Client). Gestartet von MiniClient: DriveClient.Start(ctx).
 --
 -- Sobald die eigene Figur in einem VehicleSeat eines eigenen Autos sitzt (Vorfahre-Model mit Attribut
--- OwnerUserId == LocalPlayer.UserId), läuft der Fahrregler und das Tacho-HUD erscheint:
---   * Fahrregler: VehicleSeat.ThrottleFloat/SteerFloat (Tastatur, Gamepad und Roblox-Standard-Touchsteuerung)
---     -> Antrieb (MotorRL/MotorRR, optional MotorFL/MotorFR: AngularVelocity + MotorMaxTorque) und Lenkung
---     (SteerFL/SteerFR: HingeConstraint Servo, TargetAngle). Der Fahrer ist Netzwerk-Besitzer (Server:
---     SetNetworkOwner), daher wirken die lokal gesetzten Werte ohne Verzögerung.
---   * Tacho (km/h, Gang), Nitro-Taste N / Gamepad X / Handy-Knopf (sendet nur mini_car_nitro, der Server
---     setzt NitroUntil), Zeitfahren-Anzeige (track_* Hinweise), Probefahrt-Restzeit.
+-- OwnerId bzw. OwnerUserId == LocalPlayer.UserId), laufen Fahrregler und Tacho-HUD:
+--   * Fahrregler: VehicleSeat.ThrottleFloat/SteerFloat (Tastatur, Gamepad und Roblox-Standard-Touchsteuerung
+--     setzen sie über das PlayerModule) -> Achs-Motoren (AngularVelocity, MotorMaxTorque) und Lenk-Servos
+--     (TargetAngle). Der Fahrer ist Netzwerk-Besitzer (Server: SetNetworkOwner), daher wirken die lokal gesetzten
+--     Werte ohne Verzögerung. Der Server stellt beim Bau nur die Parkbremse ein.
+--   * Tacho (km/h, Gang), Nitro-Taste N / Gamepad X / Handy-Knopf (sendet nur mini_car_nitro; der Server setzt
+--     NitroUntil/NitroReadyAt), Zeitfahren-Anzeige (mini_notice track_*), Probefahrt-Restzeit.
 --   * Die Kamera bleibt Roblox-Standard.
 --
--- Modell-Attribute (VehicleFactory/CarService): OwnerUserId, CarId, TopSpeed (Studs/s), Torque (MotorMaxTorque),
--- SteerAngle (Grad), optional WheelRadius (Studs, Standard 1,3), Gears, Nitro (Stufe 0..3), NitroUntil,
--- NitroReadyAt (Serverzeit, workspace:GetServerTimeNow), NitroBoost (Faktor, Standard 1,35), TestDrive (bool),
--- ExpiresAt (Serverzeit, Ende der Probefahrt).
--- Folder "Drive" im Modell mit den Constraints (oder ObjectValues darauf) MotorRL, MotorRR, [MotorFL, MotorFR],
--- SteerFL, SteerFR. Attribut Direction (1/-1) am Constraint bzw. ObjectValue: positive AngularVelocity × Direction
--- rollt vorwärts; die Lenkung setzt TargetAngle = -SteerFloat × Lenkwinkel × Direction (Direction 1: Hinge-Achse
--- zeigt nach oben, positiver Winkel lenkt nach links).
+-- Fahrzeug-Aufbau (VehicleFactory), zwei Namensschemata werden erkannt:
+--   Folder "Drive": Axle_FL/FR/RL/RR (CylindricalConstraint, Winkel-Motor) + Steer_FL/FR (HingeConstraint Servo)
+--                   oder MotorRL/MotorRR[/MotorFL/MotorFR] + SteerFL/SteerFR (Constraint oder ObjectValue darauf).
+--   Vorzeichen: positive AngularVelocity rollt vorwärts, positiver TargetAngle lenkt nach RECHTS. Korrektur über
+--   Modell-Attribute DriveSign/SteerSign oder Attribut Direction (±1) am Constraint bzw. ObjectValue.
+--   Angetrieben: Attribut DriveWheels ("RL,RR", "FL,FR", "FL,FR,RL,RR"); Motor*-Constraints sind immer angetrieben.
+--   Nicht angetriebene Achsen rollen frei und bremsen beim Bremsen/Halten mit.
+-- Modell-Attribute: OwnerId|OwnerUserId, CarId, MaxSpeed|TopSpeed (Studs/s), ReverseSpeed (Studs/s), Torque (je
+-- angetriebenem Rad), BrakeTorque, CoastTorque, ParkTorque (je Rad), SteerAngle (Grad), WheelRadius, Gears,
+-- KmhPerStud, NitroLevel|Nitro (0..3), NitroBoost, NitroSeconds, NitroCooldown, NitroUntil, NitroReadyAt
+-- (Serverzeit, workspace:GetServerTimeNow), Testdrive|TestDrive (bool), TestdriveEnds|ExpiresAt (Serverzeit).
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -28,16 +31,17 @@ local DriveClient = {}
 DriveClient.KmhPerStud = 0.28 * 3.6 -- 1 Stud = 0,28 m (Roblox-Maßstab): Studs/s -> km/h
 DriveClient.WheelRadius = 1.3 -- Reifen der 2.4.0-Vorlagen: Zylinder 2,6 Durchmesser
 DriveClient.SteerAngle = 30
-DriveClient.ReverseFactor = 0.35 -- Rückwärts höchstens 35 % der Spitze
-DriveClient.BrakeFactor = 2.5 -- Bremsmoment = 2,5 × Antriebsmoment
-DriveClient.CoastFactor = 0.08 -- Motorbremse beim Rollen ohne Gas
+DriveClient.ReverseFactor = 0.3 -- Rückwärts höchstens 30 % der Spitze (CarCatalog.ReverseShare)
+DriveClient.BrakeFactor = 2.5 -- Bremsmoment = 2,5 × Antriebsmoment, wenn BrakeTorque fehlt
+DriveClient.CoastFactor = 0.08 -- Motorbremse beim Rollen ohne Gas: Anteil des Bremsmoments (CarCatalog.Physics.coastShare)
+DriveClient.ParkFactor = 1.5 -- Parkbremse nach dem Aussteigen: Anteil des Bremsmoments (CarCatalog.Physics.parkShare)
+DriveClient.Gears = 5 -- Gang-Anzeige ohne Attribut Gears (CarCatalog.BaseGears)
 DriveClient.HighSpeedSteer = 0.45 -- bei Spitze nur noch 45 % Lenkeinschlag
 DriveClient.NitroBoost = 1.35
 DriveClient.NitroSendGap = 0.75
 DriveClient.Action = "UCG_Nitro"
 
-local MOTORS = { "MotorRL", "MotorRR", "MotorFL", "MotorFR" }
-local STEERS = { "SteerFL", "SteerFR" }
+local CORNERS = { "FL", "FR", "RL", "RR" }
 local MOTOR_CLASSES = { HingeConstraint = true, CylindricalConstraint = true }
 local STEER_CLASSES = { HingeConstraint = true, CylindricalConstraint = true }
 
@@ -65,6 +69,25 @@ local function num(v)
 	return v
 end
 
+-- Grundwerte aus dem geteilten CarCatalog übernehmen (falls vorhanden), damit Client und Server gleich rechnen
+local function loadCatalogDefaults()
+	local ok, cat = pcall(function()
+		local mini = game:GetService("ReplicatedStorage"):FindFirstChild("GarageShared")
+		mini = mini and mini:FindFirstChild("Mini")
+		local inst = mini and mini:FindFirstChild("CarCatalog")
+		return inst and require(inst)
+	end)
+	if not ok or type(cat) ~= "table" then
+		return
+	end
+	DriveClient.KmhPerStud = num(cat.KmhPerStud) or DriveClient.KmhPerStud
+	DriveClient.ReverseFactor = num(cat.ReverseShare) or DriveClient.ReverseFactor
+	DriveClient.Gears = num(cat.BaseGears) or DriveClient.Gears
+	local phys = type(cat.Physics) == "table" and cat.Physics or {}
+	DriveClient.CoastFactor = num(phys.coastShare) or DriveClient.CoastFactor
+	DriveClient.ParkFactor = num(phys.parkShare) or DriveClient.ParkFactor
+end
+
 local function serverNow()
 	return workspace:GetServerTimeNow()
 end
@@ -88,10 +111,26 @@ local function lapTimeFine(seconds)
 end
 
 ---------------------------------------------------------------- Fahrzeug erkennen
+-- erstes vorhandene Attribut aus einer Liste (Namensschemata von VehicleFactory und Vertrag)
+local function attr(model, a, b, c)
+	local v = model:GetAttribute(a)
+	if v == nil and b then
+		v = model:GetAttribute(b)
+	end
+	if v == nil and c then
+		v = model:GetAttribute(c)
+	end
+	return v
+end
+
+local function ownerOf(model)
+	return num(attr(model, "OwnerId", "OwnerUserId"))
+end
+
 local function ownerModel(seat)
 	local node = seat.Parent
 	while node and node ~= workspace do
-		if node:IsA("Model") and node:GetAttribute("OwnerUserId") ~= nil then
+		if node:IsA("Model") and ownerOf(node) ~= nil then
 			return node
 		end
 		node = node.Parent
@@ -223,7 +262,7 @@ end
 
 ---------------------------------------------------------------- Nitro
 local function nitroState(model, now)
-	local level = model and model:GetAttribute("Nitro")
+	local level = model and attr(model, "NitroLevel", "Nitro")
 	level = level == nil and nil or (num(level) or 0)
 	local untilT = num(model and model:GetAttribute("NitroUntil")) or 0
 	local readyAt = num(model and model:GetAttribute("NitroReadyAt")) or 0
@@ -260,24 +299,50 @@ local function onNitroAction(_, inputState)
 end
 
 ---------------------------------------------------------------- Ein-/Aussteigen
-local function enter(seat, model)
+-- Achsen und Lenkung eines Fahrzeugs einsammeln (einmal beim Einsteigen)
+function DriveClient.Collect(model)
 	local folder = model:FindFirstChild("Drive")
-	local d = { seat = seat, model = model, motors = {}, steers = {} }
-	for _, name in ipairs(MOTORS) do
-		local e = resolve(folder, model, name, MOTOR_CLASSES)
+	local d = { motors = {}, steers = {} }
+	local driven = {}
+	local list = attr(model, "DriveWheels")
+	if type(list) == "string" and list ~= "" then
+		for c in string.gmatch(list, "%u%u") do
+			driven[c] = true
+		end
+	else
+		driven.RL, driven.RR = true, true
+	end
+	for _, c in ipairs(CORNERS) do
+		local e = resolve(folder, model, "Axle_" .. c, MOTOR_CLASSES)
 		if e then
+			e.driven = driven[c] == true
+		else
+			e = resolve(folder, model, "Motor" .. c, MOTOR_CLASSES)
+			if e then
+				e.driven = true
+			end
+		end
+		if e then
+			e.corner = c
 			e.last = {}
 			table.insert(d.motors, e)
 		end
 	end
-	for _, name in ipairs(STEERS) do
-		local e = resolve(folder, model, name, STEER_CLASSES)
+	for _, c in ipairs({ "FL", "FR" }) do
+		local e = resolve(folder, model, "Steer_" .. c, STEER_CLASSES) or resolve(folder, model, "Steer" .. c, STEER_CLASSES)
 		if e then
+			e.corner = c
 			e.last = {}
 			table.insert(d.steers, e)
 		end
 	end
-	-- Grundmoment: Attribut Torque, sonst was der Server am ersten Motor eingestellt hat
+	return d
+end
+
+local function enter(seat, model)
+	local d = DriveClient.Collect(model)
+	d.seat, d.model = seat, model
+	-- Antriebsmoment: Attribut Torque, sonst was der Server am ersten Motor eingestellt hat
 	d.baseTorque = num(model:GetAttribute("Torque")) or (d.motors[1] and num(d.motors[1].c.MotorMaxTorque)) or 0
 	pcall(function()
 		seat.HeadsUpDisplay = false -- eigener Tacho statt Roblox-Standardanzeige
@@ -302,11 +367,13 @@ local function exit()
 	if not d then
 		return
 	end
-	-- Parkbremse: Räder halten, Lenkung gerade
+	-- Parkbremse: alle Räder halten, Lenkung gerade
+	local brake = num(d.model:GetAttribute("BrakeTorque")) or d.baseTorque * DriveClient.BrakeFactor
+	local park = num(d.model:GetAttribute("ParkTorque")) or brake * DriveClient.ParkFactor
 	for _, m in ipairs(d.motors) do
 		set(m, "AngularVelocity", 0)
-		if d.baseTorque > 0 then
-			set(m, "MotorMaxTorque", d.baseTorque)
+		if park > 0 then
+			set(m, "MotorMaxTorque", park)
 		end
 	end
 	for _, s in ipairs(d.steers) do
@@ -324,52 +391,67 @@ local function control(d, dt)
 	local now = serverNow()
 	local _, nitro = nitroState(model, now)
 	local boost = nitro and (num(model:GetAttribute("NitroBoost")) or DriveClient.NitroBoost) or 1
-	local topSpeed = num(model:GetAttribute("TopSpeed")) or num(seat.MaxSpeed) or 60
+	local topSpeed = num(attr(model, "MaxSpeed", "TopSpeed")) or num(seat.MaxSpeed) or 60
 	local radius = num(model:GetAttribute("WheelRadius")) or DriveClient.WheelRadius
 	local steerMax = num(model:GetAttribute("SteerAngle")) or DriveClient.SteerAngle
+	local driveSign = (num(model:GetAttribute("DriveSign")) or 1) < 0 and -1 or 1
+	local steerSign = (num(model:GetAttribute("SteerSign")) or 1) < 0 and -1 or 1
 	local torque = d.baseTorque
+	local brake = num(model:GetAttribute("BrakeTorque")) or torque * DriveClient.BrakeFactor
+	local coast = num(model:GetAttribute("CoastTorque")) or brake * DriveClient.CoastFactor
 
 	local velocity = seat.AssemblyLinearVelocity
 	local forward = seat.CFrame.LookVector
 	local fwd = velocity:Dot(forward)
 
 	local maxFwd = topSpeed * boost
-	local maxRev = topSpeed * DriveClient.ReverseFactor
-	local target, motorTorque
+	local maxRev = num(model:GetAttribute("ReverseSpeed")) or topSpeed * DriveClient.ReverseFactor
+	-- Betriebsart: drive (Gas in Fahrtrichtung), brake (Gegengas), hold (steht ohne Gas), coast (rollt ohne Gas)
+	local mode, target = "coast", 0
 	if throttle > 0.05 then
 		if fwd < -2 then
-			target, motorTorque = 0, torque * DriveClient.BrakeFactor -- rollt rückwärts: erst bremsen
+			mode = "brake" -- rollt rückwärts: erst bremsen
 		else
-			target, motorTorque = maxFwd * throttle, torque * boost
+			mode, target = "drive", maxFwd * throttle
 		end
 	elseif throttle < -0.05 then
 		if fwd > 2 then
-			target, motorTorque = 0, torque * DriveClient.BrakeFactor -- fährt vorwärts: bremsen
+			mode = "brake" -- fährt vorwärts: bremsen
 		else
-			target, motorTorque = -maxRev * -throttle, torque
+			mode, target = "drive", -maxRev * -throttle
 		end
 	elseif math.abs(fwd) < 1 then
-		target, motorTorque = 0, torque -- steht: halten
-	else
-		target, motorTorque = 0, torque * DriveClient.CoastFactor -- rollen lassen, leichte Motorbremse
+		mode = "hold"
 	end
-	local angular = target / math.max(0.1, radius)
+	local angular = target / math.max(0.1, radius) * driveSign
 	for _, m in ipairs(d.motors) do
-		set(m, "AngularVelocity", angular * m.dir)
-		if torque > 0 then
-			set(m, "MotorMaxTorque", motorTorque)
+		local velocityOut, torqueOut
+		if mode == "drive" then
+			if m.driven then
+				velocityOut, torqueOut = angular, torque * boost
+			else
+				velocityOut, torqueOut = 0, 0 -- frei rollen
+			end
+		elseif mode == "coast" then
+			velocityOut, torqueOut = 0, m.driven and coast or 0
+		else
+			velocityOut, torqueOut = 0, brake -- bremsen bzw. halten: alle Räder
 		end
+		set(m, "AngularVelocity", velocityOut * m.dir)
+		set(m, "MotorMaxTorque", torqueOut)
 	end
 	local speedRatio = math.clamp(math.abs(fwd) / math.max(1, topSpeed), 0, 1)
-	local angle = -steer * steerMax * (1 - (1 - DriveClient.HighSpeedSteer) * speedRatio)
+	-- positiver Winkel = rechts (VehicleFactory: Scharnierachse nach unten); SteerFloat +1 = rechts
+	local angle = steer * steerMax * (1 - (1 - DriveClient.HighSpeedSteer) * speedRatio) * steerSign
 	for _, s in ipairs(d.steers) do
 		set(s, "TargetAngle", angle * s.dir)
 	end
+	info.mode = mode
 
 	-- Anzeige-Werte
 	local speed = math.abs(fwd)
 	shownSpeed += (speed - shownSpeed) * math.clamp(dt * 8, 0, 1)
-	local gears = math.max(1, math.floor(num(model:GetAttribute("Gears")) or 6))
+	local gears = math.max(1, math.floor(num(model:GetAttribute("Gears")) or DriveClient.Gears))
 	local gear
 	if fwd < -1 then
 		gear = "R"
@@ -379,7 +461,7 @@ local function control(d, dt)
 		gear = tostring(math.clamp(1 + math.floor(speed / math.max(1, topSpeed) * gears), 1, gears))
 	end
 	info.speed = speed
-	info.kmh = math.floor(shownSpeed * DriveClient.KmhPerStud + 0.5)
+	info.kmh = math.floor(shownSpeed * (num(model:GetAttribute("KmhPerStud")) or DriveClient.KmhPerStud) + 0.5)
 	info.gear = gear
 	info.nitro = nitro
 	info.throttle, info.steer, info.target, info.angle = throttle, steer, target, angle
@@ -394,7 +476,7 @@ local function render(d)
 	refs.nitro.Visible = level ~= 0
 	refs.nitroLabel.Text = level == 0 and "–" or "Nitro"
 	if active then
-		local dur = num(d.model:GetAttribute("NitroDuration")) or 3
+		local dur = num(attr(d.model, "NitroSeconds", "NitroDuration")) or 3
 		UI.SetProgress(refs.nitroFill, (untilT - now) / math.max(0.1, dur))
 		refs.nitro.Text = "NITRO!"
 		UI.SetEnabled(refs.nitro, false, T.purple)
@@ -411,7 +493,12 @@ local function render(d)
 	end
 
 	-- Zeitfahren > Ergebnis > Probefahrt
-	if track.active then
+	if track.active and now < track.startedAt then
+		setSide(true)
+		refs.sideTime.Text = "Start in " .. math.ceil(track.startedAt - now - 1e-6)
+		refs.sideTime.TextColor3 = T.yellow
+		refs.sideSub.Text = "Zeitfahren"
+	elseif track.active then
 		setSide(true)
 		refs.sideTime.Text = lapTime(now - track.startedAt)
 		refs.sideTime.TextColor3 = T.text
@@ -419,16 +506,16 @@ local function render(d)
 	elseif result and os.clock() < result.untilClock then
 		setSide(true)
 		if result.cancelled then
-			refs.sideTime.Text = "Abbruch"
+			refs.sideTime.Text = "Ungültig"
 			refs.sideTime.TextColor3 = T.red
-			refs.sideSub.Text = "Zeitfahren beendet"
+			refs.sideSub.Text = DriveClient.ReasonText(result.reason)
 		else
 			refs.sideTime.Text = lapTimeFine(result.time)
 			refs.sideTime.TextColor3 = result.newBest and T.green or T.text
 			refs.sideSub.Text = result.newBest and "Neue Bestzeit!" or (result.best and ("Bestzeit " .. lapTimeFine(result.best)) or "Ziel")
 		end
-	elseif d.model:GetAttribute("TestDrive") == true then
-		local ends = num(d.model:GetAttribute("ExpiresAt"))
+	elseif attr(d.model, "Testdrive", "TestDrive") == true then
+		local ends = num(attr(d.model, "TestdriveEnds", "ExpiresAt", "TestdriveUntil"))
 		setSide(true)
 		refs.sideTime.Text = ends and countdown(ends - now) or "–"
 		refs.sideTime.TextColor3 = ends and ends - now < 10 and T.red or T.text
@@ -448,7 +535,7 @@ local function step(dt)
 	end
 	if not drive and seat and seat:IsA("VehicleSeat") then
 		local model = ownerModel(seat)
-		if model and model:GetAttribute("OwnerUserId") == player.UserId then
+		if model and ownerOf(model) == player.UserId then
 			enter(seat, model)
 		end
 	end
@@ -459,8 +546,23 @@ local function step(dt)
 end
 
 ---------------------------------------------------------------- Server-Hinweise und Snapshot
--- mini_notice: track_start {startedAt, total}, track_checkpoint {index, total, time}, track_finish {time, best,
--- newBest, reward}, track_cancel. Gleiche Tabelle zweimal (z. B. über TrackUI weitergereicht) wirkt einmal.
+-- Gründe für ungültige Läufe (TrackRules: early, tooFast; CarService: expired, left, despawn)
+DriveClient.Reasons = {
+	early = "Frühstart",
+	tooFast = "Abkürzung erkannt",
+	expired = "Zeit abgelaufen",
+	left = "Auto verlassen",
+	despawn = "Auto abgestellt",
+}
+function DriveClient.ReasonText(reason)
+	return DriveClient.Reasons[reason] or "Lauf abgebrochen"
+end
+
+local CANCEL = { track_cancel = true, track_abort = true, track_invalid = true, track_fail = true }
+
+-- mini_notice: track_start {startAt|startedAt (Serverzeit, nach der Startampel), total}, track_checkpoint {index,
+-- total, time}, track_finish {time, best, newBest, reward}, track_cancel|track_invalid {reason}.
+-- Gleiche Tabelle zweimal (z. B. über TrackUI weitergereicht) wirkt einmal.
 function DriveClient.OnNotice(data)
 	if type(data) ~= "table" or data == lastNotice then
 		return
@@ -469,7 +571,7 @@ function DriveClient.OnNotice(data)
 	local kind = data.kind
 	if kind == "track_start" then
 		track.active = true
-		track.startedAt = num(data.startedAt) or serverNow()
+		track.startedAt = num(data.startAt) or num(data.startedAt) or serverNow()
 		track.index = 0
 		track.total = num(data.total) or track.total
 		track.localSince = os.clock()
@@ -477,7 +579,7 @@ function DriveClient.OnNotice(data)
 	elseif kind == "track_checkpoint" then
 		if not track.active then
 			track.active = true
-			track.startedAt = num(data.startedAt) or (serverNow() - (num(data.time) or 0))
+			track.startedAt = num(data.startAt) or num(data.startedAt) or (serverNow() - (num(data.time) or 0))
 			track.localSince = os.clock()
 			result = nil
 		end
@@ -489,9 +591,9 @@ function DriveClient.OnNotice(data)
 			time = num(data.time), best = num(data.best), newBest = data.newBest == true, reward = num(data.reward),
 			untilClock = os.clock() + 8,
 		}
-	elseif kind == "track_cancel" or kind == "track_abort" then
+	elseif CANCEL[kind] then
 		track.active = false
-		result = { cancelled = true, untilClock = os.clock() + 4 }
+		result = { cancelled = true, reason = data.reason, untilClock = os.clock() + 5 }
 	end
 end
 
@@ -501,21 +603,22 @@ function DriveClient.OnSnapshot(s)
 	if type(tr) ~= "table" then
 		return
 	end
-	if tr.active == true and num(tr.startedAt) then
+	local startAt = num(tr.startAt) or num(tr.startedAt)
+	if tr.active == true and startAt then
 		if not track.active then
 			track.localSince = os.clock()
 			result = nil
 		end
 		track.active = true
-		track.startedAt = num(tr.startedAt)
-		track.index = num(tr.checkpoint) or num(tr.index) or track.index
+		track.startedAt = startAt
+		track.index = num(tr.checkpoint) or num(tr.index) or (num(tr.next) and num(tr.next) - 1) or track.index
 		track.total = num(tr.total) or track.total
 	elseif tr.active == false and track.active and os.clock() - track.localSince > 2 then
 		track.active = false
 	end
 end
 
--- Zustand des Zeitfahrens (für TrackUI): {active, startedAt, index, total, elapsed, result}
+-- Zustand des Zeitfahrens (für TrackUI): {active, startedAt, index, total, elapsed, countdown, result}
 function DriveClient.Track()
 	return {
 		active = track.active,
@@ -523,6 +626,7 @@ function DriveClient.Track()
 		index = track.index,
 		total = track.total,
 		elapsed = track.active and math.max(0, serverNow() - track.startedAt) or 0,
+		countdown = track.active and math.max(0, track.startedAt - serverNow()) or 0,
 		result = result and table.clone(result) or nil,
 	}
 end
@@ -538,12 +642,18 @@ end
 DriveClient.LapTime = lapTimeFine
 
 ---------------------------------------------------------------- Start
+-- Erneuter Aufruf (bereits gestartet) übernimmt nur Remote und Toast aus dem neuen ctx; das HUD bleibt.
 function DriveClient.Start(c)
 	if started then
+		if type(c) == "table" then
+			ctx = c
+			Remote = c.Remote or Remote
+		end
 		return
 	end
 	started = true
 	ctx = type(c) == "table" and c or {}
+	loadCatalogDefaults()
 	UI = ctx.UI or require(script.Parent:WaitForChild("MiniUI"))
 	Remote = ctx.Remote or require(script.Parent:WaitForChild("MiniRemote"))
 	buildHud()

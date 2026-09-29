@@ -81,8 +81,8 @@ function TrackUI.OnNotice(data)
 	elseif data.kind == "track_start" then
 		refs.result.Visible = false
 		startSentAt = -math.huge
-	elseif data.kind == "track_cancel" or data.kind == "track_abort" then
-		refs.result.Text = type(data.text) == "string" and data.text or "Zeitfahren abgebrochen."
+	elseif data.kind == "track_cancel" or data.kind == "track_abort" or data.kind == "track_invalid" or data.kind == "track_fail" then
+		refs.result.Text = type(data.text) == "string" and data.text or ("Lauf ungültig: " .. DriveClient.ReasonText(data.reason) .. ".")
 		refs.result.TextColor3 = T.red
 		refs.result.Visible = true
 		startSentAt = -math.huge
@@ -95,7 +95,11 @@ function TrackUI.Step()
 	end
 	local tr = DriveClient.Track()
 	local running = tr.active
-	if running then
+	if running and tr.countdown > 0 then
+		refs.running.Text = "Start in " .. math.ceil(tr.countdown - 1e-6)
+		refs.checkpoint.Text = "Gleich geht's los: warte auf die Startampel."
+		UI.SetProgress(refs.fill, 0)
+	elseif running then
 		refs.running.Text = Lib.LapTime(tr.elapsed)
 		refs.checkpoint.Text = tr.total > 0 and ("Checkpoint " .. tr.index .. " von " .. tr.total) or "Unterwegs …"
 		UI.SetProgress(refs.fill, tr.total > 0 and tr.index / tr.total or 0)
@@ -108,7 +112,7 @@ function TrackUI.Step()
 			UI.SetProgress(refs.fill, 0)
 		end
 	end
-	local hasCar = #Lib.Cars(state) > 0
+	local hasCar = TrackUI.CanStart(state)
 	local waiting = os.clock() - startSentAt < START_GAP
 	if running then
 		refs.start.Text = "Läuft …"
@@ -118,6 +122,19 @@ function TrackUI.Step()
 		refs.start.Text = "Zeitfahren starten"
 	end
 	UI.SetEnabled(refs.start, hasCar and not running and not waiting, T.green)
+end
+
+-- Start möglich: ein Auto ist draußen oder ein aktives, nicht gesperrtes Auto existiert (CarService nimmt dieses)
+function TrackUI.CanStart(s)
+	if type(s) ~= "table" then
+		return false
+	end
+	local id = num(s.spawnedId)
+	if not id or id <= 0 then
+		id = Lib.ActiveId(s)
+	end
+	local car = Lib.FindCar(s, id)
+	return car ~= nil and not car.locked
 end
 
 function TrackUI.Render(s)
@@ -140,11 +157,27 @@ function TrackUI.Render(s)
 	if reward and reward > 0 then
 		table.insert(parts, "Belohnung für eine neue Bestzeit: bis zu " .. MiniLocale.Credits(reward))
 	end
-	refs.info.Text = #parts > 0 and table.concat(parts, " · ") or "Deine erste gültige Runde setzt die Bestzeit."
+	local text = #parts > 0 and table.concat(parts, " · ") or "Deine erste gültige Runde setzt die Bestzeit."
+	local cat = Lib.CarCatalogModule()
+	local rules = cat and type(cat.Track) == "table" and cat.Track or nil
+	if rules and num(rules.firstReward) and num(rules.perSecond) and num(rules.maxReward) then
+		text ..= string.format(
+			"\nErste gültige Runde: %s. Danach %s je Sekunde Verbesserung der belohnten Bestzeit, höchstens %s je Lauf.",
+			MiniLocale.Credits(num(rules.firstReward)), MiniLocale.Credits(num(rules.perSecond)), MiniLocale.Credits(num(rules.maxReward))
+		)
+	end
+	refs.info.Text = text
 	local hasCar = #Lib.Cars(s) > 0
-	refs.hint.Text = hasCar and "Dein aktives Auto wird an den Start gebracht. Abkürzungen zählen nicht: Jeder Abschnitt hat eine Mindestzeit."
-		or "Für das Zeitfahren brauchst du ein eigenes Auto."
-	refs.toDealer.Visible = not hasCar
+	local canStart = TrackUI.CanStart(s)
+	if canStart then
+		local car = Lib.FindCar(s, num(s.spawnedId) and num(s.spawnedId) > 0 and num(s.spawnedId) or Lib.ActiveId(s))
+		refs.hint.Text = Lib.CarName(s, car) .. " wird an den Start gebracht. Nach der Startampel läuft die Zeit. Abkürzungen zählen nicht: Jeder Abschnitt hat eine Mindestzeit."
+	elseif hasCar then
+		refs.hint.Text = "Dein aktives Auto ist gerade gesperrt (Auktion). Hol unter „Meine Autos“ ein anderes."
+	else
+		refs.hint.Text = "Für das Zeitfahren brauchst du ein eigenes Auto."
+	end
+	refs.toDealer.Visible = not canStart
 	TrackUI.Step()
 end
 

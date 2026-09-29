@@ -5,8 +5,9 @@
 -- mini_car_spawn {id, at}, mini_car_despawn, mini_car_sell {id}. Preise, Level, Guthaben prüft der Server.
 --
 -- DealerUI.Lib: gemeinsame Helfer für CarTuningUI, TrackUI, CarwashUI (Katalog, Paletten, Vorschau, Namen).
--- Snapshot-Felder (PHASE2_CONTRACT §5): cars, activeCar, spawnedCar, catalog (darf nur einmal kommen, wird
--- zwischengespeichert), optional carPalettes {paint, rims, glow}, carSlots, carTuneMax.
+-- Snapshot-Felder (PHASE2_CONTRACT §5, Form wie CarRules.SnapshotFields): cars (CarRules.View), activeCar,
+-- spawnedCar, garageMax, catalog (CarRules.CatalogView; darf nur einmal kommen, wird zwischengespeichert).
+-- Fehlende Werte (Grip, Gewicht, Paletten, Stufen-Grenzen) ergänzt das geteilte Modul CarCatalog, falls vorhanden.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
@@ -37,16 +38,20 @@ end
 Lib.Config = C
 
 -- Optional: geteilter Autokatalog (PHASE2_CONTRACT §3, CarCatalog). Nur wenn vorhanden, ohne zu warten.
-local catalogModule = false
+-- Gefunden wird es einmal geladen; fehlt es (noch nicht repliziert), wird beim nächsten Aufruf erneut gesucht.
+local catalogModule = nil
+local catalogFailed = false
 local function carCatalogModule()
-	if catalogModule == false then
-		catalogModule = nil
-		local inst = Mini:FindFirstChild("CarCatalog")
-		if inst and inst:IsA("ModuleScript") then
-			local ok, mod = pcall(require, inst)
-			if ok and type(mod) == "table" then
-				catalogModule = mod
-			end
+	if catalogModule or catalogFailed then
+		return catalogModule
+	end
+	local inst = Mini:FindFirstChild("CarCatalog")
+	if inst and inst:IsA("ModuleScript") then
+		local ok, mod = pcall(require, inst)
+		if ok and type(mod) == "table" then
+			catalogModule = mod
+		else
+			catalogFailed = true
 		end
 	end
 	return catalogModule
@@ -66,14 +71,13 @@ Lib.DefaultTuneMax = { engine = 5, gearbox = 5, tires = 5, suspension = 5, nitro
 Lib.MaxCars = 20
 Lib.TestDriveSeconds = 60
 
--- Abholpunkte (City.CarSpawns.<key>) und ihre Anzeigenamen
+-- Abholpunkte (City.CarSpawns.<key>) und ihre Anzeigenamen; erlaubt sind nur die Schlüssel des Servers
+-- (CarCatalog.SpawnKeys), sonst diese Standardliste
 Lib.SpawnNames = {
 	dealer = "Autohaus",
 	testdrive = "Übergabe-Halle",
 	track = "Teststrecke",
 	carwash = "Waschstraße",
-	tuning = "Tuning-Zentrum",
-	auction = "Auktionshaus",
 	workshop = "Werkstatt",
 }
 Lib.NearSpawnDistance = 250
@@ -104,6 +108,17 @@ local function num(v)
 	return v
 end
 Lib.Num = num
+
+-- Grenzen aus CarCatalog (Garage, Probefahrt), sonst Vertragswerte
+function Lib.MaxGarage(s)
+	local cat = carCatalogModule()
+	return num(type(s) == "table" and s.garageMax) or num(cat and cat.MaxCars) or Lib.MaxCars
+end
+
+function Lib.TestDrive()
+	local cat = carCatalogModule()
+	return cat and type(cat.Testdrive) == "table" and num(cat.Testdrive.seconds) or Lib.TestDriveSeconds
+end
 
 -- Farbe aus Color3, {r,g,b}, {r=,g=,b=}, {color=...}/{rgb=...}
 local function toColor(v)
@@ -159,9 +174,9 @@ function Lib.Palettes(s)
 		if cat then
 			local p = type(cat.Palettes) == "table" and cat.Palettes or cat
 			from = {
-				paint = p.paint or p.Paint or p.PaintColors or cat.PaintColors,
-				rims = p.rims or p.Rims or p.RimColors or cat.RimColors,
-				glow = p.glow or p.Glow or p.Underglow or p.GlowColors or cat.GlowColors,
+				paint = p.paint or p.Paints or p.Paint or cat.Paints,
+				rims = p.rims or p.Rims or cat.Rims,
+				glow = p.glow or p.Glows or p.Glow or cat.Glows,
 			}
 		end
 	end
@@ -182,10 +197,27 @@ function Lib.Stats(e)
 	local st = type(e.stats) == "table" and e.stats or e
 	return {
 		power = num(st.power or st.hp or st.ps),
-		topSpeed = num(st.topSpeed or st.topSpeedKmh or st.vmax or st.maxSpeed or st.speed),
+		topSpeed = num(st.topSpeed or st.top or st.topSpeedKmh or st.vmax or st.maxSpeed),
 		grip = num(st.grip),
-		weight = num(st.weight or st.mass),
+		weight = num(st.weight),
+		zeroTo100 = num(st.zeroTo100),
+		drive = type(st.drive) == "string" and st.drive or nil,
 	}
+end
+
+-- Modell-Grundwerte aus CarCatalog (Grip, Gewicht, Standardlack), falls das Modul vorhanden ist
+function Lib.ModelDef(model)
+	local cat = carCatalogModule()
+	if not cat then
+		return nil
+	end
+	if type(cat.Model) == "function" then
+		local ok, def = pcall(cat.Model, model)
+		if ok and type(def) == "table" then
+			return def
+		end
+	end
+	return type(cat.ModelById) == "table" and cat.ModelById[model] or nil
 end
 
 local function normEntry(e, key)
@@ -197,16 +229,27 @@ local function normEntry(e, key)
 		return nil
 	end
 	local cfg = C and C.CarById and C.CarById[model]
+	local def = Lib.ModelDef(model)
+	local stats = Lib.Stats(e)
+	if def then
+		local base = Lib.Stats(def)
+		for k, v in pairs(base) do
+			if stats[k] == nil then
+				stats[k] = v
+			end
+		end
+	end
 	return {
 		model = model,
-		name = type(e.name) == "string" and e.name or (cfg and cfg.name) or "Auto",
-		brand = type(e.brand) == "string" and e.brand or (cfg and cfg.brand) or nil,
-		body = type(e.body) == "string" and e.body or (cfg and cfg.body) or nil,
-		price = num(e.price or e.cost),
-		level = num(e.level) or (cfg and cfg.level) or 1,
+		name = type(e.name) == "string" and e.name or (def and def.name) or (cfg and cfg.name) or "Auto",
+		brand = type(e.brand) == "string" and e.brand or (def and def.brand) or (cfg and cfg.brand) or nil,
+		body = type(e.body) == "string" and e.body or (def and def.body) or (cfg and cfg.body) or nil,
+		price = num(e.price or e.cost) or (def and num(def.price)) or nil,
+		level = num(e.level) or (def and num(def.level)) or (cfg and cfg.level) or 1,
+		paint = num(e.paint) or (def and num(def.paint)) or nil,
 		color = toColor(e.color) or (cfg and toColor(cfg.color)) or nil,
-		stats = Lib.Stats(e),
-		special = e.special == true or e.buyable == false,
+		stats = stats,
+		special = e.special == true or e.buyable == false or e.dealer == false,
 		desc = type(e.desc) == "string" and e.desc or nil,
 	}
 end
@@ -265,7 +308,7 @@ function Lib.Catalog(s)
 	end
 	local cat = carCatalogModule()
 	if cat then
-		local list = normCatalog(cat.Cars or cat.Models or cat.List or cat.Catalog)
+		local list = normCatalog(cat.DealerModels or cat.Models or cat.Cars)
 		if list then
 			catalogCache, catalogFromServer = list, true
 			return catalogCache, true
@@ -308,8 +351,25 @@ function Lib.ActiveId(s)
 	return type(s) == "table" and num(s.activeCar) or 0
 end
 
+-- Ist dieses Auto gerade draußen? spawnedId (CarService) bzw. aktives Auto + spawnedCar
 function Lib.IsOut(s, car)
-	return car ~= nil and Lib.ActiveId(s) == car.id and s.spawnedCar == true
+	if car == nil or type(s) ~= "table" then
+		return false
+	end
+	local spawned = num(s.spawnedId)
+	if spawned and spawned > 0 then
+		return spawned == car.id
+	end
+	return Lib.ActiveId(s) == car.id and s.spawnedCar == true
+end
+
+-- Laufende Probefahrt aus dem Snapshot: {model, name, endsAt (Serverzeit)} oder nil
+function Lib.TestDriveState(s)
+	local td = type(s) == "table" and s.testdrive
+	if type(td) == "table" and num(td.endsAt) and num(td.endsAt) > workspace:GetServerTimeNow() then
+		return td
+	end
+	return nil
 end
 
 function Lib.CarName(s, car)
@@ -335,17 +395,24 @@ function Lib.CarBody(s, car)
 end
 
 function Lib.TuneMax(s)
-	local src = type(s) == "table" and s.carTuneMax
-	if type(src) ~= "table" then
-		local cat = carCatalogModule()
-		src = cat and (cat.TuneMax or cat.TuningMax) or nil
-	end
+	local cat = carCatalogModule()
+	local tune = cat and type(cat.Tune) == "table" and cat.Tune or {}
 	local out = {}
 	for k, v in pairs(Lib.DefaultTuneMax) do
-		out[k] = type(src) == "table" and num(src[k]) or v
+		out[k] = type(tune[k]) == "table" and num(tune[k].max) or v
 	end
 	return out
 end
+
+-- Level-Voraussetzung einer Optik-Änderung (CarCatalog.Style[key].level), sonst 1
+function Lib.StyleLevel(key)
+	local cat = carCatalogModule()
+	local def = cat and type(cat.Style) == "table" and cat.Style[key]
+	return type(def) == "table" and num(def.level) or 1
+end
+
+-- Antrieb lesbar
+Lib.DriveNames = { FWD = "Frontantrieb", RWD = "Heckantrieb", AWD = "Allrad" }
 
 -- Stil eines Autos (Palettenindex -> Farben). paint 0/nil = Grundfarbe des Modells, glow 0 = aus.
 function Lib.Style(s, car, override)
@@ -355,7 +422,7 @@ function Lib.Style(s, car, override)
 	local base
 	if car then
 		local e = Lib.Entry(s, car.model)
-		base = (e and e.color) or toColor(car.color)
+		base = (e and e.paint and pal.paint[e.paint] and pal.paint[e.paint].color) or (e and e.color) or toColor(car.color)
 	end
 	local paint = pal.paint[paintIndex] and pal.paint[paintIndex].color or base or Color3.fromRGB(47, 169, 163)
 	local rims = pal.rims[rimsIndex] and pal.rims[rimsIndex].color or nil
@@ -378,6 +445,17 @@ function Lib.NearestSpawn()
 	if not folder or not root then
 		return "workshop"
 	end
+	local allowed = {}
+	local cat = carCatalogModule()
+	if cat and type(cat.SpawnKeys) == "table" then
+		for _, k in ipairs(cat.SpawnKeys) do
+			allowed[k] = true
+		end
+	else
+		for k in pairs(Lib.SpawnNames) do
+			allowed[k] = true
+		end
+	end
 	local best, bestDist = nil, Lib.NearSpawnDistance
 	for _, child in ipairs(folder:GetChildren()) do
 		local pos
@@ -386,7 +464,7 @@ function Lib.NearestSpawn()
 		elseif child:IsA("Model") then
 			pos = child:GetPivot().Position
 		end
-		if pos and Lib.SpawnNames[child.Name] then
+		if pos and allowed[child.Name] and child.Name ~= "workshop" then
 			local dist = (pos - root.Position).Magnitude
 			if dist < bestDist then
 				best, bestDist = child.Name, dist
@@ -648,9 +726,10 @@ local function statusLine(parent, order)
 end
 
 local function grid(parent, order)
-	local f = UI.Frame(parent, { BackgroundTransparency = 1, LayoutOrder = order or 0 })
+	local U = ui()
+	local f = U.Frame(parent, { BackgroundTransparency = 1, LayoutOrder = order or 0 })
 	local gl = Instance.new("UIGridLayout")
-	gl.CellSize = UDim2.new(0.5, -4, 0, UI.MinTouch)
+	gl.CellSize = UDim2.new(0.5, -4, 0, U.MinTouch)
 	gl.CellPadding = UDim2.new(0, 8, 0, 8)
 	gl.SortOrder = Enum.SortOrder.LayoutOrder
 	gl.Parent = f
@@ -714,7 +793,7 @@ local function createCarItem(parent, i)
 	local buttons = grid(box, 2)
 	item.spawn = UI.Button(buttons, "Holen", T.green, function()
 		if item.id then
-			Remote.Send("mini_car_spawn", { id = item.id, at = item.at or "workshop" })
+			Remote.Send("mini_car_spawn", { id = item.id, at = Lib.NearestSpawn() }) -- Ort beim Tippen bestimmen
 		end
 	end, { Name = "Holen", LayoutOrder = 1, TextSize = 14 })
 	item.workshop = UI.Button(buttons, "Zur Werkstatt", T.blue, function()
@@ -754,9 +833,10 @@ function DealerUI.Build(page, c)
 
 	local head = UI.Card(page, 1)
 	UI.Title(head, "Autohaus", 1)
-	UI.Small(head, "Kaufe dein eigenes Auto, mach eine Probefahrt (" .. Lib.TestDriveSeconds .. " s) oder hol ein Auto aus deiner Garage. Autos erscheinen am nächsten Abholpunkt oder an deiner Werkstatt.", 2)
+	UI.Small(head, "Kaufe dein eigenes Auto, mach eine Probefahrt (" .. Lib.TestDrive() .. " s) oder hol ein Auto aus deiner Garage. Autos erscheinen am nächsten Abholpunkt oder an deiner Werkstatt.", 2)
 	refs.info = UI.Label(head, "", { TextSize = 15, LayoutOrder = 3 })
 	refs.status = statusLine(head, 4)
+	refs.testdrive = UI.Label(head, "", { Name = "Probefahrt", TextSize = 15, TextColor3 = T.yellow, LayoutOrder = 5, Visible = false })
 
 	local mine = UI.Card(page, 2)
 	mine.Name = "MeineAutos"
@@ -777,7 +857,12 @@ function DealerUI.OnNotice(data)
 	if type(data) ~= "table" or not refs.status then
 		return
 	end
-	if data.kind == "car_spawned" then
+	if data.kind == "car_bought" then
+		local name = type(data.name) == "string" and data.name or "Dein neues Auto"
+		refs.status.Text = name .. " gehört jetzt dir! Unter „Meine Autos“ kannst du es holen."
+		refs.status.TextColor3 = T.green
+		refs.status.Visible = true
+	elseif data.kind == "car_spawned" then
 		local where = Lib.SpawnNames[data.at] or nil
 		local name = type(data.name) == "string" and data.name or "Dein Auto"
 		if data.testdrive then
@@ -798,6 +883,36 @@ function DealerUI.OnNotice(data)
 	end
 end
 
+-- Beschriftung "Holen: <Ort>" und "Zur Werkstatt" nach dem nächsten Abholpunkt
+local spawnLabelAt = -math.huge
+local function refreshSpawnLabels(force)
+	if not refs.cars or (not force and os.clock() - spawnLabelAt < 0.5) then
+		return
+	end
+	spawnLabelAt = os.clock()
+	local at = Lib.NearestSpawn()
+	for _, item in ipairs(refs.cars.items) do
+		if item.root.Visible then
+			item.spawn.Text = at == "workshop" and "Holen" or ("Holen: " .. (Lib.SpawnNames[at] or "hier"))
+			item.workshop.Visible = at ~= "workshop"
+		end
+	end
+end
+
+-- Pro Frame (sichtbarer Tab): Restzeit einer laufenden Probefahrt, Abholpunkt-Beschriftung (alle 0,5 s)
+function DealerUI.Step()
+	if not refs.testdrive or not state then
+		return
+	end
+	refreshSpawnLabels(false)
+	local td = Lib.TestDriveState(state)
+	refs.testdrive.Visible = td ~= nil
+	if td then
+		local left = math.max(0, math.ceil(num(td.endsAt) - workspace:GetServerTimeNow() - 1e-6))
+		refs.testdrive.Text = string.format("Probefahrt läuft: %s · noch %d:%02d", type(td.name) == "string" and td.name or "Testwagen", math.floor(left / 60), left % 60)
+	end
+end
+
 local function tuneSummary(car)
 	local parts = {}
 	for _, key in ipairs(Lib.PartKeys) do
@@ -812,7 +927,7 @@ function DealerUI.Render(s)
 	end
 	state = s
 	local cars = Lib.Cars(s)
-	local slots = num(s.carSlots) or Lib.MaxCars
+	local slots = Lib.MaxGarage(s)
 	local credits = num(s.credits) or 0
 	local level = num(s.level) or 1
 	refs.info.Text = string.format("Guthaben %s · Level %d · Garage %d/%d", MiniLocale.Credits(credits), level, #cars, slots)
@@ -821,15 +936,13 @@ function DealerUI.Render(s)
 	refs.none.Visible = #cars == 0
 	refs.mineInfo.Text = #cars > 0 and string.format("%d von %d Stellplätzen belegt. Nur ein Auto kann gleichzeitig unterwegs sein.", #cars, slots) or ""
 	refs.mineInfo.Visible = #cars > 0
-	local at = Lib.NearestSpawn()
 	refs.cars:Ensure(#cars)
 	for i, car in ipairs(cars) do
 		local item = refs.cars.items[i]
 		item.id = car.id
 		item.carName = Lib.CarName(s, car)
-		item.at = at
 		local entry = Lib.Entry(s, car.model)
-		item.sellPrice = num(car.sellPrice) or (entry and entry.price and math.floor(entry.price * 0.5)) or nil
+		item.sellPrice = num(car.sellValue) or num(car.sellPrice) or (entry and entry.price and math.floor(entry.price * 0.5)) or nil
 		item.name.Text = item.carName
 		local out = Lib.IsOut(s, car)
 		local active = Lib.ActiveId(s) == car.id
@@ -849,14 +962,14 @@ function DealerUI.Render(s)
 		item.tune.Text = tuneSummary(car)
 		item.preview:Set(Lib.CarBody(s, car), Lib.Style(s, car))
 		local free = not car.locked
-		item.spawn.Text = at == "workshop" and "Holen" or ("Holen: " .. (Lib.SpawnNames[at] or "hier"))
 		UI.SetEnabled(item.spawn, free, T.green)
-		item.workshop.Visible = at ~= "workshop"
 		UI.SetEnabled(item.workshop, free, T.blue)
 		item.despawn.Visible = out
 		UI.SetEnabled(item.tuneButton, free, T.purple)
 		UI.SetEnabled(item.sell, free, T.red)
 	end
+
+	refreshSpawnLabels(true)
 
 	-- Katalog
 	local list, fromServer = Lib.Catalog(s)
@@ -878,10 +991,19 @@ function DealerUI.Render(s)
 		local item = refs.catalog.items[i]
 		item.entry = e
 		item.name.Text = e.name
-		item.sub.Text = (e.brand and (e.brand .. " · ") or "") .. "ab Level " .. tostring(e.level)
+		local sub = { (e.brand and (e.brand .. " · ") or "") .. "ab Level " .. tostring(e.level) }
+		if e.stats.drive and Lib.DriveNames[e.stats.drive] then
+			table.insert(sub, Lib.DriveNames[e.stats.drive])
+		end
+		if e.stats.zeroTo100 then
+			table.insert(sub, "0–100 in " .. MiniLocale.Decimal(e.stats.zeroTo100, 1) .. " s")
+		end
+		item.sub.Text = table.concat(sub, " · ")
 		item.price.Text = e.price and MiniLocale.Credits(e.price) or "Preis folgt"
 		item.stats.Set(e.stats, maxima)
-		item.preview:Set(e.body, { paint = e.color or Color3.fromRGB(47, 169, 163) })
+		local pal = Lib.Palettes(s)
+		local paint = e.paint and pal.paint[e.paint] and pal.paint[e.paint].color or e.color or Color3.fromRGB(47, 169, 163)
+		item.preview:Set(e.body, { paint = paint })
 		local n = owned[e.model] or 0
 		item.owned.Text = n > 0 and ("Du besitzt " .. (n == 1 and "dieses Modell" or (n .. " Stück")) .. ".") or ""
 		item.owned.Visible = n > 0
@@ -903,6 +1025,7 @@ function DealerUI.Render(s)
 		item.test.Text = "Probefahrt"
 		UI.SetEnabled(item.test, fromServer, T.blue)
 	end
+	DealerUI.Step()
 end
 
 return DealerUI

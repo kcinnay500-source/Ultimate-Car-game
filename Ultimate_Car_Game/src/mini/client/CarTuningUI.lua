@@ -2,7 +2,8 @@
 -- Leistung in Stufen (Motor, Getriebe, Reifen, Fahrwerk 0..5, Nitro 0..3) und Optik (Lack, Felgen,
 -- Unterbodenlicht, Spoiler) mit Live-Vorschau. Die Optik-Auswahl ist nur lokal, bis "Übernehmen" sie sendet.
 -- Absichten: mini_car_tune {id, part, level = gesehene Stufe}, mini_car_style {id, paint, rims, glow, spoiler}.
--- Preise und Grenzen prüft der Server; angezeigt werden sie aus dem Snapshot (cars[i].tuneCost, styleCost).
+-- Preise und Grenzen prüft der Server; angezeigt werden sie aus dem Snapshot (CarRules.View: cars[i].tune[part]
+-- {level, max, cost, needLevel}, cars[i].styleCost {paint, rims, glow, spoiler} = Preis je geänderter Eigenschaft).
 --
 -- Einbettung (TuningUI):  CarTuningUI.Build(page, ctx, order) -> Frame;  CarTuningUI.Render(s);  CarTuningUI.Step()
 local CarTuningUI = {}
@@ -19,6 +20,7 @@ local baseline -- gespeicherte Optik des ausgewählten Autos (zuletzt gesehen)
 local pending -- lokale Auswahl {paint, rims, glow, spoiler}
 
 local SWATCH = 44
+local STYLE_NAMES = { paint = "Lackierung", rims = "Felgenfarbe", glow = "Unterbodenlicht", spoiler = "Spoiler" }
 
 local function num(v)
 	return Lib.Num(v)
@@ -121,9 +123,30 @@ local function renderStyle()
 	refs.spoiler.Text = pending.spoiler and "Spoiler: An" or "Spoiler: Aus"
 	UI.SetEnabled(refs.spoiler, not car.locked, pending.spoiler and T.green or T.card)
 	local changed = not sameStyle(pending, baseline)
-	local cost = num(car.styleCost) or num(state and state.carStyleCost)
-	refs.apply.Text = changed and (cost and ("Übernehmen · " .. MiniLocale.Credits(cost)) or "Übernehmen") or "Keine Änderung"
-	UI.SetEnabled(refs.apply, changed and not car.locked and (not cost or (num(state.credits) or 0) >= cost), T.green)
+	-- Preis = Summe der geänderten Eigenschaften (wie CarRules.Style); Level-Voraussetzung je Eigenschaft
+	local cost, blocked = 0, nil
+	local level = num(state and state.level) or 1
+	for _, key in ipairs({ "paint", "rims", "glow", "spoiler" }) do
+		if pending[key] ~= baseline[key] then
+			local c = type(car.styleCost) == "table" and num(car.styleCost[key]) or nil
+			cost = cost and c and cost + c or nil
+			local need = Lib.StyleLevel(key)
+			if level < need and not blocked then
+				blocked = STYLE_NAMES[key] .. " ab Level " .. need
+			end
+		end
+	end
+	if type(car.styleCost) == "number" then
+		cost = car.styleCost
+	end
+	if blocked then
+		refs.apply.Text = blocked
+	elseif changed then
+		refs.apply.Text = cost and cost > 0 and ("Übernehmen · " .. MiniLocale.Credits(cost)) or "Übernehmen"
+	else
+		refs.apply.Text = "Keine Änderung"
+	end
+	UI.SetEnabled(refs.apply, changed and not blocked and not car.locked and (not cost or (num(state.credits) or 0) >= cost), T.green)
 	UI.SetEnabled(refs.reset, changed, T.card)
 	refreshPreview()
 end
@@ -365,18 +388,24 @@ function CarTuningUI.Render(s)
 	refs.stats.Set(Lib.Stats(car), Lib.StatMaxima(s))
 
 	local max = Lib.TuneMax(s)
-	local costs = type(car.tuneCost) == "table" and car.tuneCost or (type(car.costs) == "table" and car.costs) or {}
+	local tune = type(car.tune) == "table" and car.tune or {}
 	local credits = num(s.credits) or 0
+	local playerLevel = num(s.level) or 1
 	for _, key in ipairs(Lib.PartKeys) do
 		local item = refs.parts[key]
-		local level = num(car[key]) or 0
-		local top = max[key] or 5
+		local t = type(tune[key]) == "table" and tune[key] or {}
+		local level = num(car[key]) or num(t.level) or 0
+		local top = num(t.max) or max[key] or 5
 		item.level = level
 		item.name.Text = Lib.PartNames[key] .. " · Stufe " .. level .. "/" .. top
 		UI.SetProgress(item.fill, level / math.max(1, top))
-		local cost = num(costs[key])
+		local cost = num(t.cost)
+		local need = num(t.needLevel) or 0
 		if level >= top then
 			item.button.Text = "Voll ausgebaut"
+			UI.SetEnabled(item.button, false)
+		elseif playerLevel < need then
+			item.button.Text = "Ab Level " .. need
 			UI.SetEnabled(item.button, false)
 		else
 			item.button.Text = cost and MiniLocale.Credits(cost) or ("Stufe " .. (level + 1))
