@@ -7,6 +7,7 @@
 -- Geld ändert sich nur über MiniRules.AddMoney (gedeckelt auf C.NumberCap), XP über MiniRules.GainXP.
 -- MiniRules wird erst beim ersten Aufruf geladen (MiniRules.LoadGames lädt dieses Modul; keine Ringabhängigkeit).
 local CarCatalog = require(script.Parent:WaitForChild("CarCatalog"))
+local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules")) -- Rabatt im Autohaus je Rang (PHASE4_CONTRACT §4)
 
 local CarRules = {}
 
@@ -261,6 +262,19 @@ function CarRules.StyleCost(car, key)
 	return math.max(def.min, math.floor(CarRules.Value(car) * def.share + 0.5))
 end
 
+-- Prestige-Rabatt im Autohaus (1 % je Rang, Deckel 10 %): tatsächlicher Kaufpreis eines Modells für dieses Profil
+function CarRules.DealerPrice(d, m)
+	local price = type(m) == "table" and m.price or 0
+	if not finite(price) or price <= 0 then
+		return 0
+	end
+	local ok, discount = pcall(PrestigeRules.Discount, d)
+	if not ok or not finite(discount) or discount <= 0 then
+		return price
+	end
+	return math.max(1, math.floor(price * (1 - math.min(discount, 1)) + 0.5))
+end
+
 ---------------------------------------------------------------- Aktionen (Server)
 -- Kauf beim Händler. Rückgabe: true, car | false, Meldung (nil = still verworfen, z. B. Doppelklick)
 function CarRules.Buy(d, modelId, now)
@@ -269,6 +283,7 @@ function CarRules.Buy(d, modelId, now)
 	if not m or not m.dealer then
 		return false, "Dieses Modell gibt es beim Händler nicht."
 	end
+	local price = CarRules.DealerPrice(d, m) -- Prestige-Rabatt (Snapshot/Autohaus zeigen denselben Preis)
 	if level(d) < m.level then
 		return false, "Dafür brauchst du Level " .. m.level .. "."
 	end
@@ -281,10 +296,10 @@ function CarRules.Buy(d, modelId, now)
 	if #g.cars >= CarCatalog.MaxCars then
 		return false, "Deine Garage ist voll (" .. CarCatalog.MaxCars .. " Autos)."
 	end
-	if money(d) < m.price then
+	if money(d) < price then
 		return false, "Nicht genug Credits."
 	end
-	mini().AddMoney(d, -m.price)
+	mini().AddMoney(d, -price)
 	local car = CarRules.AddCar(d, CarRules.NewCar(m.id, now))
 	mini().GainXP(d, CarCatalog.BuyXp)
 	return true, car
@@ -519,9 +534,10 @@ function CarRules.CatalogView(d)
 	local out = {}
 	for _, m in ipairs(CarCatalog.DealerModels) do
 		local s = CarRules.Stats(CarRules.NewCar(m.id, 0))
+		local price = CarRules.DealerPrice(d, m) -- mit Prestige-Rabatt; basePrice = Listenpreis
 		table.insert(out, {
-			id = m.id, name = m.name, brand = m.brand, body = m.body, level = m.level, price = m.price,
-			unlocked = level(d) >= m.level, affordable = money(d) >= m.price,
+			id = m.id, name = m.name, brand = m.brand, body = m.body, level = m.level, price = price, basePrice = m.price,
+			unlocked = level(d) >= m.level, affordable = money(d) >= price,
 			power = s.power, topSpeed = s.topSpeed, zeroTo100 = s.zeroTo100, drive = s.drive, rating = s.rating,
 		})
 	end

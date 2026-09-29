@@ -135,7 +135,7 @@ function SideGameRules.Dismantle(d, rng, now)
 	end
 	local scrap = found * MiniConfig.ScrapyardScrapPerPart
 	g.parts = math.min(2 ^ 53, g.parts + parts)
-	local credits = MiniRules.AddMoney(d, rng:NextInteger(0, 90))
+	local credits = MiniRules.AddIncome(d, rng:NextInteger(0, 90))
 	g.press.scrap += scrap
 	MiniRules.AddStat(d, "dismantled", 1, now)
 	local xp = MiniRules.GainXP(d, 8 + found)
@@ -148,7 +148,7 @@ function SideGameRules.SellParts(d)
 		return false, "Du brauchst mindestens " .. MiniConfig.ScrapyardSellParts .. " Altteile."
 	end
 	g.parts -= MiniConfig.ScrapyardSellParts
-	local credits = MiniRules.AddMoney(d, MiniConfig.ScrapyardSellCredits)
+	local credits = MiniRules.AddIncome(d, MiniConfig.ScrapyardSellCredits)
 	local xp = MiniRules.GainXP(d, 5)
 	return true, credits, xp
 end
@@ -229,7 +229,7 @@ function SideGameRules.Answer(d, qs, token, choice, now)
 		local paid = SideGameRules.QuizPaidLeft(d, now) > 0
 		local credits, xp = 0, nil
 		if paid then
-			credits = MiniRules.AddMoney(d, MiniConfig.QuizCorrectCredits)
+			credits = MiniRules.AddIncome(d, MiniConfig.QuizCorrectCredits)
 		end
 		MiniRules.AddStat(d, "quizCorrect", 1, now)
 		if paid then
@@ -325,7 +325,7 @@ function SideGameRules.Tap(d, cell, now)
 		local paid = SideGameRules.ParkingPaidLeft(d, now) > 0
 		local reward, xp = 0, nil
 		if paid then
-			reward = MiniRules.AddMoney(d, SideGameRules.ParkingReward(pk.streak))
+			reward = MiniRules.AddIncome(d, SideGameRules.ParkingReward(pk.streak))
 			MiniRules.AddReputation(d, 1)
 		end
 		MiniRules.AddStat(d, "parkingSolved", 1, now)

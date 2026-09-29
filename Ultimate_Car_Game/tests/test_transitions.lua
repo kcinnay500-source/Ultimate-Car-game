@@ -138,7 +138,7 @@ return {
 	end },
 
 	{ "Keine NaN/inf im gespeicherten Profil", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 2 }) -- Presse ab Level 2 (GameConfig.Unlocks)
 		local MiniRules = g:MiniShared("MiniRules")
 		local player = g:Join(609, { name = "Yara" })
 		g:Advance(1)
@@ -162,7 +162,7 @@ return {
 	end },
 
 	{ "Herunterfahren: alle gespeichert, Sperren frei, Bestenliste geschrieben", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 2 }) -- Presse ab Level 2 (GameConfig.Unlocks)
 		local MC = g:MiniShared("MiniConfig")
 		local a = g:Join(610, { name = "Anton" })
 		local b = g:Join(611, { name = "Berta" })
@@ -322,7 +322,7 @@ return {
 	end },
 
 	{ "Robux-Kauf während Minispiel-Aktionen: kein Geldverlust, transacting sperrt Minispiele", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 2 }) -- Presse ab Level 2 (GameConfig.Unlocks)
 		local C = g:Config()
 		local product = C.CreditProducts[1]
 		product.productId = 424242

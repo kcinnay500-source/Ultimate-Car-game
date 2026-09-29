@@ -243339,6 +243339,7 @@ return CarCatalog
 -- Geld ändert sich nur über MiniRules.AddMoney (gedeckelt auf C.NumberCap), XP über MiniRules.GainXP.
 -- MiniRules wird erst beim ersten Aufruf geladen (MiniRules.LoadGames lädt dieses Modul; keine Ringabhängigkeit).
 local CarCatalog = require(script.Parent:WaitForChild("CarCatalog"))
+local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules")) -- Rabatt im Autohaus je Rang (PHASE4_CONTRACT §4)
 
 local CarRules = {}
 
@@ -243593,6 +243594,19 @@ function CarRules.StyleCost(car, key)
 	return math.max(def.min, math.floor(CarRules.Value(car) * def.share + 0.5))
 end
 
+-- Prestige-Rabatt im Autohaus (1 % je Rang, Deckel 10 %): tatsächlicher Kaufpreis eines Modells für dieses Profil
+function CarRules.DealerPrice(d, m)
+	local price = type(m) == "table" and m.price or 0
+	if not finite(price) or price &lt;= 0 then
+		return 0
+	end
+	local ok, discount = pcall(PrestigeRules.Discount, d)
+	if not ok or not finite(discount) or discount &lt;= 0 then
+		return price
+	end
+	return math.max(1, math.floor(price * (1 - math.min(discount, 1)) + 0.5))
+end
+
 ---------------------------------------------------------------- Aktionen (Server)
 -- Kauf beim Händler. Rückgabe: true, car | false, Meldung (nil = still verworfen, z. B. Doppelklick)
 function CarRules.Buy(d, modelId, now)
@@ -243601,6 +243615,7 @@ function CarRules.Buy(d, modelId, now)
 	if not m or not m.dealer then
 		return false, "Dieses Modell gibt es beim Händler nicht."
 	end
+	local price = CarRules.DealerPrice(d, m) -- Prestige-Rabatt (Snapshot/Autohaus zeigen denselben Preis)
 	if level(d) &lt; m.level then
 		return false, "Dafür brauchst du Level " .. m.level .. "."
 	end
@@ -243613,10 +243628,10 @@ function CarRules.Buy(d, modelId, now)
 	if #g.cars &gt;= CarCatalog.MaxCars then
 		return false, "Deine Garage ist voll (" .. CarCatalog.MaxCars .. " Autos)."
 	end
-	if money(d) &lt; m.price then
+	if money(d) &lt; price then
 		return false, "Nicht genug Credits."
 	end
-	mini().AddMoney(d, -m.price)
+	mini().AddMoney(d, -price)
 	local car = CarRules.AddCar(d, CarRules.NewCar(m.id, now))
 	mini().GainXP(d, CarCatalog.BuyXp)
 	return true, car
@@ -243851,9 +243866,10 @@ function CarRules.CatalogView(d)
 	local out = {}
 	for _, m in ipairs(CarCatalog.DealerModels) do
 		local s = CarRules.Stats(CarRules.NewCar(m.id, 0))
+		local price = CarRules.DealerPrice(d, m) -- mit Prestige-Rabatt; basePrice = Listenpreis
 		table.insert(out, {
-			id = m.id, name = m.name, brand = m.brand, body = m.body, level = m.level, price = m.price,
-			unlocked = level(d) &gt;= m.level, affordable = money(d) &gt;= m.price,
+			id = m.id, name = m.name, brand = m.brand, body = m.body, level = m.level, price = price, basePrice = m.price,
+			unlocked = level(d) &gt;= m.level, affordable = money(d) &gt;= price,
 			power = s.power, topSpeed = s.topSpeed, zeroTo100 = s.zeroTo100, drive = s.drive, rating = s.rating,
 		})
 	end
@@ -243882,8 +243898,11 @@ return CarRules
 -- Alle Funktionen sind nil-sicher: der Client ruft R.Reward auf state.data auf, und Profile ohne
 -- games (oder ein fehlendes d) ergeben neutrale Werte (1 bzw. 0).
 -- Ausbaustufe 4 (docs/PHASE4_CONTRACT.md §4, §8): Prestige-Einnahmenbonus (PrestigeIncome), Tycoon-Durchläufe
--- (TycoonWorkshop), Open-World-Perks (OWPerk, Platzhalter bis Meilenstein 6). Der Gesamtfaktor auf die
--- Werkstatt-Vergütung (WorkshopReward) ist auf GameConfig.WorkshopRewardCap (Standard ×1,6) gedeckelt.
+-- (TycoonWorkshop), Open-World-Perks (OWPerk, Platzhalter bis Meilenstein 6). Gedeckelt (GameConfig.WorkshopRewardCap,
+-- Standard ×1,6) ist NUR der Ausbaustufe-4-Faktor Tycoon × OW-Perk (CareerCapped); die 2.4.0/3.x-Querboni
+-- (Presse, Tuning-Abteilung, Kundenbonus) bleiben wie bisher ungedeckelt, sonst sänken die Einnahmen bestehender
+-- Profile. Der Prestige-Bonus (+2 % je Rang, Deckel +30 %) gilt auf alle Einnahmen (MiniRules.AddIncome) und wird
+-- in der Werkstatt außerhalb des Deckels multipliziert, damit jeder Rang messbar wirkt.
 local MiniConfig = require(script.Parent:WaitForChild("MiniConfig"))
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules"))
@@ -244035,24 +244054,34 @@ function CrossBonus.OWPerk(d: any, typ: string?): number
 	return 1
 end
 
--- Faktor der Ausbaustufe 4 (Prestige × Tycoon × Open-World-Perk), ungedeckelt
+-- Faktor der Ausbaustufe 4 (Prestige × Tycoon × Open-World-Perk), ungedeckelt (für Anzeigen)
 function CrossBonus.CareerBonus(d: any): number
 	return CrossBonus.PrestigeIncome(d) * CrossBonus.TycoonWorkshop(d) * CrossBonus.OWPerk(d, "werkstatt")
 end
 
--- Gesamtfaktor auf die Werkstatt-Vergütung ohne Deckel (für Anzeigen, die den Deckel erklären)
-function CrossBonus.WorkshopRewardRaw(d: any): number
-	return CrossBonus.PressWorkshop(d) * CrossBonus.TuningWorkshop(d) * CrossBonus.CustomerBonus(d) * CrossBonus.CareerBonus(d)
-end
-
--- Gesamtfaktor auf die Werkstatt-Vergütung (R.Reward): Presse × Tuning-Stufe × Kundenbonus × Prestige × Tycoon
--- × OW-Perk, zusammen gedeckelt auf WorkshopCap (Vertrag §8: ×1,6), nie unter 1.
-function CrossBonus.WorkshopReward(d: any): number
-	local raw = CrossBonus.WorkshopRewardRaw(d)
+-- Gedeckelter Ausbaustufe-4-Faktor auf die Werkstatt: min(WorkshopCap, Tycoon × OW-Perk), nie unter 1
+function CrossBonus.CareerCapped(d: any): number
+	local raw = CrossBonus.TycoonWorkshop(d) * CrossBonus.OWPerk(d, "werkstatt")
 	if not finite(raw) or raw &lt; 1 then
 		return 1
 	end
 	return math.min(CrossBonus.WorkshopCap(), raw)
+end
+
+-- Gesamtfaktor auf die Werkstatt-Vergütung ohne jeden Deckel (für Anzeigen, die den Deckel erklären)
+function CrossBonus.WorkshopRewardRaw(d: any): number
+	return CrossBonus.PressWorkshop(d) * CrossBonus.TuningWorkshop(d) * CrossBonus.CustomerBonus(d) * CrossBonus.CareerBonus(d)
+end
+
+-- Gesamtfaktor auf die Werkstatt-Vergütung (R.Reward): Presse × Tuning-Stufe × Kundenbonus (wie 3.x, ungedeckelt)
+-- × min(WorkshopCap, Tycoon × OW-Perk) × Prestige-Einnahmenbonus; nie unter 1.
+function CrossBonus.WorkshopReward(d: any): number
+	local raw = CrossBonus.PressWorkshop(d) * CrossBonus.TuningWorkshop(d) * CrossBonus.CustomerBonus(d)
+		* CrossBonus.CareerCapped(d) * CrossBonus.PrestigeIncome(d)
+	if not finite(raw) or raw &lt; 1 then
+		return 1
+	end
+	return raw
 end
 
 return CrossBonus
@@ -244186,8 +244215,9 @@ do
 		P.Rewards[rank] = {
 			rank = rank,
 			title = tier .. " " .. roman[(rank - 1) % 5 + 1],
-			incomePct = math.min(rank * P.IncomePerRank, P.IncomeCap) * 100, -- Gesamtbonus auf diesem Rang in %
-			discountPct = math.min(rank * P.DiscountPerRank, P.DiscountCap) * 100,
+			-- Gesamtbonus auf diesem Rang in % (ganzzahlig gerundet: 7 × 0,02 × 100 wäre sonst 14,000000000000002)
+			incomePct = math.floor(math.min(rank * P.IncomePerRank, P.IncomeCap) * 100 + 0.5),
+			discountPct = math.floor(math.min(rank * P.DiscountPerRank, P.DiscountCap) * 100 + 0.5),
 			cosmetic = (rank % 2 == 1) and ("wrap_prestige_" .. rank) or ("rims_prestige_" .. rank), -- Shop-Kosmetik-Id (Meilenstein 8)
 			tycoonRebirthPct = rank &gt;= P.RebirthBonusFromRank and P.RebirthBonus * 100 or 0,
 		}
@@ -244208,7 +244238,9 @@ GameConfig.Party = {
 }
 
 ---------------------------------------------------------------- Tutorial (§6)
--- Fortschritt bestätigt der Server aus echten Ereignissen. event:
+-- Fortschritt bestätigt der Server aus echten Ereignissen. Das Tutorial läuft nur in der Open World (Modus
+-- openworld); in Lobby und Schnellem Spiel ruht es (TutorialService). Neustart am Tutorial-Kiosk der Lobby
+-- (tutorial_restart), die Belohnung gibt es nur einmal (meta.tutorialRewarded). event:
 --   "next"            reiner Lese-Schritt, der Client sendet tutorial_next {step}
 --   "station:&lt;key&gt;"   2.4.0-Plot-Station geöffnet (World.Create -&gt; callback("station", key)); zone = "plot"
 --   "tab:&lt;tab&gt;"       Stadt-Station mit Attribut MiniTab = &lt;tab&gt; geöffnet (MiniService-Prompt); zone = "city"
@@ -244219,7 +244251,7 @@ GameConfig.Party = {
 --   "action:&lt;name&gt;"   eine Mini-Aktion war erfolgreich (z. B. mini_travel)
 -- target = Stationsschlüssel für den Pfeil/Marker im Client (zone plot: Plot.Stations.&lt;key&gt;, zone city: City.Stations.&lt;key&gt;).
 GameConfig.Tutorial = {
-	Reward = { credits = 500, xp = 60 }, -- einmalig am Ende (nicht beim Überspringen)
+	Reward = { credits = 500, xp = 60 }, -- einmalig am Ende (nicht beim Überspringen, nicht nach einem Neustart)
 	Steps = {
 		{ id = "move", text = "Willkommen in deiner Werkstatt! Lauf ein paar Schritte – mit WASD oder dem Joystick.", target = nil, zone = nil, event = "next" },
 		{ id = "menu", text = "Öffne das Menü mit der Taste M oder dem Knopf „Minispiele“. Dort findest du alles Wichtige.", target = nil, zone = nil, event = "next" },
@@ -244228,8 +244260,8 @@ GameConfig.Tutorial = {
 		{ id = "obd", text = "Steck das OBD-Gerät ans Auto und finde den Fehler.", target = nil, zone = nil, event = "job:repair" },
 		{ id = "repair", text = "Repariere das Auto Schritt für Schritt bis zur Endkontrolle.", target = nil, zone = nil, event = "job:invoice" },
 		{ id = "settle", text = "Rechne den Auftrag am Empfang ab – die Credits gehören dir!", target = "workshop", zone = "plot", event = "settled" },
-		{ id = "map", text = "Öffne den Stadtplan und reise damit in die Stadt.", target = "map", zone = "city", event = "action:mini_travel" },
-		{ id = "dealer", text = "Schau im Autohaus vorbei. Dort wartet später dein erstes eigenes Auto.", target = "dealer", zone = "city", event = "tab:dealer" },
+		{ id = "map", text = "Drück M (oder den Knopf „Minispiele“) und öffne den Tab „Stadtplan“ – reise damit in die Stadt.", target = nil, zone = nil, event = "action:mini_travel" },
+		{ id = "dealer", text = "Schau im Autohaus vorbei und drück dort E. Kaufen kannst du ab Level 3 – ansehen darfst du jetzt schon.", target = "dealer", zone = "city", event = "tab:dealer" },
 		{ id = "goals", text = "Sieh dir an der Infotafel deine Tagesziele an. Viel Spaß in der Werkstattmeile!", target = "goals", zone = "city", event = "tab:goals" },
 	} :: { TutorialStep },
 	EventKinds = { "next", "station", "tab", "job", "settled", "action" },
@@ -244543,7 +244575,7 @@ local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules"))
 local MetaRules = {}
 
 export type Meta = {
-	tutorialDone: boolean, tutorialStep: number, tutorialSkipped: boolean,
+	tutorialDone: boolean, tutorialStep: number, tutorialSkipped: boolean, tutorialRewarded: boolean,
 	beginner: boolean, passive: boolean, single: boolean,
 	lastMode: string, firstSeen: number, playSeconds: number, hintsSeen: { [string]: boolean },
 }
@@ -244574,6 +244606,7 @@ function MetaRules.Default(): Meta
 		tutorialDone = false,
 		tutorialStep = 1,
 		tutorialSkipped = false,
+		tutorialRewarded = false, -- Belohnung verbucht (ein Neustart am Kiosk gibt sie nicht noch einmal)
 		beginner = true,
 		passive = false,
 		single = false,
@@ -244595,12 +244628,22 @@ function MetaRules.Load(raw: any, d: any, now: any): Meta
 	m.tutorialSkipped = r.tutorialSkipped == true
 	m.tutorialDone = r.tutorialDone == true or m.tutorialSkipped or veteran == true -- übersprungen = beendet
 	m.tutorialStep = loadInt(r.tutorialStep, 1, 1, stepCount())
+	-- Belohnung: gespeichertes Flag; Profile von vor dem Flag, die das Tutorial regulär beendet haben, gelten als
+	-- belohnt (sonst gäbe es sie beim Neustart am Kiosk ein zweites Mal). Veteranen ebenso.
+	m.tutorialRewarded = r.tutorialRewarded == true or (r.tutorialRewarded == nil and r.tutorialDone == true and r.tutorialSkipped ~= true) or veteran == true
 	m.beginner = r.beginner ~= false -- nur ein ausdrückliches false schaltet die Hinweise ab
 	m.passive = r.passive == true
 	m.single = r.single == true
 	m.lastMode = (type(r.lastMode) == "string" and GameConfig.ModeSet[r.lastMode]) and r.lastMode or GameConfig.DefaultMode
 	if veteran then
 		m.lastMode = "openworld" -- 2.4.0-Veteranen landen wie bisher in ihrer Werkstatt (Open World), nicht in der Lobby
+		-- Erstlings-Hinweise („Super, dein erster Auftrag!“, Empfang erklärt) passen nicht zu jemandem mit
+		-- abgerechneten Aufträgen: first:jobsDone und station:workshop gelten als gesehen.
+		for _, h in ipairs(GameConfig.Hints) do
+			if h.when == "first:jobsDone" or h.when == "station:workshop" then
+				m.hintsSeen[h.id] = true
+			end
+		end
 	end
 	m.firstSeen = loadInt(r.firstSeen, 0, 0, MAX_SAFE)
 	if finite(now) and now &gt; 0 and (m.firstSeen == 0 or m.firstSeen &gt; now) then
@@ -245192,6 +245235,7 @@ MiniNet.Actions = {
 	party_kick = { userId = "number" },
 	tutorial_next = { step = "number" },
 	tutorial_skip = {},
+	tutorial_restart = {}, -- Tutorial-Kiosk in der Lobby: noch einmal von vorn (ohne zweite Belohnung)
 	prestige_claim = { rank = "number" },
 	unlocks_seen = {},
 }
@@ -245224,6 +245268,7 @@ MiniNet.Cooldowns = {
 	party_join = 2, -- = GameConfig.Party.JoinCooldown
 	party_kick = 1,
 	tutorial_skip = 1,
+	tutorial_restart = 2,
 	prestige_claim = 0.5,
 }
 MiniNet.Targets = {
@@ -245277,6 +245322,7 @@ local AuctionRules = require(script.Parent:WaitForChild("AuctionRules"))
 local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
 -- Ausbaustufe 4: Einstellungen/Tutorial (games.meta) und Prestige (games.prestige); MetaRules braucht nur GameConfig
 local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
+local CrossBonus = require(script.Parent:WaitForChild("CrossBonus"))
 
 local MiniRules = {}
 
@@ -245545,6 +245591,18 @@ function MiniRules.AddMoney(d, amount)
 	local before = MiniRules.IsFiniteNumber(d.money) and d.money or 0
 	d.money = math.min(C.NumberCap, math.max(0, before + amount))
 	return d.money - before
+end
+
+-- Einnahme aus einem Minispiel (Tuning, Presse-Händler, Schrottplatz, Quiz, Parkplatz, Teststrecke, Spielhalle):
+-- wie AddMoney, aber mit dem Prestige-Einnahmenbonus (PHASE4_CONTRACT §4: +2 % je Rang auf alle Einnahmen,
+-- CrossBonus.PrestigeIncome). Rückgabe: tatsächlich gutgeschriebener Betrag. Rückzahlungen, Übergaben zwischen
+-- Spielern (Auktion) und feste Belohnungen (Ziele, Tutorial) laufen weiter über AddMoney.
+function MiniRules.AddIncome(d, amount)
+	if not MiniRules.IsFiniteNumber(amount) or amount &lt;= 0 then
+		return MiniRules.AddMoney(d, amount)
+	end
+	local factor = CrossBonus.PrestigeIncome(d)
+	return MiniRules.AddMoney(d, math.floor(amount * factor + 0.5))
 end
 
 function MiniRules.AddReputation(d, amount)
@@ -245997,7 +246055,7 @@ function PressRules.Exchange(d, packageIndex)
 		return false, "Nicht genug Schrott."
 	end
 	pr.scrap -= amount
-	local credits = MiniRules.AddMoney(d, PressRules.ExchangeCredits(amount))
+	local credits = MiniRules.AddIncome(d, PressRules.ExchangeCredits(amount))
 	return true, credits
 end
 
@@ -246434,7 +246492,7 @@ function SideGameRules.Dismantle(d, rng, now)
 	end
 	local scrap = found * MiniConfig.ScrapyardScrapPerPart
 	g.parts = math.min(2 ^ 53, g.parts + parts)
-	local credits = MiniRules.AddMoney(d, rng:NextInteger(0, 90))
+	local credits = MiniRules.AddIncome(d, rng:NextInteger(0, 90))
 	g.press.scrap += scrap
 	MiniRules.AddStat(d, "dismantled", 1, now)
 	local xp = MiniRules.GainXP(d, 8 + found)
@@ -246447,7 +246505,7 @@ function SideGameRules.SellParts(d)
 		return false, "Du brauchst mindestens " .. MiniConfig.ScrapyardSellParts .. " Altteile."
 	end
 	g.parts -= MiniConfig.ScrapyardSellParts
-	local credits = MiniRules.AddMoney(d, MiniConfig.ScrapyardSellCredits)
+	local credits = MiniRules.AddIncome(d, MiniConfig.ScrapyardSellCredits)
 	local xp = MiniRules.GainXP(d, 5)
 	return true, credits, xp
 end
@@ -246528,7 +246586,7 @@ function SideGameRules.Answer(d, qs, token, choice, now)
 		local paid = SideGameRules.QuizPaidLeft(d, now) &gt; 0
 		local credits, xp = 0, nil
 		if paid then
-			credits = MiniRules.AddMoney(d, MiniConfig.QuizCorrectCredits)
+			credits = MiniRules.AddIncome(d, MiniConfig.QuizCorrectCredits)
 		end
 		MiniRules.AddStat(d, "quizCorrect", 1, now)
 		if paid then
@@ -246624,7 +246682,7 @@ function SideGameRules.Tap(d, cell, now)
 		local paid = SideGameRules.ParkingPaidLeft(d, now) &gt; 0
 		local reward, xp = 0, nil
 		if paid then
-			reward = MiniRules.AddMoney(d, SideGameRules.ParkingReward(pk.streak))
+			reward = MiniRules.AddIncome(d, SideGameRules.ParkingReward(pk.streak))
 			MiniRules.AddReputation(d, 1)
 		end
 		MiniRules.AddStat(d, "parkingSolved", 1, now)
@@ -246971,7 +247029,7 @@ function TuningRules.Collect(d, slot, now)
 	if not def then
 		return true, 0, { levels = 0, credits = 0 }
 	end
-	local reward = MiniRules.AddMoney(d, TuningRules.Reward(d, def))
+	local reward = MiniRules.AddIncome(d, TuningRules.Reward(d, def))
 	MiniRules.AddReputation(d, 2)
 	d.games.tuning.completed += 1
 	MiniRules.AddStat(d, "tuningCollected", 1, now)
@@ -247005,7 +247063,7 @@ function TuningRules.CollectIdle(d, now)
 	if value &lt; 1 then
 		return false, "Noch keine Einnahmen."
 	end
-	local paid = MiniRules.AddMoney(d, value)
+	local paid = MiniRules.AddIncome(d, value)
 	d.games.tuning.lastIdle = now
 	MiniRules.AddStat(d, "idleCollected", 1, now)
 	local xp = MiniRules.GainXP(d, math.max(1, math.floor(value / 80)))
@@ -247051,7 +247109,11 @@ TutorialRules.Text = {
 	notNext = "Dieser Schritt wird automatisch erledigt – mach einfach weiter!",
 	wrongStep = "Erledige zuerst den aktuellen Schritt.",
 	alreadyDone = "Das Tutorial ist schon fertig.",
-	skipped = "Tutorial übersprungen. Du findest die Hilfe jederzeit am Tutorial-Kiosk in der Lobby.",
+	skipped = "Tutorial übersprungen. Am Tutorial-Kiosk in der Lobby kannst du es jederzeit neu starten.",
+	notHere = "Das Tutorial läuft in der Werkstattmeile – reise zuerst in die Open World.",
+	restarted = "Tutorial neu gestartet! Es geht in der Werkstattmeile (Open World) weiter.",
+	restartRunning = "Das Tutorial läuft schon – du findest die Karte in der Werkstattmeile.",
+	finishedAgain = "Tutorial noch einmal geschafft! Die Belohnung hattest du schon – viel Spaß in der Werkstattmeile!",
 	finished = "Tutorial geschafft! Du bekommst %d Credits und %d XP.",
 	progress = "Schritt %d von %d",
 }
@@ -247094,19 +247156,54 @@ function TutorialRules.Skipped(d: any): boolean
 	return m ~= nil and m.tutorialSkipped == true
 end
 
--- Läuft das Tutorial (meta vorhanden, nicht beendet)?
-function TutorialRules.Active(d: any): boolean
-	local m = MetaRules.Meta(d)
-	return m ~= nil and m.tutorialDone ~= true and TutorialRules.Count() &gt; 0
+-- Läuft das Tutorial hier? Wird ein Modus übergeben, ist es nur in der Open World aktiv (Vertrag §6: Pflicht beim
+-- ersten Beitritt in der Open World; in Lobby und Schnellem Spiel ruht es). Ohne Modus: nur der Profilstand.
+function TutorialRules.AllowedIn(mode: any): boolean
+	return mode == nil or mode == "openworld"
 end
 
--- Aktueller Schritt (nil, wenn beendet oder ohne meta) und seine Nummer
-function TutorialRules.Current(d: any): (Step?, number)
+-- Läuft das Tutorial (meta vorhanden, nicht beendet, Modus passt)?
+function TutorialRules.Active(d: any, mode: any?): boolean
+	local m = MetaRules.Meta(d)
+	return m ~= nil and m.tutorialDone ~= true and TutorialRules.Count() &gt; 0 and TutorialRules.AllowedIn(mode)
+end
+
+-- Aktueller Schritt (nil, wenn beendet, ohne meta oder außerhalb der Open World) und seine Nummer
+function TutorialRules.Current(d: any, mode: any?): (Step?, number)
 	local i = TutorialRules.StepIndex(d)
-	if not TutorialRules.Active(d) then
+	if not TutorialRules.Active(d, mode) then
 		return nil, i
 	end
 	return GameConfig.Tutorial.Steps[i], i
+end
+
+-- Wurde die Belohnung schon einmal verbucht? (Neustart am Kiosk gibt sie nicht noch einmal.)
+function TutorialRules.Rewarded(d: any): boolean
+	local m = MetaRules.Meta(d)
+	return m ~= nil and m.tutorialRewarded == true
+end
+
+function TutorialRules.MarkRewarded(d: any)
+	local m = MetaRules.Meta(d)
+	if m then
+		m.tutorialRewarded = true
+	end
+end
+
+-- Neustart (Tutorial-Kiosk in der Lobby): nur nach Ende/Überspringen; Schritt 1, ohne zweite Belohnung.
+-- Rückgabe: ok, Meldung bei Ablehnung.
+function TutorialRules.Restart(d: any): (boolean, string?)
+	local m = MetaRules.Meta(d)
+	if not m then
+		return false, TutorialRules.Text.wrongStep
+	end
+	if m.tutorialDone ~= true then
+		return false, TutorialRules.Text.restartRunning
+	end
+	m.tutorialDone = false
+	m.tutorialSkipped = false
+	m.tutorialStep = 1
+	return true, nil
 end
 
 -- Ist der Schritt ein reiner Lese-Schritt („Weiter“)?
@@ -247240,18 +247337,19 @@ function TutorialRules.ProgressText(step: number, count: number): string
 	return string.format(TutorialRules.Text.progress, step, count)
 end
 
--- { step, count, id, text, target, zone, event, next, done, skipped, active } – flach, sendbar
-function TutorialRules.View(d: any): View
-	local step, i = TutorialRules.Current(d)
+-- { step, count, id, text, target, zone, event, next, done, skipped, active } – flach, sendbar.
+-- mode (optional): außerhalb der Open World ist active = false und der Schritt ohne Text/Ziel (die Karte ruht).
+function TutorialRules.View(d: any, mode: any?): View
+	local step, i = TutorialRules.Current(d, mode)
 	local n = TutorialRules.Count()
 	local s = step or GameConfig.Tutorial.Steps[i]
 	return {
 		step = i,
 		count = n,
 		id = s and s.id or nil,
-		text = s and s.text or "",
-		target = s and s.target or nil,
-		zone = s and s.zone or nil,
+		text = (s and step) and s.text or "",
+		target = (s and step) and s.target or nil,
+		zone = (s and step) and s.zone or nil,
 		event = s and s.event or nil,
 		next = TutorialRules.IsNextStep(step),
 		done = TutorialRules.Done(d),
@@ -248875,7 +248973,7 @@ local function finish(ms, data, d, now)
 	local pay = ArcadeRules.Payout(a, round.key, ev.score, now)
 	local paid = 0
 	if pay.credits &gt; 0 then
-		paid = MiniRules.AddMoney(d, pay.credits)
+		paid = MiniRules.AddIncome(d, pay.credits)
 	end
 	if pay.xp &gt; 0 then
 		MiniRules.GainXP(d, pay.xp)
@@ -250440,7 +250538,7 @@ local function payPending(cs)
 	local amount, xp = cs.pendingReward, cs.pendingXp
 	cs.pendingReward, cs.pendingXp = 0, 0
 	if amount &gt; 0 then
-		MiniRules.AddMoney(d, amount)
+		MiniRules.AddIncome(d, amount) -- Teststrecke: Prestige-Einnahmenbonus (PHASE4_CONTRACT §4)
 	end
 	if xp &gt; 0 then
 		MiniRules.GainXP(d, xp)
@@ -251647,7 +251745,8 @@ return LeaderboardService
 --   lobby_mode {mode}                        Modus für die nächste Reise wählen ("tycoon" | "openworld"), Sitzungsauswahl
 --   lobby_settings {single, passive, beginner}  Einstellungen (MetaRules.SetSettings, sofort wirksam, in d.games.meta gespeichert)
 --   lobby_go                                 Reise mit der Auswahl (PlaceRouter.Go); Party: nur der Leiter, Mitglieder reisen mit
---   lobby_return                             aus jedem Modus zurück in die Lobby
+--   lobby_return                             aus jedem Modus zurück in die Lobby (Party-Mitglieder auch allein: sie bleiben
+--                                            in der Party, nur die Figur reist; der Leiter nimmt bei lobby_go/lobby_return alle mit)
 --   party_create / party_join {code} / party_leave / party_kick {userId}
 -- Party = serverlokal (Code 4 Zeichen aus GameConfig.Party.CodeAlphabet, höchstens MaxMembers, der Leiter startet die Reise;
 -- Verlassen des Servers entfernt aus der Party, der nächste wird Leiter). Mitglieder erhalten mini_notice { kind = "party",
@@ -251701,6 +251800,8 @@ local TEXT = {
 	partyNotMember = "Dieser Spieler ist nicht in deiner Party.",
 	partyKicked = "Du wurdest aus der Party entfernt.",
 	partyLeader = "%s ist jetzt Party-Leiter.",
+	partyLeaderYou = "Du bist jetzt Party-Leiter.",
+	returnAlone = "Du reist allein zurück in die Lobby. Deine Party bleibt bestehen.",
 	partyNoCode = "Es ist gerade kein Party-Code frei. Versuch es gleich noch einmal.",
 	partyTooSoon = "Einen Moment, bitte.",
 	arrived = PlaceRouter.Text.arrived,
@@ -251852,10 +251953,12 @@ local function removeFromParty(player: Player, reason: string)
 	notifyParty(party, { event = reason == "kicked" and "kicked" or "left", userId = player.UserId, name = playerName(player) })
 	if party.leader == player then
 		party.leader = party.members[1]
-		notifyParty(party, { event = "leader", userId = party.leader.UserId, name = playerName(party.leader) })
+		-- die übrigen erfahren den Namen; der neue Leiter bekommt seinen eigenen Toast (kein doppelter Hinweis)
+		notifyParty(party, { event = "leader", userId = party.leader.UserId, name = playerName(party.leader) }, party.leader)
 		local leaderMs = msOf(party.leader)
 		if leaderMs then
-			toast(leaderMs, string.format(TEXT.partyLeader, "Du"))
+			toast(leaderMs, TEXT.partyLeaderYou)
+			dirty(leaderMs)
 		end
 	end
 	return party
@@ -251876,9 +251979,15 @@ end
 local function travel(ms: any, mode: string, fromAction: string): boolean
 	local p, d = ms.p, ms.p.profile.data
 	local party = LobbyService.PartyOf(ms.player)
+	local alone = false
 	if party and party.leader ~= ms.player then
-		toast(ms, TEXT.notLeader)
-		return false
+		if fromAction == "lobby_go" then
+			toast(ms, TEXT.notLeader)
+			return false
+		end
+		-- lobby_return: ein Mitglied darf jederzeit allein zurück (Vertrag §5: aus jedem Modus); die Party bleibt
+		alone = true
+		party = nil
 	end
 	local settings = MetaRules.Settings(d)
 	local members = party and livingMembers(party) or nil
@@ -251911,7 +252020,10 @@ local function travel(ms: any, mode: string, fromAction: string): boolean
 		notifyParty(party, { event = "travel", mode = mode, userId = ms.player.UserId, name = playerName(ms.player) }, ms.player)
 	end
 	ms.lobbyChoice = nil
-	toast(ms, TEXT.arrived[mode])
+	toast(ms, PlaceRouter.ArrivedText(mode))
+	if alone then
+		toast(ms, TEXT.returnAlone)
+	end
 	return true
 end
 
@@ -252083,7 +252195,22 @@ end
 
 function LobbyService.Init(c: any)
 	ctx = type(c) == "table" and c or nil
-	PlaceRouter.Init(c)
+	-- PlaceRouter bekommt den Kontext plus einen Rückruf für asynchron gescheiterte Teleports (TeleportInitFailed):
+	-- die Sitzung gilt als geändert (Snapshot mit neuem Modus), die Vorauswahl ist verbraucht.
+	local routerCtx = {}
+	for k, v in pairs(ctx or {}) do
+		routerCtx[k] = v
+	end
+	routerCtx.onTeleportFailed = function(p: any, kind: any, result: any)
+		local ms = p and msOf(p.player)
+		if ms then
+			if result then
+				ms.lobbyChoice = nil
+			end
+			dirty(ms)
+		end
+	end
+	PlaceRouter.Init(routerCtx)
 end
 
 ---------------------------------------------------------------- Sitzung
@@ -252154,6 +252281,11 @@ function LobbyService.OnStation(ms: any, station: any)
 		end
 	end
 	local data = { action = key }
+	if key == "tutorial" then
+		-- Tutorial-Kiosk: LobbyUI zeigt den Abschnitt „Tutorial“ (Schritte, „Tutorial erneut starten“)
+		local meta = MetaRules.Meta(d)
+		data.tutorialDone = meta ~= nil and meta.tutorialDone == true
+	end
 	local hint = MetaRules.HintFor(d, "station:" .. key)
 	if hint then
 		data.hint = hint.text
@@ -252195,6 +252327,12 @@ function LobbyService.SnapshotFields(ms: any, d: any, _t: number?, _full: boolea
 	local mode = p and GameConfig.ModeSet[p.mode] and p.mode or MetaRules.Mode(d)
 	local m = MetaRules.Meta(d)
 	local settings = MetaRules.Settings(d)
+	-- Einzelspieler-Kennzeichnung dieser Sitzung (p.single, auch ein ausdrückliches false aus TeleportData); ohne
+	-- Sitzung die gespeicherte Einstellung
+	local single = settings.single
+	if p then
+		single = p.single == true
+	end
 	local party = ms and LobbyService.PartyOf(ms.player) or nil
 	local partyField: any = false
 	if party then
@@ -252214,7 +252352,7 @@ function LobbyService.SnapshotFields(ms: any, d: any, _t: number?, _full: boolea
 	return {
 		mode = mode,
 		placeKind = PlaceRouter.PlaceKind(),
-		single = p and p.single == true or settings.single,
+		single = single,
 		-- true, wenn Reisen in diesem Place simuliert werden (Platzhalter-Ids, Studio oder alles in einem Place)
 		simulated = not (PlaceRouter.WouldTeleport("tycoon") or PlaceRouter.WouldTeleport("openworld") or PlaceRouter.WouldTeleport("lobby")),
 		choice = ms and ms.lobbyChoice or false,
@@ -252337,6 +252475,7 @@ local MiniSnapshot = require(MiniShared:WaitForChild("MiniSnapshot"))
 local PressRules = require(MiniShared:WaitForChild("PressRules"))
 local SideGameRules = require(MiniShared:WaitForChild("SideGameRules"))
 local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
+local TutorialRules = require(MiniShared:WaitForChild("TutorialRules"))
 
 local Server = script.Parent
 local PressService = require(Server:WaitForChild("PressService"))
@@ -252639,16 +252778,37 @@ end
 -- je Aktion, damit Klickpakete der Presse nicht zweimal je Sekunde mahnen) und führt nichts aus.
 local ACTION_UNLOCK = {
 	mini_press_click = "feature:press",
+	mini_press_buy = "feature:press", -- Maschinen, Händler und Rebirth der Presse erst mit der Presse (nicht nur der Klick)
+	mini_press_exchange = "feature:press",
+	mini_press_rebirth = "feature:press",
 	mini_scrapyard_buy = "feature:scrapyard",
 	mini_quiz_new = "feature:quiz",
 	mini_parking_new = "feature:parking",
 	mini_tuning_start = "feature:tuning",
+	mini_tuning_collect = "feature:tuning",
+	mini_tuning_idle = "feature:tuning", -- passive Einnahmen gehören zu den Tuning-Projekten (TuningService sammelt vorher nicht)
 	mini_track_start = "feature:track",
 	mini_carwash = "feature:carwash",
 	mini_arcade_start = "feature:arcade",
-	mini_auction_bid = "feature:auction",
+	-- Auktion: NPC-Lose ab feature:auction (12), Lose anderer Spieler erst mit auction:player (20) – wie das Einliefern
+	mini_auction_bid = function(clean)
+		local lot = AuctionService.Lot and AuctionService.Lot(clean.lot) or nil
+		if type(lot) == "table" and lot.kind == "player" then
+			return "auction:player"
+		end
+		return "feature:auction"
+	end,
 	mini_auction_consign = "auction:player",
 	mini_car_testdrive = "feature:dealer",
+	-- Minispiel-Ausbau: Tuning-Abteilung mit den Tuning-Projekten, Schrottplatz-Ausbau mit dem Schrottplatz
+	mini_upgrade = function(clean)
+		if clean.key == "scrapyardLevel" then
+			return "feature:scrapyard"
+		elseif clean.key == "tuningLevel" then
+			return "feature:tuning"
+		end
+		return nil -- unbekannte Schlüssel meldet MiniRules.BuyUpgrade selbst
+	end,
 	mini_car_buy = function(clean)
 		local key = "car:" .. tostring(clean.model)
 		return Unlocks.Known(key) and key or nil -- unbekannte Modelle meldet CarRules.Buy selbst
@@ -252849,8 +253009,8 @@ function Mini.OnJoin(p)
 		AuctionService.OnJoin(ms)
 		-- Ausbaustufe 4: Level/Rang merken, Tutorial-Stand, Anfangsmodus (PlaceKind, lastMode, TeleportData)
 		PrestigeService.OnJoin(ms, d, t)
+		local mode = LobbyService.OnJoin(ms, d, t) -- setzt p.mode (das Tutorial richtet sich danach)
 		TutorialService.OnJoin(ms, d, t)
-		local mode = LobbyService.OnJoin(ms, d, t)
 		ms.modeSeen = nil
 		checkMode(ms, d) -- Open World: Pflicht-Tutorial beim ersten Beitritt (TutorialRules.ShouldStart)
 		-- Game Passes (kann warten), danach den Offline-Ertrag gutschreiben: nur Schrott, nie Geld.
@@ -252890,6 +253050,7 @@ function Mini.Tick(p, t)
 			ctx.changed(p) -- nachgeholte, gedrosselte Revision (siehe Handle)
 		end
 		PressService.Tick(ms, d, t)
+		TuningService.Tick(ms, d, t) -- ohne Tuning-Freischaltung sammeln sich keine passiven Einnahmen an
 		-- Autos: Probefahrt-Ende, Leerlauf/verlorene Autos, Zeitfahren-Timeout, Nitro, zurückgehaltene Belohnung
 		local okCars, errCars = pcall(CarService.Tick, ms, d, t)
 		if not okCars then
@@ -253065,13 +253226,23 @@ local function openStation(p, tab, station)
 		flush(ms, now())
 		return
 	end
-	-- Tutorial-Schritte "tab:&lt;tab&gt;" (Autohaus, Infotafel) und Beginner-Hinweise "station:&lt;key&gt;" (Stadtplan, Credit-Center)
+	-- Tutorial-Schritte "tab:&lt;tab&gt;" (Autohaus, Infotafel) und Beginner-Hinweise "station:&lt;key&gt;" (Stadtplan, Credit-Center).
+	-- Verlangt der aktuelle Tutorial-Schritt genau diese Station, öffnet der Tab auch ohne Level-Freischaltung
+	-- (nur ansehen; Kauf/Probefahrt bleiben über ACTION_UNLOCK gesperrt) – sonst bekäme ein Level-1-Spieler am
+	-- Autohaus nur den Sperr-Toast, während der Schritt abgehakt wird.
+	local wanted = TutorialRules.Current(d, p.mode)
+	local tutorialWants = wanted ~= nil and wanted.event == "tab:" .. tostring(tab)
 	pcall(TutorialService.OnStation, ms, d, key, tab)
 	if tab == "shop" then
 		-- Credit-Center: 2.4.0-Credits-Shop (Tablet-Seite "shop", zeigt auch die Game Passes); ohne Tablet der Tab "shop"
 		emit(ms, MiniNet.Events.Open, { tab = tab, page = "credits" })
-	elseif MiniNet.TabSet[tab] and not Unlocks.TabAllowed(d, tab) then
+	elseif MiniNet.TabSet[tab] and not Unlocks.TabAllowed(d, tab) and not tutorialWants then
 		api.toast(ms, lockedText(Unlocks.ForTab(tab)))
+	elseif tab == "tycoon" and not MiniNet.TabSet[tab] then
+		-- Schnelles Spiel ohne Tycoon-Dienst (Meilenstein 4): Hinweis und der Lobby-Tab, damit der Rückweg einen
+		-- Tastendruck entfernt ist
+		api.toast(ms, MiniLocale.T("coming_soon", CityService.Title(station, tab)))
+		emit(ms, MiniNet.Events.Open, { tab = "lobby" })
 	elseif MiniNet.TabSet[tab] then
 		-- Spielhalle: der Automat (Attribut GameKey/Game bzw. Stationsname arcade_N) wird gleich ausgewählt
 		local game = nil
@@ -253166,8 +253337,14 @@ return Mini
 -- (docs/PHASE4_CONTRACT.md §1). Ein Code für alle Places; das Verhalten richtet sich nach dem Attribut
 -- PlaceKind an ReplicatedStorage.GarageShared ("all" | "lobby" | "openworld" | "tycoon").
 --
---   PlaceRouter.Init(ctx)                        ctx = { emit(p, kind, data), toast(p, text), moveTo(p, part)?, now() }
---                                                (der GarageServer-Kontext aus MiniService.Init; nur emit/toast sind Pflicht)
+--   PlaceRouter.Init(ctx)                        ctx = { emit(p, kind, data), toast(p, text), moveTo(p, part)?, now(),
+--                                                getSession(player)?, onTeleportFailed(p, kind, result)? }
+--                                                (der GarageServer-Kontext aus MiniService.Init; nur emit/toast sind Pflicht).
+--                                                Verbindet einmalig TeleportService.TeleportInitFailed: schlägt ein
+--                                                TeleportAsync erst asynchron fehl (GameFull, Flooded, Failure …), holt
+--                                                der Server die Sitzung über ctx.getSession, warnt, zeigt den Toast und
+--                                                simuliert den Ortswechsel (Simulate) – je Spieler, Party-Mitglieder
+--                                                bekommen ihr eigenes Ereignis.
 --   PlaceRouter.PlaceKind() -&gt; string            Attribut PlaceKind (fehlt es: "all")
 --   PlaceRouter.InitialMode(p, placeKind, joinData) -&gt; mode, info
 --                                                Modus beim Beitritt: lobby-Place -&gt; "lobby"; openworld/tycoon -&gt; dieser Modus;
@@ -253184,7 +253361,11 @@ return Mini
 --                                                (&lt;Zone&gt;.Arrivals.hub; Open World ohne Stadt: eigene Werkstatt), mini_notice
 --                                                { kind = "mode", mode, simulated = true, single }. Fehlt die Zone in diesem
 --                                                Place: bleiben + Toast, nichts geändert.
---   PlaceRouter.MoveToZone(p, kind) -&gt; ok, msg    Figur zur Zonen-Ankunft versetzen (ohne Moduswechsel), z. B. nach dem Erscheinen
+--   PlaceRouter.MoveToZone(p, kind) -&gt; ok, msg    Figur zur Zonen-Ankunft versetzen (ohne Moduswechsel), z. B. nach dem Erscheinen.
+--                                                Open World mit laufendem Tutorial: die eigene Werkstatt (dort beginnt es),
+--                                                sonst die Stadt-Ankunft.
+--   PlaceRouter.ArrivedText(kind) -&gt; string      Ankunfts-Toast; Schnelles Spiel ohne Tycoon-Dienst (GameConfig.Tycoon leer):
+--                                                „eröffnet bald“ mit dem Rückweg.
 --   PlaceRouter.WouldTeleport(kind) -&gt; bool      true, wenn Go einen echten Teleport versuchen würde (für den Snapshot)
 --   PlaceRouter.SanitizeTeleportData(raw) -&gt; table  Whitelist nach GameConfig.TeleportDataKeys (nur string/number/boolean)
 -- Kein Geld, keine Speicherung außer meta.lastMode (MetaRules.SetMode). Teleports laufen nur in pcall, TeleportData gilt als
@@ -253197,6 +253378,7 @@ local Shared = ReplicatedStorage:WaitForChild("GarageShared")
 local MiniShared = Shared:WaitForChild("Mini")
 local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 local MetaRules = require(MiniShared:WaitForChild("MetaRules"))
+local TutorialRules = require(MiniShared:WaitForChild("TutorialRules"))
 local CityService = require(script.Parent:WaitForChild("CityService"))
 
 local PlaceRouter = {}
@@ -253210,10 +253392,12 @@ local TEXT = {
 	noCharacter = "Warte kurz, bis deine Figur da ist.",
 	teleportFailed = "Der Teleport hat nicht geklappt. Wir wechseln den Ort hier im Server.",
 	arrived = { lobby = "Willkommen in der Lobby!", openworld = "Willkommen in der Werkstattmeile!", tycoon = "Schnelles Spiel: Viel Erfolg bei deiner Tycoon-Runde!" },
+	tycoonSoon = "Das Schnelle Spiel eröffnet bald! Zurück geht's mit M → Tab „Lobby“ → „Zurück zur Lobby“.",
 }
 PlaceRouter.Text = TEXT
 
-local ctx = nil -- { emit, toast, moveTo?, now? }
+local ctx = nil -- { emit, toast, moveTo?, now?, getSession?, onTeleportFailed? }
+local failedConnection = nil -- TeleportService.TeleportInitFailed (einmal je Server)
 
 local function finite(v: any): boolean
 	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
@@ -253231,8 +253415,82 @@ local function emit(p: any, kind: string, data: any)
 	end
 end
 
+-- Gibt es das Schnelle Spiel schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
+function PlaceRouter.TycoonOpen(): boolean
+	local t = GameConfig.Tycoon
+	return type(t) == "table" and next(t) ~= nil
+end
+
+-- Ankunfts-Toast eines Modus
+function PlaceRouter.ArrivedText(kind: string): string?
+	if kind == "tycoon" and not PlaceRouter.TycoonOpen() then
+		return TEXT.tycoonSoon
+	end
+	return TEXT.arrived[kind]
+end
+
+-- Modus zu einer Place-Id (Rückwärtssuche in GameConfig.Places); nil für unbekannte Ids
+function PlaceRouter.ModeForPlace(placeId: any): string?
+	if not finite(placeId) or placeId &lt;= 0 then
+		return nil
+	end
+	for _, kind in ipairs(GameConfig.Modes) do
+		if PlaceRouter.PlaceId(kind) == placeId then
+			return kind
+		end
+	end
+	return nil
+end
+
+-- TeleportService.TeleportInitFailed(player, result, errorMessage, placeId, options): der übliche asynchrone
+-- Fehlerweg eines echten Teleports. Sitzung holen, Ziel aus den TeleportData (SanitizeTeleportData) bzw. der Place-Id,
+-- warnen, Toast und Simulation. Kein Ziel bestimmbar oder Simulation unmöglich: lastMode auf den aktuellen Modus zurück.
+function PlaceRouter.OnTeleportInitFailed(player: any, result: any, message: any, placeId: any, options: any)
+	local p = ctx and type(ctx.getSession) == "function" and ctx.getSession(player) or nil
+	if not p or not p.profile or type(p.profile.data) ~= "table" then
+		return
+	end
+	local td = {}
+	if typeof(options) == "Instance" then
+		local okData, raw = pcall(function()
+			return options:GetTeleportData()
+		end)
+		if okData then
+			td = PlaceRouter.SanitizeTeleportData(raw)
+		end
+	end
+	local kind = PlaceRouter.IsMode(td.mode) and td.mode or PlaceRouter.ModeForPlace(placeId)
+	warn("[Ortswechsel] Teleport von " .. tostring(player and player.Name) .. " nach " .. tostring(kind or placeId)
+		.. " fehlgeschlagen: " .. tostring(result) .. " – " .. tostring(message))
+	toast(p, TEXT.teleportFailed)
+	local ok, res = false, nil
+	if kind and kind ~= p.mode then
+		ok, res = PlaceRouter.Simulate(p, kind, { single = td.single, party = td.party })
+	end
+	if not ok then
+		MetaRules.SetMode(p.profile.data, p.mode) -- Reise ist nicht zustande gekommen: letzter Modus = hier
+	end
+	if ctx and type(ctx.onTeleportFailed) == "function" then
+		pcall(ctx.onTeleportFailed, p, kind, ok and res or nil)
+	end
+end
+
 function PlaceRouter.Init(c: any)
 	ctx = type(c) == "table" and c or nil
+	if failedConnection then
+		return
+	end
+	local ok, err = pcall(function()
+		failedConnection = TeleportService.TeleportInitFailed:Connect(function(player, result, message, placeId, options)
+			local okF, errF = pcall(PlaceRouter.OnTeleportInitFailed, player, result, message, placeId, options)
+			if not okF then
+				warn("[Ortswechsel] TeleportInitFailed: " .. tostring(errF))
+			end
+		end)
+	end)
+	if not ok then
+		warn("[Ortswechsel] TeleportInitFailed nicht verbunden: " .. tostring(err))
+	end
 end
 
 function PlaceRouter.Initialized(): boolean
@@ -253405,20 +253663,54 @@ end
 
 -- Figur zur Zonen-Ankunft versetzen (ohne Moduswechsel). Open World ohne Stadt: eigene Werkstatt (ctx.moveTo bzw.
 -- CityService.Travel). Rückgabe: ok, Hinweistext bei Fehlschlag.
+-- Open World: Ankunft in der eigenen Werkstatt (ctx.moveTo bzw. CityService.Travel). Rückgabe: ok, Hinweistext.
+local function moveHome(p: any): (boolean, string?)
+	if not (ctx and type(ctx.moveTo) == "function") then
+		return false, TEXT.zoneMissing
+	end
+	local ch = p.player and p.player.Character
+	local humanoid = ch and ch:FindFirstChildOfClass("Humanoid")
+	if not ch or not humanoid or humanoid.Health &lt;= 0 then
+		return false, TEXT.noCharacter
+	end
+	CityService.Unseat(humanoid) -- SeatWeld weg, sonst reist das ganze Auto mit (GarageServer.moveTo löst es ebenfalls)
+	local ok, err = pcall(CityService.Travel, p, "workshop", ctx.moveTo)
+	if ok and err ~= false then
+		return true
+	end
+	return false, type(err) == "string" and err or TEXT.noCharacter
+end
+
+-- Neue Spieler mit laufendem Tutorial kommen in ihrer Werkstatt an (Schritt 1 „Willkommen in deiner Werkstatt“,
+-- Schritt 3 „Geh zum Empfang“ – die Grundstücke liegen bis zu 500 Studs vom Stadt-Hub entfernt).
+function PlaceRouter.PrefersWorkshop(p: any, kind: string): boolean
+	if kind ~= "openworld" then
+		return false
+	end
+	local d = p and p.profile and p.profile.data or nil
+	return TutorialRules.Active(d) == true
+end
+
 function PlaceRouter.MoveToZone(p: any, kind: string): (boolean, string?)
 	if not PlaceRouter.IsMode(kind) then
 		return false, TEXT.unknown
+	end
+	if PlaceRouter.PrefersWorkshop(p, kind) and PlaceRouter.ZoneAvailable(p, kind) then
+		local ok, msg = moveHome(p)
+		if ok then
+			return true
+		end
+		if msg == TEXT.noCharacter then
+			return false, msg
+		end
+		-- Werkstatt (noch) nicht erreichbar: Stadt-Ankunft
 	end
 	local destination = PlaceRouter.ZoneArrival(kind)
 	if destination then
 		return placeCharacter(p, destination)
 	end
-	if kind == "openworld" and PlaceRouter.ZoneAvailable(p, kind) and ctx and type(ctx.moveTo) == "function" then
-		local ok, err = pcall(CityService.Travel, p, "workshop", ctx.moveTo)
-		if ok and err ~= false then
-			return true
-		end
-		return false, type(err) == "string" and err or TEXT.noCharacter
+	if kind == "openworld" and PlaceRouter.ZoneAvailable(p, kind) then
+		return moveHome(p)
 	end
 	return false, TEXT.zoneMissing
 end
@@ -253490,29 +253782,44 @@ function PlaceRouter.Go(p: any, kind: string, data: GoData?): (boolean, GoResult
 		return false, TEXT.unknown
 	end
 	data = type(data) == "table" and data or {}
+	local attempted = false
 	if PlaceRouter.WouldTeleport(kind) then
 		local placeId = PlaceRouter.PlaceId(kind)
+		attempted = true
+		-- Der gewählte Modus gilt am Ziel als letzter Modus (Profil wird beim Verlassen gespeichert). Er wird VOR dem
+		-- Aufruf gemerkt: TeleportInitFailed kann noch innerhalb von TeleportAsync feuern und setzt ihn dann zurück
+		-- bzw. auf das Ziel der Simulation – ein SetMode danach überschriebe diese Korrektur.
+		MetaRules.SetMode(p.profile.data, kind)
 		local ok, err = pcall(teleport, p, kind, placeId, data)
 		if ok then
-			-- Der gewählte Modus gilt auch am Ziel als letzter Modus (Profil wird beim Verlassen gespeichert)
-			MetaRules.SetMode(p.profile.data, kind)
 			return true, { mode = kind, teleported = true, simulated = false, placeId = placeId }
 		end
 		warn("[Ortswechsel] Teleport nach " .. kind .. " (" .. tostring(placeId) .. "): " .. tostring(err))
 		toast(p, TEXT.teleportFailed)
 	end
-	return PlaceRouter.Simulate(p, kind, data)
+	local okS, res = PlaceRouter.Simulate(p, kind, data)
+	if not okS and attempted then
+		MetaRules.SetMode(p.profile.data, p.mode) -- Reise ist nicht zustande gekommen: letzter Modus = hier
+	end
+	return okS, res
 end
 
 return PlaceRouter
 </ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000035"><Properties><string name="Name">PressService</string><ProtectedString name="Source">-- PressService: Schrottpresse auf dem Server (Klicks, Maschinen-Tick, Offline-Ertrag, Händler, Rebirth).
 -- Erträge der Presse sind Schrott, nie Geld. Geld gibt es nur beim Händler (innerhalb von request()).
+-- Freischaltung (PHASE4_CONTRACT §3, §12): die Presse gibt es ab feature:press (Level 2). Vorher produzieren die
+-- Maschinen nicht (Tick und Offline), lastTick läuft mit; die Aktionen sperrt MiniService (ACTION_UNLOCK).
 local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniConfig = require(MiniShared:WaitForChild("MiniConfig"))
 local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 local PressRules = require(MiniShared:WaitForChild("PressRules"))
+local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
 
 local PressService = {}
+
+function PressService.Unlocked(d): boolean
+	return Unlocks.Has(d, "feature:press")
+end
 
 -- Klick-Budget: höchstens MaxClicksPerSecond je vergangener Sekunde, kleiner Puffer für gebündelte Pakete.
 function PressService.AcceptClicks(ms, count, t)
@@ -253541,6 +253848,9 @@ end
 
 -- Rückgabe: Hinweis-Daten für mini_notice (kind "offline") oder nil
 function PressService.ApplyOffline(ms, d, seconds, now)
+	if not PressService.Unlocked(d) then
+		return nil -- Presse noch gesperrt: keine Offline-Produktion
+	end
 	local gain = PressRules.Produce(d, seconds, now, ms.passes)
 	if gain &gt;= 1 then
 		return { text = MiniLocale.T("offline_press", MiniLocale.Scrap(gain)), scrap = gain, seconds = seconds }
@@ -253552,7 +253862,7 @@ end
 function PressService.Tick(ms, d, now)
 	local dt = now - ms.lastTickAt
 	ms.lastTickAt = now
-	if dt &gt; 0 then
+	if dt &gt; 0 and PressService.Unlocked(d) then
 		PressRules.Produce(d, math.min(dt, MiniConfig.PressTickCapSeconds), now, ms.passes)
 	end
 	d.games.press.lastTick = now
@@ -253908,16 +254218,34 @@ end
 
 return SideGamesService
 </ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000039"><Properties><string name="Name">TuningService</string><ProtectedString name="Source">-- TuningService: Idle Tuning Garage auf dem Server. Echtzeit über die Serverzeit, läuft offline weiter.
+-- Freischaltung (PHASE4_CONTRACT §3, §12): Tuning-Projekte gibt es ab feature:tuning (Level 6). Vorher sammeln sich
+-- keine passiven Einnahmen an (die Uhr lastIdle bleibt auf jetzt), die Aktionen sperrt MiniService (ACTION_UNLOCK).
 local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 local TuningRules = require(MiniShared:WaitForChild("TuningRules"))
+local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
 
 local TuningService = {}
 
+function TuningService.Unlocked(d): boolean
+	return Unlocks.Has(d, "feature:tuning")
+end
+
 function TuningService.OnJoin(ms, d, now)
 	local tu = d.games.tuning
-	-- Erstes Spiel oder Zeitstempel in der Zukunft: Sammeln beginnt jetzt
-	if tu.lastIdle &lt;= 0 or tu.lastIdle &gt; now then
+	-- Erstes Spiel, Zeitstempel in der Zukunft oder Tuning noch gesperrt: Sammeln beginnt (frühestens) jetzt
+	if tu.lastIdle &lt;= 0 or tu.lastIdle &gt; now or not TuningService.Unlocked(d) then
+		tu.lastIdle = now
+	end
+end
+
+-- 0,5-s-Tick: ohne Freischaltung läuft die Uhr der passiven Einnahmen mit (nichts wird angespart)
+function TuningService.Tick(ms, d, now)
+	local tu = d.games and d.games.tuning
+	if type(tu) ~= "table" then
+		return
+	end
+	if not TuningService.Unlocked(d) then
 		tu.lastIdle = now
 	end
 end
@@ -253949,8 +254277,8 @@ return TuningService
 -- für reine Lese-Schritte („Weiter“) und tutorial_skip. Belohnung (GameConfig.Tutorial.Reward) einmalig am Ende.
 --
 -- Schnittstelle für MiniService:
---   Register(Actions, api)              tutorial_next {step}, tutorial_skip
---   OnJoin(ms, d, now)                  Sitzung vorbereiten (Hinweis mit dem aktuellen Schritt nach 'hello')
+--   Register(Actions, api)              tutorial_next {step}, tutorial_skip, tutorial_restart (Kiosk in der Lobby)
+--   OnJoin(ms, d, now)                  Sitzung vorbereiten (Hinweis mit dem aktuellen Schritt nach 'hello', nur Open World)
 --   OnEvent(ms, d, event) -&gt; advanced   Ereignis melden: "station:&lt;key&gt;" (Plot-Station, GarageServer act/World-Callback),
 --                                       "tab:&lt;tab&gt;" (Stadt-Station, MiniService.openStation), "settled" (Mini.OnSettled),
 --                                       "action:&lt;name&gt;" (Mini.Handle nach erfolgreichem Handler), "accept"/"scan"/"menu"
@@ -253967,6 +254295,9 @@ return TuningService
 --   SnapshotFields(ms, d, now, full)    { tutorial = { step, count, text, target, zone, next, done, skipped, active } }
 -- Hinweise: mini_notice { kind = "tutorial", step, count, text, target, zone, next, done, skipped, finished?, started? }
 --           mini_notice { kind = "hint", id, text, trigger }
+-- Modus: das Tutorial läuft nur in der Open World (ms.p.mode == "openworld", Vertrag §6). In Lobby und Schnellem
+-- Spiel ist snapshot.tutorial.active = false, tutorial_next wird mit Toast abgelehnt, Ereignisse zählen nicht
+-- (Beginner-Hinweise laufen weiter). Sitzungen ohne Modus (p.mode = nil) gelten als Open World.
 -- Geld: nur die einmalige Belohnung (MiniRules.AddMoney + MiniRules.GainXP); fällt sie außerhalb von request()
 -- an (Stationsbesuch), meldet api.changed die 2.4.0-Revision. Während transacting wird sie zurückgehalten
 -- (ms.tutorialRewardPending) und im Tick bzw. in OnLeave nachgeholt.
@@ -254007,6 +254338,19 @@ local function transacting(ms: any): boolean
 	return prof ~= nil and prof.transacting == true
 end
 
+-- Modus der Sitzung (nil ohne Lobby-Verkabelung = Open World)
+local function modeOf(ms: any): string?
+	local p = ms and ms.p
+	local mode = p and p.mode
+	return type(mode) == "string" and mode or nil
+end
+
+-- Läuft das Tutorial in dieser Sitzung (Profilstand und Modus)?
+local function activeHere(ms: any, d: any): boolean
+	return TutorialRules.Active(d, modeOf(ms))
+end
+TutorialService.ActiveHere = activeHere
+
 ---------------------------------------------------------------- Hinweise (Warteschlange, bis der Client zuhört)
 local function send(ms: any, kind: string, data: { [string]: any })
 	if not api then
@@ -254032,7 +254376,7 @@ function TutorialService.Flush(ms: any)
 end
 
 local function stepNotice(ms: any, d: any, extra: { [string]: any }?)
-	local v = TutorialRules.View(d)
+	local v = TutorialRules.View(d, modeOf(ms))
 	local data = {
 		step = v.step, count = v.count, id = v.id, text = v.text, target = v.target, zone = v.zone,
 		next = v.next, done = v.done, skipped = v.skipped, active = v.active,
@@ -254046,13 +254390,22 @@ local function stepNotice(ms: any, d: any, extra: { [string]: any }?)
 	end
 end
 
----------------------------------------------------------------- Belohnung (einmalig, nie beim Überspringen)
+---------------------------------------------------------------- Belohnung (einmalig, nie beim Überspringen, nie nach Neustart)
 local function grantReward(ms: any, d: any): boolean
+	if TutorialRules.Rewarded(d) then
+		ms.tutorialRewardPending = nil
+		if api then
+			api.toast(ms, TutorialRules.Text.finishedAgain)
+			api.dirty(ms)
+		end
+		return true
+	end
 	if transacting(ms) then
 		ms.tutorialRewardPending = true
 		return false
 	end
 	ms.tutorialRewardPending = nil
+	TutorialRules.MarkRewarded(d)
 	local r = TutorialRules.Reward()
 	local credits = MiniRules.AddMoney(d, r.credits)
 	MiniRules.GainXP(d, r.xp)
@@ -254089,12 +254442,14 @@ function TutorialService.Hint(ms: any, d: any, trigger: any): number
 	return #hints
 end
 
--- Statistik gestiegen (MiniRules.AddStat): Hinweis "first:&lt;stat&gt;", sobald sie &gt; 0 ist
+-- Statistik gestiegen (MiniRules.AddStat um 1): Hinweis "first:&lt;stat&gt;" nur beim Übergang 0 -&gt; 1. Ein Veteran mit
+-- 200 Aufträgen (stats.jobsDone aus d.completed) bekommt so nie „Super, dein erster Auftrag!“ (MetaRules.Load
+-- markiert die Erstlings-Hinweise für Veteranen zusätzlich als gesehen).
 function TutorialService.OnStat(ms: any, d: any, stat: any): number
 	local g = type(d) == "table" and d.games or nil
 	local stats = type(g) == "table" and g.stats or nil
 	local v = type(stats) == "table" and stats[stat] or nil
-	if type(stat) ~= "string" or not finite(v) or v &lt;= 0 then
+	if type(stat) ~= "string" or not finite(v) or v ~= 1 then
 		return 0
 	end
 	return TutorialService.Hint(ms, d, "first:" .. stat)
@@ -254110,8 +254465,8 @@ function TutorialService.OnEvent(ms: any, d: any, event: any): boolean
 	if string.sub(event, 1, 8) == "station:" then
 		TutorialService.Hint(ms, d, event)
 	end
-	if not TutorialRules.Active(d) then
-		return false
+	if not activeHere(ms, d) then
+		return false -- beendet oder außerhalb der Open World (Lobby/Tycoon): Ereignisse zählen nicht
 	end
 	local advanced, finished = TutorialRules.Advance(d, event)
 	if not advanced then
@@ -254136,6 +254491,10 @@ end
 
 ---------------------------------------------------------------- Aktionen
 local function next_(ms: any, data: any, d: any)
+	if TutorialRules.Active(d) and not activeHere(ms, d) then
+		api.toast(ms, TutorialRules.Text.notHere) -- Lobby/Tycoon: kein Fortschritt
+		return
+	end
 	local ok, res = TutorialRules.Next(d, data.step)
 	if ok then
 		afterAdvance(ms, d, res == true)
@@ -254153,10 +254512,32 @@ local function skip(ms: any, _: any, d: any)
 	stepNotice(ms, d, { skipped = true })
 end
 
+-- Tutorial-Kiosk in der Lobby: noch einmal von vorn (nur nach Ende/Überspringen); die Belohnung gibt es nicht
+-- noch einmal (meta.tutorialRewarded). In der Open World startet es sofort, sonst beim nächsten Betreten.
+local function restart(ms: any, _: any, d: any)
+	local ok, msg = TutorialRules.Restart(d)
+	if not ok then
+		if msg then
+			api.toast(ms, msg)
+		end
+		return
+	end
+	ms.tutorialRewardPending = nil
+	ms.tutorialStarted = nil
+	api.toast(ms, TutorialRules.Text.restarted)
+	if activeHere(ms, d) then
+		ms.tutorialStarted = true
+		stepNotice(ms, d, { started = true, restarted = true })
+	else
+		stepNotice(ms, d, { restarted = true })
+	end
+end
+
 function TutorialService.Register(Actions: any, a: any)
 	api = a
 	Actions.Register("tutorial_next", next_)
 	Actions.Register("tutorial_skip", skip)
+	Actions.Register("tutorial_restart", restart)
 end
 
 ---------------------------------------------------------------- Sitzung
@@ -254184,7 +254565,7 @@ function TutorialService.OnJoin(ms: any, d: any, now: number?)
 	ms.tutorialNotices = {}
 	ms.tutorialRewardPending = nil
 	ms.tutorialStarted = nil
-	if TutorialRules.Active(d) then
+	if activeHere(ms, d) then
 		stepNotice(ms, d) -- wartet in der Warteschlange, bis der Client nach 'hello' zuhört
 	end
 end
@@ -254197,7 +254578,7 @@ function TutorialService.Tick(ms: any, d: any, now: number?): boolean
 		changed = grantReward(ms, d) or changed
 	end
 	TutorialService.Flush(ms)
-	if not TutorialRules.Active(d) then
+	if not activeHere(ms, d) then
 		return changed
 	end
 	local event = TutorialRules.PendingJobEvent(d)
@@ -254219,11 +254600,12 @@ end
 
 ---------------------------------------------------------------- Snapshot (§11)
 function TutorialService.SnapshotFields(ms: any, d: any, now: number?, full: boolean?): { [string]: any }
-	local v = TutorialRules.View(d)
+	local v = TutorialRules.View(d, modeOf(ms)) -- außerhalb der Open World: active = false, ohne Text/Ziel
 	return {
 		tutorial = {
 			step = v.step, count = v.count, id = v.id, text = v.text, target = v.target, zone = v.zone,
 			next = v.next, done = v.done, skipped = v.skipped, active = v.active,
+			rewarded = TutorialRules.Rewarded(d),
 			rewardPending = ms ~= nil and ms.tutorialRewardPending == true,
 		},
 	}
@@ -263194,6 +263576,10 @@ return LeaderboardUI
 -- party_*); Modus, Party und Einstellungen kommen vom Server (Snapshot-Felder aus LobbyService.SnapshotFields).
 -- Schnittstelle wie die anderen Bereiche: Build(page, ctx), Render(s), OnShow(), OnNotice(data) für
 -- mini_notice { kind = "mode" | "party" | "lobby" }. Handy-tauglich: eine Spalte, Knöpfe mindestens 44 px.
+-- Abschnitt „Tutorial“ (Tutorial-Kiosk): die Schritte als Liste und „Tutorial erneut starten“ (tutorial_restart,
+-- nur nach Ende/Überspringen; die Belohnung gibt es nicht noch einmal). Solange GameConfig.Tycoon leer ist
+-- (Meilenstein 4), zeigt die Karte „Schnelles Spiel“ den Zustand „Eröffnet bald“.
+local Players = game:GetService("Players")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local GameConfig = require(Mini:WaitForChild("GameConfig"))
 
@@ -263229,6 +263615,12 @@ local MODE_TEXT = {
 	openworld = "Du bist in der Werkstattmeile (Open World).",
 	tycoon = "Du bist im Schnellen Spiel (Tycoon).",
 }
+
+-- Gibt es das Schnelle Spiel schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
+local function tycoonOpen(): boolean
+	local t = GameConfig.Tycoon
+	return type(t) == "table" and next(t) ~= nil
+end
 
 local function toast(text: string)
 	if ctx and type(ctx.Toast) == "function" and type(text) == "string" and text ~= "" then
@@ -263387,6 +263779,23 @@ function LobbyUI.Build(page, c)
 		Remote.Send("party_leave")
 	end, { Name = "PartyLeave", LayoutOrder = 42 })
 
+	-- Tutorial (Tutorial-Kiosk): Schritte und Neustart
+	local tutorial = UI.Card(page, 5)
+	tutorial.Name = "TutorialCard"
+	UI.Title(tutorial, "Tutorial", 1)
+	refs.tutorialStatus = UI.Label(tutorial, "", { Font = UI.FontBold, TextSize = 15, LayoutOrder = 2, Name = "TutorialStatus" })
+	local steps = {}
+	for i, st in ipairs(GameConfig.Tutorial.Steps) do
+		table.insert(steps, tostring(i) .. ". " .. tostring(st.text))
+	end
+	local stepList = UI.Small(tutorial, table.concat(steps, "\n"), 3)
+	stepList.Name = "TutorialSteps"
+	refs.tutorialRestart = UI.Button(tutorial, "Tutorial erneut starten", T.blue, function()
+		Remote.Send("tutorial_restart")
+	end, { Name = "TutorialRestart", LayoutOrder = 4 })
+	refs.tutorialHint = UI.Small(tutorial, "", 5)
+	refs.tutorialHint.Name = "TutorialHint"
+
 	LobbyUI.Render(nil)
 end
 
@@ -263417,7 +263826,11 @@ function LobbyUI.Render(s)
 		local here = mode == key
 		card.root.BackgroundColor3 = selected and card.color or T.card
 		card.root:SetAttribute("baseColor", card.root.BackgroundColor3)
-		card.state.Text = here and "Du bist hier." or (selected and "Ausgewählt" or "Antippen zum Auswählen")
+		local state = here and "Du bist hier." or (selected and "Ausgewählt" or "Antippen zum Auswählen")
+		if key == "tycoon" and not tycoonOpen() then
+			state = "Eröffnet bald – das Gelände kannst du schon ansehen. " .. state
+		end
+		card.state.Text = state
 	end
 	local target = choice or ((mode ~= "lobby") and mode) or "openworld"
 	local party = type(s.party) == "table" and s.party or nil
@@ -263466,6 +263879,23 @@ function LobbyUI.Render(s)
 	refs.createButton.Visible = party == nil
 	refs.codeBox.Parent.Visible = party == nil
 	refs.leaveButton.Visible = party ~= nil
+
+	-- Tutorial
+	if refs.tutorialStatus then
+		local meta = type(s.meta) == "table" and s.meta or {}
+		local tut = type(s.tutorial) == "table" and s.tutorial or {}
+		local done = meta.tutorialDone == true or tut.done == true
+		local count = #GameConfig.Tutorial.Steps
+		if done then
+			refs.tutorialStatus.Text = tut.skipped and "Du hast das Tutorial übersprungen." or "Du hast das Tutorial geschafft."
+			refs.tutorialHint.Text = tut.rewarded and "Noch einmal von vorn – die Belohnung hattest du schon."
+				or "Noch einmal von vorn: Am Ende warten " .. tostring(GameConfig.Tutorial.Reward.credits) .. " Credits und " .. tostring(GameConfig.Tutorial.Reward.xp) .. " XP."
+		else
+			refs.tutorialStatus.Text = "Das Tutorial läuft: Schritt " .. tostring(meta.tutorialStep or tut.step or 1) .. " von " .. tostring(count) .. (inLobby and " – es geht in der Werkstattmeile weiter." or ".")
+			refs.tutorialHint.Text = "Die Tutorial-Karte siehst du in der Open World."
+		end
+		UI.SetEnabled(refs.tutorialRestart, done, T.blue)
+	end
 end
 
 function LobbyUI.OnShow()
@@ -263493,6 +263923,11 @@ function LobbyUI.OnNotice(data)
 			toast(name .. " ist der Party beigetreten.")
 		elseif ev == "left" then
 			toast(name .. " hat die Party verlassen.")
+		elseif ev == "kicked" then
+			local me = Players.LocalPlayer
+			if not (me and data.userId == me.UserId) then
+				toast(name .. " wurde aus der Party entfernt.") -- den eigenen Rauswurf meldet der Server per Toast
+			end
 		elseif ev == "leader" then
 			toast(name .. " ist jetzt Party-Leiter.")
 		elseif ev == "travel" then
@@ -263505,6 +263940,17 @@ function LobbyUI.OnNotice(data)
 		if action == "mode_tycoon" or action == "mode_openworld" then
 			pendingChoice = string.sub(action, 6)
 			LobbyUI.Render(latest)
+		elseif action == "tutorial" then
+			-- Tutorial-Kiosk: zum Abschnitt „Tutorial“ blättern (Inhalt ist eine ScrollingFrame)
+			LobbyUI.Render(latest)
+			local card = refs.tutorialStatus and refs.tutorialStatus.Parent
+			local content = UI and UI.Content
+			if card and content and content:IsA("ScrollingFrame") then
+				pcall(function()
+					local y = card.AbsolutePosition.Y - content.AbsolutePosition.Y + content.CanvasPosition.Y
+					content.CanvasPosition = Vector2.new(0, math.max(0, y - 8))
+				end)
+			end
 		end
 	end
 end
@@ -265500,16 +265946,22 @@ local function num(v: any, default: number): number
 	return type(v) == "number" and v == v and v or default
 end
 
+-- Prozentwert ganzzahlig gerundet (7 × 0,02 × 100 ergäbe sonst „14.000000000000002“)
+local function pct(v: any): string
+	return tostring(math.floor(num(v, 0) + 0.5))
+end
+
 local function rewardText(r: any): string
 	if type(r) ~= "table" then
 		return ""
 	end
-	local parts = { "+" .. tostring(num(r.incomePct, 0)) .. " % Einnahmen", tostring(num(r.discountPct, 0)) .. " % Rabatt im Autohaus", "Kosmetik" }
+	local parts = { "+" .. pct(r.incomePct) .. " % Einnahmen", pct(r.discountPct) .. " % Rabatt im Autohaus", "Kosmetik" }
 	if num(r.tycoonRebirthPct, 0) &gt; 0 then
-		table.insert(parts, "+" .. tostring(r.tycoonRebirthPct) .. " % Tycoon-Rebirth")
+		table.insert(parts, "+" .. pct(r.tycoonRebirthPct) .. " % Tycoon-Rebirth")
 	end
 	return table.concat(parts, " · ")
 end
+PrestigeUI.RewardText = rewardText
 
 ---------------------------------------------------------------- Belohnungszeile
 local function rewardRow(parent, i: number)
@@ -265776,6 +266228,39 @@ end
 
 function PrestigeUI.Hud()
 	return hud.gui, hud
+end
+
+-- Unterkante des Abzeichens (in Pixeln ab der Oberkante der ScreenGui, Inset eingerechnet); 0 ohne Abzeichen.
+-- Hinweis-/Freischaltungskarten (TutorialUI, UnlocksUI) legen sich darunter – auch wenn das Abzeichen auf schmalen
+-- Bildschirmen unter die 2.4.0-Leiste (y 60) rückt.
+function PrestigeUI.HudBottom(): number
+	local gui, frame = hud.gui, hud.frame
+	if not gui or not frame or not gui.Parent then
+		return 0
+	end
+	local ok, bottom = pcall(function()
+		return frame.AbsolutePosition.Y - gui.AbsolutePosition.Y + frame.AbsoluteSize.Y
+	end)
+	if ok and type(bottom) == "number" and bottom == bottom and bottom &gt; 0 then
+		return bottom
+	end
+	return frame.Position.Y.Offset + PrestigeUI.HudHeight
+end
+
+-- Oberkante für Karten oben rechts: unter dem Abzeichen UND unter der Toast-Zone (2.4.0-Toast 330 × 60 zentriert
+-- ab UI.ToastTop bzw. y 62; auf Bildschirmen unter ≈ 960 px überlappen Toast und rechte Karte).
+PrestigeUI.ToastHeight = 60
+PrestigeUI.CardGap = 8
+function PrestigeUI.OverlayTop(): number
+	local top = PrestigeUI.HudBottom() + PrestigeUI.CardGap
+	local toastTop = 62
+	if UI and type(UI.ToastTop) == "function" then
+		local ok, t = pcall(UI.ToastTop)
+		if ok and type(t) == "number" and t == t then
+			toastTop = t
+		end
+	end
+	return math.max(top, toastTop + PrestigeUI.ToastHeight + PrestigeUI.CardGap)
 end
 
 return PrestigeUI
@@ -266232,6 +266717,7 @@ return TrackUI
 </ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000066"><Properties><string name="Name">TuningUI</string><ProtectedString name="Source">-- TuningUI: Idle Tuning Garage (Echtzeit-Projekte, passive Einnahmen, Ausbau der Tuning-Abteilung).
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniLocale = require(Mini:WaitForChild("MiniLocale"))
+local Unlocks = require(Mini:WaitForChild("Unlocks"))
 
 local TuningUI = {}
 
@@ -266351,7 +266837,17 @@ function TuningUI.Render(s)
 		MiniLocale.Number(tu.idleRate or 0), MiniLocale.Credits(tu.pendingIdle or 0), MiniLocale.Duration(tu.idleCapSeconds or 0)
 	)
 	UI.SetProgress(refs.idleFill, (tu.idleSeconds or 0) / math.max(1, tu.idleCapSeconds or 1))
-	UI.SetEnabled(refs.idleButton, (tu.pendingIdle or 0) &gt;= 1, T.blue)
+	-- Tuning-Projekte (und ihre passiven Einnahmen) gibt es erst ab der Freischaltung (Level 6): vorher bleibt der
+	-- Knopf aus – der Server sperrt mini_tuning_idle ohnehin und sammelt nichts an
+	local unlocked = Unlocks.TabAllowed({ level = s.level }, "tuning")
+	if not unlocked then
+		local entry = Unlocks.ForTab("tuning")
+		refs.idleText.Text = "Passive Einnahmen gibt es ab Level " .. tostring(entry and entry.level or "?") .. " mit den Tuning-Projekten."
+		refs.idleButton.Text = "Ab Level " .. tostring(entry and entry.level or "?")
+	else
+		refs.idleButton.Text = "Einnahmen abholen"
+	end
+	UI.SetEnabled(refs.idleButton, unlocked and (tu.pendingIdle or 0) &gt;= 1, T.blue)
 
 	local projects = tu.projects or {}
 	refs.none.Visible = #projects == 0
@@ -266393,8 +266889,10 @@ return TuningUI
 --              Fortschrittsbalken, „Weiter“ (nur next-Schritte), „Überspringen“ (immer). Touch-Flächen 44 px.
 --   Marker     BillboardGui am Zielteil (zone plot: PlayerWorkshops.Plot_&lt;UserId&gt;.Stations.&lt;key&gt;,
 --              zone city: workspace.City.Stations.&lt;key&gt;), AlwaysOnTop, leicht wippend.
---   HintCard   Beginner-Hinweis oben rechts, unter dem ProgressHUD-Abzeichen (y 8 + 56 + 8 = 72; liegt dort gerade die
---              Karte „Neu freigeschaltet“ (UnlocksUI), rückt der Hinweis darunter).
+--   HintCard   Beginner-Hinweis oben rechts, unter dem ProgressHUD-Abzeichen und unter der Toast-Zone (tatsächliche Lage
+--              über PrestigeUI.OverlayTop, bei jeder Größenänderung neu; liegt dort gerade die Karte „Neu freigeschaltet“
+--              (UnlocksUI), rückt der Hinweis darunter). Mehrere Hinweise hintereinander laufen als Warteschlange
+--              (je HintSeconds), damit keiner den anderen im selben Moment überschreibt.
 --   UnlockCard „Freigeschaltet: &lt;Titel&gt;“ bei mini_notice { kind = "unlock" } mit kurzem Effekt – nur, wenn nicht schon
 --              UnlocksUI (ScreenGui "UnlockCards") die Karte zeigt (sonst gäbe es sie doppelt).
 -- Sichtbarkeit wie beim ProgressHUD: weg, solange Minispiel-Panel, 2.4.0-Tablet, QTE/Diagnose oder Tacho zu sehen sind.
@@ -266405,6 +266903,7 @@ local TweenService = game:GetService("TweenService")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local GameConfig = require(Mini:WaitForChild("GameConfig"))
 local TutorialRules = require(Mini:WaitForChild("TutorialRules"))
+local PrestigeUI = require(script.Parent:WaitForChild("PrestigeUI"))
 
 local TutorialUI = {}
 
@@ -266412,9 +266911,10 @@ TutorialUI.DisplayOrder = 21
 TutorialUI.CardWidth = 440
 TutorialUI.CardBottom = 150 -- Abstand zur Unterkante (2.4.0-Leiste: 132 px + 6 px Rand + Luft)
 TutorialUI.HintWidth = 300
-TutorialUI.HintTop = 8 + 56 + 8 -- unter dem ProgressHUD-Abzeichen (y 8, 56 hoch)
+TutorialUI.HintTop = 62 + 60 + 8 -- Mindestabstand: unter der Toast-Zone; tatsächlich PrestigeUI.OverlayTop() (Abzeichen)
 TutorialUI.HintSeconds = 8
 TutorialUI.UnlockSeconds = 6
+TutorialUI.QueueMax = 8
 TutorialUI.FinishSeconds = 5
 TutorialUI.MoveSeconds = 0.6 -- so lange muss die Figur laufen, bis „move“ als erledigt gilt
 
@@ -266433,6 +266933,8 @@ local hintSerial, unlockSerial, finishSerial = 0, 0, 0
 local sentNextFor = nil -- Schrittnummer, für die der Client schon tutorial_next geschickt hat
 local movedFor = 0
 local finishedUntil = 0
+local hintQueue, unlockQueue = {}, {} -- wartende Hinweise/Freischaltungen
+local hintShowing, unlockShowing = false, false
 
 local function num(v: any, default: number): number
 	return type(v) == "number" and v == v and v or default
@@ -266560,6 +267062,9 @@ local function layout()
 	local hw = math.min(TutorialUI.HintWidth, w - 32)
 	hint.frame.Size = UDim2.new(0, hw, 0, 0)
 	unlock.frame.Size = UDim2.new(0, hw, 0, 0)
+	-- Lage unter Abzeichen und Toast-Zone (Abzeichen rückt auf schmalen Bildschirmen auf y 60)
+	unlock.frame.Position = UDim2.new(1, -16, 0, TutorialUI.OverlayTop())
+	TutorialUI.PlaceHintCard()
 	-- Handy hochkant: die Knöpfe teilen sich die Breite
 	local narrow = w &lt; 480
 	card.skip.Size = UDim2.new(narrow and 0.5 or 0, narrow and -4 or 150, 0, UI.MinTouch)
@@ -266739,9 +267244,22 @@ end
 TutorialUI.Render = TutorialUI.OnSnapshot
 
 ---------------------------------------------------------------- Hinweis- und Freischaltungs-Karten
-local function placeHintCard()
-	-- unter der Karte „Neu freigeschaltet“ (UnlocksUI oder eigene), falls die gerade zu sehen ist
+-- Oberkante der Karten oben rechts: unter dem Abzeichen (tatsächliche Lage) und unter der Toast-Zone
+function TutorialUI.OverlayTop(): number
 	local top = TutorialUI.HintTop
+	local ok, t = pcall(PrestigeUI.OverlayTop)
+	if ok and type(t) == "number" and t == t then
+		top = math.max(top, t)
+	end
+	return top
+end
+
+local function placeHintCard()
+	if not hint.frame then
+		return
+	end
+	-- unter der Karte „Neu freigeschaltet“ (UnlocksUI oder eigene), falls die gerade zu sehen ist
+	local top = TutorialUI.OverlayTop()
 	local pg = playerGui()
 	local other = pg and pg:FindFirstChild("UnlockCards")
 	local otherCard = other and other:FindFirstChild("UnlockCard")
@@ -266750,28 +267268,49 @@ local function placeHintCard()
 		if c and c.Visible and c.AbsoluteSize.Y &gt; 0 then
 			top = math.max(top, c.AbsolutePosition.Y - (gui and gui.AbsolutePosition.Y or 0) + c.AbsoluteSize.Y + 8)
 		elseif c and c.Visible then
-			top = math.max(top, TutorialUI.HintTop + 80)
+			top = math.max(top, TutorialUI.OverlayTop() + 80)
 		end
 	end
 	hint.frame.Position = UDim2.new(1, -16, 0, top)
 end
+TutorialUI.PlaceHintCard = placeHintCard
 
-function TutorialUI.ShowHint(text: string, id: string?)
-	if not hint.frame or type(text) ~= "string" or text == "" then
+local function showNextHint()
+	if hintShowing or #hintQueue == 0 or not hint.frame then
 		return
 	end
+	local entry = table.remove(hintQueue, 1)
+	hintShowing = true
 	hintSerial += 1
 	local serial = hintSerial
-	hint.text.Text = text
-	hint.frame:SetAttribute("hintId", id or "")
+	hint.text.Text = entry.text
+	hint.frame:SetAttribute("hintId", entry.id or "")
 	placeHintCard()
 	hint.frame.Visible = true
 	pop(hint.scale)
 	task.delay(TutorialUI.HintSeconds, function()
 		if serial == hintSerial and hint.frame then
 			hint.frame.Visible = false
+			hintShowing = false
+			showNextHint()
 		end
 	end)
+end
+
+-- Hinweis einreihen: sofort, wenn keiner zu sehen ist, sonst nach dem laufenden (je HintSeconds)
+function TutorialUI.ShowHint(text: string, id: string?)
+	if not hint.frame or type(text) ~= "string" or text == "" then
+		return
+	end
+	if #hintQueue &gt;= TutorialUI.QueueMax then
+		table.remove(hintQueue, 1)
+	end
+	table.insert(hintQueue, { text = text, id = id })
+	showNextHint()
+end
+
+function TutorialUI.QueuedHints(): number
+	return #hintQueue
 end
 
 -- Zeigt UnlocksUI die Karte schon (ScreenGui "UnlockCards")? Dann keine zweite.
@@ -266781,22 +267320,38 @@ local function unlockCardHandledElsewhere(): boolean
 	return other ~= nil and other:FindFirstChild("UnlockCard") ~= nil
 end
 
-function TutorialUI.ShowUnlock(title: string, text: string?)
-	if not unlock.frame or type(title) ~= "string" or title == "" then
+local function showNextUnlock()
+	if unlockShowing or #unlockQueue == 0 or not unlock.frame then
 		return
 	end
+	local entry = table.remove(unlockQueue, 1)
+	unlockShowing = true
 	unlockSerial += 1
 	local serial = unlockSerial
-	unlock.title.Text = "Freigeschaltet: " .. title
-	unlock.text.Text = text or ""
-	unlock.text.Visible = text ~= nil and text ~= ""
+	unlock.title.Text = "Freigeschaltet: " .. entry.title
+	unlock.text.Text = entry.text or ""
+	unlock.text.Visible = entry.text ~= nil and entry.text ~= ""
+	unlock.frame.Position = UDim2.new(1, -16, 0, TutorialUI.OverlayTop())
 	unlock.frame.Visible = true
 	pop(unlock.scale)
 	task.delay(TutorialUI.UnlockSeconds, function()
 		if serial == unlockSerial and unlock.frame then
 			unlock.frame.Visible = false
+			unlockShowing = false
+			showNextUnlock()
 		end
 	end)
+end
+
+function TutorialUI.ShowUnlock(title: string, text: string?)
+	if not unlock.frame or type(title) ~= "string" or title == "" then
+		return
+	end
+	if #unlockQueue &gt;= TutorialUI.QueueMax then
+		table.remove(unlockQueue, 1)
+	end
+	table.insert(unlockQueue, { title = title, text = text })
+	showNextUnlock()
 end
 
 function TutorialUI.OnNotice(data: any)
@@ -266906,17 +267461,22 @@ return TutorialUI
 -- Die Tabelle kommt aus dem Snapshot (unlocks.list, nur bei vollen Snapshots); fehlt sie, rechnet der Client sie
 -- aus der replizierten GameConfig.Unlocks und s.level selbst nach (Unlocks.ListFor). Absicht: unlocks_seen beim
 -- Öffnen des Tabs, wenn es neue Einträge gibt.
+-- Lage der Karte: unter dem Abzeichen (PrestigeUI.OverlayTop – tatsächliche Lage, auch wenn es auf schmalen
+-- Bildschirmen auf y 60 rückt) und unter der Toast-Zone; bei jeder Größenänderung neu. Mehrere Freischaltungen auf
+-- einem Level (Level 3: Schrottplatz, Autohaus, Komet C1) laufen als Warteschlange nacheinander durch, je CardSeconds.
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniLocale = require(Mini:WaitForChild("MiniLocale"))
 local Unlocks = require(Mini:WaitForChild("Unlocks"))
+local PrestigeUI = require(script.Parent:WaitForChild("PrestigeUI"))
 
 local UnlocksUI = {}
 
 UnlocksUI.CardWidth = 300
-UnlocksUI.CardTop = 8 + 56 + 8 -- unter dem ProgressHUD-Abzeichen (y 8, 56 hoch)
+UnlocksUI.CardTop = 62 + 60 + 8 -- Mindestabstand: unter der Toast-Zone (Toast y 62, 60 hoch); tatsächlich PrestigeUI.OverlayTop()
 UnlocksUI.CardSeconds = 6
+UnlocksUI.CardQueueMax = 8 -- mehr Karten am Stück zeigt niemand
 UnlocksUI.CardDisplayOrder = 21 -- über dem 2.4.0-HUD, unter dem Minispiel-Panel (30)
 
 local KIND_NAMES = {
@@ -266935,6 +267495,8 @@ local lastLevel = nil
 local sentSeenFor = nil
 local showPending = false
 local cardSerial = 0
+local cardQueue = {} -- { title, text, color }, wartende Karten
+local cardShowing = false
 
 local function num(v: any, default: number): number
 	return type(v) == "number" and v == v and v or default
@@ -266997,27 +267559,66 @@ local function buildCard()
 		if w &gt; 0 then
 			frame.Size = UDim2.new(0, math.min(UnlocksUI.CardWidth, w - 32), 0, 0)
 		end
+		UnlocksUI.PlaceCard()
 	end)
+	UnlocksUI.PlaceCard()
 end
 
-function UnlocksUI.ShowCard(title: string, text: string?, color: Color3?)
-	if not card.frame then
+-- Oberkante der Karte: unter Abzeichen und Toast-Zone (PrestigeUI.OverlayTop), mindestens CardTop
+function UnlocksUI.CardTopNow(): number
+	local top = UnlocksUI.CardTop
+	local ok, t = pcall(PrestigeUI.OverlayTop)
+	if ok and type(t) == "number" and t == t then
+		top = math.max(top, t)
+	end
+	return top
+end
+
+function UnlocksUI.PlaceCard()
+	if card.frame then
+		card.frame.Position = UDim2.new(1, -16, 0, UnlocksUI.CardTopNow())
+	end
+end
+
+local function showNext()
+	if cardShowing or #cardQueue == 0 or not card.frame then
 		return
 	end
+	local entry = table.remove(cardQueue, 1)
+	cardShowing = true
 	cardSerial += 1
 	local serial = cardSerial
-	card.title.Text = title
-	card.text.Text = text or ""
-	card.text.Visible = text ~= nil and text ~= ""
-	card.stripe.BackgroundColor3 = color or T.green
+	card.title.Text = entry.title
+	card.text.Text = entry.text or ""
+	card.text.Visible = entry.text ~= nil and entry.text ~= ""
+	card.stripe.BackgroundColor3 = entry.color or T.green
+	UnlocksUI.PlaceCard()
 	card.frame.Visible = true
 	card.scale.Scale = 0.85
 	TweenService:Create(card.scale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 	task.delay(UnlocksUI.CardSeconds, function()
 		if serial == cardSerial and card.frame then
 			card.frame.Visible = false
+			cardShowing = false
+			showNext()
 		end
 	end)
+end
+
+-- Karte einreihen: erscheint sofort, wenn keine zu sehen ist, sonst nach der laufenden (je CardSeconds)
+function UnlocksUI.ShowCard(title: string, text: string?, color: Color3?)
+	if not card.frame then
+		return
+	end
+	if #cardQueue &gt;= UnlocksUI.CardQueueMax then
+		table.remove(cardQueue, 1)
+	end
+	table.insert(cardQueue, { title = title, text = text, color = color })
+	showNext()
+end
+
+function UnlocksUI.QueuedCards(): number
+	return #cardQueue
 end
 
 function UnlocksUI.CardVisible(): boolean

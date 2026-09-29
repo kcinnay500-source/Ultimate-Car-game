@@ -456,7 +456,7 @@ local function payPending(cs)
 	local amount, xp = cs.pendingReward, cs.pendingXp
 	cs.pendingReward, cs.pendingXp = 0, 0
 	if amount > 0 then
-		MiniRules.AddMoney(d, amount)
+		MiniRules.AddIncome(d, amount) -- Teststrecke: Prestige-Einnahmenbonus (PHASE4_CONTRACT §4)
 	end
 	if xp > 0 then
 		MiniRules.GainXP(d, xp)

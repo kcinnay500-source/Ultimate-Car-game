@@ -30,6 +30,7 @@ local MiniSnapshot = require(MiniShared:WaitForChild("MiniSnapshot"))
 local PressRules = require(MiniShared:WaitForChild("PressRules"))
 local SideGameRules = require(MiniShared:WaitForChild("SideGameRules"))
 local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
+local TutorialRules = require(MiniShared:WaitForChild("TutorialRules"))
 
 local Server = script.Parent
 local PressService = require(Server:WaitForChild("PressService"))
@@ -332,16 +333,37 @@ end
 -- je Aktion, damit Klickpakete der Presse nicht zweimal je Sekunde mahnen) und führt nichts aus.
 local ACTION_UNLOCK = {
 	mini_press_click = "feature:press",
+	mini_press_buy = "feature:press", -- Maschinen, Händler und Rebirth der Presse erst mit der Presse (nicht nur der Klick)
+	mini_press_exchange = "feature:press",
+	mini_press_rebirth = "feature:press",
 	mini_scrapyard_buy = "feature:scrapyard",
 	mini_quiz_new = "feature:quiz",
 	mini_parking_new = "feature:parking",
 	mini_tuning_start = "feature:tuning",
+	mini_tuning_collect = "feature:tuning",
+	mini_tuning_idle = "feature:tuning", -- passive Einnahmen gehören zu den Tuning-Projekten (TuningService sammelt vorher nicht)
 	mini_track_start = "feature:track",
 	mini_carwash = "feature:carwash",
 	mini_arcade_start = "feature:arcade",
-	mini_auction_bid = "feature:auction",
+	-- Auktion: NPC-Lose ab feature:auction (12), Lose anderer Spieler erst mit auction:player (20) – wie das Einliefern
+	mini_auction_bid = function(clean)
+		local lot = AuctionService.Lot and AuctionService.Lot(clean.lot) or nil
+		if type(lot) == "table" and lot.kind == "player" then
+			return "auction:player"
+		end
+		return "feature:auction"
+	end,
 	mini_auction_consign = "auction:player",
 	mini_car_testdrive = "feature:dealer",
+	-- Minispiel-Ausbau: Tuning-Abteilung mit den Tuning-Projekten, Schrottplatz-Ausbau mit dem Schrottplatz
+	mini_upgrade = function(clean)
+		if clean.key == "scrapyardLevel" then
+			return "feature:scrapyard"
+		elseif clean.key == "tuningLevel" then
+			return "feature:tuning"
+		end
+		return nil -- unbekannte Schlüssel meldet MiniRules.BuyUpgrade selbst
+	end,
 	mini_car_buy = function(clean)
 		local key = "car:" .. tostring(clean.model)
 		return Unlocks.Known(key) and key or nil -- unbekannte Modelle meldet CarRules.Buy selbst
@@ -542,8 +564,8 @@ function Mini.OnJoin(p)
 		AuctionService.OnJoin(ms)
 		-- Ausbaustufe 4: Level/Rang merken, Tutorial-Stand, Anfangsmodus (PlaceKind, lastMode, TeleportData)
 		PrestigeService.OnJoin(ms, d, t)
+		local mode = LobbyService.OnJoin(ms, d, t) -- setzt p.mode (das Tutorial richtet sich danach)
 		TutorialService.OnJoin(ms, d, t)
-		local mode = LobbyService.OnJoin(ms, d, t)
 		ms.modeSeen = nil
 		checkMode(ms, d) -- Open World: Pflicht-Tutorial beim ersten Beitritt (TutorialRules.ShouldStart)
 		-- Game Passes (kann warten), danach den Offline-Ertrag gutschreiben: nur Schrott, nie Geld.
@@ -583,6 +605,7 @@ function Mini.Tick(p, t)
 			ctx.changed(p) -- nachgeholte, gedrosselte Revision (siehe Handle)
 		end
 		PressService.Tick(ms, d, t)
+		TuningService.Tick(ms, d, t) -- ohne Tuning-Freischaltung sammeln sich keine passiven Einnahmen an
 		-- Autos: Probefahrt-Ende, Leerlauf/verlorene Autos, Zeitfahren-Timeout, Nitro, zurückgehaltene Belohnung
 		local okCars, errCars = pcall(CarService.Tick, ms, d, t)
 		if not okCars then
@@ -758,13 +781,23 @@ local function openStation(p, tab, station)
 		flush(ms, now())
 		return
 	end
-	-- Tutorial-Schritte "tab:<tab>" (Autohaus, Infotafel) und Beginner-Hinweise "station:<key>" (Stadtplan, Credit-Center)
+	-- Tutorial-Schritte "tab:<tab>" (Autohaus, Infotafel) und Beginner-Hinweise "station:<key>" (Stadtplan, Credit-Center).
+	-- Verlangt der aktuelle Tutorial-Schritt genau diese Station, öffnet der Tab auch ohne Level-Freischaltung
+	-- (nur ansehen; Kauf/Probefahrt bleiben über ACTION_UNLOCK gesperrt) – sonst bekäme ein Level-1-Spieler am
+	-- Autohaus nur den Sperr-Toast, während der Schritt abgehakt wird.
+	local wanted = TutorialRules.Current(d, p.mode)
+	local tutorialWants = wanted ~= nil and wanted.event == "tab:" .. tostring(tab)
 	pcall(TutorialService.OnStation, ms, d, key, tab)
 	if tab == "shop" then
 		-- Credit-Center: 2.4.0-Credits-Shop (Tablet-Seite "shop", zeigt auch die Game Passes); ohne Tablet der Tab "shop"
 		emit(ms, MiniNet.Events.Open, { tab = tab, page = "credits" })
-	elseif MiniNet.TabSet[tab] and not Unlocks.TabAllowed(d, tab) then
+	elseif MiniNet.TabSet[tab] and not Unlocks.TabAllowed(d, tab) and not tutorialWants then
 		api.toast(ms, lockedText(Unlocks.ForTab(tab)))
+	elseif tab == "tycoon" and not MiniNet.TabSet[tab] then
+		-- Schnelles Spiel ohne Tycoon-Dienst (Meilenstein 4): Hinweis und der Lobby-Tab, damit der Rückweg einen
+		-- Tastendruck entfernt ist
+		api.toast(ms, MiniLocale.T("coming_soon", CityService.Title(station, tab)))
+		emit(ms, MiniNet.Events.Open, { tab = "lobby" })
 	elseif MiniNet.TabSet[tab] then
 		-- Spielhalle: der Automat (Attribut GameKey/Game bzw. Stationsname arcade_N) wird gleich ausgewählt
 		local game = nil

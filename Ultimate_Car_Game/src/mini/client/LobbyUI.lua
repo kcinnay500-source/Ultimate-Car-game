@@ -5,6 +5,10 @@
 -- party_*); Modus, Party und Einstellungen kommen vom Server (Snapshot-Felder aus LobbyService.SnapshotFields).
 -- Schnittstelle wie die anderen Bereiche: Build(page, ctx), Render(s), OnShow(), OnNotice(data) für
 -- mini_notice { kind = "mode" | "party" | "lobby" }. Handy-tauglich: eine Spalte, Knöpfe mindestens 44 px.
+-- Abschnitt „Tutorial“ (Tutorial-Kiosk): die Schritte als Liste und „Tutorial erneut starten“ (tutorial_restart,
+-- nur nach Ende/Überspringen; die Belohnung gibt es nicht noch einmal). Solange GameConfig.Tycoon leer ist
+-- (Meilenstein 4), zeigt die Karte „Schnelles Spiel“ den Zustand „Eröffnet bald“.
+local Players = game:GetService("Players")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local GameConfig = require(Mini:WaitForChild("GameConfig"))
 
@@ -40,6 +44,12 @@ local MODE_TEXT = {
 	openworld = "Du bist in der Werkstattmeile (Open World).",
 	tycoon = "Du bist im Schnellen Spiel (Tycoon).",
 }
+
+-- Gibt es das Schnelle Spiel schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
+local function tycoonOpen(): boolean
+	local t = GameConfig.Tycoon
+	return type(t) == "table" and next(t) ~= nil
+end
 
 local function toast(text: string)
 	if ctx and type(ctx.Toast) == "function" and type(text) == "string" and text ~= "" then
@@ -198,6 +208,23 @@ function LobbyUI.Build(page, c)
 		Remote.Send("party_leave")
 	end, { Name = "PartyLeave", LayoutOrder = 42 })
 
+	-- Tutorial (Tutorial-Kiosk): Schritte und Neustart
+	local tutorial = UI.Card(page, 5)
+	tutorial.Name = "TutorialCard"
+	UI.Title(tutorial, "Tutorial", 1)
+	refs.tutorialStatus = UI.Label(tutorial, "", { Font = UI.FontBold, TextSize = 15, LayoutOrder = 2, Name = "TutorialStatus" })
+	local steps = {}
+	for i, st in ipairs(GameConfig.Tutorial.Steps) do
+		table.insert(steps, tostring(i) .. ". " .. tostring(st.text))
+	end
+	local stepList = UI.Small(tutorial, table.concat(steps, "\n"), 3)
+	stepList.Name = "TutorialSteps"
+	refs.tutorialRestart = UI.Button(tutorial, "Tutorial erneut starten", T.blue, function()
+		Remote.Send("tutorial_restart")
+	end, { Name = "TutorialRestart", LayoutOrder = 4 })
+	refs.tutorialHint = UI.Small(tutorial, "", 5)
+	refs.tutorialHint.Name = "TutorialHint"
+
 	LobbyUI.Render(nil)
 end
 
@@ -228,7 +255,11 @@ function LobbyUI.Render(s)
 		local here = mode == key
 		card.root.BackgroundColor3 = selected and card.color or T.card
 		card.root:SetAttribute("baseColor", card.root.BackgroundColor3)
-		card.state.Text = here and "Du bist hier." or (selected and "Ausgewählt" or "Antippen zum Auswählen")
+		local state = here and "Du bist hier." or (selected and "Ausgewählt" or "Antippen zum Auswählen")
+		if key == "tycoon" and not tycoonOpen() then
+			state = "Eröffnet bald – das Gelände kannst du schon ansehen. " .. state
+		end
+		card.state.Text = state
 	end
 	local target = choice or ((mode ~= "lobby") and mode) or "openworld"
 	local party = type(s.party) == "table" and s.party or nil
@@ -277,6 +308,23 @@ function LobbyUI.Render(s)
 	refs.createButton.Visible = party == nil
 	refs.codeBox.Parent.Visible = party == nil
 	refs.leaveButton.Visible = party ~= nil
+
+	-- Tutorial
+	if refs.tutorialStatus then
+		local meta = type(s.meta) == "table" and s.meta or {}
+		local tut = type(s.tutorial) == "table" and s.tutorial or {}
+		local done = meta.tutorialDone == true or tut.done == true
+		local count = #GameConfig.Tutorial.Steps
+		if done then
+			refs.tutorialStatus.Text = tut.skipped and "Du hast das Tutorial übersprungen." or "Du hast das Tutorial geschafft."
+			refs.tutorialHint.Text = tut.rewarded and "Noch einmal von vorn – die Belohnung hattest du schon."
+				or "Noch einmal von vorn: Am Ende warten " .. tostring(GameConfig.Tutorial.Reward.credits) .. " Credits und " .. tostring(GameConfig.Tutorial.Reward.xp) .. " XP."
+		else
+			refs.tutorialStatus.Text = "Das Tutorial läuft: Schritt " .. tostring(meta.tutorialStep or tut.step or 1) .. " von " .. tostring(count) .. (inLobby and " – es geht in der Werkstattmeile weiter." or ".")
+			refs.tutorialHint.Text = "Die Tutorial-Karte siehst du in der Open World."
+		end
+		UI.SetEnabled(refs.tutorialRestart, done, T.blue)
+	end
 end
 
 function LobbyUI.OnShow()
@@ -304,6 +352,11 @@ function LobbyUI.OnNotice(data)
 			toast(name .. " ist der Party beigetreten.")
 		elseif ev == "left" then
 			toast(name .. " hat die Party verlassen.")
+		elseif ev == "kicked" then
+			local me = Players.LocalPlayer
+			if not (me and data.userId == me.UserId) then
+				toast(name .. " wurde aus der Party entfernt.") -- den eigenen Rauswurf meldet der Server per Toast
+			end
 		elseif ev == "leader" then
 			toast(name .. " ist jetzt Party-Leiter.")
 		elseif ev == "travel" then
@@ -316,6 +369,17 @@ function LobbyUI.OnNotice(data)
 		if action == "mode_tycoon" or action == "mode_openworld" then
 			pendingChoice = string.sub(action, 6)
 			LobbyUI.Render(latest)
+		elseif action == "tutorial" then
+			-- Tutorial-Kiosk: zum Abschnitt „Tutorial“ blättern (Inhalt ist eine ScrollingFrame)
+			LobbyUI.Render(latest)
+			local card = refs.tutorialStatus and refs.tutorialStatus.Parent
+			local content = UI and UI.Content
+			if card and content and content:IsA("ScrollingFrame") then
+				pcall(function()
+					local y = card.AbsolutePosition.Y - content.AbsolutePosition.Y + content.CanvasPosition.Y
+					content.CanvasPosition = Vector2.new(0, math.max(0, y - 8))
+				end)
+			end
 		end
 	end
 end

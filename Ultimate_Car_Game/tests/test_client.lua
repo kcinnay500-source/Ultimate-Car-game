@@ -424,6 +424,7 @@ return {
 		local g = H.Garage({ before = function(g)
 			local R = g:Rules()
 			local d = R.NewData(g:Now())
+			d.level = 2 -- Presse ab Level 2 (GameConfig.Unlocks): vorher gibt es keinen Offline-Ertrag
 			d.games.press.upgrades = { pu1 = 10 }
 			d.games.press.lastTick = g:Now() - 3600
 			g:Seed(1001, { version = 2, data = d, receipts = {} })

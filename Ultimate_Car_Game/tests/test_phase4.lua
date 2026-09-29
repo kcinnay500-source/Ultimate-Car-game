@@ -73,6 +73,16 @@ return {
 		for _, n in ipairs(g:Notices(pl, "tutorial")) do
 			T.check(n.started ~= true, "in der Lobby startet das Tutorial nicht (started)")
 		end
+		-- In der Lobby ruht das Tutorial (§6: Pflicht beim ersten Beitritt in der Open World): kein Hinweis, keine
+		-- Karte (active = false), tutorial_next bringt keinen Fortschritt
+		T.eq(#g:Notices(pl, "tutorial"), 0, "in der Lobby kein tutorial-Hinweis")
+		T.eq(snap and snap.tutorial and snap.tutorial.active, false, "Lobby: tutorial.active false")
+		T.eq(snap and snap.tutorial and snap.tutorial.text, "", "Lobby: kein Schritt-Text")
+		local mLobby = g:Mark()
+		T.eq(g:Act(pl, "tutorial_next", { step = 1, rid = 90 }), "ok", "tutorial_next in der Lobby -> Toast")
+		T.eq(step(g, d), 1, "Lobby: kein Fortschritt")
+		T.check(g:HasToast(pl, "Werkstattmeile", mLobby), "Toast: Tutorial läuft in der Werkstattmeile")
+		T.eq(#g:Notices(pl, "hint", mLobby), 0, "kein Tutorial-Hinweis in der Lobby")
 		-- Einstellungen (nur Booleans, sofort im Profil)
 		T.eq(g:Act(pl, "lobby_settings", { single = false, passive = true, beginner = true, rid = 1 }), "ok", "lobby_settings")
 		T.eq(d.games.meta.passive, true, "passive gespeichert")
@@ -92,7 +102,10 @@ return {
 		T.eq(d.games.meta.lastMode, "openworld", "lastMode gespeichert")
 		local modeNotice = g:Notices(pl, "mode", m)[1]
 		T.check(modeNotice ~= nil and modeNotice.simulated == true and modeNotice.mode == "openworld", "mini_notice mode (Simulation)")
-		near(T, rootPos(g, pl), HUB.openworld[1], HUB.openworld[2], 8, "Figur an der Stadt-Ankunft")
+		-- Neuer Spieler mit Pflicht-Tutorial: Ankunft in der eigenen Werkstatt („Willkommen in deiner Werkstatt“,
+		-- Schritt 3 „Geh zum Empfang“), nicht am Stadt-Hub (bis zu 500 Studs entfernt)
+		local homeStation = g:Station(pl, "home")
+		T.check(homeStation and (rootPos(g, pl) - homeStation.Position).Magnitude < 12, "Figur in der eigenen Werkstatt (Tutorial)")
 		g:Advance(1.1)
 		T.eq(g:MiniSnapshot(pl).mode, "openworld", "Snapshot mode openworld")
 		-- Pflicht-Tutorial beim ersten Open-World-Beitritt
@@ -156,8 +169,14 @@ return {
 		m = openCityStation(g, pl, "goals")
 		T.eq(step(g, d), 9, "Infotafel zu früh")
 		T.check(g:Events(pl, "mini_open", m)[1] ~= nil and g:Events(pl, "mini_open", m)[1].tab == "goals", "Tab goals geöffnet")
+		T.eq(d.level, 1, "noch Level 1 (Autohaus ab 3 gesperrt)")
 		m = openCityStation(g, pl, "dealer")
 		T.eq(step(g, d), 10, "Schritt 10 (Ziele)")
+		-- Tutorial-Station mit Level-Sperre: der Tab öffnet trotzdem (nur ansehen), kein Sperr-Toast
+		local openDealer = g:Events(pl, "mini_open", m)[1]
+		T.check(openDealer ~= nil and openDealer.tab == "dealer", "Autohaus öffnet im Tutorial auch auf Level 1")
+		T.check(not g:HasToast(pl, "Ab Level 3", m), "kein Sperr-Toast im Tutorial-Schritt")
+		T.eq(g:Act(pl, "mini_car_buy", { model = "komet", rid = 19 }), "locked", "Kauf bleibt gesperrt")
 		local money, xp, level = d.money, d.xp, d.level
 		m = openCityStation(g, pl, "goals")
 		T.check(d.games.meta.tutorialDone and not d.games.meta.tutorialSkipped, "Tutorial beendet")
@@ -253,6 +272,44 @@ return {
 		T.check(#travel >= 1 and travel[#travel].event == "travel" and travel[#travel].mode == "tycoon", "Ben erhält travel")
 		g:Advance(1.1)
 		T.eq(g:MiniSnapshot(b).mode, "tycoon", "Snapshot Ben tycoon")
+		-- Schnelles Spiel ohne Tycoon-Dienst (GameConfig.Tycoon leer): Ankunfts-Toast nennt den Rückweg, die
+		-- Tycoon-Stationen öffnen den Lobby-Tab (Rückweg einen Tastendruck entfernt)
+		T.check(g:HasToast(a, "eröffnet bald", m), "Ankunfts-Toast: eröffnet bald + Rückweg")
+		local tst = g:Find("Workspace.Tycoon.Stations.tycoon")
+		T.check(tst ~= nil, "Tycoon-Station tycoon")
+		if tst then
+			local arrivalT = tst:FindFirstChild("Arrival")
+			g:Teleport(a, arrivalT and arrivalT.WorldPosition or tst.Position, arrivalT and nil or Vector3.new(0, 3, 4))
+			g:Advance(0.2)
+			local mt = g:Mark()
+			g:Trigger(a, tst:FindFirstChildOfClass("ProximityPrompt"), { force = true })
+			g:Advance(0.3)
+			local openT = g:Events(a, "mini_open", mt)[1]
+			T.check(openT ~= nil and openT.tab == "lobby", "Tycoon-Station öffnet den Lobby-Tab (Rückweg)")
+			T.check(g:HasToast(a, "eröffnet bald", mt), "Hinweis eröffnet bald")
+		end
+		-- Mitglied kehrt allein zurück (Vertrag §5: lobby_return aus jedem Modus), Party und Leiter bleiben
+		g:Advance(3.1)
+		m = g:Mark()
+		T.eq(g:Act(b, "lobby_return", { rid = 40 }), "ok", "lobby_return Mitglied")
+		T.eq(pb.mode, "lobby", "Ben allein in der Lobby")
+		T.eq(pa.mode, "tycoon", "Anna bleibt im Tycoon")
+		T.eq(LS.PartyOf(b), party, "Ben bleibt in der Party")
+		T.check(g:HasToast(b, "allein zurück", m), "Toast: allein zurück, Party bleibt")
+		near(T, rootPos(g, b), HUB.lobby[1], HUB.lobby[2], 8, "Ben an der Lobby-Ankunft")
+		T.eq(#g:Notices(a, "party", m), 0, "Leiter bekommt kein travel-Ereignis")
+		-- Ben reist mit dem Leiter wieder mit (nur das Ziel zählt)
+		g:Advance(3.1)
+		T.eq(g:Act(a, "lobby_mode", { mode = "openworld", rid = 41 }), "ok", "Anna wählt Open World")
+		g:Advance(0.5)
+		T.eq(g:Act(a, "lobby_go", { rid = 42 }), "ok", "lobby_go Anna")
+		T.eq(pb.mode, "openworld", "Ben mitgereist")
+		g:Advance(3.1)
+		T.eq(g:Act(a, "lobby_mode", { mode = "tycoon", rid = 43 }), "ok", "Anna wählt Tycoon")
+		g:Advance(0.5)
+		T.eq(g:Act(a, "lobby_go", { rid = 44 }), "ok", "lobby_go Anna zurück in den Tycoon")
+		T.eq(pa.mode, "tycoon", "Anna im Tycoon")
+		T.eq(pb.mode, "tycoon", "Ben im Tycoon")
 		-- Respawn im Tycoon: Figur landet an der Zonen-Ankunft, nicht in der Werkstatt (Mini.OnCharacter)
 		g:Respawn(a)
 		g:Advance(1.1)
@@ -283,9 +340,19 @@ return {
 			T.eq(g:MiniState(a).lobbyChoice, "tycoon", "Sitzung: Vorauswahl tycoon")
 			T.eq(g:MiniSnapshot(a).choice, "tycoon", "Snapshot choice tycoon")
 		end
-		-- Leiter verlässt den Server: Ben wird Leiter
+		-- Leiter verlässt den Server: Ben wird Leiter (eigener Toast in korrekter Grammatik, kein Doppel-Hinweis)
+		m = g:Mark()
 		g:Leave(a)
 		T.eq(party.leader, b, "Ben ist Leiter")
+		T.check(g:HasToast(b, "Du bist jetzt Party-Leiter", m), "Toast: Du bist jetzt Party-Leiter.")
+		T.check(not g:HasToast(b, "Du ist", m), "kein Grammatikfehler")
+		local leaderNotices = 0
+		for _, n in ipairs(g:Notices(b, "party", m)) do
+			if n.event == "leader" then
+				leaderNotices += 1
+			end
+		end
+		T.eq(leaderNotices, 0, "neuer Leiter bekommt das leader-Ereignis nicht auch noch (kein zweiter Toast)")
 		g:Advance(0.5)
 		T.eq(g:Act(b, "party_leave", { rid = 9 }), "ok", "party_leave")
 		T.eq(LS.Parties[code], nil, "Party aufgelöst")
@@ -309,6 +376,25 @@ return {
 		T.eq(d.games.meta.beginner, true, "Standard: Beginner-Hinweise an")
 		T.eq(d.games.stats.jobsDone, 12, "jobsDone aus completed")
 		T.eq(d.games.prestige.titleRank, 0, "Prestige-Standard")
+		-- Erstlings-Hinweise („Super, dein erster Auftrag!“, Empfang erklärt) passen nicht zu 12 Aufträgen
+		T.eq(d.games.meta.hintsSeen.h_first_job, true, "Veteran: first:jobsDone gilt als gesehen")
+		T.eq(d.games.meta.hintsSeen.h_workshop, true, "Veteran: station:workshop gilt als gesehen")
+		T.eq(d.games.meta.tutorialRewarded, true, "Veteran: Tutorial-Belohnung gilt als verbucht")
+		local TS = g:MiniServer("TutorialService")
+		local m0 = g:Mark()
+		local MiniRulesV = g:MiniShared("MiniRules")
+		MiniRulesV.AddStat(d, "jobsDone", 1, g:Now())
+		T.eq(TS.OnStat(g:MiniState(pl), d, "jobsDone"), 0, "13. Auftrag: kein Erstlings-Hinweis (nur beim Übergang 0 -> 1)")
+		T.eq(#g:Notices(pl, "hint", m0), 0, "kein hint-Notice")
+		-- Beginner ohne Vorgeschichte: erst der erste Auftrag (Wert 1) löst den Hinweis aus, ein späterer nie mehr
+		local R2 = g:Rules()
+		local dNew = R2.NewData(g:Now())
+		g:MiniShared("MetaRules").ApplyDefault(dNew.games)
+		dNew.games.stats.jobsDone = 2
+		T.eq(g:MiniShared("MetaRules").HintFor(dNew, "first:jobsDone") ~= nil, true, "neues Profil: Hinweis noch offen")
+		T.eq(TS.OnStat(g:MiniState(pl), dNew, "jobsDone"), 0, "Wert 2: kein Hinweis")
+		dNew.games.stats.jobsDone = 1
+		T.eq(TS.OnStat(g:MiniState(pl), dNew, "jobsDone"), 1, "Wert 1: Hinweis")
 		T.eq(d.money, 4321, "Geld bleibt")
 		T.eq(#g:Notices(pl, "tutorial"), 0, "kein Tutorial-Hinweis")
 		local home = g:Station(pl, "home")
@@ -343,21 +429,189 @@ return {
 		T.eq(g:Act(pl, "mini_auction_consign", { id = 1, start = 100, duration = 120, rid = 4 }), "locked", "Spieler-Auktionen ab Level 20")
 		T.eq(g:Act(pl, "mini_quiz_new", { rid = 5 }), "locked", "Quiz ab Level 4")
 		T.eq(g:Act(pl, "mini_daily_claim", { rid = 6 }), "ok", "Aktion ohne Voraussetzung läuft")
+		-- Presse: Maschinen, Händler und Rebirth sind ebenfalls gesperrt; die Maschinen produzieren nicht
+		T.eq(g:Act(pl, "mini_press_buy", { id = "pu1", level = 0, rid = 7 }), "locked", "mini_press_buy gesperrt")
+		T.eq(g:Act(pl, "mini_press_exchange", { index = 1, rid = 8 }), "locked", "mini_press_exchange gesperrt")
+		T.eq(g:Act(pl, "mini_press_rebirth", { rebirths = 0, rid = 9 }), "locked", "mini_press_rebirth gesperrt")
+		T.eq(g:Act(pl, "mini_upgrade", { key = "scrapyardLevel", level = 1, rid = 10 }), "locked", "Schrottplatz-Ausbau gesperrt")
+		T.eq(g:Act(pl, "mini_upgrade", { key = "tuningLevel", level = 1, rid = 11 }), "locked", "Tuning-Abteilung gesperrt")
+		-- Tuning: passive Einnahmen werden vor Level 6 weder angesammelt noch ausgezahlt
+		T.eq(g:Act(pl, "mini_tuning_idle", { rid = 12 }), "locked", "mini_tuning_idle gesperrt")
+		T.eq(g:Act(pl, "mini_tuning_collect", { slot = 1, rid = 13 }), "locked", "mini_tuning_collect gesperrt")
+		local money0 = d.money
+		g.env.clock:Jump(3600)
+		g:Advance(1.1)
+		local TR = g:MiniShared("TuningRules")
+		T.eq(TR.PendingIdle(d, g:Now()), 0, "keine passiven Einnahmen angespart (Uhr läuft mit)")
+		T.eq(d.games.press.scrap, 0, "Presse produziert vor Level 2 keinen Schrott")
+		T.eq(g:Act(pl, "mini_tuning_idle", { rid = 14 }), "locked", "nach einer Stunde weiter gesperrt")
+		T.eq(d.money, money0, "Geld unverändert")
+		-- Verlassen/Beitritt: auch offline nichts angespart
+		g:Leave(pl)
+		g.env.clock:Jump(3600)
+		g:Advance(1)
+		pl, d = join(g, 4301, "Neu")
+		g:Advance(1.1)
+		T.eq(TR.PendingIdle(d, g:Now()), 0, "offline nichts angespart")
+		T.eq(d.games.press.scrap, 0, "kein Offline-Schrott vor Level 2")
+		T.eq(#g:Notices(pl, "offline"), 0, "kein Offline-Hinweis")
+		local snapL = g:MiniSnapshot(pl)
+		T.eq(snapL and snapL.tuning and snapL.tuning.pendingIdle, 0, "Snapshot pendingIdle 0")
 		-- Stadt-Station mit Level-Voraussetzung: Toast statt mini_open
 		m = openCityStation(g, pl, "arcade")
 		T.eq(#g:Events(pl, "mini_open", m), 0, "Spielhalle öffnet nicht")
 		T.check(g:HasToast(pl, "Ab Level 10: Spielhalle", m), "Toast Spielhalle")
 		m = openCityStation(g, pl, "map")
 		T.check(g:Events(pl, "mini_open", m)[1] ~= nil and g:Events(pl, "mini_open", m)[1].tab == "map", "Stadtplan (ohne Voraussetzung) öffnet")
-		-- Level 10: alles offen
+		-- Level 10: alles offen (ab Level 6 sammeln sich passive Einnahmen an)
 		d.level = 10
 		g:Advance(1.1)
 		T.eq(g:Act(pl, "mini_press_click", { count = 3 }), "ok", "Presse ab Level 2")
 		T.eq(d.games.press.clicks, 3, "Klicks gezählt")
+		g.env.clock:Jump(600)
+		g:Advance(1.1)
+		T.check(TR.PendingIdle(d, g:Now()) > 0, "ab Level 6 sammeln sich passive Einnahmen an")
+		T.check(d.games.press.scrap > 3, "Maschinen produzieren ab Level 2")
+		g:Advance(0.5)
+		T.eq(g:Act(pl, "mini_tuning_idle", { rid = 15 }), "ok", "mini_tuning_idle ab Level 6")
 		m = openCityStation(g, pl, "arcade")
 		T.check(g:Events(pl, "mini_open", m)[1] ~= nil and g:Events(pl, "mini_open", m)[1].tab == "arcade", "Spielhalle öffnet ab Level 10")
 		T.eq(g:Act(pl, "mini_arcade_start", { game = "arcade_1", rid = 7 }), "ok", "Spielhalle spielbar")
 		noErrors(T, g, "Sperren")
+	end },
+
+	{ "Tutorial-Kiosk: tutorial_restart nach Überspringen, nie eine zweite Belohnung, Kiosk-Station öffnet den Lobby-Tab", function(T, H)
+		local g = H.Garage({ placeKind = "all" })
+		local TR = g:MiniShared("TutorialRules")
+		local pl, d, p = join(g, 4501, "Kim")
+		-- Neustart in der Lobby, solange es läuft: abgelehnt
+		local m = g:Mark()
+		T.eq(g:Act(pl, "tutorial_restart", { rid = 1 }), "ok", "tutorial_restart (läuft noch) -> Toast")
+		T.check(g:HasToast(pl, "läuft schon", m), "Toast: läuft schon")
+		T.eq(d.games.meta.tutorialDone, false, "unverändert")
+		-- Kiosk-Station in der Lobby: Lobby-Tab mit action tutorial, Hinweis mit tutorialDone
+		local st = g:Find("Workspace.Lobby.Stations.tutorial")
+		T.check(st ~= nil, "Lobby-Station tutorial")
+		if st then
+			g:Teleport(pl, st.Arrival.WorldPosition)
+			g:Advance(0.2)
+			m = g:Mark()
+			g:Trigger(pl, st:FindFirstChildOfClass("ProximityPrompt"), { force = true })
+			g:Advance(0.3)
+			local open = g:Events(pl, "mini_open", m)[1]
+			T.check(open ~= nil and open.tab == "lobby" and open.action == "tutorial", "mini_open lobby mit action tutorial")
+			local n = g:Notices(pl, "lobby", m)[1]
+			T.check(n ~= nil and n.action == "tutorial" and n.tutorialDone == false, "lobby-Hinweis mit tutorialDone")
+		end
+		-- in die Open World, überspringen
+		g:Advance(0.5)
+		T.eq(g:Act(pl, "lobby_mode", { mode = "openworld", rid = 2 }), "ok", "lobby_mode")
+		g:Advance(3.1)
+		T.eq(g:Act(pl, "lobby_go", { rid = 3 }), "ok", "lobby_go")
+		T.eq(p.mode, "openworld", "Open World")
+		g:Advance(1.1)
+		m = g:Mark()
+		T.eq(g:Act(pl, "tutorial_skip", { rid = 4 }), "ok", "tutorial_skip")
+		T.eq(d.games.meta.tutorialDone, true, "übersprungen")
+		T.check(g:HasToast(pl, "Tutorial-Kiosk", m), "Skip-Toast nennt den Kiosk")
+		T.check(g:HasToast(pl, "neu starten", m), "Skip-Toast verspricht nur, was es gibt (Neustart)")
+		-- Neustart: Schritt 1, aktiv, gestartet-Hinweis; keine Belohnung verbucht
+		g:Advance(2.1)
+		m = g:Mark()
+		local money = d.money
+		T.eq(g:Act(pl, "tutorial_restart", { rid = 5 }), "ok", "tutorial_restart")
+		T.eq(d.games.meta.tutorialDone, false, "läuft wieder")
+		T.eq(d.games.meta.tutorialSkipped, false, "nicht mehr übersprungen")
+		T.eq(step(g, d), 1, "Schritt 1")
+		T.eq(d.games.meta.tutorialRewarded, false, "noch keine Belohnung verbucht")
+		local n = g:Notices(pl, "tutorial", m)
+		T.check(#n >= 1 and n[#n].restarted == true and n[#n].active == true and n[#n].step == 1, "tutorial-Hinweis restarted/active")
+		T.check(g:HasToast(pl, "neu gestartet", m), "Toast neu gestartet")
+		g:Advance(1.1)
+		T.eq(g:MiniSnapshot(pl).tutorial.active, true, "Snapshot aktiv")
+		-- Ende erreicht (letzter Schritt an der Infotafel): Belohnung genau einmal
+		d.games.meta.tutorialStep = TR.Count()
+		g:Advance(0.5)
+		m = g:Mark()
+		openCityStation(g, pl, "goals")
+		T.eq(d.games.meta.tutorialDone, true, "beendet")
+		T.eq(d.games.meta.tutorialRewarded, true, "Belohnung verbucht")
+		T.check(d.money - money >= 500, "500 Credits beim ersten Abschluss")
+		-- zweiter Durchlauf: Neustart erlaubt, am Ende keine zweite Belohnung
+		g:Advance(2.1)
+		T.eq(g:Act(pl, "tutorial_restart", { rid = 6 }), "ok", "tutorial_restart nach Abschluss")
+		T.eq(d.games.meta.tutorialDone, false, "läuft erneut")
+		T.eq(d.games.meta.tutorialRewarded, true, "Flag bleibt")
+		d.games.meta.tutorialStep = TR.Count()
+		money = d.money
+		local xp = d.xp
+		g:Advance(0.5)
+		m = g:Mark()
+		openCityStation(g, pl, "goals")
+		T.eq(d.games.meta.tutorialDone, true, "zweites Mal beendet")
+		T.eq(d.money, money, "keine zweite Belohnung (Credits)")
+		T.eq(d.xp, xp, "keine zweite Belohnung (XP)")
+		T.check(g:HasToast(pl, "hattest du schon", m), "Toast: Belohnung hattest du schon")
+		-- Speichern/Laden: Flag bleibt
+		g:Leave(pl)
+		local rec = g:Record(4501)
+		T.eq(rec and rec.data.games.meta.tutorialRewarded, true, "tutorialRewarded gespeichert")
+		local _, d2 = join(g, 4501, "Kim")
+		T.eq(d2.games.meta.tutorialRewarded, true, "tutorialRewarded geladen")
+		-- altes Profil ohne Flag, regulär beendet: gilt als belohnt; übersprungen: nicht
+		local MR = g:MiniShared("MetaRules")
+		local mOld = MR.Load({ tutorialDone = true }, nil, g:Now())
+		T.eq(mOld.tutorialRewarded, true, "alt + beendet = belohnt")
+		local mSkip = MR.Load({ tutorialDone = true, tutorialSkipped = true }, nil, g:Now())
+		T.eq(mSkip.tutorialRewarded, false, "alt + übersprungen = nicht belohnt")
+		noErrors(T, g, "Kiosk")
+	end },
+
+	{ "Spieler-Auktionen: Gebote auf Spieler-Lose erst ab Level 20 (auction:player), NPC-Lose ab 12", function(T, H)
+		local g = H.Garage()
+		local AR = g:MiniShared("AuctionRules")
+		local CR = g:MiniShared("CarRules")
+		local AS = g:MiniServer("AuctionService")
+		local seller, sd = join(g, 4601, "Sina")
+		local buyer, bd = join(g, 4602, "Ben")
+		sd.level = 20
+		bd.level = 12
+		bd.money = 100000
+		local car = CR.AddCar(sd, CR.NewCar("komet", g:Now()))
+		local start = AR.StartOptions(car)[1]
+		T.eq(g:Act(seller, "mini_auction_consign", { id = car.id, start = start, duration = 120, rid = 1 }), "ok", "consign")
+		local lot
+		for _, id in ipairs(AS.State().order) do
+			local l = AS.Lot(id)
+			if l.kind == "player" then
+				lot = l
+			end
+		end
+		T.check(lot ~= nil, "Spieler-Los angelegt")
+		g:Advance(0.6)
+		local m = g:Mark()
+		T.eq(g:Act(buyer, "mini_auction_bid", { lot = lot.id, amount = start, rid = 2 }), "locked", "Level 12: Gebot auf Spieler-Los gesperrt")
+		T.check(g:HasToast(buyer, "Ab Level 20: Spieler-Auktionen", m), "Toast Spieler-Auktionen ab Level 20")
+		T.eq(AR.Top(lot), nil, "kein Gebot")
+		-- NPC-Los: ab Level 12 erlaubt (Prüfung läuft durch CheckBid, nicht durch die Sperre)
+		local npc
+		for _, id in ipairs(AS.State().order) do
+			local l = AS.Lot(id)
+			if l.kind ~= "player" then
+				npc = l
+			end
+		end
+		if npc then
+			g:Advance(0.6)
+			T.check(g:Act(buyer, "mini_auction_bid", { lot = npc.id, amount = AR.MinBid(npc), rid = 3 }) ~= "locked", "NPC-Los nicht gesperrt")
+		end
+		T.eq(g:Act(buyer, "mini_auction_bid", { lot = 999999, amount = 1, rid = 4 }) ~= "locked", true, "unbekanntes Los: keine Sperre, AuctionService meldet selbst")
+		-- Level 20: Gebot geht durch
+		bd.level = 20
+		g:Advance(0.6)
+		T.eq(g:Act(buyer, "mini_auction_bid", { lot = lot.id, amount = start, rid = 5 }), "ok", "Level 20: Gebot angenommen")
+		T.eq(AR.Top(lot) and AR.Top(lot).userId, 4602, "Ben vorn")
+		noErrors(T, g, "Auktion")
 	end },
 
 	{ "Client: im all-Place öffnet sich der Lobby-Tab einmal, Tabs lobby/unlocks/prestige vorhanden, Sperrhinweis am gesperrten Bereich", function(T, H)

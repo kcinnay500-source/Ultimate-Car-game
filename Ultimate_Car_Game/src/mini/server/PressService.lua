@@ -1,11 +1,18 @@
 -- PressService: Schrottpresse auf dem Server (Klicks, Maschinen-Tick, Offline-Ertrag, Händler, Rebirth).
 -- Erträge der Presse sind Schrott, nie Geld. Geld gibt es nur beim Händler (innerhalb von request()).
+-- Freischaltung (PHASE4_CONTRACT §3, §12): die Presse gibt es ab feature:press (Level 2). Vorher produzieren die
+-- Maschinen nicht (Tick und Offline), lastTick läuft mit; die Aktionen sperrt MiniService (ACTION_UNLOCK).
 local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniConfig = require(MiniShared:WaitForChild("MiniConfig"))
 local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 local PressRules = require(MiniShared:WaitForChild("PressRules"))
+local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
 
 local PressService = {}
+
+function PressService.Unlocked(d): boolean
+	return Unlocks.Has(d, "feature:press")
+end
 
 -- Klick-Budget: höchstens MaxClicksPerSecond je vergangener Sekunde, kleiner Puffer für gebündelte Pakete.
 function PressService.AcceptClicks(ms, count, t)
@@ -34,6 +41,9 @@ end
 
 -- Rückgabe: Hinweis-Daten für mini_notice (kind "offline") oder nil
 function PressService.ApplyOffline(ms, d, seconds, now)
+	if not PressService.Unlocked(d) then
+		return nil -- Presse noch gesperrt: keine Offline-Produktion
+	end
 	local gain = PressRules.Produce(d, seconds, now, ms.passes)
 	if gain >= 1 then
 		return { text = MiniLocale.T("offline_press", MiniLocale.Scrap(gain)), scrap = gain, seconds = seconds }
@@ -45,7 +55,7 @@ end
 function PressService.Tick(ms, d, now)
 	local dt = now - ms.lastTickAt
 	ms.lastTickAt = now
-	if dt > 0 then
+	if dt > 0 and PressService.Unlocked(d) then
 		PressRules.Produce(d, math.min(dt, MiniConfig.PressTickCapSeconds), now, ms.passes)
 	end
 	d.games.press.lastTick = now

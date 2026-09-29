@@ -4,8 +4,11 @@
 -- Alle Funktionen sind nil-sicher: der Client ruft R.Reward auf state.data auf, und Profile ohne
 -- games (oder ein fehlendes d) ergeben neutrale Werte (1 bzw. 0).
 -- Ausbaustufe 4 (docs/PHASE4_CONTRACT.md §4, §8): Prestige-Einnahmenbonus (PrestigeIncome), Tycoon-Durchläufe
--- (TycoonWorkshop), Open-World-Perks (OWPerk, Platzhalter bis Meilenstein 6). Der Gesamtfaktor auf die
--- Werkstatt-Vergütung (WorkshopReward) ist auf GameConfig.WorkshopRewardCap (Standard ×1,6) gedeckelt.
+-- (TycoonWorkshop), Open-World-Perks (OWPerk, Platzhalter bis Meilenstein 6). Gedeckelt (GameConfig.WorkshopRewardCap,
+-- Standard ×1,6) ist NUR der Ausbaustufe-4-Faktor Tycoon × OW-Perk (CareerCapped); die 2.4.0/3.x-Querboni
+-- (Presse, Tuning-Abteilung, Kundenbonus) bleiben wie bisher ungedeckelt, sonst sänken die Einnahmen bestehender
+-- Profile. Der Prestige-Bonus (+2 % je Rang, Deckel +30 %) gilt auf alle Einnahmen (MiniRules.AddIncome) und wird
+-- in der Werkstatt außerhalb des Deckels multipliziert, damit jeder Rang messbar wirkt.
 local MiniConfig = require(script.Parent:WaitForChild("MiniConfig"))
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules"))
@@ -157,24 +160,34 @@ function CrossBonus.OWPerk(d: any, typ: string?): number
 	return 1
 end
 
--- Faktor der Ausbaustufe 4 (Prestige × Tycoon × Open-World-Perk), ungedeckelt
+-- Faktor der Ausbaustufe 4 (Prestige × Tycoon × Open-World-Perk), ungedeckelt (für Anzeigen)
 function CrossBonus.CareerBonus(d: any): number
 	return CrossBonus.PrestigeIncome(d) * CrossBonus.TycoonWorkshop(d) * CrossBonus.OWPerk(d, "werkstatt")
 end
 
--- Gesamtfaktor auf die Werkstatt-Vergütung ohne Deckel (für Anzeigen, die den Deckel erklären)
-function CrossBonus.WorkshopRewardRaw(d: any): number
-	return CrossBonus.PressWorkshop(d) * CrossBonus.TuningWorkshop(d) * CrossBonus.CustomerBonus(d) * CrossBonus.CareerBonus(d)
-end
-
--- Gesamtfaktor auf die Werkstatt-Vergütung (R.Reward): Presse × Tuning-Stufe × Kundenbonus × Prestige × Tycoon
--- × OW-Perk, zusammen gedeckelt auf WorkshopCap (Vertrag §8: ×1,6), nie unter 1.
-function CrossBonus.WorkshopReward(d: any): number
-	local raw = CrossBonus.WorkshopRewardRaw(d)
+-- Gedeckelter Ausbaustufe-4-Faktor auf die Werkstatt: min(WorkshopCap, Tycoon × OW-Perk), nie unter 1
+function CrossBonus.CareerCapped(d: any): number
+	local raw = CrossBonus.TycoonWorkshop(d) * CrossBonus.OWPerk(d, "werkstatt")
 	if not finite(raw) or raw < 1 then
 		return 1
 	end
 	return math.min(CrossBonus.WorkshopCap(), raw)
+end
+
+-- Gesamtfaktor auf die Werkstatt-Vergütung ohne jeden Deckel (für Anzeigen, die den Deckel erklären)
+function CrossBonus.WorkshopRewardRaw(d: any): number
+	return CrossBonus.PressWorkshop(d) * CrossBonus.TuningWorkshop(d) * CrossBonus.CustomerBonus(d) * CrossBonus.CareerBonus(d)
+end
+
+-- Gesamtfaktor auf die Werkstatt-Vergütung (R.Reward): Presse × Tuning-Stufe × Kundenbonus (wie 3.x, ungedeckelt)
+-- × min(WorkshopCap, Tycoon × OW-Perk) × Prestige-Einnahmenbonus; nie unter 1.
+function CrossBonus.WorkshopReward(d: any): number
+	local raw = CrossBonus.PressWorkshop(d) * CrossBonus.TuningWorkshop(d) * CrossBonus.CustomerBonus(d)
+		* CrossBonus.CareerCapped(d) * CrossBonus.PrestigeIncome(d)
+	if not finite(raw) or raw < 1 then
+		return 1
+	end
+	return raw
 end
 
 return CrossBonus

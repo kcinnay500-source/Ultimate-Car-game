@@ -52,9 +52,9 @@ Jedes neue Modul liefert `Default()` und `Load(raw, d, now)` (idempotent, NaN/ne
 Schlüssel, Tiefe ≤ 5). `MiniRules.DefaultGames/LoadGames` rufen sie auf. Nichts wird in `data` direkt angelegt.
 
 ```
-d.games.meta     = { tutorialDone=bool, tutorialStep=int, tutorialSkipped=bool, beginner=bool, passive=bool,
-                     single=bool, lastMode="lobby"|"openworld"|"tycoon", firstSeen=unix, playSeconds=int,
-                     hintsSeen={ [hintId]=true } }
+d.games.meta     = { tutorialDone=bool, tutorialStep=int, tutorialSkipped=bool, tutorialRewarded=bool, beginner=bool,
+                     passive=bool, single=bool, lastMode="lobby"|"openworld"|"tycoon", firstSeen=unix, playSeconds=int,
+                     hintsSeen={ [hintId]=true } }   -- tutorialRewarded: Belohnung verbucht (Neustart am Kiosk ohne zweite)
 d.games.prestige = { claimed={ [rank:int]=true }, titleRank=int }          -- Rang = PrestigeRules.RankFor(d.level)
 d.games.tycoon   = { runsDone={ werkstatt=int, autohaus=int, produktion=int, schrottplatz=int },
                      rebirths=int,
@@ -138,10 +138,18 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   `{ id, text, target=<Stationsschlüssel|nil>, event=<Serverereignis> }`: Bewegen, Menü öffnen (M), zum Empfang,
   Auftrag annehmen, OBD, Reparatur, Abrechnen, Stadtplan, Autohaus ansehen, Ziele. Fortschritt bestätigt **der
   Server** aus echten Ereignissen (`OnSettled`, Stationsbesuch, Aktionen) – der Client sendet nur `tutorial_next` für
-  reine Lese-Schritte („Weiter“). Belohnung am Ende: 500 Credits + 60 XP (`GameConfig.Tutorial.Reward`), einmalig.
+  reine Lese-Schritte („Weiter“). Belohnung am Ende: 500 Credits + 60 XP (`GameConfig.Tutorial.Reward`), einmalig
+  (`meta.tutorialRewarded`). Das Tutorial läuft **nur in der Open World**: in Lobby und Schnellem Spiel ist
+  `snapshot.tutorial.active = false`, `tutorial_next` wird mit Toast abgelehnt, Ereignisse zählen nicht. Neue
+  Spieler mit laufendem Tutorial kommen aus der Lobby in ihrer **eigenen Werkstatt** an (nicht am Stadt-Hub).
+  Verlangt der aktuelle Schritt eine Station mit Level-Sperre (Autohaus ab 3), öffnet der Tab trotzdem (nur
+  ansehen; Kauf/Probefahrt bleiben gesperrt). **Tutorial-Kiosk** in der Lobby: `tutorial_restart` startet es nach
+  Ende/Überspringen neu (Schritt 1, ohne zweite Belohnung); LobbyUI zeigt dafür den Abschnitt „Tutorial“.
 - Beginner-Hinweise (`GameConfig.Hints`): `{ id, text, when="unlock:<key>"|"station:<key>"|"first:<stat>" }`, je
   einmal (`meta.hintsSeen`), nur bei `beginner=true`; Anzeige als Karte oben rechts (nicht als Toast, Toasts bleiben
-  2.4.0).
+  2.4.0). `first:<stat>` löst nur beim Übergang 0 → 1 aus; 2.4.0-Veteranen (Profil ohne `meta`, `d.completed > 0`)
+  bekommen `first:jobsDone`/`station:workshop` als gesehen. Karten (Hinweis, „Neu freigeschaltet“) liegen unter dem
+  tatsächlichen Abzeichen und unter der Toast-Zone und laufen als Warteschlange nacheinander (nie überschrieben).
 - Unlock-Anzeige: Tab **„Freischaltungen“** (`unlocks`) mit der Tabelle Level → Freischaltung (erreicht/offen), plus
   HUD-Zeile „Nächste Freischaltung“. Beim Erreichen eines Levels mit Freischaltung: `mini_notice { kind="unlock" }`
   mit Titel (Client zeigt eine Karte mit Effekt).
@@ -215,8 +223,13 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   (Deckel 5 Durchläufe je Typ, danach zählt nichts mehr; Formel `min(n,5) × Schritt`):
   werkstatt → +2 % Werkstatt-Vergütung (max +10 %), autohaus → −1,5 % Händlerpreise (max −7,5 %),
   produktion → +3 % Tuning-Tempo (max +15 %), schrottplatz → +3 % Schrott (max +15 %). Wirkt über `CrossBonus`
-  (`CrossBonus.TycoonWorkshop(d)` usw.). Zusammen mit Prestige und OW-Perks ist der Gesamtbonus auf die Werkstatt
-  auf ×1,6 gedeckelt (`CrossBonus.WorkshopReward`).
+  (`CrossBonus.TycoonWorkshop(d)` usw.). Der Deckel ×1,6 (`GameConfig.WorkshopRewardCap`) gilt **nur** für den
+  Ausbaustufe-4-Faktor Tycoon × OW-Perk (`CrossBonus.CareerCapped`); die 3.x-Querboni (Presse, Tuning-Abteilung,
+  Kundenbonus) bleiben ungedeckelt (bestehende Profile verlieren nichts), und der Prestige-Einnahmenbonus (§4)
+  wird außerhalb des Deckels multipliziert, damit jeder Rang messbar wirkt. `CrossBonus.WorkshopReward` =
+  Presse × Tuning × Kunde × CareerCapped × PrestigeIncome. Auf Minispiel-Einnahmen (Tuning, Presse-Händler,
+  Schrottplatz, Quiz, Parkplatz, Teststrecke, Spielhalle) wirkt Prestige über `MiniRules.AddIncome`; der
+  Händler-Rabatt über `CarRules.DealerPrice` (Katalog `price` = rabattiert, `basePrice` = Listenpreis).
 - Speichern: `run` bei jedem Autosave; Verlassen → `run` bleibt (Fortsetzen). Abbruch: `tycoon_abandon` (Bestätigung).
 
 ## 9. Shop & Monetarisierung (`ShopRules`, `ShopService`, `ShopUI`-Erweiterung, `Purchases`)
@@ -245,7 +258,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 ```
 lobby_mode {mode}  lobby_settings {single,passive,beginner}  lobby_go  lobby_return
 party_create  party_join {code}  party_leave  party_kick {userId}
-tutorial_next {step}  tutorial_skip
+tutorial_next {step}  tutorial_skip  tutorial_restart
 prestige_claim {rank}
 ow_build {typ}  ow_collect {typ}  ow_passive {on}
 story_start {id}  story_claim {id}  story_sell {offer, price}      -- price = Stufe 1..3 (Absicht)
@@ -279,6 +292,12 @@ Sticky (nur bei full): `unlocks.list`, `shop.catalog`, `story.missions`.
 - DataStore: unverändert `UltimateCarGame_v2`, Sitzungssperre, Autosave 45 s, Versionierung über `d.games.v` und
   `Load`-Whitelists (alte Profile laden mit Standardwerten). Studio schreibt nie in Produktion.
 - TeleportService nur in `pcall`; `TeleportData` als unvertrauenswürdig behandeln (Whitelist, Typen, Längen).
+  `TeleportService.TeleportInitFailed` ist verbunden (`PlaceRouter.Init`): asynchrone Fehler → warn + Toast +
+  Simulation je Spieler; kommt die Reise nicht zustande, zeigt `meta.lastMode` wieder auf den aktuellen Modus.
+- Unlock-Sperren decken alle Aktionen eines Bereichs: Presse (Klick, Maschinen, Händler, Rebirth, keine Produktion
+  vor Level 2), Tuning (Start, Abholen, passive Einnahmen – vor Level 6 wird nichts angespart), Ausbau
+  (`mini_upgrade` je Bereich), Gebote auf **Spieler-Lose** erst mit `auction:player` (NPC-Lose ab `feature:auction`).
+- `lobby_return` ist auch für Party-Mitglieder erlaubt (allein zurück, Party bleibt); nur `lobby_go` ist Leitersache.
 - Alle Texte Deutsch, junges Publikum, keine externen Assets (`rbxassetid`), keine Glücksspielmechanik.
 - Neue Luau-Dateien mit Typannotationen an Funktionssignaturen (keine `--!strict`-Pflicht, aber `--!nonstrict` ok),
   ModuleScripts, Kommentare Deutsch.

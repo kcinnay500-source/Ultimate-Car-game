@@ -2,8 +2,14 @@
 -- (docs/PHASE4_CONTRACT.md §1). Ein Code für alle Places; das Verhalten richtet sich nach dem Attribut
 -- PlaceKind an ReplicatedStorage.GarageShared ("all" | "lobby" | "openworld" | "tycoon").
 --
---   PlaceRouter.Init(ctx)                        ctx = { emit(p, kind, data), toast(p, text), moveTo(p, part)?, now() }
---                                                (der GarageServer-Kontext aus MiniService.Init; nur emit/toast sind Pflicht)
+--   PlaceRouter.Init(ctx)                        ctx = { emit(p, kind, data), toast(p, text), moveTo(p, part)?, now(),
+--                                                getSession(player)?, onTeleportFailed(p, kind, result)? }
+--                                                (der GarageServer-Kontext aus MiniService.Init; nur emit/toast sind Pflicht).
+--                                                Verbindet einmalig TeleportService.TeleportInitFailed: schlägt ein
+--                                                TeleportAsync erst asynchron fehl (GameFull, Flooded, Failure …), holt
+--                                                der Server die Sitzung über ctx.getSession, warnt, zeigt den Toast und
+--                                                simuliert den Ortswechsel (Simulate) – je Spieler, Party-Mitglieder
+--                                                bekommen ihr eigenes Ereignis.
 --   PlaceRouter.PlaceKind() -> string            Attribut PlaceKind (fehlt es: "all")
 --   PlaceRouter.InitialMode(p, placeKind, joinData) -> mode, info
 --                                                Modus beim Beitritt: lobby-Place -> "lobby"; openworld/tycoon -> dieser Modus;
@@ -20,7 +26,11 @@
 --                                                (<Zone>.Arrivals.hub; Open World ohne Stadt: eigene Werkstatt), mini_notice
 --                                                { kind = "mode", mode, simulated = true, single }. Fehlt die Zone in diesem
 --                                                Place: bleiben + Toast, nichts geändert.
---   PlaceRouter.MoveToZone(p, kind) -> ok, msg    Figur zur Zonen-Ankunft versetzen (ohne Moduswechsel), z. B. nach dem Erscheinen
+--   PlaceRouter.MoveToZone(p, kind) -> ok, msg    Figur zur Zonen-Ankunft versetzen (ohne Moduswechsel), z. B. nach dem Erscheinen.
+--                                                Open World mit laufendem Tutorial: die eigene Werkstatt (dort beginnt es),
+--                                                sonst die Stadt-Ankunft.
+--   PlaceRouter.ArrivedText(kind) -> string      Ankunfts-Toast; Schnelles Spiel ohne Tycoon-Dienst (GameConfig.Tycoon leer):
+--                                                „eröffnet bald“ mit dem Rückweg.
 --   PlaceRouter.WouldTeleport(kind) -> bool      true, wenn Go einen echten Teleport versuchen würde (für den Snapshot)
 --   PlaceRouter.SanitizeTeleportData(raw) -> table  Whitelist nach GameConfig.TeleportDataKeys (nur string/number/boolean)
 -- Kein Geld, keine Speicherung außer meta.lastMode (MetaRules.SetMode). Teleports laufen nur in pcall, TeleportData gilt als
@@ -33,6 +43,7 @@ local Shared = ReplicatedStorage:WaitForChild("GarageShared")
 local MiniShared = Shared:WaitForChild("Mini")
 local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 local MetaRules = require(MiniShared:WaitForChild("MetaRules"))
+local TutorialRules = require(MiniShared:WaitForChild("TutorialRules"))
 local CityService = require(script.Parent:WaitForChild("CityService"))
 
 local PlaceRouter = {}
@@ -46,10 +57,12 @@ local TEXT = {
 	noCharacter = "Warte kurz, bis deine Figur da ist.",
 	teleportFailed = "Der Teleport hat nicht geklappt. Wir wechseln den Ort hier im Server.",
 	arrived = { lobby = "Willkommen in der Lobby!", openworld = "Willkommen in der Werkstattmeile!", tycoon = "Schnelles Spiel: Viel Erfolg bei deiner Tycoon-Runde!" },
+	tycoonSoon = "Das Schnelle Spiel eröffnet bald! Zurück geht's mit M → Tab „Lobby“ → „Zurück zur Lobby“.",
 }
 PlaceRouter.Text = TEXT
 
-local ctx = nil -- { emit, toast, moveTo?, now? }
+local ctx = nil -- { emit, toast, moveTo?, now?, getSession?, onTeleportFailed? }
+local failedConnection = nil -- TeleportService.TeleportInitFailed (einmal je Server)
 
 local function finite(v: any): boolean
 	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
@@ -67,8 +80,82 @@ local function emit(p: any, kind: string, data: any)
 	end
 end
 
+-- Gibt es das Schnelle Spiel schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
+function PlaceRouter.TycoonOpen(): boolean
+	local t = GameConfig.Tycoon
+	return type(t) == "table" and next(t) ~= nil
+end
+
+-- Ankunfts-Toast eines Modus
+function PlaceRouter.ArrivedText(kind: string): string?
+	if kind == "tycoon" and not PlaceRouter.TycoonOpen() then
+		return TEXT.tycoonSoon
+	end
+	return TEXT.arrived[kind]
+end
+
+-- Modus zu einer Place-Id (Rückwärtssuche in GameConfig.Places); nil für unbekannte Ids
+function PlaceRouter.ModeForPlace(placeId: any): string?
+	if not finite(placeId) or placeId <= 0 then
+		return nil
+	end
+	for _, kind in ipairs(GameConfig.Modes) do
+		if PlaceRouter.PlaceId(kind) == placeId then
+			return kind
+		end
+	end
+	return nil
+end
+
+-- TeleportService.TeleportInitFailed(player, result, errorMessage, placeId, options): der übliche asynchrone
+-- Fehlerweg eines echten Teleports. Sitzung holen, Ziel aus den TeleportData (SanitizeTeleportData) bzw. der Place-Id,
+-- warnen, Toast und Simulation. Kein Ziel bestimmbar oder Simulation unmöglich: lastMode auf den aktuellen Modus zurück.
+function PlaceRouter.OnTeleportInitFailed(player: any, result: any, message: any, placeId: any, options: any)
+	local p = ctx and type(ctx.getSession) == "function" and ctx.getSession(player) or nil
+	if not p or not p.profile or type(p.profile.data) ~= "table" then
+		return
+	end
+	local td = {}
+	if typeof(options) == "Instance" then
+		local okData, raw = pcall(function()
+			return options:GetTeleportData()
+		end)
+		if okData then
+			td = PlaceRouter.SanitizeTeleportData(raw)
+		end
+	end
+	local kind = PlaceRouter.IsMode(td.mode) and td.mode or PlaceRouter.ModeForPlace(placeId)
+	warn("[Ortswechsel] Teleport von " .. tostring(player and player.Name) .. " nach " .. tostring(kind or placeId)
+		.. " fehlgeschlagen: " .. tostring(result) .. " – " .. tostring(message))
+	toast(p, TEXT.teleportFailed)
+	local ok, res = false, nil
+	if kind and kind ~= p.mode then
+		ok, res = PlaceRouter.Simulate(p, kind, { single = td.single, party = td.party })
+	end
+	if not ok then
+		MetaRules.SetMode(p.profile.data, p.mode) -- Reise ist nicht zustande gekommen: letzter Modus = hier
+	end
+	if ctx and type(ctx.onTeleportFailed) == "function" then
+		pcall(ctx.onTeleportFailed, p, kind, ok and res or nil)
+	end
+end
+
 function PlaceRouter.Init(c: any)
 	ctx = type(c) == "table" and c or nil
+	if failedConnection then
+		return
+	end
+	local ok, err = pcall(function()
+		failedConnection = TeleportService.TeleportInitFailed:Connect(function(player, result, message, placeId, options)
+			local okF, errF = pcall(PlaceRouter.OnTeleportInitFailed, player, result, message, placeId, options)
+			if not okF then
+				warn("[Ortswechsel] TeleportInitFailed: " .. tostring(errF))
+			end
+		end)
+	end)
+	if not ok then
+		warn("[Ortswechsel] TeleportInitFailed nicht verbunden: " .. tostring(err))
+	end
 end
 
 function PlaceRouter.Initialized(): boolean
@@ -241,20 +328,54 @@ end
 
 -- Figur zur Zonen-Ankunft versetzen (ohne Moduswechsel). Open World ohne Stadt: eigene Werkstatt (ctx.moveTo bzw.
 -- CityService.Travel). Rückgabe: ok, Hinweistext bei Fehlschlag.
+-- Open World: Ankunft in der eigenen Werkstatt (ctx.moveTo bzw. CityService.Travel). Rückgabe: ok, Hinweistext.
+local function moveHome(p: any): (boolean, string?)
+	if not (ctx and type(ctx.moveTo) == "function") then
+		return false, TEXT.zoneMissing
+	end
+	local ch = p.player and p.player.Character
+	local humanoid = ch and ch:FindFirstChildOfClass("Humanoid")
+	if not ch or not humanoid or humanoid.Health <= 0 then
+		return false, TEXT.noCharacter
+	end
+	CityService.Unseat(humanoid) -- SeatWeld weg, sonst reist das ganze Auto mit (GarageServer.moveTo löst es ebenfalls)
+	local ok, err = pcall(CityService.Travel, p, "workshop", ctx.moveTo)
+	if ok and err ~= false then
+		return true
+	end
+	return false, type(err) == "string" and err or TEXT.noCharacter
+end
+
+-- Neue Spieler mit laufendem Tutorial kommen in ihrer Werkstatt an (Schritt 1 „Willkommen in deiner Werkstatt“,
+-- Schritt 3 „Geh zum Empfang“ – die Grundstücke liegen bis zu 500 Studs vom Stadt-Hub entfernt).
+function PlaceRouter.PrefersWorkshop(p: any, kind: string): boolean
+	if kind ~= "openworld" then
+		return false
+	end
+	local d = p and p.profile and p.profile.data or nil
+	return TutorialRules.Active(d) == true
+end
+
 function PlaceRouter.MoveToZone(p: any, kind: string): (boolean, string?)
 	if not PlaceRouter.IsMode(kind) then
 		return false, TEXT.unknown
+	end
+	if PlaceRouter.PrefersWorkshop(p, kind) and PlaceRouter.ZoneAvailable(p, kind) then
+		local ok, msg = moveHome(p)
+		if ok then
+			return true
+		end
+		if msg == TEXT.noCharacter then
+			return false, msg
+		end
+		-- Werkstatt (noch) nicht erreichbar: Stadt-Ankunft
 	end
 	local destination = PlaceRouter.ZoneArrival(kind)
 	if destination then
 		return placeCharacter(p, destination)
 	end
-	if kind == "openworld" and PlaceRouter.ZoneAvailable(p, kind) and ctx and type(ctx.moveTo) == "function" then
-		local ok, err = pcall(CityService.Travel, p, "workshop", ctx.moveTo)
-		if ok and err ~= false then
-			return true
-		end
-		return false, type(err) == "string" and err or TEXT.noCharacter
+	if kind == "openworld" and PlaceRouter.ZoneAvailable(p, kind) then
+		return moveHome(p)
 	end
 	return false, TEXT.zoneMissing
 end
@@ -326,18 +447,26 @@ function PlaceRouter.Go(p: any, kind: string, data: GoData?): (boolean, GoResult
 		return false, TEXT.unknown
 	end
 	data = type(data) == "table" and data or {}
+	local attempted = false
 	if PlaceRouter.WouldTeleport(kind) then
 		local placeId = PlaceRouter.PlaceId(kind)
+		attempted = true
+		-- Der gewählte Modus gilt am Ziel als letzter Modus (Profil wird beim Verlassen gespeichert). Er wird VOR dem
+		-- Aufruf gemerkt: TeleportInitFailed kann noch innerhalb von TeleportAsync feuern und setzt ihn dann zurück
+		-- bzw. auf das Ziel der Simulation – ein SetMode danach überschriebe diese Korrektur.
+		MetaRules.SetMode(p.profile.data, kind)
 		local ok, err = pcall(teleport, p, kind, placeId, data)
 		if ok then
-			-- Der gewählte Modus gilt auch am Ziel als letzter Modus (Profil wird beim Verlassen gespeichert)
-			MetaRules.SetMode(p.profile.data, kind)
 			return true, { mode = kind, teleported = true, simulated = false, placeId = placeId }
 		end
 		warn("[Ortswechsel] Teleport nach " .. kind .. " (" .. tostring(placeId) .. "): " .. tostring(err))
 		toast(p, TEXT.teleportFailed)
 	end
-	return PlaceRouter.Simulate(p, kind, data)
+	local okS, res = PlaceRouter.Simulate(p, kind, data)
+	if not okS and attempted then
+		MetaRules.SetMode(p.profile.data, p.mode) -- Reise ist nicht zustande gekommen: letzter Modus = hier
+	end
+	return okS, res
 end
 
 return PlaceRouter

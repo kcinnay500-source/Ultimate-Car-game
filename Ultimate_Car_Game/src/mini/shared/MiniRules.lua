@@ -11,6 +11,7 @@ local AuctionRules = require(script.Parent:WaitForChild("AuctionRules"))
 local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
 -- Ausbaustufe 4: Einstellungen/Tutorial (games.meta) und Prestige (games.prestige); MetaRules braucht nur GameConfig
 local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
+local CrossBonus = require(script.Parent:WaitForChild("CrossBonus"))
 
 local MiniRules = {}
 
@@ -279,6 +280,18 @@ function MiniRules.AddMoney(d, amount)
 	local before = MiniRules.IsFiniteNumber(d.money) and d.money or 0
 	d.money = math.min(C.NumberCap, math.max(0, before + amount))
 	return d.money - before
+end
+
+-- Einnahme aus einem Minispiel (Tuning, Presse-Händler, Schrottplatz, Quiz, Parkplatz, Teststrecke, Spielhalle):
+-- wie AddMoney, aber mit dem Prestige-Einnahmenbonus (PHASE4_CONTRACT §4: +2 % je Rang auf alle Einnahmen,
+-- CrossBonus.PrestigeIncome). Rückgabe: tatsächlich gutgeschriebener Betrag. Rückzahlungen, Übergaben zwischen
+-- Spielern (Auktion) und feste Belohnungen (Ziele, Tutorial) laufen weiter über AddMoney.
+function MiniRules.AddIncome(d, amount)
+	if not MiniRules.IsFiniteNumber(amount) or amount <= 0 then
+		return MiniRules.AddMoney(d, amount)
+	end
+	local factor = CrossBonus.PrestigeIncome(d)
+	return MiniRules.AddMoney(d, math.floor(amount * factor + 0.5))
 end
 
 function MiniRules.AddReputation(d, amount)

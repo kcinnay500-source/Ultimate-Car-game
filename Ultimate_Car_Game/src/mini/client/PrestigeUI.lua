@@ -40,16 +40,22 @@ local function num(v: any, default: number): number
 	return type(v) == "number" and v == v and v or default
 end
 
+-- Prozentwert ganzzahlig gerundet (7 × 0,02 × 100 ergäbe sonst „14.000000000000002“)
+local function pct(v: any): string
+	return tostring(math.floor(num(v, 0) + 0.5))
+end
+
 local function rewardText(r: any): string
 	if type(r) ~= "table" then
 		return ""
 	end
-	local parts = { "+" .. tostring(num(r.incomePct, 0)) .. " % Einnahmen", tostring(num(r.discountPct, 0)) .. " % Rabatt im Autohaus", "Kosmetik" }
+	local parts = { "+" .. pct(r.incomePct) .. " % Einnahmen", pct(r.discountPct) .. " % Rabatt im Autohaus", "Kosmetik" }
 	if num(r.tycoonRebirthPct, 0) > 0 then
-		table.insert(parts, "+" .. tostring(r.tycoonRebirthPct) .. " % Tycoon-Rebirth")
+		table.insert(parts, "+" .. pct(r.tycoonRebirthPct) .. " % Tycoon-Rebirth")
 	end
 	return table.concat(parts, " · ")
 end
+PrestigeUI.RewardText = rewardText
 
 ---------------------------------------------------------------- Belohnungszeile
 local function rewardRow(parent, i: number)
@@ -316,6 +322,39 @@ end
 
 function PrestigeUI.Hud()
 	return hud.gui, hud
+end
+
+-- Unterkante des Abzeichens (in Pixeln ab der Oberkante der ScreenGui, Inset eingerechnet); 0 ohne Abzeichen.
+-- Hinweis-/Freischaltungskarten (TutorialUI, UnlocksUI) legen sich darunter – auch wenn das Abzeichen auf schmalen
+-- Bildschirmen unter die 2.4.0-Leiste (y 60) rückt.
+function PrestigeUI.HudBottom(): number
+	local gui, frame = hud.gui, hud.frame
+	if not gui or not frame or not gui.Parent then
+		return 0
+	end
+	local ok, bottom = pcall(function()
+		return frame.AbsolutePosition.Y - gui.AbsolutePosition.Y + frame.AbsoluteSize.Y
+	end)
+	if ok and type(bottom) == "number" and bottom == bottom and bottom > 0 then
+		return bottom
+	end
+	return frame.Position.Y.Offset + PrestigeUI.HudHeight
+end
+
+-- Oberkante für Karten oben rechts: unter dem Abzeichen UND unter der Toast-Zone (2.4.0-Toast 330 × 60 zentriert
+-- ab UI.ToastTop bzw. y 62; auf Bildschirmen unter ≈ 960 px überlappen Toast und rechte Karte).
+PrestigeUI.ToastHeight = 60
+PrestigeUI.CardGap = 8
+function PrestigeUI.OverlayTop(): number
+	local top = PrestigeUI.HudBottom() + PrestigeUI.CardGap
+	local toastTop = 62
+	if UI and type(UI.ToastTop) == "function" then
+		local ok, t = pcall(UI.ToastTop)
+		if ok and type(t) == "number" and t == t then
+			toastTop = t
+		end
+	end
+	return math.max(top, toastTop + PrestigeUI.ToastHeight + PrestigeUI.CardGap)
 end
 
 return PrestigeUI

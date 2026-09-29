@@ -11,6 +11,10 @@ local FILES = {
 	CarCatalog = "src/mini/shared/CarCatalog.lua",
 	ArcadeRules = "src/mini/shared/ArcadeRules.lua",
 	TrackRules = "src/mini/shared/TrackRules.lua",
+	-- Ausbaustufe 4: CarCatalog nimmt die Händler-Level aus GameConfig.Unlocks (reine Datenmodule)
+	Unlocks = "src/mini/shared/Unlocks.lua",
+	GameConfig = "src/mini/shared/GameConfig.lua",
+	PrestigeRules = "src/mini/shared/PrestigeRules.lua",
 }
 
 local loaded = {}

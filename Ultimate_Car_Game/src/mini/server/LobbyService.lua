@@ -3,7 +3,8 @@
 --   lobby_mode {mode}                        Modus für die nächste Reise wählen ("tycoon" | "openworld"), Sitzungsauswahl
 --   lobby_settings {single, passive, beginner}  Einstellungen (MetaRules.SetSettings, sofort wirksam, in d.games.meta gespeichert)
 --   lobby_go                                 Reise mit der Auswahl (PlaceRouter.Go); Party: nur der Leiter, Mitglieder reisen mit
---   lobby_return                             aus jedem Modus zurück in die Lobby
+--   lobby_return                             aus jedem Modus zurück in die Lobby (Party-Mitglieder auch allein: sie bleiben
+--                                            in der Party, nur die Figur reist; der Leiter nimmt bei lobby_go/lobby_return alle mit)
 --   party_create / party_join {code} / party_leave / party_kick {userId}
 -- Party = serverlokal (Code 4 Zeichen aus GameConfig.Party.CodeAlphabet, höchstens MaxMembers, der Leiter startet die Reise;
 -- Verlassen des Servers entfernt aus der Party, der nächste wird Leiter). Mitglieder erhalten mini_notice { kind = "party",
@@ -57,6 +58,8 @@ local TEXT = {
 	partyNotMember = "Dieser Spieler ist nicht in deiner Party.",
 	partyKicked = "Du wurdest aus der Party entfernt.",
 	partyLeader = "%s ist jetzt Party-Leiter.",
+	partyLeaderYou = "Du bist jetzt Party-Leiter.",
+	returnAlone = "Du reist allein zurück in die Lobby. Deine Party bleibt bestehen.",
 	partyNoCode = "Es ist gerade kein Party-Code frei. Versuch es gleich noch einmal.",
 	partyTooSoon = "Einen Moment, bitte.",
 	arrived = PlaceRouter.Text.arrived,
@@ -208,10 +211,12 @@ local function removeFromParty(player: Player, reason: string)
 	notifyParty(party, { event = reason == "kicked" and "kicked" or "left", userId = player.UserId, name = playerName(player) })
 	if party.leader == player then
 		party.leader = party.members[1]
-		notifyParty(party, { event = "leader", userId = party.leader.UserId, name = playerName(party.leader) })
+		-- die übrigen erfahren den Namen; der neue Leiter bekommt seinen eigenen Toast (kein doppelter Hinweis)
+		notifyParty(party, { event = "leader", userId = party.leader.UserId, name = playerName(party.leader) }, party.leader)
 		local leaderMs = msOf(party.leader)
 		if leaderMs then
-			toast(leaderMs, string.format(TEXT.partyLeader, "Du"))
+			toast(leaderMs, TEXT.partyLeaderYou)
+			dirty(leaderMs)
 		end
 	end
 	return party
@@ -232,9 +237,15 @@ end
 local function travel(ms: any, mode: string, fromAction: string): boolean
 	local p, d = ms.p, ms.p.profile.data
 	local party = LobbyService.PartyOf(ms.player)
+	local alone = false
 	if party and party.leader ~= ms.player then
-		toast(ms, TEXT.notLeader)
-		return false
+		if fromAction == "lobby_go" then
+			toast(ms, TEXT.notLeader)
+			return false
+		end
+		-- lobby_return: ein Mitglied darf jederzeit allein zurück (Vertrag §5: aus jedem Modus); die Party bleibt
+		alone = true
+		party = nil
 	end
 	local settings = MetaRules.Settings(d)
 	local members = party and livingMembers(party) or nil
@@ -267,7 +278,10 @@ local function travel(ms: any, mode: string, fromAction: string): boolean
 		notifyParty(party, { event = "travel", mode = mode, userId = ms.player.UserId, name = playerName(ms.player) }, ms.player)
 	end
 	ms.lobbyChoice = nil
-	toast(ms, TEXT.arrived[mode])
+	toast(ms, PlaceRouter.ArrivedText(mode))
+	if alone then
+		toast(ms, TEXT.returnAlone)
+	end
 	return true
 end
 
@@ -439,7 +453,22 @@ end
 
 function LobbyService.Init(c: any)
 	ctx = type(c) == "table" and c or nil
-	PlaceRouter.Init(c)
+	-- PlaceRouter bekommt den Kontext plus einen Rückruf für asynchron gescheiterte Teleports (TeleportInitFailed):
+	-- die Sitzung gilt als geändert (Snapshot mit neuem Modus), die Vorauswahl ist verbraucht.
+	local routerCtx = {}
+	for k, v in pairs(ctx or {}) do
+		routerCtx[k] = v
+	end
+	routerCtx.onTeleportFailed = function(p: any, kind: any, result: any)
+		local ms = p and msOf(p.player)
+		if ms then
+			if result then
+				ms.lobbyChoice = nil
+			end
+			dirty(ms)
+		end
+	end
+	PlaceRouter.Init(routerCtx)
 end
 
 ---------------------------------------------------------------- Sitzung
@@ -510,6 +539,11 @@ function LobbyService.OnStation(ms: any, station: any)
 		end
 	end
 	local data = { action = key }
+	if key == "tutorial" then
+		-- Tutorial-Kiosk: LobbyUI zeigt den Abschnitt „Tutorial“ (Schritte, „Tutorial erneut starten“)
+		local meta = MetaRules.Meta(d)
+		data.tutorialDone = meta ~= nil and meta.tutorialDone == true
+	end
 	local hint = MetaRules.HintFor(d, "station:" .. key)
 	if hint then
 		data.hint = hint.text
@@ -551,6 +585,12 @@ function LobbyService.SnapshotFields(ms: any, d: any, _t: number?, _full: boolea
 	local mode = p and GameConfig.ModeSet[p.mode] and p.mode or MetaRules.Mode(d)
 	local m = MetaRules.Meta(d)
 	local settings = MetaRules.Settings(d)
+	-- Einzelspieler-Kennzeichnung dieser Sitzung (p.single, auch ein ausdrückliches false aus TeleportData); ohne
+	-- Sitzung die gespeicherte Einstellung
+	local single = settings.single
+	if p then
+		single = p.single == true
+	end
 	local party = ms and LobbyService.PartyOf(ms.player) or nil
 	local partyField: any = false
 	if party then
@@ -570,7 +610,7 @@ function LobbyService.SnapshotFields(ms: any, d: any, _t: number?, _full: boolea
 	return {
 		mode = mode,
 		placeKind = PlaceRouter.PlaceKind(),
-		single = p and p.single == true or settings.single,
+		single = single,
 		-- true, wenn Reisen in diesem Place simuliert werden (Platzhalter-Ids, Studio oder alles in einem Place)
 		simulated = not (PlaceRouter.WouldTeleport("tycoon") or PlaceRouter.WouldTeleport("openworld") or PlaceRouter.WouldTeleport("lobby")),
 		choice = ms and ms.lobbyChoice or false,

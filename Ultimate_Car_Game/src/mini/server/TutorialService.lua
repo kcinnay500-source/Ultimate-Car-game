@@ -3,8 +3,8 @@
 -- für reine Lese-Schritte („Weiter“) und tutorial_skip. Belohnung (GameConfig.Tutorial.Reward) einmalig am Ende.
 --
 -- Schnittstelle für MiniService:
---   Register(Actions, api)              tutorial_next {step}, tutorial_skip
---   OnJoin(ms, d, now)                  Sitzung vorbereiten (Hinweis mit dem aktuellen Schritt nach 'hello')
+--   Register(Actions, api)              tutorial_next {step}, tutorial_skip, tutorial_restart (Kiosk in der Lobby)
+--   OnJoin(ms, d, now)                  Sitzung vorbereiten (Hinweis mit dem aktuellen Schritt nach 'hello', nur Open World)
 --   OnEvent(ms, d, event) -> advanced   Ereignis melden: "station:<key>" (Plot-Station, GarageServer act/World-Callback),
 --                                       "tab:<tab>" (Stadt-Station, MiniService.openStation), "settled" (Mini.OnSettled),
 --                                       "action:<name>" (Mini.Handle nach erfolgreichem Handler), "accept"/"scan"/"menu"
@@ -21,6 +21,9 @@
 --   SnapshotFields(ms, d, now, full)    { tutorial = { step, count, text, target, zone, next, done, skipped, active } }
 -- Hinweise: mini_notice { kind = "tutorial", step, count, text, target, zone, next, done, skipped, finished?, started? }
 --           mini_notice { kind = "hint", id, text, trigger }
+-- Modus: das Tutorial läuft nur in der Open World (ms.p.mode == "openworld", Vertrag §6). In Lobby und Schnellem
+-- Spiel ist snapshot.tutorial.active = false, tutorial_next wird mit Toast abgelehnt, Ereignisse zählen nicht
+-- (Beginner-Hinweise laufen weiter). Sitzungen ohne Modus (p.mode = nil) gelten als Open World.
 -- Geld: nur die einmalige Belohnung (MiniRules.AddMoney + MiniRules.GainXP); fällt sie außerhalb von request()
 -- an (Stationsbesuch), meldet api.changed die 2.4.0-Revision. Während transacting wird sie zurückgehalten
 -- (ms.tutorialRewardPending) und im Tick bzw. in OnLeave nachgeholt.
@@ -61,6 +64,19 @@ local function transacting(ms: any): boolean
 	return prof ~= nil and prof.transacting == true
 end
 
+-- Modus der Sitzung (nil ohne Lobby-Verkabelung = Open World)
+local function modeOf(ms: any): string?
+	local p = ms and ms.p
+	local mode = p and p.mode
+	return type(mode) == "string" and mode or nil
+end
+
+-- Läuft das Tutorial in dieser Sitzung (Profilstand und Modus)?
+local function activeHere(ms: any, d: any): boolean
+	return TutorialRules.Active(d, modeOf(ms))
+end
+TutorialService.ActiveHere = activeHere
+
 ---------------------------------------------------------------- Hinweise (Warteschlange, bis der Client zuhört)
 local function send(ms: any, kind: string, data: { [string]: any })
 	if not api then
@@ -86,7 +102,7 @@ function TutorialService.Flush(ms: any)
 end
 
 local function stepNotice(ms: any, d: any, extra: { [string]: any }?)
-	local v = TutorialRules.View(d)
+	local v = TutorialRules.View(d, modeOf(ms))
 	local data = {
 		step = v.step, count = v.count, id = v.id, text = v.text, target = v.target, zone = v.zone,
 		next = v.next, done = v.done, skipped = v.skipped, active = v.active,
@@ -100,13 +116,22 @@ local function stepNotice(ms: any, d: any, extra: { [string]: any }?)
 	end
 end
 
----------------------------------------------------------------- Belohnung (einmalig, nie beim Überspringen)
+---------------------------------------------------------------- Belohnung (einmalig, nie beim Überspringen, nie nach Neustart)
 local function grantReward(ms: any, d: any): boolean
+	if TutorialRules.Rewarded(d) then
+		ms.tutorialRewardPending = nil
+		if api then
+			api.toast(ms, TutorialRules.Text.finishedAgain)
+			api.dirty(ms)
+		end
+		return true
+	end
 	if transacting(ms) then
 		ms.tutorialRewardPending = true
 		return false
 	end
 	ms.tutorialRewardPending = nil
+	TutorialRules.MarkRewarded(d)
 	local r = TutorialRules.Reward()
 	local credits = MiniRules.AddMoney(d, r.credits)
 	MiniRules.GainXP(d, r.xp)
@@ -143,12 +168,14 @@ function TutorialService.Hint(ms: any, d: any, trigger: any): number
 	return #hints
 end
 
--- Statistik gestiegen (MiniRules.AddStat): Hinweis "first:<stat>", sobald sie > 0 ist
+-- Statistik gestiegen (MiniRules.AddStat um 1): Hinweis "first:<stat>" nur beim Übergang 0 -> 1. Ein Veteran mit
+-- 200 Aufträgen (stats.jobsDone aus d.completed) bekommt so nie „Super, dein erster Auftrag!“ (MetaRules.Load
+-- markiert die Erstlings-Hinweise für Veteranen zusätzlich als gesehen).
 function TutorialService.OnStat(ms: any, d: any, stat: any): number
 	local g = type(d) == "table" and d.games or nil
 	local stats = type(g) == "table" and g.stats or nil
 	local v = type(stats) == "table" and stats[stat] or nil
-	if type(stat) ~= "string" or not finite(v) or v <= 0 then
+	if type(stat) ~= "string" or not finite(v) or v ~= 1 then
 		return 0
 	end
 	return TutorialService.Hint(ms, d, "first:" .. stat)
@@ -164,8 +191,8 @@ function TutorialService.OnEvent(ms: any, d: any, event: any): boolean
 	if string.sub(event, 1, 8) == "station:" then
 		TutorialService.Hint(ms, d, event)
 	end
-	if not TutorialRules.Active(d) then
-		return false
+	if not activeHere(ms, d) then
+		return false -- beendet oder außerhalb der Open World (Lobby/Tycoon): Ereignisse zählen nicht
 	end
 	local advanced, finished = TutorialRules.Advance(d, event)
 	if not advanced then
@@ -190,6 +217,10 @@ end
 
 ---------------------------------------------------------------- Aktionen
 local function next_(ms: any, data: any, d: any)
+	if TutorialRules.Active(d) and not activeHere(ms, d) then
+		api.toast(ms, TutorialRules.Text.notHere) -- Lobby/Tycoon: kein Fortschritt
+		return
+	end
 	local ok, res = TutorialRules.Next(d, data.step)
 	if ok then
 		afterAdvance(ms, d, res == true)
@@ -207,10 +238,32 @@ local function skip(ms: any, _: any, d: any)
 	stepNotice(ms, d, { skipped = true })
 end
 
+-- Tutorial-Kiosk in der Lobby: noch einmal von vorn (nur nach Ende/Überspringen); die Belohnung gibt es nicht
+-- noch einmal (meta.tutorialRewarded). In der Open World startet es sofort, sonst beim nächsten Betreten.
+local function restart(ms: any, _: any, d: any)
+	local ok, msg = TutorialRules.Restart(d)
+	if not ok then
+		if msg then
+			api.toast(ms, msg)
+		end
+		return
+	end
+	ms.tutorialRewardPending = nil
+	ms.tutorialStarted = nil
+	api.toast(ms, TutorialRules.Text.restarted)
+	if activeHere(ms, d) then
+		ms.tutorialStarted = true
+		stepNotice(ms, d, { started = true, restarted = true })
+	else
+		stepNotice(ms, d, { restarted = true })
+	end
+end
+
 function TutorialService.Register(Actions: any, a: any)
 	api = a
 	Actions.Register("tutorial_next", next_)
 	Actions.Register("tutorial_skip", skip)
+	Actions.Register("tutorial_restart", restart)
 end
 
 ---------------------------------------------------------------- Sitzung
@@ -238,7 +291,7 @@ function TutorialService.OnJoin(ms: any, d: any, now: number?)
 	ms.tutorialNotices = {}
 	ms.tutorialRewardPending = nil
 	ms.tutorialStarted = nil
-	if TutorialRules.Active(d) then
+	if activeHere(ms, d) then
 		stepNotice(ms, d) -- wartet in der Warteschlange, bis der Client nach 'hello' zuhört
 	end
 end
@@ -251,7 +304,7 @@ function TutorialService.Tick(ms: any, d: any, now: number?): boolean
 		changed = grantReward(ms, d) or changed
 	end
 	TutorialService.Flush(ms)
-	if not TutorialRules.Active(d) then
+	if not activeHere(ms, d) then
 		return changed
 	end
 	local event = TutorialRules.PendingJobEvent(d)
@@ -273,11 +326,12 @@ end
 
 ---------------------------------------------------------------- Snapshot (§11)
 function TutorialService.SnapshotFields(ms: any, d: any, now: number?, full: boolean?): { [string]: any }
-	local v = TutorialRules.View(d)
+	local v = TutorialRules.View(d, modeOf(ms)) -- außerhalb der Open World: active = false, ohne Text/Ziel
 	return {
 		tutorial = {
 			step = v.step, count = v.count, id = v.id, text = v.text, target = v.target, zone = v.zone,
 			next = v.next, done = v.done, skipped = v.skipped, active = v.active,
+			rewarded = TutorialRules.Rewarded(d),
 			rewardPending = ms ~= nil and ms.tutorialRewardPending == true,
 		},
 	}

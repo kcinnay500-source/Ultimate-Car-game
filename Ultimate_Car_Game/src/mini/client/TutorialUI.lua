@@ -8,8 +8,10 @@
 --              Fortschrittsbalken, „Weiter“ (nur next-Schritte), „Überspringen“ (immer). Touch-Flächen 44 px.
 --   Marker     BillboardGui am Zielteil (zone plot: PlayerWorkshops.Plot_<UserId>.Stations.<key>,
 --              zone city: workspace.City.Stations.<key>), AlwaysOnTop, leicht wippend.
---   HintCard   Beginner-Hinweis oben rechts, unter dem ProgressHUD-Abzeichen (y 8 + 56 + 8 = 72; liegt dort gerade die
---              Karte „Neu freigeschaltet“ (UnlocksUI), rückt der Hinweis darunter).
+--   HintCard   Beginner-Hinweis oben rechts, unter dem ProgressHUD-Abzeichen und unter der Toast-Zone (tatsächliche Lage
+--              über PrestigeUI.OverlayTop, bei jeder Größenänderung neu; liegt dort gerade die Karte „Neu freigeschaltet“
+--              (UnlocksUI), rückt der Hinweis darunter). Mehrere Hinweise hintereinander laufen als Warteschlange
+--              (je HintSeconds), damit keiner den anderen im selben Moment überschreibt.
 --   UnlockCard „Freigeschaltet: <Titel>“ bei mini_notice { kind = "unlock" } mit kurzem Effekt – nur, wenn nicht schon
 --              UnlocksUI (ScreenGui "UnlockCards") die Karte zeigt (sonst gäbe es sie doppelt).
 -- Sichtbarkeit wie beim ProgressHUD: weg, solange Minispiel-Panel, 2.4.0-Tablet, QTE/Diagnose oder Tacho zu sehen sind.
@@ -20,6 +22,7 @@ local TweenService = game:GetService("TweenService")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local GameConfig = require(Mini:WaitForChild("GameConfig"))
 local TutorialRules = require(Mini:WaitForChild("TutorialRules"))
+local PrestigeUI = require(script.Parent:WaitForChild("PrestigeUI"))
 
 local TutorialUI = {}
 
@@ -27,9 +30,10 @@ TutorialUI.DisplayOrder = 21
 TutorialUI.CardWidth = 440
 TutorialUI.CardBottom = 150 -- Abstand zur Unterkante (2.4.0-Leiste: 132 px + 6 px Rand + Luft)
 TutorialUI.HintWidth = 300
-TutorialUI.HintTop = 8 + 56 + 8 -- unter dem ProgressHUD-Abzeichen (y 8, 56 hoch)
+TutorialUI.HintTop = 62 + 60 + 8 -- Mindestabstand: unter der Toast-Zone; tatsächlich PrestigeUI.OverlayTop() (Abzeichen)
 TutorialUI.HintSeconds = 8
 TutorialUI.UnlockSeconds = 6
+TutorialUI.QueueMax = 8
 TutorialUI.FinishSeconds = 5
 TutorialUI.MoveSeconds = 0.6 -- so lange muss die Figur laufen, bis „move“ als erledigt gilt
 
@@ -48,6 +52,8 @@ local hintSerial, unlockSerial, finishSerial = 0, 0, 0
 local sentNextFor = nil -- Schrittnummer, für die der Client schon tutorial_next geschickt hat
 local movedFor = 0
 local finishedUntil = 0
+local hintQueue, unlockQueue = {}, {} -- wartende Hinweise/Freischaltungen
+local hintShowing, unlockShowing = false, false
 
 local function num(v: any, default: number): number
 	return type(v) == "number" and v == v and v or default
@@ -175,6 +181,9 @@ local function layout()
 	local hw = math.min(TutorialUI.HintWidth, w - 32)
 	hint.frame.Size = UDim2.new(0, hw, 0, 0)
 	unlock.frame.Size = UDim2.new(0, hw, 0, 0)
+	-- Lage unter Abzeichen und Toast-Zone (Abzeichen rückt auf schmalen Bildschirmen auf y 60)
+	unlock.frame.Position = UDim2.new(1, -16, 0, TutorialUI.OverlayTop())
+	TutorialUI.PlaceHintCard()
 	-- Handy hochkant: die Knöpfe teilen sich die Breite
 	local narrow = w < 480
 	card.skip.Size = UDim2.new(narrow and 0.5 or 0, narrow and -4 or 150, 0, UI.MinTouch)
@@ -354,9 +363,22 @@ end
 TutorialUI.Render = TutorialUI.OnSnapshot
 
 ---------------------------------------------------------------- Hinweis- und Freischaltungs-Karten
-local function placeHintCard()
-	-- unter der Karte „Neu freigeschaltet“ (UnlocksUI oder eigene), falls die gerade zu sehen ist
+-- Oberkante der Karten oben rechts: unter dem Abzeichen (tatsächliche Lage) und unter der Toast-Zone
+function TutorialUI.OverlayTop(): number
 	local top = TutorialUI.HintTop
+	local ok, t = pcall(PrestigeUI.OverlayTop)
+	if ok and type(t) == "number" and t == t then
+		top = math.max(top, t)
+	end
+	return top
+end
+
+local function placeHintCard()
+	if not hint.frame then
+		return
+	end
+	-- unter der Karte „Neu freigeschaltet“ (UnlocksUI oder eigene), falls die gerade zu sehen ist
+	local top = TutorialUI.OverlayTop()
 	local pg = playerGui()
 	local other = pg and pg:FindFirstChild("UnlockCards")
 	local otherCard = other and other:FindFirstChild("UnlockCard")
@@ -365,28 +387,49 @@ local function placeHintCard()
 		if c and c.Visible and c.AbsoluteSize.Y > 0 then
 			top = math.max(top, c.AbsolutePosition.Y - (gui and gui.AbsolutePosition.Y or 0) + c.AbsoluteSize.Y + 8)
 		elseif c and c.Visible then
-			top = math.max(top, TutorialUI.HintTop + 80)
+			top = math.max(top, TutorialUI.OverlayTop() + 80)
 		end
 	end
 	hint.frame.Position = UDim2.new(1, -16, 0, top)
 end
+TutorialUI.PlaceHintCard = placeHintCard
 
-function TutorialUI.ShowHint(text: string, id: string?)
-	if not hint.frame or type(text) ~= "string" or text == "" then
+local function showNextHint()
+	if hintShowing or #hintQueue == 0 or not hint.frame then
 		return
 	end
+	local entry = table.remove(hintQueue, 1)
+	hintShowing = true
 	hintSerial += 1
 	local serial = hintSerial
-	hint.text.Text = text
-	hint.frame:SetAttribute("hintId", id or "")
+	hint.text.Text = entry.text
+	hint.frame:SetAttribute("hintId", entry.id or "")
 	placeHintCard()
 	hint.frame.Visible = true
 	pop(hint.scale)
 	task.delay(TutorialUI.HintSeconds, function()
 		if serial == hintSerial and hint.frame then
 			hint.frame.Visible = false
+			hintShowing = false
+			showNextHint()
 		end
 	end)
+end
+
+-- Hinweis einreihen: sofort, wenn keiner zu sehen ist, sonst nach dem laufenden (je HintSeconds)
+function TutorialUI.ShowHint(text: string, id: string?)
+	if not hint.frame or type(text) ~= "string" or text == "" then
+		return
+	end
+	if #hintQueue >= TutorialUI.QueueMax then
+		table.remove(hintQueue, 1)
+	end
+	table.insert(hintQueue, { text = text, id = id })
+	showNextHint()
+end
+
+function TutorialUI.QueuedHints(): number
+	return #hintQueue
 end
 
 -- Zeigt UnlocksUI die Karte schon (ScreenGui "UnlockCards")? Dann keine zweite.
@@ -396,22 +439,38 @@ local function unlockCardHandledElsewhere(): boolean
 	return other ~= nil and other:FindFirstChild("UnlockCard") ~= nil
 end
 
-function TutorialUI.ShowUnlock(title: string, text: string?)
-	if not unlock.frame or type(title) ~= "string" or title == "" then
+local function showNextUnlock()
+	if unlockShowing or #unlockQueue == 0 or not unlock.frame then
 		return
 	end
+	local entry = table.remove(unlockQueue, 1)
+	unlockShowing = true
 	unlockSerial += 1
 	local serial = unlockSerial
-	unlock.title.Text = "Freigeschaltet: " .. title
-	unlock.text.Text = text or ""
-	unlock.text.Visible = text ~= nil and text ~= ""
+	unlock.title.Text = "Freigeschaltet: " .. entry.title
+	unlock.text.Text = entry.text or ""
+	unlock.text.Visible = entry.text ~= nil and entry.text ~= ""
+	unlock.frame.Position = UDim2.new(1, -16, 0, TutorialUI.OverlayTop())
 	unlock.frame.Visible = true
 	pop(unlock.scale)
 	task.delay(TutorialUI.UnlockSeconds, function()
 		if serial == unlockSerial and unlock.frame then
 			unlock.frame.Visible = false
+			unlockShowing = false
+			showNextUnlock()
 		end
 	end)
+end
+
+function TutorialUI.ShowUnlock(title: string, text: string?)
+	if not unlock.frame or type(title) ~= "string" or title == "" then
+		return
+	end
+	if #unlockQueue >= TutorialUI.QueueMax then
+		table.remove(unlockQueue, 1)
+	end
+	table.insert(unlockQueue, { title = title, text = text })
+	showNextUnlock()
 end
 
 function TutorialUI.OnNotice(data: any)

@@ -322,6 +322,14 @@ return {
 		-- TeleportData: mode/single übernommen, Müll ignoriert
 		local d1, msD = S.join(4, "Dana", { TeleportData = { mode = "tycoon", single = true, party = "ab12", junk = "x", amount = 999 } })
 		T.eq(msD.p.mode, "tycoon", "TeleportData.mode übernommen")
+		-- Snapshot-Feld single folgt der Sitzung (p.single), auch wenn TeleportData single = false und das Profil
+		-- single = true sagt (Operatorpräzedenz-Falle `p and p.single == true or settings.single`)
+		local dS, msS, ddS = S.join(9, "Solo", { TeleportData = { mode = "tycoon", single = false } })
+		ddS.games.meta.single = true
+		T.eq(msS.p.single, false, "Sitzung nicht als Einzelspieler markiert")
+		T.eq(S.snapshot(dS).single, false, "Snapshot single = false (Sitzung), nicht die gespeicherte Einstellung")
+		T.eq(S.snapshot(dS).meta.single, true, "meta.single zeigt die gespeicherte Einstellung")
+		T.eq(LS.SnapshotFields(nil, ddS, g:Now(), true).single, true, "ohne Sitzung: gespeicherte Einstellung")
 		T.eq(msD.p.single, true, "TeleportData.single übernommen")
 		T.eq(msD.p.partyCode, "AB12", "TeleportData.party großgeschrieben")
 		near(T, rootPos(g, d1), HUB.tycoon[1], HUB.tycoon[2], 6, "Dana an der Tycoon-Ankunft")
@@ -391,10 +399,19 @@ return {
 		mark = g:Mark()
 		S.act(a, "lobby_return")
 		T.check(g:HasToast(a, "schon in der Lobby", mark), "schon in der Lobby")
-		-- Open World: Stadt-Ankunft; ohne Auswahl fällt lobby_go auf openworld zurück
+		-- Open World mit laufendem Tutorial: Ankunft in der eigenen Werkstatt (dort beginnt Schritt 1/3);
+		-- ohne Auswahl fällt lobby_go auf openworld zurück
 		mark = g:Mark()
 		S.act(a, "lobby_go")
 		T.eq(msA.p.mode, "openworld", "ohne Auswahl: Open World")
+		local homeA = g:Plot(a).Stations.home
+		local posA = rootPos(g, a)
+		T.check(posA and (posA - homeA.Position).Magnitude < 12, "Tutorial läuft: Ankunft in der eigenen Werkstatt statt am Stadt-Hub")
+		-- Tutorial erledigt: Stadt-Ankunft
+		S.act(a, "lobby_return")
+		dA.games.meta.tutorialDone = true
+		S.act(a, "lobby_mode", { mode = "openworld" })
+		S.act(a, "lobby_go")
 		near(T, rootPos(g, a), HUB.openworld[1], HUB.openworld[2], 6, "Anna an der Stadt-Ankunft")
 		-- Figur im Sitz: Unseat vor PivotTo
 		S.act(a, "lobby_return")
@@ -720,6 +737,39 @@ return {
 		T.eq(last and last.failed, true, "ReserveServer fehlgeschlagen")
 		T.eq(g:MiniState(c).p.mode, "tycoon", "Cem lokal im Tycoon")
 		g.env.teleportFails = nil
+		-- Asynchroner Fehler: TeleportAsync gelingt, danach feuert TeleportService.TeleportInitFailed je Spieler
+		-- (GameFull, Flooded, Failure …) -> Toast + Simulation, lastMode stimmt, Party-Mitglied ebenfalls
+		S.act(a, "lobby_return")
+		g.env.teleportFails = "signal"
+		mark = g:Mark()
+		local warnBefore = #g:Warnings()
+		S.act(a, "lobby_mode", { mode = "tycoon" })
+		S.act(a, "lobby_go")
+		g:Advance(0.5)
+		T.eq(msA.p.mode, "tycoon", "nach TeleportInitFailed: simuliert (Anna)")
+		T.eq(msB.p.mode, "tycoon", "nach TeleportInitFailed: simuliert (Ben, eigenes Ereignis)")
+		T.eq(dA.games.meta.lastMode, "tycoon", "lastMode = Ziel der Simulation")
+		near(T, rootPos(g, a), HUB.tycoon[1], HUB.tycoon[2], 6, "Anna an der Tycoon-Ankunft")
+		T.check(g:HasToast(a, "nicht geklappt", mark), "Toast Teleport-Fehler (Anna)")
+		T.check(g:HasToast(b, "nicht geklappt", mark), "Toast Teleport-Fehler (Ben)")
+		T.eq(#g:Notices(a, "mode", mark), 1, "Simulations-Hinweis (Anna)")
+		T.eq(#g:Notices(b, "mode", mark), 1, "Simulations-Hinweis (Ben)")
+		T.check(#g:Warnings() > warnBefore, "TeleportInitFailed protokolliert (warn)")
+		T.eq(msA.lobbyChoice, nil, "Vorauswahl verbraucht")
+		T.check(S.log.dirty > 0, "Snapshot als geändert markiert")
+		-- fehlendes Ziel im Place: Modus bleibt, lastMode zurück auf den aktuellen Modus
+		S.act(a, "lobby_return")
+		g:Advance(0.5)
+		T.eq(msA.p.mode, "lobby", "zurück in der Lobby")
+		workspace:FindFirstChild("Tycoon"):Destroy()
+		mark = g:Mark()
+		S.act(a, "lobby_mode", { mode = "tycoon" })
+		S.act(a, "lobby_go")
+		g:Advance(0.5)
+		T.eq(msA.p.mode, "lobby", "ohne Zone: Modus bleibt lobby")
+		T.eq(dA.games.meta.lastMode, "lobby", "lastMode zurückgesetzt (Reise kam nicht zustande)")
+		T.check(g:HasToast(a, "nicht geklappt", mark), "Toast Teleport-Fehler")
+		g.env.teleportFails = nil
 		-- TeleportOptions-Klasse im Mock
 		local opts = Instance.new("TeleportOptions")
 		T.eq(opts.ReservedServerAccessCode, "", "Standard leer")
@@ -849,6 +899,34 @@ return {
 			end
 		end
 		T.check(sawSim, "Simulationshinweis als Toast")
+		-- Schnelles Spiel ohne Tycoon-Dienst (GameConfig.Tycoon leer): Karte sagt „Eröffnet bald“
+		T.check(next(GC.Tycoon) == nil, "GameConfig.Tycoon noch leer (Meilenstein 4)")
+		T.check(withText(page, "Eröffnet bald") ~= nil, "Modus-Karte: Eröffnet bald")
+		-- kicked-Ereignis: die übrigen erfahren es, der eigene Rauswurf kommt vom Server als Toast
+		local nToasts = #toasts
+		g:InClient(p, function()
+			mod.OnNotice({ kind = "party", event = "kicked", name = "Ben", userId = 2 })
+			mod.OnNotice({ kind = "party", event = "kicked", name = "Tester", userId = 1001 })
+		end)
+		T.eq(#toasts, nToasts + 1, "genau ein Toast (Ben entfernt, eigener Rauswurf nicht doppelt)")
+		T.check(toasts[#toasts]:find("Ben", 1, true) and toasts[#toasts]:find("entfernt", 1, true), "Toast: Ben wurde entfernt")
+		-- Tutorial-Abschnitt (Kiosk): Schritte, Neustart nur nach Ende/Überspringen, sendet tutorial_restart
+		local restart = byName(page, "TutorialRestart")
+		T.check(restart ~= nil and restart.AbsoluteSize.Y >= 44, "Knopf Tutorial erneut starten")
+		T.check(byName(page, "TutorialSteps") ~= nil and byName(page, "TutorialSteps").Text:find("1. ", 1, true), "Schritt-Liste")
+		render(g, p, mod, snapshot("lobby", { meta = { beginner = true, passive = false, single = false, tutorialDone = false, tutorialStep = 4 } }))
+		T.check(not enabled(restart), "läuft: kein Neustart")
+		T.check(withText(page, "Schritt 4 von") ~= nil, "Stand angezeigt")
+		press(g, restart)
+		T.eq(rec.Count("tutorial_restart"), 0, "gesperrt: nichts gesendet")
+		render(g, p, mod, snapshot("lobby", { meta = { beginner = true, passive = false, single = false, tutorialDone = true, tutorialStep = 10 }, tutorial = { done = true, skipped = true, rewarded = false } }))
+		T.check(enabled(restart), "übersprungen: Neustart möglich")
+		T.check(withText(page, "übersprungen") ~= nil, "Status übersprungen")
+		press(g, restart)
+		T.eq(rec.Count("tutorial_restart"), 1, "tutorial_restart gesendet")
+		T.eq(next(rec.Last("tutorial_restart")), nil, "ohne Felder")
+		render(g, p, mod, snapshot("lobby", { meta = { beginner = true, passive = false, single = false, tutorialDone = true, tutorialStep = 10 }, tutorial = { done = true, skipped = false, rewarded = true } }))
+		T.check(withText(page, "hattest du schon") ~= nil, "Hinweis: Belohnung hattest du schon")
 		T.check(sawJoin and sawTravel, "Party-Hinweise als Toast")
 		render(g, p, mod, snapshot("lobby"))
 		T.check(go.Text:find("Open World", 1, true) ~= nil, "Portal-Station wählt Open World vor")

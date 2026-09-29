@@ -269,6 +269,28 @@ return {
 		T.eq(okFull, false, "kein 21. Auto")
 		T.check(type(msgFull) == "string" and msgFull:find("voll", 1, true) ~= nil, "Meldung Garage voll")
 		T.eq((CR.GrantModel(d, "aureon_nero", NOW)), nil, "auch Auktionsgewinn scheitert bei voller Garage")
+		-- Prestige-Rabatt (PHASE4_CONTRACT §4: 1 % je Rang, Deckel 10 %) wirkt auf Preisprüfung, Abzug und Katalog
+		local PR = g:MiniShared("PrestigeRules")
+		local d2 = freshData(g)
+		d2.level = PR.Threshold(1) -- Rang 1
+		T.eq(CR.DealerPrice(d2, CC.Model("komet")), math.floor(price * 0.99 + 0.5), "Rang 1: 99 % des Listenpreises")
+		d2.money = math.floor(price * 0.99 + 0.5)
+		local okR, carR = CR.Buy(d2, "komet", NOW)
+		T.eq(okR, true, "Kauf mit Rabatt genau bezahlbar")
+		T.eq(d2.money, 0, "rabattierter Preis abgezogen")
+		T.check(carR ~= nil, "Auto da")
+		local row
+		for _, e in ipairs(CR.CatalogView(d2)) do
+			if e.id == "komet" then
+				row = e
+			end
+		end
+		T.eq(row and row.price, math.floor(price * 0.99 + 0.5), "Katalog zeigt den rabattierten Preis")
+		T.eq(row and row.basePrice, price, "Katalog kennt den Listenpreis")
+		d2.level = PR.Threshold(20)
+		T.eq(CR.DealerPrice(d2, CC.Model("komet")), math.floor(price * 0.90 + 0.5), "Rang 20: Deckel 10 %")
+		d2.level = 3
+		T.eq(CR.DealerPrice(d2, CC.Model("komet")), price, "ohne Rang Listenpreis")
 	end },
 
 	{ "Tuning: gesehene Stufe, Level, Kosten skalieren mit dem Autowert, gesperrte Autos", function(T, H)

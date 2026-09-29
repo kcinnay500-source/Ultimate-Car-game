@@ -193,7 +193,7 @@ local function finish(ms, data, d, now)
 	local pay = ArcadeRules.Payout(a, round.key, ev.score, now)
 	local paid = 0
 	if pay.credits > 0 then
-		paid = MiniRules.AddMoney(d, pay.credits)
+		paid = MiniRules.AddIncome(d, pay.credits)
 	end
 	if pay.xp > 0 then
 		MiniRules.GainXP(d, pay.xp)

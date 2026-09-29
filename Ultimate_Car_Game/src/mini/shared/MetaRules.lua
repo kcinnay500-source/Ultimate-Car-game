@@ -9,7 +9,7 @@ local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules"))
 local MetaRules = {}
 
 export type Meta = {
-	tutorialDone: boolean, tutorialStep: number, tutorialSkipped: boolean,
+	tutorialDone: boolean, tutorialStep: number, tutorialSkipped: boolean, tutorialRewarded: boolean,
 	beginner: boolean, passive: boolean, single: boolean,
 	lastMode: string, firstSeen: number, playSeconds: number, hintsSeen: { [string]: boolean },
 }
@@ -40,6 +40,7 @@ function MetaRules.Default(): Meta
 		tutorialDone = false,
 		tutorialStep = 1,
 		tutorialSkipped = false,
+		tutorialRewarded = false, -- Belohnung verbucht (ein Neustart am Kiosk gibt sie nicht noch einmal)
 		beginner = true,
 		passive = false,
 		single = false,
@@ -61,12 +62,22 @@ function MetaRules.Load(raw: any, d: any, now: any): Meta
 	m.tutorialSkipped = r.tutorialSkipped == true
 	m.tutorialDone = r.tutorialDone == true or m.tutorialSkipped or veteran == true -- übersprungen = beendet
 	m.tutorialStep = loadInt(r.tutorialStep, 1, 1, stepCount())
+	-- Belohnung: gespeichertes Flag; Profile von vor dem Flag, die das Tutorial regulär beendet haben, gelten als
+	-- belohnt (sonst gäbe es sie beim Neustart am Kiosk ein zweites Mal). Veteranen ebenso.
+	m.tutorialRewarded = r.tutorialRewarded == true or (r.tutorialRewarded == nil and r.tutorialDone == true and r.tutorialSkipped ~= true) or veteran == true
 	m.beginner = r.beginner ~= false -- nur ein ausdrückliches false schaltet die Hinweise ab
 	m.passive = r.passive == true
 	m.single = r.single == true
 	m.lastMode = (type(r.lastMode) == "string" and GameConfig.ModeSet[r.lastMode]) and r.lastMode or GameConfig.DefaultMode
 	if veteran then
 		m.lastMode = "openworld" -- 2.4.0-Veteranen landen wie bisher in ihrer Werkstatt (Open World), nicht in der Lobby
+		-- Erstlings-Hinweise („Super, dein erster Auftrag!“, Empfang erklärt) passen nicht zu jemandem mit
+		-- abgerechneten Aufträgen: first:jobsDone und station:workshop gelten als gesehen.
+		for _, h in ipairs(GameConfig.Hints) do
+			if h.when == "first:jobsDone" or h.when == "station:workshop" then
+				m.hintsSeen[h.id] = true
+			end
+		end
 	end
 	m.firstSeen = loadInt(r.firstSeen, 0, 0, MAX_SAFE)
 	if finite(now) and now > 0 and (m.firstSeen == 0 or m.firstSeen > now) then

@@ -5,17 +5,22 @@
 -- Die Tabelle kommt aus dem Snapshot (unlocks.list, nur bei vollen Snapshots); fehlt sie, rechnet der Client sie
 -- aus der replizierten GameConfig.Unlocks und s.level selbst nach (Unlocks.ListFor). Absicht: unlocks_seen beim
 -- Öffnen des Tabs, wenn es neue Einträge gibt.
+-- Lage der Karte: unter dem Abzeichen (PrestigeUI.OverlayTop – tatsächliche Lage, auch wenn es auf schmalen
+-- Bildschirmen auf y 60 rückt) und unter der Toast-Zone; bei jeder Größenänderung neu. Mehrere Freischaltungen auf
+-- einem Level (Level 3: Schrottplatz, Autohaus, Komet C1) laufen als Warteschlange nacheinander durch, je CardSeconds.
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniLocale = require(Mini:WaitForChild("MiniLocale"))
 local Unlocks = require(Mini:WaitForChild("Unlocks"))
+local PrestigeUI = require(script.Parent:WaitForChild("PrestigeUI"))
 
 local UnlocksUI = {}
 
 UnlocksUI.CardWidth = 300
-UnlocksUI.CardTop = 8 + 56 + 8 -- unter dem ProgressHUD-Abzeichen (y 8, 56 hoch)
+UnlocksUI.CardTop = 62 + 60 + 8 -- Mindestabstand: unter der Toast-Zone (Toast y 62, 60 hoch); tatsächlich PrestigeUI.OverlayTop()
 UnlocksUI.CardSeconds = 6
+UnlocksUI.CardQueueMax = 8 -- mehr Karten am Stück zeigt niemand
 UnlocksUI.CardDisplayOrder = 21 -- über dem 2.4.0-HUD, unter dem Minispiel-Panel (30)
 
 local KIND_NAMES = {
@@ -34,6 +39,8 @@ local lastLevel = nil
 local sentSeenFor = nil
 local showPending = false
 local cardSerial = 0
+local cardQueue = {} -- { title, text, color }, wartende Karten
+local cardShowing = false
 
 local function num(v: any, default: number): number
 	return type(v) == "number" and v == v and v or default
@@ -96,27 +103,66 @@ local function buildCard()
 		if w > 0 then
 			frame.Size = UDim2.new(0, math.min(UnlocksUI.CardWidth, w - 32), 0, 0)
 		end
+		UnlocksUI.PlaceCard()
 	end)
+	UnlocksUI.PlaceCard()
 end
 
-function UnlocksUI.ShowCard(title: string, text: string?, color: Color3?)
-	if not card.frame then
+-- Oberkante der Karte: unter Abzeichen und Toast-Zone (PrestigeUI.OverlayTop), mindestens CardTop
+function UnlocksUI.CardTopNow(): number
+	local top = UnlocksUI.CardTop
+	local ok, t = pcall(PrestigeUI.OverlayTop)
+	if ok and type(t) == "number" and t == t then
+		top = math.max(top, t)
+	end
+	return top
+end
+
+function UnlocksUI.PlaceCard()
+	if card.frame then
+		card.frame.Position = UDim2.new(1, -16, 0, UnlocksUI.CardTopNow())
+	end
+end
+
+local function showNext()
+	if cardShowing or #cardQueue == 0 or not card.frame then
 		return
 	end
+	local entry = table.remove(cardQueue, 1)
+	cardShowing = true
 	cardSerial += 1
 	local serial = cardSerial
-	card.title.Text = title
-	card.text.Text = text or ""
-	card.text.Visible = text ~= nil and text ~= ""
-	card.stripe.BackgroundColor3 = color or T.green
+	card.title.Text = entry.title
+	card.text.Text = entry.text or ""
+	card.text.Visible = entry.text ~= nil and entry.text ~= ""
+	card.stripe.BackgroundColor3 = entry.color or T.green
+	UnlocksUI.PlaceCard()
 	card.frame.Visible = true
 	card.scale.Scale = 0.85
 	TweenService:Create(card.scale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 	task.delay(UnlocksUI.CardSeconds, function()
 		if serial == cardSerial and card.frame then
 			card.frame.Visible = false
+			cardShowing = false
+			showNext()
 		end
 	end)
+end
+
+-- Karte einreihen: erscheint sofort, wenn keine zu sehen ist, sonst nach der laufenden (je CardSeconds)
+function UnlocksUI.ShowCard(title: string, text: string?, color: Color3?)
+	if not card.frame then
+		return
+	end
+	if #cardQueue >= UnlocksUI.CardQueueMax then
+		table.remove(cardQueue, 1)
+	end
+	table.insert(cardQueue, { title = title, text = text, color = color })
+	showNext()
+end
+
+function UnlocksUI.QueuedCards(): number
+	return #cardQueue
 end
 
 function UnlocksUI.CardVisible(): boolean

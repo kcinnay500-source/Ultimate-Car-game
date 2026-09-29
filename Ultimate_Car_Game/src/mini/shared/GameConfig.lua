@@ -128,8 +128,9 @@ do
 		P.Rewards[rank] = {
 			rank = rank,
 			title = tier .. " " .. roman[(rank - 1) % 5 + 1],
-			incomePct = math.min(rank * P.IncomePerRank, P.IncomeCap) * 100, -- Gesamtbonus auf diesem Rang in %
-			discountPct = math.min(rank * P.DiscountPerRank, P.DiscountCap) * 100,
+			-- Gesamtbonus auf diesem Rang in % (ganzzahlig gerundet: 7 × 0,02 × 100 wäre sonst 14,000000000000002)
+			incomePct = math.floor(math.min(rank * P.IncomePerRank, P.IncomeCap) * 100 + 0.5),
+			discountPct = math.floor(math.min(rank * P.DiscountPerRank, P.DiscountCap) * 100 + 0.5),
 			cosmetic = (rank % 2 == 1) and ("wrap_prestige_" .. rank) or ("rims_prestige_" .. rank), -- Shop-Kosmetik-Id (Meilenstein 8)
 			tycoonRebirthPct = rank >= P.RebirthBonusFromRank and P.RebirthBonus * 100 or 0,
 		}
@@ -150,7 +151,9 @@ GameConfig.Party = {
 }
 
 ---------------------------------------------------------------- Tutorial (§6)
--- Fortschritt bestätigt der Server aus echten Ereignissen. event:
+-- Fortschritt bestätigt der Server aus echten Ereignissen. Das Tutorial läuft nur in der Open World (Modus
+-- openworld); in Lobby und Schnellem Spiel ruht es (TutorialService). Neustart am Tutorial-Kiosk der Lobby
+-- (tutorial_restart), die Belohnung gibt es nur einmal (meta.tutorialRewarded). event:
 --   "next"            reiner Lese-Schritt, der Client sendet tutorial_next {step}
 --   "station:<key>"   2.4.0-Plot-Station geöffnet (World.Create -> callback("station", key)); zone = "plot"
 --   "tab:<tab>"       Stadt-Station mit Attribut MiniTab = <tab> geöffnet (MiniService-Prompt); zone = "city"
@@ -161,7 +164,7 @@ GameConfig.Party = {
 --   "action:<name>"   eine Mini-Aktion war erfolgreich (z. B. mini_travel)
 -- target = Stationsschlüssel für den Pfeil/Marker im Client (zone plot: Plot.Stations.<key>, zone city: City.Stations.<key>).
 GameConfig.Tutorial = {
-	Reward = { credits = 500, xp = 60 }, -- einmalig am Ende (nicht beim Überspringen)
+	Reward = { credits = 500, xp = 60 }, -- einmalig am Ende (nicht beim Überspringen, nicht nach einem Neustart)
 	Steps = {
 		{ id = "move", text = "Willkommen in deiner Werkstatt! Lauf ein paar Schritte – mit WASD oder dem Joystick.", target = nil, zone = nil, event = "next" },
 		{ id = "menu", text = "Öffne das Menü mit der Taste M oder dem Knopf „Minispiele“. Dort findest du alles Wichtige.", target = nil, zone = nil, event = "next" },
@@ -170,8 +173,8 @@ GameConfig.Tutorial = {
 		{ id = "obd", text = "Steck das OBD-Gerät ans Auto und finde den Fehler.", target = nil, zone = nil, event = "job:repair" },
 		{ id = "repair", text = "Repariere das Auto Schritt für Schritt bis zur Endkontrolle.", target = nil, zone = nil, event = "job:invoice" },
 		{ id = "settle", text = "Rechne den Auftrag am Empfang ab – die Credits gehören dir!", target = "workshop", zone = "plot", event = "settled" },
-		{ id = "map", text = "Öffne den Stadtplan und reise damit in die Stadt.", target = "map", zone = "city", event = "action:mini_travel" },
-		{ id = "dealer", text = "Schau im Autohaus vorbei. Dort wartet später dein erstes eigenes Auto.", target = "dealer", zone = "city", event = "tab:dealer" },
+		{ id = "map", text = "Drück M (oder den Knopf „Minispiele“) und öffne den Tab „Stadtplan“ – reise damit in die Stadt.", target = nil, zone = nil, event = "action:mini_travel" },
+		{ id = "dealer", text = "Schau im Autohaus vorbei und drück dort E. Kaufen kannst du ab Level 3 – ansehen darfst du jetzt schon.", target = "dealer", zone = "city", event = "tab:dealer" },
 		{ id = "goals", text = "Sieh dir an der Infotafel deine Tagesziele an. Viel Spaß in der Werkstattmeile!", target = "goals", zone = "city", event = "tab:goals" },
 	} :: { TutorialStep },
 	EventKinds = { "next", "station", "tab", "job", "settled", "action" },

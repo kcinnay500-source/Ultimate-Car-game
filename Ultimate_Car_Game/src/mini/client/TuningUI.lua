@@ -1,6 +1,7 @@
 -- TuningUI: Idle Tuning Garage (Echtzeit-Projekte, passive Einnahmen, Ausbau der Tuning-Abteilung).
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniLocale = require(Mini:WaitForChild("MiniLocale"))
+local Unlocks = require(Mini:WaitForChild("Unlocks"))
 
 local TuningUI = {}
 
@@ -120,7 +121,17 @@ function TuningUI.Render(s)
 		MiniLocale.Number(tu.idleRate or 0), MiniLocale.Credits(tu.pendingIdle or 0), MiniLocale.Duration(tu.idleCapSeconds or 0)
 	)
 	UI.SetProgress(refs.idleFill, (tu.idleSeconds or 0) / math.max(1, tu.idleCapSeconds or 1))
-	UI.SetEnabled(refs.idleButton, (tu.pendingIdle or 0) >= 1, T.blue)
+	-- Tuning-Projekte (und ihre passiven Einnahmen) gibt es erst ab der Freischaltung (Level 6): vorher bleibt der
+	-- Knopf aus – der Server sperrt mini_tuning_idle ohnehin und sammelt nichts an
+	local unlocked = Unlocks.TabAllowed({ level = s.level }, "tuning")
+	if not unlocked then
+		local entry = Unlocks.ForTab("tuning")
+		refs.idleText.Text = "Passive Einnahmen gibt es ab Level " .. tostring(entry and entry.level or "?") .. " mit den Tuning-Projekten."
+		refs.idleButton.Text = "Ab Level " .. tostring(entry and entry.level or "?")
+	else
+		refs.idleButton.Text = "Einnahmen abholen"
+	end
+	UI.SetEnabled(refs.idleButton, unlocked and (tu.pendingIdle or 0) >= 1, T.blue)
 
 	local projects = tu.projects or {}
 	refs.none.Visible = #projects == 0

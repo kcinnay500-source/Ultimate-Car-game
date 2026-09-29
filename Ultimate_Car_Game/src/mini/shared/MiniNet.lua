@@ -58,6 +58,7 @@ MiniNet.Actions = {
 	party_kick = { userId = "number" },
 	tutorial_next = { step = "number" },
 	tutorial_skip = {},
+	tutorial_restart = {}, -- Tutorial-Kiosk in der Lobby: noch einmal von vorn (ohne zweite Belohnung)
 	prestige_claim = { rank = "number" },
 	unlocks_seen = {},
 }
@@ -90,6 +91,7 @@ MiniNet.Cooldowns = {
 	party_join = 2, -- = GameConfig.Party.JoinCooldown
 	party_kick = 1,
 	tutorial_skip = 1,
+	tutorial_restart = 2,
 	prestige_claim = 0.5,
 }
 MiniNet.Targets = {

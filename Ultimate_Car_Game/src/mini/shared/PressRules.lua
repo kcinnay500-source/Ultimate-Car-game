@@ -183,7 +183,7 @@ function PressRules.Exchange(d, packageIndex)
 		return false, "Nicht genug Schrott."
 	end
 	pr.scrap -= amount
-	local credits = MiniRules.AddMoney(d, PressRules.ExchangeCredits(amount))
+	local credits = MiniRules.AddIncome(d, PressRules.ExchangeCredits(amount))
 	return true, credits
 end
 

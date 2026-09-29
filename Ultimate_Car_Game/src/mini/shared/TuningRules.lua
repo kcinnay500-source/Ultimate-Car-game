@@ -96,7 +96,7 @@ function TuningRules.Collect(d, slot, now)
 	if not def then
 		return true, 0, { levels = 0, credits = 0 }
 	end
-	local reward = MiniRules.AddMoney(d, TuningRules.Reward(d, def))
+	local reward = MiniRules.AddIncome(d, TuningRules.Reward(d, def))
 	MiniRules.AddReputation(d, 2)
 	d.games.tuning.completed += 1
 	MiniRules.AddStat(d, "tuningCollected", 1, now)
@@ -130,7 +130,7 @@ function TuningRules.CollectIdle(d, now)
 	if value < 1 then
 		return false, "Noch keine Einnahmen."
 	end
-	local paid = MiniRules.AddMoney(d, value)
+	local paid = MiniRules.AddIncome(d, value)
 	d.games.tuning.lastIdle = now
 	MiniRules.AddStat(d, "idleCollected", 1, now)
 	local xp = MiniRules.GainXP(d, math.max(1, math.floor(value / 80)))

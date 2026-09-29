@@ -36,7 +36,11 @@ TutorialRules.Text = {
 	notNext = "Dieser Schritt wird automatisch erledigt – mach einfach weiter!",
 	wrongStep = "Erledige zuerst den aktuellen Schritt.",
 	alreadyDone = "Das Tutorial ist schon fertig.",
-	skipped = "Tutorial übersprungen. Du findest die Hilfe jederzeit am Tutorial-Kiosk in der Lobby.",
+	skipped = "Tutorial übersprungen. Am Tutorial-Kiosk in der Lobby kannst du es jederzeit neu starten.",
+	notHere = "Das Tutorial läuft in der Werkstattmeile – reise zuerst in die Open World.",
+	restarted = "Tutorial neu gestartet! Es geht in der Werkstattmeile (Open World) weiter.",
+	restartRunning = "Das Tutorial läuft schon – du findest die Karte in der Werkstattmeile.",
+	finishedAgain = "Tutorial noch einmal geschafft! Die Belohnung hattest du schon – viel Spaß in der Werkstattmeile!",
 	finished = "Tutorial geschafft! Du bekommst %d Credits und %d XP.",
 	progress = "Schritt %d von %d",
 }
@@ -79,19 +83,54 @@ function TutorialRules.Skipped(d: any): boolean
 	return m ~= nil and m.tutorialSkipped == true
 end
 
--- Läuft das Tutorial (meta vorhanden, nicht beendet)?
-function TutorialRules.Active(d: any): boolean
-	local m = MetaRules.Meta(d)
-	return m ~= nil and m.tutorialDone ~= true and TutorialRules.Count() > 0
+-- Läuft das Tutorial hier? Wird ein Modus übergeben, ist es nur in der Open World aktiv (Vertrag §6: Pflicht beim
+-- ersten Beitritt in der Open World; in Lobby und Schnellem Spiel ruht es). Ohne Modus: nur der Profilstand.
+function TutorialRules.AllowedIn(mode: any): boolean
+	return mode == nil or mode == "openworld"
 end
 
--- Aktueller Schritt (nil, wenn beendet oder ohne meta) und seine Nummer
-function TutorialRules.Current(d: any): (Step?, number)
+-- Läuft das Tutorial (meta vorhanden, nicht beendet, Modus passt)?
+function TutorialRules.Active(d: any, mode: any?): boolean
+	local m = MetaRules.Meta(d)
+	return m ~= nil and m.tutorialDone ~= true and TutorialRules.Count() > 0 and TutorialRules.AllowedIn(mode)
+end
+
+-- Aktueller Schritt (nil, wenn beendet, ohne meta oder außerhalb der Open World) und seine Nummer
+function TutorialRules.Current(d: any, mode: any?): (Step?, number)
 	local i = TutorialRules.StepIndex(d)
-	if not TutorialRules.Active(d) then
+	if not TutorialRules.Active(d, mode) then
 		return nil, i
 	end
 	return GameConfig.Tutorial.Steps[i], i
+end
+
+-- Wurde die Belohnung schon einmal verbucht? (Neustart am Kiosk gibt sie nicht noch einmal.)
+function TutorialRules.Rewarded(d: any): boolean
+	local m = MetaRules.Meta(d)
+	return m ~= nil and m.tutorialRewarded == true
+end
+
+function TutorialRules.MarkRewarded(d: any)
+	local m = MetaRules.Meta(d)
+	if m then
+		m.tutorialRewarded = true
+	end
+end
+
+-- Neustart (Tutorial-Kiosk in der Lobby): nur nach Ende/Überspringen; Schritt 1, ohne zweite Belohnung.
+-- Rückgabe: ok, Meldung bei Ablehnung.
+function TutorialRules.Restart(d: any): (boolean, string?)
+	local m = MetaRules.Meta(d)
+	if not m then
+		return false, TutorialRules.Text.wrongStep
+	end
+	if m.tutorialDone ~= true then
+		return false, TutorialRules.Text.restartRunning
+	end
+	m.tutorialDone = false
+	m.tutorialSkipped = false
+	m.tutorialStep = 1
+	return true, nil
 end
 
 -- Ist der Schritt ein reiner Lese-Schritt („Weiter“)?
@@ -225,18 +264,19 @@ function TutorialRules.ProgressText(step: number, count: number): string
 	return string.format(TutorialRules.Text.progress, step, count)
 end
 
--- { step, count, id, text, target, zone, event, next, done, skipped, active } – flach, sendbar
-function TutorialRules.View(d: any): View
-	local step, i = TutorialRules.Current(d)
+-- { step, count, id, text, target, zone, event, next, done, skipped, active } – flach, sendbar.
+-- mode (optional): außerhalb der Open World ist active = false und der Schritt ohne Text/Ziel (die Karte ruht).
+function TutorialRules.View(d: any, mode: any?): View
+	local step, i = TutorialRules.Current(d, mode)
 	local n = TutorialRules.Count()
 	local s = step or GameConfig.Tutorial.Steps[i]
 	return {
 		step = i,
 		count = n,
 		id = s and s.id or nil,
-		text = s and s.text or "",
-		target = s and s.target or nil,
-		zone = s and s.zone or nil,
+		text = (s and step) and s.text or "",
+		target = (s and step) and s.target or nil,
+		zone = (s and step) and s.zone or nil,
 		event = s and s.event or nil,
 		next = TutorialRules.IsNextStep(step),
 		done = TutorialRules.Done(d),

@@ -326,7 +326,7 @@ return {
 		T.eq(ok, false, "Kauf Elys auf 89 abgelehnt")
 	end },
 
-	{ "CrossBonus: PrestigeIncome, TycoonWorkshop nil-sicher, OWPerk neutral, Gesamtdeckel ×1,6", function(T, H)
+	{ "CrossBonus: PrestigeIncome, TycoonWorkshop nil-sicher, OWPerk neutral, Deckel ×1,6 nur auf Tycoon × OW, Prestige wirkt immer", function(T, H)
 		local g = H.Garage({ noServer = true })
 		local CB, PR, GC = g:MiniShared("CrossBonus"), g:MiniShared("PrestigeRules"), g:MiniShared("GameConfig")
 		local d = g:Rules().NewData(NOW)
@@ -351,31 +351,56 @@ return {
 		d.games.tycoon.runsDone.werkstatt = 12
 		T.near(CB.TycoonWorkshop(d), 1.10, 1e-9, "Deckel 5 Durchläufe +10 %")
 		T.near(CB.CareerBonus(d), 1.30 * 1.10, 1e-9, "Karriere-Faktor")
-		-- bestehende Faktoren bleiben und der Gesamtdeckel greift
+		-- Die 2.4.0/3.x-Querboni (Presse, Tuning-Abteilung, Kundenbonus) bleiben ungedeckelt: ein bestehendes Profil
+		-- mit Tuning-Stufe 30 (×2,305) verliert durch die Ausbaustufe 4 nichts (Deckel ×1,6 nur auf Tycoon × OW-Perk)
 		d.level = 1
 		d.games.tycoon.runsDone.werkstatt = 5
-		d.games.tuningLevel = 10
+		d.games.tuningLevel = 30
 		d.games.parking.streak = 20
 		d.games.press.upgrades = { pu1 = 20, pu2 = 20 }
-		local raw = CB.WorkshopRewardRaw(d)
-		T.check(raw > 1.6, "roher Faktor über dem Deckel: " .. tostring(raw))
-		T.near(CB.WorkshopReward(d), 1.6, 1e-9, "Gesamtdeckel ×1,6")
+		local legacy = CB.PressWorkshop(d) * CB.TuningWorkshop(d) * CB.CustomerBonus(d)
+		T.check(legacy > 2.3, "3.x-Querboni über 2,3: " .. tostring(legacy))
+		T.near(CB.CareerCapped(d), 1.10, 1e-9, "Tycoon-Faktor unter dem Deckel: ×1,10")
+		T.near(CB.WorkshopReward(d), legacy * 1.10, 1e-9, "3.x-Boni ungedeckelt × Tycoon")
 		T.eq(CB.WorkshopCap(), GC.WorkshopRewardCap or 1.6, "Deckel aus GameConfig (Standard 1,6)")
-		-- unter dem Deckel: alle Faktoren multiplizieren sich
+		-- Deckel greift nur auf Tycoon × OW-Perk (Platzhalter OW = 1 -> nie über 1,10; künstlich hoher Deckel-Test)
+		local savedCap = GC.WorkshopRewardCap
+		GC.WorkshopRewardCap = 1.05
+		T.near(CB.CareerCapped(d), 1.05, 1e-9, "Tycoon × OW auf den Deckel gekappt")
+		T.near(CB.WorkshopReward(d), legacy * 1.05, 1e-9, "Deckel wirkt nur auf den Ausbaustufe-4-Faktor")
+		GC.WorkshopRewardCap = savedCap
+		-- unter dem Deckel: alle Faktoren multiplizieren sich, Prestige außerhalb des Deckels
 		d.games.press.upgrades = {}
 		d.games.parking.streak = 0
 		d.games.tuningLevel = 2
 		d.level = PR.Threshold(1)
 		T.near(CB.WorkshopReward(d), CB.PressWorkshop(d) * CB.TuningWorkshop(d) * CB.CustomerBonus(d) * 1.02 * 1.10, 1e-9, "Produkt unter dem Deckel")
-		-- 2.4.0-Vergütung (R.Reward) nutzt den gedeckelten Faktor
+		-- Prestige wirkt messbar, auch wenn Tycoon × OW den Deckel erreicht (Rang 1 = +2 %)
+		GC.WorkshopRewardCap = 1.05
+		d.level = 1
+		local atCap = CB.WorkshopReward(d)
+		d.level = PR.Threshold(1)
+		T.near(CB.WorkshopReward(d), atCap * 1.02, 1e-9, "Rang 1: +2 % trotz Deckel")
+		d.level = PR.Threshold(20)
+		T.near(CB.WorkshopReward(d), atCap * 1.30, 1e-9, "Rang 20: +30 % trotz Deckel")
+		GC.WorkshopRewardCap = savedCap
+		-- 2.4.0-Vergütung (R.Reward) nutzt genau diesen Faktor; MiniRules.AddIncome den Prestige-Bonus
 		local R = g:Rules()
 		local C = g:Config()
-		d.level = PR.Threshold(20)
-		d.games.press.upgrades = { pu1 = 30, pu2 = 30 }
-		d.games.parking.streak = 30
-		d.games.tuningLevel = 10
-		local job = { car = C.Cars[1], def = nil }
-		T.near(CB.WorkshopReward(d), 1.6, 1e-9, "R.Reward-Basis gedeckelt")
+		local MR = g:MiniShared("MiniRules")
+		d.level = PR.Threshold(5)
+		d.games.press.upgrades = {}
+		d.games.parking.streak = 0
+		d.games.tuningLevel = 1
+		local job = { kind = C.Jobs[1].id, carId = C.Cars[1].id, quality = 100, usedParts = {} }
+		local def, car = C.JobById[job.kind], C.CarById[job.carId]
+		T.eq(R.Reward(d, job), math.floor(def.reward * car.reward * 1.10 * 1.10 * (1 + 100 * 0.0025) + 0.5), "R.Reward: Tycoon ×1,10 × Prestige ×1,10")
+		d.money = 0
+		T.eq(MR.AddIncome(d, 1000), 1100, "AddIncome: Rang 5 = +10 % auf Minispiel-Einnahmen")
+		T.eq(d.money, 1100, "gutgeschrieben")
+		d.level = 1
+		T.eq(MR.AddIncome(d, 1000), 1000, "AddIncome ohne Rang: unverändert")
+		T.eq(MR.AddIncome(d, -500), -500, "AddIncome mit negativem Betrag = AddMoney (kein Bonus)")
 	end },
 
 	{ "PrestigeService: Abholen nur einmal, nur erreichte Ränge, in Reihenfolge; Statistik", function(T, H)
@@ -769,6 +794,99 @@ return {
 			end)
 		end), "OnNotice ohne Fehler")
 		T.check(#g:Errors() == 0, "keine Client-Fehler: " .. g:ErrorText())
+	end },
+
+	{ "Karten oben rechts: unter dem Abzeichen (auch bei y 60 auf schmalen Bildschirmen) und unter der Toast-Zone; Warteschlange statt Überschreiben; Prozentwerte ganzzahlig", function(T, H)
+		local GC0 = nil
+		for _, vp in ipairs({ Vector2.new(390, 844), Vector2.new(844, 390), Vector2.new(1280, 720) }) do
+			local g, p = startClient(H, { viewport = vp })
+			local rec = recorder(T)
+			local prestige, _, MiniUI = build(g, p, "PrestigeUI", rec)
+			local unlocks = build(g, p, "UnlocksUI", rec)
+			local tutorial = build(g, p, "TutorialUI", rec)
+			local GC = g:MiniShared("GameConfig")
+			GC0 = GC
+			local label = string.format("%dx%d", vp.X, vp.Y)
+			render(g, p, prestige, snapshot(g, 12, { full = true }))
+			g:InClient(p, function()
+				prestige.Step(1)
+			end)
+			local hudGui = p.PlayerGui:FindFirstChild("ProgressHUD")
+			local badge = hudGui and byName(hudGui, "Badge")
+			T.check(badge ~= nil and hudGui.Enabled, label .. ": Abzeichen sichtbar")
+			local narrow = vp.X < prestige.CompactProgressWidth + 2 * (prestige.HudWidth + prestige.HudMargin + 8)
+			T.eq(badge and badge.Position.Y.Offset, narrow and prestige.HudTopNarrow or prestige.HudTop, label .. ": Abzeichen-Lage (schmal: y 60)")
+			local badgeBottom = badge.AbsolutePosition.Y + badge.AbsoluteSize.Y
+			local toastBottom = hudGui.AbsolutePosition.Y + 62 + 60
+			-- Unlock-Karte
+			g:InClient(p, function()
+				unlocks.OnNotice({ kind = "unlock", key = "feature:scrapyard", title = "Schrottplatz", level = 3, hint = "Neu: der Schrottplatz!" })
+				unlocks.OnNotice({ kind = "unlock", key = "feature:dealer", title = "Autohaus", level = 3 })
+				unlocks.OnNotice({ kind = "unlock", key = "car:komet", title = "Komet C1", level = 3 })
+			end)
+			local cardGui = p.PlayerGui:FindFirstChild("UnlockCards")
+			local card = cardGui and byName(cardGui, "UnlockCard")
+			T.check(card ~= nil and card.Visible, label .. ": Unlock-Karte sichtbar")
+			T.check(card.AbsolutePosition.Y >= badgeBottom + 8, label .. ": Unlock-Karte unter dem Abzeichen (" .. tostring(card.AbsolutePosition.Y) .. " vs " .. tostring(badgeBottom) .. ")")
+			T.check(card.AbsolutePosition.Y >= toastBottom + 8, label .. ": Unlock-Karte unter der Toast-Zone")
+			T.check(card.AbsolutePosition.X + card.AbsoluteSize.X <= vp.X and card.AbsoluteSize.X > 0, label .. ": Karte im Bild")
+			-- Warteschlange: erst Schrottplatz, dann Autohaus, dann Komet – nichts geht verloren
+			local title = byName(cardGui, "Title")
+			T.check(title and title.Text:find("Schrottplatz", 1, true), label .. ": erste Karte Schrottplatz: " .. tostring(title and title.Text))
+			T.eq(unlocks.QueuedCards(), 2, label .. ": zwei Karten warten")
+			g:Advance(unlocks.CardSeconds + 0.3)
+			T.check(title and title.Text:find("Autohaus", 1, true), label .. ": zweite Karte Autohaus")
+			g:Advance(unlocks.CardSeconds + 0.3)
+			T.check(title and title.Text:find("Komet C1", 1, true), label .. ": dritte Karte Komet C1")
+			T.check(card.Visible, label .. ": dritte Karte sichtbar")
+			g:Advance(unlocks.CardSeconds + 0.3)
+			T.eq(card.Visible, false, label .. ": Warteschlange leer, Karte weg")
+			-- Hinweiskarte (TutorialUI): ebenfalls unter Abzeichen und Toast; Warteschlange
+			g:InClient(p, function()
+				tutorial.ShowHint("Neu: der Schrottplatz!", "h_scrapyard")
+				tutorial.ShowHint("Neu: das Autohaus!", "h_dealer")
+			end)
+			local tGui = p.PlayerGui:FindFirstChild("Tutorial")
+			local hintCard = tGui and byName(tGui, "HintCard")
+			T.check(hintCard ~= nil and hintCard.Visible, label .. ": Hinweiskarte sichtbar")
+			T.check(hintCard.AbsolutePosition.Y >= badgeBottom + 8, label .. ": Hinweiskarte unter dem Abzeichen")
+			T.check(hintCard.AbsolutePosition.Y >= toastBottom + 8, label .. ": Hinweiskarte unter der Toast-Zone")
+			local hintText = byName(hintCard, "Text")
+			T.check(hintText and hintText.Text:find("Schrottplatz", 1, true), label .. ": erster Hinweis zuerst")
+			T.eq(tutorial.QueuedHints(), 1, label .. ": zweiter Hinweis wartet")
+			g:Advance(tutorial.HintSeconds + 0.3)
+			T.check(hintText and hintText.Text:find("Autohaus", 1, true) and hintCard.Visible, label .. ": zweiter Hinweis danach")
+			-- Größenwechsel: Karte folgt dem Abzeichen
+			local other = vp.X < 818 and Vector2.new(1280, 720) or Vector2.new(390, 844)
+			H.Mock.SetViewport(g.env, other)
+			g:InClient(p, function()
+				hudGui:GetPropertyChangedSignal("AbsoluteSize"):Fire()
+				cardGui:GetPropertyChangedSignal("AbsoluteSize"):Fire()
+				tGui:GetPropertyChangedSignal("AbsoluteSize"):Fire()
+				unlocks.OnNotice({ kind = "unlock", key = "feature:quiz", title = "Quiz", level = 4 })
+			end)
+			local badgeBottom2 = badge.AbsolutePosition.Y + badge.AbsoluteSize.Y
+			T.check(card.AbsolutePosition.Y >= badgeBottom2 + 8, label .. " -> " .. tostring(other.X) .. ": Karte nach Größenwechsel unter dem Abzeichen")
+			T.check(hintCard.AbsolutePosition.Y >= badgeBottom2 + 8, label .. " -> " .. tostring(other.X) .. ": Hinweis nach Größenwechsel unter dem Abzeichen")
+			T.check(#g:Errors() == 0, label .. ": keine Client-Fehler: " .. g:ErrorText())
+		end
+		-- Belohnungstexte ohne Gleitkomma-Müll (Rang 7: 14 %, nicht 14.000000000000002 %)
+		local g = H.Garage({ noServer = true })
+		local GC = g:MiniShared("GameConfig")
+		for _, r in ipairs(GC.Prestige.Rewards) do
+			T.check(r.incomePct == math.floor(r.incomePct) and r.discountPct == math.floor(r.discountPct), "Rang " .. r.rank .. ": ganzzahlige Prozentwerte")
+		end
+		T.eq(GC.Prestige.Rewards[7].incomePct, 14, "Rang 7: 14 %")
+		T.eq(GC.Prestige.Rewards[14].incomePct, 28, "Rang 14: 28 %")
+		T.eq(GC.Prestige.Rewards[7].discountPct, 7, "Rang 7: 7 % Rabatt")
+		local g2, p2 = startClient(H)
+		local PUI = g2:ClientModule(p2, "Mini.PrestigeUI")
+		T.check(type(PUI.RewardText) == "function", "PrestigeUI.RewardText")
+		for _, r in ipairs(GC.Prestige.Rewards) do
+			local text = PUI.RewardText(r)
+			T.check(not text:find("0000", 1, true), "Rang " .. r.rank .. ": Text ohne Gleitkomma-Müll: " .. text)
+		end
+		T.check(PUI.RewardText({ incomePct = 14.000000000000002, discountPct = 7.000000000000001, tycoonRebirthPct = 5 }):find("+14 % Einnahmen · 7 % Rabatt", 1, true) ~= nil, "RewardText rundet")
 	end },
 
 	{ "UnlocksUI: nächste Freischaltung oben, Tabelle Level -> Freischaltung mit Hervorhebung, Karte bei unlock-Hinweis, unlocks_seen", function(T, H)
