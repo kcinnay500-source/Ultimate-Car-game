@@ -237,8 +237,18 @@ local function uiSetup(T, H)
 		local x = find(page, name)
 		return x ~= nil and H.Mock.IsGuiVisible(x)
 	end
+	-- wie ArcadeService: BLITZ-REAKTION meldet jedes Lampen-Aus erst in dem Moment (arcade_go)
 	function S.at(round, t)
 		g:AdvanceTo(round.startAt + t)
+		round.goSent = round.goSent or {}
+		for _, ev in ipairs(S.A.GoEvents(round)) do
+			if not round.goSent[ev.attempt] and ev.at <= g:Now() + 1e-9 then
+				round.goSent[ev.attempt] = true
+				local go = S.A.GoView(round, ev.attempt)
+				go.kind = "arcade_go"
+				S.notice(go)
+			end
+		end
 	end
 	function S.finish(round)
 		local fin = rec.Of("mini_arcade_finish")
@@ -958,6 +968,10 @@ return {
 		T.near(view.startAt, g:Now() + A.Countdown, 1e-6, "Start nach Countdown")
 		local token = view.token
 		T.eq(AS.Round(ms).token, token, "Runde in der Sitzung")
+		-- Die Ausgeh-Zeitpunkte bleiben geheim, bis die Lampen wirklich ausgehen (arcade_go)
+		T.eq(view.params.attempts[1].g, nil, "kein g im Rundenpaket")
+		T.check(view.params.attempts[2].l ~= nil, "Beginn der Starts bekannt")
+		local secret = AS.Round(ms).p.attempts
 		-- zweiter Start sofort: ignoriert (Doppeltipp)
 		act("mini_arcade_start", { game = "arcade_1" })
 		T.eq(count("arcade_round"), 1, "Doppeltipp startet nicht neu")
@@ -967,12 +981,15 @@ return {
 		input(token + 1, 1)
 		T.eq(count("arcade_step"), steps, "fremdes Token ohne Wirkung")
 		-- zu spät angekommene Eingabe
-		g:AdvanceTo(view.startAt + view.params.attempts[1].g + 0.2)
+		T.eq(count("arcade_go"), 0, "vor dem ersten Lampen-Aus kein arcade_go")
+		g:AdvanceTo(view.startAt + secret[1].g + 0.2)
+		T.eq(count("arcade_go"), 1, "arcade_go im Moment des Lampen-Aus")
+		T.near(last("arcade_go").g, secret[1].g, 1e-9, "arcade_go nennt g")
 		local stale = g:Now() - 0.7
 		act("mini_arcade_input", { token = token, at = stale, value = 1, rid = 1 })
 		T.eq(last("arcade_step").reject, "late", "zu alt: abgelehnt mit Grund")
 		-- gültige Reaktionen
-		for i, a in ipairs(view.params.attempts) do
+		for i, a in ipairs(secret) do
 			g:AdvanceTo(view.startAt + a.g + 0.18)
 			input(token, 1)
 			local s = last("arcade_step")
@@ -1013,7 +1030,7 @@ return {
 		g:Advance(1.1)
 		act("mini_arcade_start", { game = "arcade_1" })
 		view = last("arcade_round")
-		g:AdvanceTo(view.startAt + view.params.attempts[1].g + 0.18)
+		g:AdvanceTo(view.startAt + AS.Round(ms).p.attempts[1].g + 0.18)
 		input(view.token, 1)
 		act("mini_arcade_finish", { token = view.token })
 		res = last("arcade_result")
@@ -1025,7 +1042,7 @@ return {
 		g:Advance(1.1)
 		act("mini_arcade_start", { game = "arcade_1" })
 		local old = last("arcade_round")
-		g:AdvanceTo(old.startAt + old.params.attempts[1].g + 0.18)
+		g:AdvanceTo(old.startAt + AS.Round(ms).p.attempts[1].g + 0.18)
 		input(old.token, 1)
 		g:Advance(1.1)
 		act("mini_arcade_start", { game = "arcade_4" })
@@ -1070,7 +1087,7 @@ return {
 		act("mini_arcade_start", { game = "arcade_1" })
 		view = last("arcade_round")
 		T.eq(view.capLeft, 5, "Rest im Rundenpaket")
-		for _, at in ipairs(view.params.attempts) do
+		for _, at in ipairs(AS.Round(ms).p.attempts) do
 			g:AdvanceTo(view.startAt + at.g + 0.18)
 			input(view.token, 1)
 		end
@@ -1187,8 +1204,11 @@ return {
 			return
 		end
 		local rid = 10
-		for _, a in ipairs(view.params.attempts) do
+		local secret = g:MiniServer("ArcadeService").Round(g:MiniState(pl)).p.attempts
+		for i, a in ipairs(secret) do
 			g:AdvanceTo(view.startAt + a.g + 0.18)
+			local go = g:Notices(pl, "arcade_go")
+			T.eq(#go, i, "arcade_go über den echten Weg " .. i)
 			rid += 1
 			local at = g:Now()
 			g:Advance(0.03)
@@ -1251,6 +1271,10 @@ return {
 		for _, e in ipairs(sent) do
 			T.eq(e.ok, true, "Server nimmt an")
 			T.near(e.info.reaction, 0.2, 0.02, "Reaktion ≈ 0,2 s")
+		end
+		for i = 1, 5 do
+			local res = S.AUI.Current().st.res[i]
+			T.check(res and not res.early and res.points == 200, "Client wertet Start " .. i .. " nach arcade_go wie der Server")
 		end
 		S.at(round, round.duration + 0.5)
 		local res = S.finish(round)
@@ -1522,5 +1546,93 @@ return {
 		for _, w in ipairs(g:Warnings()) do
 			T.check(not tostring(w):find("Spielhalle", 1, true), "Warnung: " .. tostring(w))
 		end
+	end },
+
+	{ "Rückdatieren begrenzt: Skript mit at = g + 0,2 nach dem Lampen-Aus bekommt keine 1000 Punkte", function(T, H)
+		local A = rules(H)
+		local lat = A.Latency(0.1) -- 100 ms Round-Trip -> 50 ms Einweg
+		T.near(lat, 0.05, 1e-9, "Einweg-Latenz = halbe Round-Trip-Zeit")
+		T.eq(A.Latency(2), A.LatencyCap, "gedeckelt")
+		T.eq(A.Latency(nil), A.DefaultLatency, "ohne Messung: Standard")
+		local round = A.NewRound("arcade_1", 4711, 1000, 1, lat)
+		-- Rundenpaket ohne Ausgeh-Zeitpunkte, nichts daraus ableitbar
+		local view = A.View(round)
+		for i, a in ipairs(view.params.attempts) do
+			T.eq(a.g, nil, "kein g in Start " .. i)
+		end
+		T.eq(round.p.attempts[1].g ~= nil, true, "Server kennt g")
+		local period = A.ReactionPeriod()
+		for i, a in ipairs(view.params.attempts) do
+			T.near(a.l, (i - 1) * period, 1e-9, "feste Taktung verrät g nicht (Start " .. i .. ")")
+		end
+		local r2 = A.NewRound("arcade_1", 99, 1000, 2, lat)
+		T.eq(r2.duration, round.duration, "Dauer unabhängig von den Pausen")
+		-- Angriff: nach dem (gesehenen) Lampen-Aus 0,6 s warten, dann at = g + 0,2 behaupten
+		local total = 0
+		for _, a in ipairs(round.p.attempts) do
+			local arrive = round.startAt + a.g + 0.6
+			local ok, info = A.Input(round, round.startAt + a.g + 0.2, 1, arrive)
+			T.eq(ok, true, "angenommen, aber …")
+			T.check(info.reaction >= 0.6 - lat - A.LatencySlack - lat - 1e-6, "… gewertet ab Ankunft − Latenz (" .. tostring(info.reaction) .. ")")
+			total += info.points
+		end
+		T.check(total < 700, "keine Höchstpunktzahl durch Rückdatieren (" .. total .. ")")
+		-- ehrlicher Spieler mit Latenz: at = Druckzeitpunkt, kommt lat später an -> volle Punkte bei 0,2 s echter Reaktion
+		local fair = A.NewRound("arcade_1", 4711, 1000, 3, lat)
+		local sum = 0
+		for _, a in ipairs(fair.p.attempts) do
+			local seen = fair.startAt + a.g + lat -- arcade_go kommt lat später an
+			local press = seen + 0.2
+			local _, info = A.Input(fair, press, 1, press + lat)
+			sum += info.points
+		end
+		T.eq(sum, 1000, "ehrlich mit Latenz: 1000")
+		-- andere Automaten: Rückdatierung ebenso begrenzt
+		local brake = A.NewRound("arcade_2", 5, 1000, 4, lat)
+		local now = brake.startAt + 5
+		T.near(A.InputTime(now - 0.45, now, lat), now - lat - A.LatencySlack, 1e-9, "0,45 s alt -> auf Ankunft − Latenz angehoben")
+		T.near(A.InputTime(now - 0.05, now, lat), now - 0.05, 1e-9, "innerhalb der Latenz unverändert")
+	end },
+
+	{ "Client: Druck vor arcade_go gilt lokal als Frühstart, die Server-Bewertung gewinnt", function(T, H)
+		local S = uiSetup(T, H)
+		local g = S.g
+		local round = S.round("arcade_1", 321, 777)
+		local a = round.p.attempts[1]
+		-- arcade_go ist unterwegs (Server ist schon bei g + 0,25), der Spieler drückt: lokal noch Lampen an
+		g:AdvanceTo(round.startAt + a.g + 0.25)
+		S.click("Druecken")
+		local cur = S.AUI.Current()
+		T.check(cur.st.res[1] and cur.st.res[1].early, "lokal Frühstart (Lampen noch an)")
+		local sent = S.forward(round)
+		T.eq(#sent, 1, "gesendet")
+		local info = sent[1].info
+		T.check(info and not info.early and info.points > 0, "Server: gültige Reaktion")
+		info.kind = "arcade_step"
+		info.token = round.token
+		S.notice(info)
+		T.check(cur.st.res[1] and not cur.st.res[1].early and cur.st.res[1].points == info.points, "Server-Bewertung übernommen")
+		T.eq(#S.errors(), 0, "keine Fehler: " .. table.concat(S.errors(), "\n"))
+	end },
+
+	{ "Client: Panel mitten in der Runde zu -> Tasten sofort frei, auch ohne Antwort des Servers", function(T, H)
+		local S = uiSetup(T, H)
+		local g = S.g
+		local round = S.round("arcade_7", 55, 888)
+		S.at(round, 1)
+		T.check(g.env.casBindings.UCG_ArcadeControls ~= nil, "Tasten gebunden")
+		T.eq(g:Key(S.pl, Enum.KeyCode.A), true, "A wird während der Runde geschluckt")
+		-- Panel geschlossen (× / M / Tablet / QTE): Seite unsichtbar
+		g:Activate()
+		S.gui.Enabled = false
+		g:Advance(0.5)
+		T.eq(#S.rec.Of("mini_arcade_finish"), 1, "Abrechnung angefragt")
+		T.eq(g.env.casBindings.UCG_ArcadeControls, nil, "Tasten sofort frei (vor arcade_result)")
+		T.eq(g:Key(S.pl, Enum.KeyCode.W), false, "W erreicht die Figur wieder")
+		T.eq(g:Key(S.pl, Enum.KeyCode.Space), false, "Leertaste springt wieder")
+		-- Server antwortet nie: bleibt frei
+		g:Advance(10)
+		T.eq(g.env.casBindings.UCG_ArcadeControls, nil, "bleibt frei")
+		T.eq(#S.errors(), 0, "keine Fehler: " .. table.concat(S.errors(), "\n"))
 	end },
 }

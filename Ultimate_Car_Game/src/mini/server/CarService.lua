@@ -145,10 +145,32 @@ local function anchorCFrame(x)
 	return nil
 end
 
-local function citySpawn(key)
+local function citySpawnPart(key)
 	local c = city()
 	local folder = c and c:FindFirstChild("CarSpawns")
-	return anchorCFrame(folder and folder:FindFirstChild(key))
+	return folder and folder:FindFirstChild(key)
+end
+
+local function citySpawn(key)
+	return anchorCFrame(citySpawnPart(key))
+end
+
+-- Seitliche Ausweichplätze (Vielfache von Physics.spawnSpacing, rechts = +): Attribut AltSteps der Spawn-Parts
+-- (worldgen prüft genau diese Plätze auf freie Fläche, z. B. Waschstraße nur "-1"), sonst 1, -1, 2, -2.
+local DEFAULT_STEPS = { 0, 1, -1, 2, -2 }
+local function spawnSteps(anchor)
+	local raw = anchor and anchor:GetAttribute("AltSteps")
+	if type(raw) ~= "string" then
+		return DEFAULT_STEPS
+	end
+	local steps = { 0 }
+	for token in string.gmatch(raw, "[^,%s]+") do
+		local n = tonumber(token)
+		if n and n == math.floor(n) and n ~= 0 and math.abs(n) <= 4 and not table.find(steps, n) then
+			table.insert(steps, n)
+		end
+	end
+	return steps
 end
 
 -- Werkstatt-Parkplatz: Part "CarSpawn" im eigenen Plot, sonst die Einfahrt vor der Halle (Nase zur Straße, +Z)
@@ -161,7 +183,7 @@ local function plotSpawn(cs)
 	local sp = model:FindFirstChild("CarSpawn", true)
 	local cf = anchorCFrame(sp)
 	if cf then
-		return cf
+		return cf, sp
 	end
 	local f = CarCatalog.Physics.plotFallback
 	return model:GetPivot() * CFrame.new(f[1], f[2], f[3]) * CFrame.Angles(0, math.pi, 0)
@@ -219,18 +241,21 @@ end
 
 -- Ziel-CFrame (Boden unter den Reifen, nur Gierwinkel) für einen Spawn-Schlüssel mit Rückfallkette
 local function spawnCFrame(cs, keys)
-	local base
+	local base, anchor
 	for _, key in ipairs(keys) do
 		if key == "workshop" then
-			base = plotSpawn(cs)
+			base, anchor = plotSpawn(cs)
 		else
-			base = citySpawn(key)
+			anchor = citySpawnPart(key)
+			base = anchorCFrame(anchor)
 		end
 		if base then
 			break
 		end
 	end
-	base = base or plotSpawn(cs)
+	if not base then
+		base, anchor = plotSpawn(cs)
+	end
 	if not base then
 		local ch = cs.player.Character
 		local root = ch and ch:FindFirstChild("HumanoidRootPart")
@@ -245,7 +270,7 @@ local function spawnCFrame(cs, keys)
 	local right = Vector3.new(-flat.Z, 0, flat.X)
 	local P = CarCatalog.Physics
 	local chosen = base.Position
-	for _, step in ipairs({ 0, 1, -1, 2, -2 }) do
+	for _, step in ipairs(spawnSteps(anchor)) do
 		local pos = base.Position + right * (step * P.spawnSpacing)
 		if not occupied(pos) then
 			chosen = pos
@@ -510,6 +535,20 @@ local function eject(seat, humanoid)
 	end
 end
 
+-- Den Besitzer aus dem Sitz eines seiner Fahrzeuge (slot) lösen; SeatWeld wird sofort zerstört.
+function CarService.UnseatFrom(cs, slot)
+	local v = cs[slot]
+	local seat = v and v.info and v.info.seat
+	local _, humanoid = characterParts(cs.player)
+	if not seat or not humanoid then
+		return false
+	end
+	if seat.Occupant ~= humanoid and humanoid.SeatPart ~= seat then
+		return false
+	end
+	return CityService.Unseat(humanoid)
+end
+
 -- Besitzer neben die Fahrertür stellen und in den Sitz setzen
 local function seatOwner(cs, v)
 	local ch, humanoid, root = characterParts(cs.player)
@@ -520,7 +559,8 @@ local function seatOwner(cs, v)
 	if seat.Occupant then
 		return false
 	end
-	humanoid.Sit = false
+	-- Sitzt die Figur noch in einem anderen Auto: SeatWeld zuerst lösen, sonst zieht PivotTo das alte Auto mit
+	CityService.Unseat(humanoid)
 	pcall(function()
 		ch:PivotTo(CFrame.new(seat.Position - seat.CFrame.RightVector * 3 + Vector3.new(0, 2, 0)))
 	end)
@@ -561,8 +601,11 @@ local function bindVehicle(cs, v)
 					abortRun(cs, "left")
 				end
 				-- Aussteigen: neben die Fahrertür (nicht nach einem Teleport weg vom Auto)
-				local ch, _, root = characterParts(cs.player)
-				if ch and root and (root.Position - seat.Position).Magnitude < 8 then
+				-- Nicht, wenn die Figur inzwischen in einem anderen Sitz sitzt (z. B. Probefahrt): PivotTo würde
+				-- sonst das neue Auto mitziehen.
+				local ch, hum, root = characterParts(cs.player)
+				local other = hum and hum.SeatPart
+				if ch and root and (other == nil or other == seat) and (root.Position - seat.Position).Magnitude < 8 then
 					pcall(function()
 						ch:PivotTo(CFrame.new(seat.Position - seat.CFrame.RightVector * 4.5 + Vector3.new(0, 2.5, 0)))
 					end)
@@ -671,8 +714,13 @@ local function refreshSpawned(cs, d, id)
 	if not car then
 		return
 	end
-	VehicleFactory.ApplyStats(v.model, CarRules.Stats(car))
+	local stats = CarRules.Stats(car)
+	VehicleFactory.ApplyStats(v.model, stats)
 	VehicleFactory.ApplyStyle(v.model, car, (cs.shine[id] or 0) > now())
+	-- Zeitfahren läuft: schnelleres Auto -> Mindestzeiten der offenen Abschnitte anpassen
+	if cs.run and cs.run.vehicle == v then
+		TrackRules.Rescale(cs.run, TrackRules.CarSpeed(stats))
+	end
 end
 
 local function validKey(at)
@@ -799,6 +847,9 @@ function CarService.Register(Actions, a)
 		end
 		cs.lastSpawnAt.test = t
 		cs.testdriveReadyAt = t + CarCatalog.Testdrive.cooldown
+		-- Sitzt der Spieler noch im eigenen Auto: erst aussteigen (SeatWeld weg), sonst reist das eigene Auto
+		-- beim Umsetzen zum Probewagen mit.
+		CarService.UnseatFrom(cs, "car")
 		local v, err = spawnVehicle(cs, "test", CarRules.NewCar(m.id, t), { "testdrive", "dealer" }, true)
 		if not v then
 			toast(cs, err)
@@ -925,7 +976,12 @@ function CarService.Register(Actions, a)
 		for i, part in ipairs(list) do
 			positions[i] = part.Position
 		end
-		local run = TrackRules.NewRun(TrackRules.MinTimes(v.info.chassis.Position, positions), t)
+		-- Plausibilität mit dem Tempo DIESES Autos (nicht dem schnellsten des Katalogs): sonst schafft ein
+		-- verschobenes Kompakt-Chassis die Mindestzeiten des Supersportwagens
+		local maxSpeed = TrackRules.CarSpeed(CarRules.Stats(car))
+		local start = v.info.chassis.Position
+		local run = TrackRules.NewRun(TrackRules.MinTimes(start, positions, maxSpeed), t, nil,
+			TrackRules.MinLap(start, positions, maxSpeed), maxSpeed)
 		run.vehicle = v
 		cs.run = run
 		notice(cs, "car_spawned", { id = car.id, model = car.model, name = v.name, testdrive = false, at = "track" })

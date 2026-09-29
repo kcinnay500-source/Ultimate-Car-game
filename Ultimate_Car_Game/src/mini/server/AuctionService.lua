@@ -4,7 +4,11 @@
 -- * Spieler-Auktionen: eigene Autos an Spieler auf demselben Server (Einliefern sperrt das Auto, locked = true).
 -- * Zuschlag im globalen Tick: nächsthöheres gültiges Gebot (Guthaben, Garage, Level, schreibbares Profil erneut
 --   geprüft); wartet, solange ein beteiligtes Profil transacting ist (höchstens SettleWaitMax, dann nächstes Gebot bzw.
---   Abbruch). Auto + Geld wechseln in einem Server-Schritt (AuctionRules.Handover), danach sofort api.save beider Profile.
+--   Abbruch). Fällt das HÖCHSTE Gebot weg, läuft das Los ReopenSeconds weiter (Scheingebot-Schutz, AuctionRules.Reopen),
+--   der Bieter darf bei "nicht gedeckt" DropBanSeconds nicht bieten. Beim Bieten zählt nur das freie Guthaben.
+--   Auto + Geld wechseln in einem Server-Schritt (AuctionRules.Handover), dann wird die Übergabe ins Auktionsbuch
+--   geschrieben (api.recordTransfer, AuctionLedger) und danach beide Profile gespeichert. Speichert nur eines, gleicht
+--   das Laden über das Auktionsbuch ab (kein doppeltes Auto, keine Credits aus dem Nichts).
 -- * Verkäufer verlässt den Server: Auktion abgebrochen, Auto entsperrt (vor dem letzten Speichern). Bieter verlässt den
 --   Server: seine Gebote fallen weg.
 -- * Öffentlicher Zustand an alle Spieler des Servers: mini_notice auction_update (gedrosselt), dazu auction_won /
@@ -51,11 +55,11 @@ local TEXT = {
 }
 -- Bieter fällt beim Zuschlag heraus (Toast an ihn); %s = Modellname
 local SKIP_TEXT = {
-	money = "Dein Gebot für den %s war beim Zuschlag nicht gedeckt – das nächste Gebot gewinnt.",
-	garage = "Deine Garage war beim Zuschlag voll – der %s geht an das nächste Gebot.",
-	level = "Für den %s fehlt dir das nötige Level – das nächste Gebot gewinnt.",
-	busy = "Dein Kauf wurde gerade gespeichert – der %s geht an das nächste Gebot.",
-	writable = "Dein Profil wird gerade nicht gespeichert – der %s geht an das nächste Gebot.",
+	money = "Dein Gebot für den %s war beim Zuschlag nicht gedeckt und wurde gestrichen. Du kannst 10 Minuten lang nicht bieten.",
+	garage = "Deine Garage war beim Zuschlag voll – dein Gebot für den %s wurde gestrichen.",
+	level = "Für den %s fehlt dir das nötige Level – dein Gebot wurde gestrichen.",
+	busy = "Dein Kauf wurde gerade gespeichert – dein Gebot für den %s wurde gestrichen.",
+	writable = "Dein Profil wird gerade nicht gespeichert – dein Gebot für den %s wurde gestrichen.",
 }
 local CANCEL_TEXT = {
 	seller_left = "Der Verkäufer hat den Server verlassen.",
@@ -77,6 +81,7 @@ local function newState(seed)
 		lastNpcModel = nil,
 		lastTickAt = -math.huge,
 		lastConsign = {}, -- [userId] = Zeit
+		banned = {}, -- [userId] = Zeit, bis zu der nicht geboten werden darf (Höchstgebot war nicht gedeckt)
 		dirty = true,
 		lastBroadcast = -math.huge,
 		screen = { lastFind = -math.huge, lastAt = -math.huge, labels = nil, gui = nil },
@@ -192,6 +197,21 @@ local function save(ms)
 	else
 		warnOnce("save_missing", "api.save fehlt: Übergabe wird erst mit dem nächsten Speichern gesichert")
 	end
+end
+
+-- Übergabe ins Auktionsbuch schreiben (darf warten), danach beide Profile speichern. Ohne api.recordTransfer
+-- (Tests, Studio) nur speichern.
+local function recordAndSave(seller, buyer, transfer)
+	task.spawn(function()
+		if api and api.recordTransfer and transfer then
+			local ok, err = pcall(api.recordTransfer, transfer)
+			if not ok then
+				warn("[Auktion] Auktionsbuch: " .. tostring(err))
+			end
+		end
+		save(seller)
+		save(buyer)
+	end)
 end
 
 local function credits(n)
@@ -448,6 +468,35 @@ local function checker(lot, t)
 	end
 end
 
+local function lotList()
+	local list = {}
+	for _, id in ipairs(S.order) do
+		local lot = S.lots[id]
+		if lot then
+			table.insert(list, lot)
+		end
+	end
+	return list
+end
+
+-- Höchstgebot beim Zuschlag weggefallen: Los läuft weiter (AuctionRules.Reopen), bei "nicht gedeckt" Bietsperre
+local function reopen(lot, bid, reason, t)
+	if not AuctionRules.Reopen(lot, bid.userId, t) then
+		return false
+	end
+	if reason == "money" then
+		S.banned[bid.userId] = t + AuctionRules.DropBanSeconds
+	end
+	S.dirty = true
+	local text = "Das Höchstgebot für den " .. lot.name .. " war beim Zuschlag nicht gültig. Die Auktion läuft noch "
+		.. AuctionRules.ReopenSeconds .. " Sekunden – jetzt kannst du nachbieten!"
+	notifyBidders(lot, text, bid.userId)
+	if lot.kind == "player" then
+		toast(S.sessions[lot.sellerId], text)
+	end
+	return true
+end
+
 local function settlePlayerLot(lot, t)
 	local seller = S.sessions[lot.sellerId]
 	if not seller or gone(seller) then
@@ -471,7 +520,11 @@ local function settlePlayerLot(lot, t)
 		cancelLot(lot, seller, t, "car")
 		return
 	end
-	local winner, wait = AuctionRules.PickWinner(lot, checker(lot, t))
+	local winner, wait, dropped, why = AuctionRules.PickWinner(lot, checker(lot, t), true)
+	if wait == "reopen" then
+		reopen(lot, dropped, why, t)
+		return
+	end
 	if wait then
 		return
 	end
@@ -489,9 +542,8 @@ local function settlePlayerLot(lot, t)
 		lot.skipped[winner.userId] = info or "invalid" -- nächster Tick: nächstes Gebot
 		return
 	end
-	-- Übergabe ist geschehen (ein Schritt): sofort beide Profile speichern, dann melden
-	save(seller)
-	save(buyer)
+	-- Übergabe ist geschehen (ein Schritt): Auktionsbuch, dann beide Profile speichern; danach melden
+	recordAndSave(seller, buyer, info.transfer)
 	changed(seller)
 	changed(buyer)
 	S.dirty = true
@@ -509,7 +561,11 @@ local function settlePlayerLot(lot, t)
 end
 
 local function settleNpcLot(lot, t)
-	local winner, wait = AuctionRules.PickWinner(lot, checker(lot, t))
+	local winner, wait, dropped, why = AuctionRules.PickWinner(lot, checker(lot, t), true)
+	if wait == "reopen" then
+		reopen(lot, dropped, why, t)
+		return
+	end
 	if wait then
 		return
 	end
@@ -702,9 +758,17 @@ function AuctionService.Register(Actions, a)
 			toast(ms, TEXT.gone)
 			return
 		end
+		local uid = uidOf(ms)
+		local bannedUntil = S.banned[uid]
+		if bannedUntil and t < bannedUntil then
+			toast(ms, "Dein letztes Höchstgebot war beim Zuschlag nicht gedeckt. Bieten ist wieder in "
+				.. AuctionRules.Clock(bannedUntil - t) .. " Min. möglich.")
+			return
+		end
 		local bidder = {
-			userId = uidOf(ms), level = finite(d.level) and d.level or 1, money = d.money, cars = carCount(d),
-			writable = writable(ms),
+			userId = uid, level = finite(d.level) and d.level or 1, money = d.money, cars = carCount(d),
+			writable = writable(ms), committed = AuctionRules.Committed(lotList(), uid, lot.id),
+			partner = lot.kind == "player" and AuctionRules.RecentPartner(d, lot.sellerId, t),
 		}
 		local ok, err = AuctionRules.CheckBid(lot, bidder, data.amount, t)
 		if not ok then

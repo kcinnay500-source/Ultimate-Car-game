@@ -15,6 +15,10 @@ Prüfungen:
   * Stationen / Ankunftspunkte / CitySpawn gemäß Vertrag (Prompt-Werte, Attachment Arrival, freier Boden)
   * Stadt-Parts in Plot-Grundflächen (außer PlotSlots.*.Vacant und Bodenplatte)
   * Anim-Attribute nur unter City.Animated; Plot-Vorlage: Start deaktiviert, Anker vorhanden
+  * Befahrbarkeit (drive.py): Verkehrsschleifen A/B1/B2/T in mehreren Spuren ohne Stufe > 0.6 und ohne
+    (unsichtbare) Hindernisse; CarSpawns (Stellfläche inkl. Ausweichplätze, Ausfahrt bis zur Schleife); Plot-CarSpawn
+    und Einfahrt an allen 8 Slots (Vorlage mit Vollausbau); Checkpoints der Teststrecke; Auktions- und
+    Automaten-Bildschirme; kein Soon an den Stationen der Ausbaustufe 2/3
 Exit-Code 1 bei Fehlern (Warnungen nicht).
 """
 import math
@@ -44,7 +48,7 @@ DISTRICT_BUDGET = {
     "Stadtrand": (640, 0),           # Wäldchen in den leeren Ecken
 }
 FOLDER_BUDGET = {"Ground": (250, 0), "Roads": (610, 0), "Lights": (220, 52), "PlotSlots": (300, 0),
-                 "Animated": (2260, 0)}
+                 "Animated": (2260, 0), "CarSpawns": (12, 0), "Track": (14, 0)}
 TOTAL_BUDGET = 12000   # Gesamtobergrenze aller Stadt-Parts inkl. Autos und Verkehr (Merge-Vorgabe)
 LIGHT_BUDGET = 120
 
@@ -662,6 +666,8 @@ def main(argv):
                 if "Anim" in get_attrs(it) and id(it) not in inside and id(it) not in ps_ids]
     if bad_anim:
         warns.append("Anim-Attribut außerhalb City.Animated: %s" % bad_anim[:8])
+    # 8) Fahrzeuge, Strecke, Bildschirme
+    vehicle_checks(tree, city, parts, errors, warns, info, verbose)
     # Ausgabe
     for line in info:
         print(line)
@@ -671,6 +677,173 @@ def main(argv):
         print("FEHLER:" if not e.startswith("   ") else "      ", e.strip() if e.startswith("   ") else e)
     print("OK" if not errors else "%d Fehler" % sum(1 for e in errors if not e.startswith("   ")))
     return 0 if not errors else 1
+
+
+# ---------------------------------------------------------------- Fahrzeuge (PHASE2_CONTRACT §3)
+OPENED_STATIONS = ("dealer", "testdrive", "track", "carwash", "auction", "auction_consign", "arcade")
+REQUIRED_SPAWNS = ("dealer", "testdrive", "track", "carwash")
+
+
+def _bool_prop(item, name, default):
+    e = get_prop(item, name)
+    return default if e is None or e.text is None else e.text == "true"
+
+
+def _stage_parts(tree):
+    from worldgen.plots import slot_cf
+    ss = next(i for i in tree.getroot().findall("Item") if i.get("class") == "ServerStorage")
+    ext = child(ss, "WorkshopExtensions")
+    out = []
+    for slot, house, px, pz, rot in SLOTS:
+        for st in children(ext) if ext is not None else []:
+            scan.walk(st, "Plot%d.%s" % (slot, name_of(st)), False, slot_cf(px, pz, rot), out)
+    return out
+
+
+def _report_drive(errors, who, probs, verbose):
+    if probs:
+        errors.append("%s: %d Befahrbarkeits-Probleme" % (who, len(probs)))
+        for kind, x, z, off, detail in probs[: (60 if verbose else 5)]:
+            errors.append("   %s bei (%.1f, %.1f) Spur %+.1f: %s" % (kind, x, z, off, detail))
+
+
+def vehicle_checks(tree, city, parts, errors, warns, info, verbose=False):
+    from worldgen import drive, vehicles
+    from worldgen.ground_roads import traffic_loops
+    world = drive.World(parts)
+    # a) Verkehrsschleifen: alle Spuren ohne Stufe > 0.6 / Hindernis
+    for key, nm, pts, speed in traffic_loops():
+        offs = (-9.0, -4.5, 0.0, 4.5, 9.0) if key == "T" else (-5.0, 0.0, 5.0)
+        _report_drive(errors, "Schleife %s (%s)" % (key, nm), drive.drive(world, pts, -0.95, True, offs), verbose)
+    # b) CarSpawns
+    folder = child(city, "CarSpawns")
+    have = {name_of(c): c for c in children(folder)} if folder is not None else {}
+    miss = [k for k in REQUIRED_SPAWNS if k not in have]
+    if miss:
+        errors.append("CarSpawns fehlen: %s" % miss)
+    ok_spawns = 0
+
+    def check_spot(who, w, x, fy, z, yaw, alts):
+        nf, blk = drive.footprint_blockers(w, x, fy, z, yaw)
+        if nf or blk:
+            errors.append("%s: Stellfläche nicht frei (%s%s)" % (who, ("ohne Boden %s " % nf[:3]) if nf else "",
+                                                                  blk[:4]))
+            return False
+        (lx, lz), (rx, rz) = drive.look_right(yaw)
+        for st in alts:
+            ax, az = x + rx * st * 11, z + rz * st * 11
+            g = w.ground(ax, az, fy, 0.3)
+            nf, blk = drive.footprint_blockers(w, ax, fy if g is None else g, az, yaw)
+            if nf or blk:
+                errors.append("%s: Ausweichplatz %+d (%.1f, %.1f) nicht frei (%s%s)" % (
+                    who, st, ax, az, ("ohne Boden %s " % nf[:2]) if nf else "", blk[:3]))
+        return True
+    for key, it in have.items():
+        rec = scan.record(it, "City.CarSpawns." + key)
+        if rec.collide or rec.transp < 1 or not rec.anchored or _bool_prop(it, "CanTouch", True) or \
+                _bool_prop(it, "CanQuery", True):
+            errors.append("CarSpawn %s: muss unsichtbar, verankert, CanCollide/CanTouch/CanQuery false sein" % key)
+        spec = vehicles.CAR_SPAWNS.get(key)
+        if spec is None:
+            warns.append("CarSpawn %s nicht in vehicles.CAR_SPAWNS" % key)
+            continue
+        title, x, fy, z, yaw, alts, route = spec
+        look = rec.cf.look
+        want = drive.look_right(yaw)[0]
+        if abs(look[0] - want[0]) > 1e-3 or abs(look[2] - want[1]) > 1e-3 or abs(look[1]) > 1e-3:
+            errors.append("CarSpawn %s: Blickrichtung %s statt %s" % (key, look, want))
+        g = world.ground(x, z, fy, 0.3)
+        if g is None or abs(g - fy) > 0.12:
+            errors.append("CarSpawn %s: Boden %s statt %.2f" % (key, g, fy))
+        if abs(rec.aabb()[2] - fy) > 0.01:
+            errors.append("CarSpawn %s: Unterseite %.2f nicht auf dem Boden %.2f" % (key, rec.aabb()[2], fy))
+        if check_spot("CarSpawn " + key, world, x, fy, z, yaw, alts):
+            ok_spawns += 1
+        _report_drive(errors, "Ausfahrt CarSpawn " + key, drive.drive(world, route, fy, False), verbose)
+    info.append("CarSpawns: %d / %d frei und befahrbar (%s)" % (ok_spawns, len(have), ", ".join(sorted(have))))
+    # c) Plot-Vorlage: CarSpawn + Einfahrt an allen Slots (Vollausbau, ohne Vacant-Kit)
+    ws = scan.workspace(tree)
+    wk = child(ws, "Werkstatt")
+    cs = child(wk, "CarSpawn") if wk is not None else None
+    if cs is None:
+        errors.append("Plot-Vorlage: Part CarSpawn fehlt")
+    else:
+        rec = scan.record(cs, "Werkstatt.CarSpawn")
+        if rec.collide or rec.transp < 1 or not rec.anchored or _bool_prop(cs, "CanTouch", True):
+            errors.append("Plot-Vorlage CarSpawn: muss unsichtbar, verankert, CanCollide/CanTouch false sein")
+        plot_world = drive.World([p for p in parts if ".Vacant." not in p.path] + scan.plot_parts(tree) +
+                                 _stage_parts(tree))
+        lx, fy, lz, yaw0, alts = vehicles.PLOT_SPAWN
+        n_ok = 0
+        for slot, house, px, pz, rot in SLOTS:
+            x, fy, z, yaw = vehicles.plot_spawn_world(px, pz, rot)
+            w = rec.cf.p
+            wx, wz = loc2world(px, pz, rot, w[0], w[2])
+            if abs(wx - x) > 1e-3 or abs(wz - z) > 1e-3:
+                errors.append("Plot-CarSpawn: Vorlage (%.1f, %.1f) != vehicles.PLOT_SPAWN" % (w[0], w[2]))
+                break
+            ok = check_spot("Plot %d CarSpawn" % slot, plot_world, x, fy, z, yaw, alts)
+            probs = drive.drive(plot_world, vehicles.plot_route_world(px, pz, rot), fy, False)
+            _report_drive(errors, "Plot %d Ausfahrt" % slot, probs, verbose)
+            n_ok += ok and not probs
+        info.append("Plot-CarSpawn: %d / %d Slots frei und bis zur Meile befahrbar" % (n_ok, len(SLOTS)))
+    # d) Teststrecke
+    tr = child(city, "Track")
+    cps = child(tr, "Checkpoints") if tr is not None else None
+    if cps is None:
+        errors.append("City.Track.Checkpoints fehlt")
+    else:
+        names = [name_of(c) for c in children(cps)]
+        n = 0
+        while "CP%d" % (n + 1) in names:
+            n += 1
+        if n < 3 or n != len(names):
+            errors.append("Checkpoints: CP1..CPn lückenlos erwartet, gefunden %s" % names)
+        seq = [child(cps, "CP%d" % (i + 1)) for i in range(n)] + [child(tr, "Ziel")]
+        if seq[-1] is None:
+            errors.append("City.Track.Ziel fehlt")
+            seq = seq[:-1]
+        loop_t = next(pts for key, nm, pts, sp in traffic_loops() if key == "T")
+        samples = drive.polyline_samples(loop_t, True, 1.0)
+        for it in seq:
+            rec = scan.record(it, "City.Track." + name_of(it))
+            if rec.collide or rec.transp < 1 or not rec.anchored or not _bool_prop(it, "CanTouch", True):
+                errors.append("Checkpoint %s: unsichtbar, verankert, CanCollide false, CanTouch true erwartet" %
+                              rec.name)
+            c = rec.cf.p
+            d, dirv = min((math.hypot(sx - c[0], sz - c[2]), (dx, dz)) for sx, sz, dx, dz in samples)
+            if d > 3:
+                errors.append("Checkpoint %s liegt %.1f neben der Ideallinie" % (rec.name, d))
+            across = rec.cf.vector((1, 0, 0))
+            if rec.size[0] < vehicles.TRACK_WIDTH + 2 or abs(across[0] * dirv[0] + across[2] * dirv[1]) > 0.2:
+                errors.append("Checkpoint %s deckt die Streckenbreite nicht quer ab" % rec.name)
+            if rec.aabb()[2] > -0.95 + 0.01 or rec.aabb()[3] < 6:
+                errors.append("Checkpoint %s: Höhe %.2f..%.2f (Fahrzeug muss hindurch)" % (rec.name, rec.aabb()[2],
+                                                                                            rec.aabb()[3]))
+        info.append("Teststrecke: %d Checkpoints + Ziel" % n)
+    # e) Bildschirme
+    guis = [x for x in city.iter("Item") if x.get("class") == "SurfaceGui"]
+    auction = [g for g in guis if name_of(g) == "AuctionScreen"]
+    if len(auction) != 1:
+        errors.append("AuctionScreen: %d SurfaceGuis (soll 1)" % len(auction))
+    else:
+        labs = {name_of(x) for x in auction[0].iter("Item") if x.get("class") == "TextLabel"}
+        if {"Title", "Lot", "Bid", "Time"} - labs:
+            errors.append("AuctionScreen: Labels fehlen %s" % sorted({"Title", "Lot", "Bid", "Time"} - labs))
+    screens = [g for g in guis if name_of(g) == "Screen"]
+    titled = [g for g in screens if any(x.get("class") == "TextLabel" and name_of(x) == "Title" for x in g.iter("Item"))]
+    from worldgen.contract import ARCADE_GAMES
+    if len(titled) != len(ARCADE_GAMES) or len(screens) != len(ARCADE_GAMES):
+        errors.append("Spielhalle: %d Screens / %d mit Title (soll je %d)" % (len(screens), len(titled),
+                                                                            len(ARCADE_GAMES)))
+    walls = [p.path for p in parts if p.collide and p.transp >= 0.95 and p.name != "Grenze"]
+    if walls:
+        errors.append("Unsichtbare kollidierende Parts (nur die Stadtgrenze darf das): %s" % walls[:5])
+    st = child(city, "Stations")
+    soon = [name_of(s) for s in children(st) if (name_of(s) in OPENED_STATIONS or name_of(s).startswith("arcade_"))
+            and "Soon" in get_attrs(s)] if st is not None else []
+    if soon:
+        errors.append("Stationen noch mit Soon: %s" % soon)
 
 
 if __name__ == "__main__":

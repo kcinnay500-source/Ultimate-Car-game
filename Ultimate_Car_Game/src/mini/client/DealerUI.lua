@@ -78,6 +78,9 @@ Lib.SpawnNames = {
 	testdrive = "Übergabe-Halle",
 	track = "Teststrecke",
 	carwash = "Waschstraße",
+	plaza = "Stadtplatz",
+	scrapyard = "Schrottplatz",
+	tuning = "Tuning-Zentrum",
 	workshop = "Werkstatt",
 }
 Lib.NearSpawnDistance = 250

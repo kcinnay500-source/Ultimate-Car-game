@@ -42,6 +42,11 @@ UI.Tabs = {
 	{ key = "overview", label = "Übersicht" },
 	{ key = "press", label = "Schrottpresse" },
 	{ key = "tuning", label = "Tuning" },
+	{ key = "dealer", label = "Autohaus" },
+	{ key = "track", label = "Teststrecke" },
+	{ key = "carwash", label = "Waschstraße" },
+	{ key = "auction", label = "Auktion" },
+	{ key = "arcade", label = "Spielhalle" },
 	{ key = "scrapyard", label = "Schrottplatz" },
 	{ key = "quiz", label = "Quiz" },
 	{ key = "parking", label = "Parkplatz" },
@@ -53,7 +58,10 @@ UI.Tabs = {
 UI.TabTitles = {
 	overview = "Minispiele · Übersicht",
 	press = "Schrottpresse",
-	tuning = "Idle Tuning Garage",
+	tuning = "Tuning-Zentrum",
+	dealer = "Autohaus",
+	track = "Teststrecke",
+	carwash = "Waschstraße",
 	scrapyard = "Schrottplatz",
 	quiz = "Mechaniker-Quiz",
 	parking = "Parkplatz-Chaos",
@@ -61,6 +69,8 @@ UI.TabTitles = {
 	leaderboard = "Bestenliste",
 	map = "Schnellreise",
 	shop = "Game Passes",
+	auction = "Auktionshaus",
+	arcade = "Spielhalle",
 }
 
 UI.Pages = {} -- [key] = Frame
@@ -462,6 +472,10 @@ function UI.MirrorToast(text, force)
 	toastSerial += 1
 	local serial = toastSerial
 	UI.ToastLabel.Text = text
+	if type(UI.ToastTop) == "function" then
+		local ok, top = pcall(UI.ToastTop)
+		UI.ToastPanel.Position = UDim2.new(0.5, 0, 0, ok and type(top) == "number" and top or 62)
+	end
 	UI.ToastPanel.Visible = true
 	task.delay(4, function()
 		if serial == toastSerial and UI.ToastPanel then

@@ -116,6 +116,7 @@ local toastSerial=0
 local function toast(value)
     toastSerial=toastSerial+1;local serial=toastSerial
     toastLabel.Text=t(value);toastPanel.Visible=true
+    if MiniClient.ToastTop then local ok,top=pcall(MiniClient.ToastTop);toastPanel.Position=UDim2.new(0.5,0,0,ok and type(top)=="number" and top or 62) end -- 3.0: während der Fahrt unter dem Tacho
     task.delay(4,function() if serial==toastSerial then toastPanel.Visible=false end end)
 end
 overlay=make("Frame",gui,{Name="InteractionOverlay",Size=UDim2.fromScale(1,1),BackgroundColor3=Color3.new(),BackgroundTransparency=0.25,BorderSizePixel=0,Visible=false,ZIndex=10,Active=true})
@@ -305,6 +306,13 @@ local function shopPage()
                 productLoading[product.productId]=nil
             end)
         end
+    end
+    -- 3.0: Credit-Center: auch die Game Passes der Minispiele (Kauf über mini_pass_prompt, den Roblox-Dialog öffnet der Server)
+    local function passes() local s=MiniClient.Snapshot and MiniClient.Snapshot();return type(s)=="table" and type(s.passes)=="table" and s.passes or {} end -- 3.0
+    for _,pass in ipairs({{key="DoubleScrap",field="doubleScrap",name="Game Pass · 2× Schrott",sub="Doppelter Schrott aus Klicks und Maschinen der Schrottpresse. Kein Einfluss auf die Bestenliste."},{key="PressPlus",field="pressPlus",name="Game Pass · Schrottpresse+",sub="Stärkere Maschinen in der Schrottpresse. Kein Einfluss auf die Bestenliste."}}) do -- 3.0
+        local c=card(170);heading(c,pass.name,pass.sub,60) -- 3.0
+        bind(button(c,"",16,112,260,function() local ps=passes();if ps[pass.field] then return toast("Diesen Game Pass hast du bereits.") end;send("mini_pass_prompt",{pass=pass.key}) end,colors.purple),function() -- 3.0
+            local ps=passes();if ps[pass.field] then return "Bereits aktiv ✓" end;if ps[pass.field.."Configured"]==false then return "In Kürze verfügbar" end;return "Game Pass kaufen" end) -- 3.0
     end
 end
 local pages={home=homePage,workshop=workshopPage,parts=partsPage,upgrades=upgradesPage,shop=shopPage,tools=toolsPage}

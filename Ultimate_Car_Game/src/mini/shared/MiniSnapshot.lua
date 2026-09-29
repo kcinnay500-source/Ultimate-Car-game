@@ -7,10 +7,15 @@ local TuningRules = require(script.Parent:WaitForChild("TuningRules"))
 local SideGameRules = require(script.Parent:WaitForChild("SideGameRules"))
 local GoalRules = require(script.Parent:WaitForChild("GoalRules"))
 local CrossBonus = require(script.Parent:WaitForChild("CrossBonus"))
+local AuctionRules = require(script.Parent:WaitForChild("AuctionRules"))
+local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
 local C = require(script.Parent.Parent:WaitForChild("Config"))
 local R = require(script.Parent.Parent:WaitForChild("Rules"))
 
 local MiniSnapshot = {}
+
+-- Felder, die der Server in reinen Produktions-Snapshots weglassen darf; der Client behält dann die letzten Werte
+MiniSnapshot.StickyKeys = { "cars", "catalog" }
 
 local function copy(t)
 	local out = {}
@@ -165,6 +170,9 @@ function MiniSnapshot.Build(d, now, passes, quizState)
 			next = GoalRules.NextGoal(d, now),
 			boni = GoalRules.ActiveBoni(d, passes),
 		},
+		auction = AuctionRules.SnapshotFields(d),
+		arcade = ArcadeRules.SnapshotView(d, now),
+		-- Autos/Teststrecke (cars, catalog, track, spawnedCar, …) ergänzt MiniService über CarService.SnapshotFields
 		passes = {
 			doubleScrap = passes and passes.doubleScrap == true or false,
 			pressPlus = passes and passes.pressPlus == true or false,

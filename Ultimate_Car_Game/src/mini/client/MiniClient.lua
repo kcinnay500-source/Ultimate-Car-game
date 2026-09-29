@@ -34,6 +34,9 @@ local PAGES = {
 	overview = "OverviewUI",
 	press = "PressUI",
 	tuning = "TuningUI",
+	dealer = "DealerUI",
+	track = "TrackUI",
+	carwash = "CarwashUI",
 	scrapyard = "ScrapyardUI",
 	quiz = "QuizUI",
 	parking = "ParkingUI",
@@ -41,11 +44,14 @@ local PAGES = {
 	leaderboard = "LeaderboardUI",
 	map = "MapUI",
 	shop = "ShopUI",
+	auction = "AuctionUI",
+	arcade = "ArcadeUI",
 }
 
 local opts = {}
 local started, starting = false, false
 local UI, Remote, Effects, City
+local Drive -- DriveClient (Fahren: Tacho, Fahrregler, Nitro)
 local Modules = {}
 local latest, latestAt = nil, 0
 local warned = {}
@@ -127,6 +133,12 @@ function MiniClient.Toast(text)
 	end
 end
 
+-- Oberkante der Toasts (2.4.0-Toast und Spiegel): während der Fahrt unter dem Tacho, sonst 62
+function MiniClient.ToastTop()
+	local off = Drive and call(Drive.ToastOffset)
+	return type(off) == "number" and off or 62
+end
+
 function MiniClient.Snapshot()
 	return latest
 end
@@ -153,13 +165,26 @@ local function renderHeader()
 	UI.HeaderInfo.Text = MiniLocale.Credits(latest.credits or 0) .. " · " .. MiniLocale.Scrap(scrap) .. " · Level " .. tostring(latest.level or 1)
 end
 
+-- Vom Server weggelassene große Felder (MiniSnapshot.StickyKeys: cars, catalog) aus dem vorigen Snapshot übernehmen
+local STICKY = { "cars", "catalog" }
+
 local function onSnapshot(s)
 	if type(s) ~= "table" then
 		return
 	end
+	if latest then
+		for _, key in ipairs(STICKY) do
+			if s[key] == nil and latest[key] ~= nil then
+				s[key] = latest[key]
+			end
+		end
+	end
 	latest, latestAt = s, os.clock()
 	if Modules.press and Modules.press.OnSnapshot then
 		call(Modules.press.OnSnapshot, s)
+	end
+	if Drive then
+		call(Drive.OnSnapshot, s)
 	end
 	renderHeader()
 	renderVisible()
@@ -171,6 +196,22 @@ local function onNotice(data)
 		return
 	end
 	local kind = data.kind
+	-- Autos: jeder Bereich filtert selbst nach kind (car_*, testdrive_end, track_*, carwash)
+	for _, key in ipairs({ "dealer", "track", "carwash" }) do
+		local m = Modules[key]
+		if m and m.OnNotice then
+			call(m.OnNotice, data)
+		end
+	end
+	if Drive then
+		call(Drive.OnNotice, data)
+	end
+	-- Der Server hat den Spieler in ein Auto gesetzt (Autohaus, Probefahrt, Teststrecke, Waschstraße …) bzw. das
+	-- Zeitfahren läuft an: Panel schließen, sonst verdeckt es Sicht und Countdown, und auf dem Handy bleibt die
+	-- Touch-Steuerung (Stick) ausgeblendet, während die Uhr schon läuft.
+	if (kind == "car_spawned" or kind == "track_start") and MiniClient.IsOpen() then
+		MiniClient.Close()
+	end
 	if kind == "offline" then
 		local text = data.text
 		if type(text) ~= "string" and tonumber(data.scrap) then
@@ -183,6 +224,10 @@ local function onNotice(data)
 		call(Modules.quiz and Modules.quiz.OnResult, data)
 	elseif kind == "scrapyard" then
 		call(Modules.scrapyard and Modules.scrapyard.OnResult, data)
+	elseif kind == "auction_update" or kind == "auction_won" or kind == "auction_sold" then
+		call(Modules.auction and Modules.auction.OnNotice, data)
+	elseif type(kind) == "string" and string.sub(kind, 1, 7) == "arcade_" then
+		call(Modules.arcade and Modules.arcade.OnNotice, data)
 	elseif kind == "leaderboard" then
 		call(Modules.leaderboard and Modules.leaderboard.OnData, type(data.view) == "table" and data.view or data)
 	end
@@ -203,6 +248,7 @@ function MiniClient.Start(o)
 	City = require(folder:WaitForChild("CityClient"))
 
 	UI.Build()
+	UI.ToastTop = MiniClient.ToastTop
 	local ctx = {
 		UI = UI,
 		Remote = Remote,
@@ -211,6 +257,10 @@ function MiniClient.Start(o)
 		Locale = MiniLocale,
 		Toast = MiniClient.Toast,
 		Close = MiniClient.Close,
+		IsTabletOpen = function()
+			return call(opts.isTabletOpen) == true
+		end,
+		IsBlocked = MiniClient.IsBlocked,
 		OpenTablet = opts.openTablet and function(key)
 			MiniClient.Close()
 			call(opts.openTablet, key)
@@ -228,6 +278,16 @@ function MiniClient.Start(o)
 			warnOnce("build_" .. tab.key, "Bereich " .. tab.key .. " nicht geladen: " .. tostring(err))
 			UI.Small(page, "Dieser Bereich konnte nicht geladen werden.", 1)
 		end
+	end
+
+	-- Fahren (eigene ScreenGui "Fahren", läuft unabhängig vom Panel)
+	local okDrive, errDrive = pcall(function()
+		Drive = require(folder:WaitForChild("DriveClient", 10))
+		Drive.Start(ctx)
+	end)
+	if not okDrive then
+		Drive = nil
+		warnOnce("drive", "Fahren nicht geladen: " .. tostring(errDrive))
 	end
 
 	UI.OnTabShown = function(key)
@@ -253,8 +313,15 @@ function MiniClient.Start(o)
 			onSnapshot(value)
 		elseif kind == "mini_open" then
 			local tab = type(value) == "table" and value.tab or value
-			if type(tab) == "string" and UI.Pages[tab] then
+			if type(value) == "table" and value.page == "credits" and opts.openTablet and not MiniClient.IsBlocked() then
+				-- Credit-Center: 2.4.0-Credits-Shop im Tablet (dort auch die Game Passes)
+				MiniClient.Close()
+				call(opts.openTablet, "shop")
+			elseif type(tab) == "string" and UI.Pages[tab] then
 				MiniClient.Open(tab)
+				if tab == "arcade" and type(value) == "table" and type(value.game) == "string" then
+					call(Modules.arcade and Modules.arcade.Select, value.game)
+				end
 			end
 		elseif kind == "mini_notice" then
 			onNotice(value)

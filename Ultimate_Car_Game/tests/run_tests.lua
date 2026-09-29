@@ -781,6 +781,9 @@ for _, f in ipairs(testFiles) do
 			table.insert(T.failures, T.current .. ": Laufzeitfehler: " .. tostring(err))
 			T.checks += 1
 		end
+		-- Jeder Fall baut eine eigene Mock-Welt samt Event-Protokoll (bei Tages-Sprüngen mehrere GB). Sofort
+		-- freigeben, sonst wächst der Heap über mehrere Fälle, bis die inkrementelle GC nachzieht.
+		collectgarbage("collect")
 	end
 end
 

@@ -332,7 +332,7 @@ def build_dyno(dm, anim, lib):
     return car
 
 
-# ---------------------------------------------------------------- Z4 "DEIN AUTO · BALD" (Showroom-Ecke)
+# ---------------------------------------------------------------- Z4 "DEIN AUTO · TUNEN" (Showroom-Ecke)
 def build_showroom(dm, lib):
     m = lib.model(dm, "Showroom")
     x0, x1, z0, z1 = 250, 285, -239.5, -205
@@ -344,8 +344,8 @@ def build_showroom(dm, lib):
     lib.cylinder(m, "Drehteller", (cx, 0.27, cz), 0.3, 16, "Y", SLATE, "Metal")
     for z in (cz - 4, cz + 4):
         lib.box(m, "Schildpfosten", 282.7, 283.3, 0, 8.5, z - 0.3, z + 0.3, STEEL, "Metal")
-    lib.sign(m, "DEIN AUTO · BALD", (10, 3), CF.at(282.6, 7, cz, -90), AMBER, SLATE, name="Schild",
-             sub="Bring dein Projekt ins Tuning-Zentrum", sub_color=WHITE)
+    lib.sign(m, "DEIN AUTO · TUNEN", (10, 3), CF.at(282.6, 7, cz, -90), AMBER, SLATE, name="Schild",
+             sub="Leistung & Optik am Tuning-Tresen", sub_color=WHITE)
 
 
 # ---------------------------------------------------------------- Z5 Fahrgasse + Z6 Projektbuchten (Anim=lift)

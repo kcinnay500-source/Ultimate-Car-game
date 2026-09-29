@@ -10,7 +10,8 @@ local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 
 local CityService = {}
 
--- Anzeigenamen für Stationen, die in Ausbaustufe 1 noch nicht offen sind
+-- Ersatz-Anzeigenamen für Stationen ohne MiniTitle, deren Tab (noch) nicht existiert ("eröffnet bald").
+-- Seit Ausbaustufe 2/3 sind Autohaus, Teststrecke, Waschstraße, Auktion und Spielhalle echte Tabs.
 CityService.ComingSoon = {
 	dealer = "Das Autohaus", autohaus = "Das Autohaus",
 	auction = "Die Auktion", auktion = "Die Auktion",
@@ -126,6 +127,30 @@ function CityService.Init(a)
 	end)
 end
 
+-- Figur aus einem Sitz lösen, BEVOR sie per PivotTo versetzt wird. Humanoid.Sit = false ist auf einem
+-- Live-Server nur eine Bitte (der Humanoid gehört dem Client, die SeatWeld verschwindet erst später). Solange
+-- die SeatWeld existiert, ist die Figur Teil der Fahrzeug-Baugruppe und PivotTo würde das ganze Auto mitziehen.
+-- Deshalb die SeatWeld unter dem Sitz sofort zerstören. Rückgabe: true, wenn die Figur gesessen hat.
+function CityService.Unseat(humanoid)
+	if not humanoid then
+		return false
+	end
+	local was = false
+	local ok = pcall(function()
+		local sp = humanoid.SeatPart
+		if sp then
+			was = true
+			local w = sp:FindFirstChild("SeatWeld")
+			while w do
+				w:Destroy()
+				w = sp:FindFirstChild("SeatWeld")
+			end
+		end
+		humanoid.Sit = false
+	end)
+	return ok and was
+end
+
 -- Reise: key = "workshop" (eigene Werkstatt, Stations.home) oder ein Kind von City.Arrivals.
 -- moveTo = GarageServer.moveTo (plotlokal). Rückgabe: ok, Hinweistext
 function CityService.Travel(p, key, moveTo)
@@ -156,7 +181,7 @@ function CityService.Travel(p, key, moveTo)
 	if not root or not humanoid or humanoid.Health <= 0 then
 		return false, MiniLocale.T("travel_blocked")
 	end
-	humanoid.Sit = false
+	CityService.Unseat(humanoid) -- SeatWeld weg, sonst reist das ganze Auto mit
 	ch:PivotTo(destination)
 	root.AssemblyLinearVelocity = Vector3.new()
 	root.AssemblyAngularVelocity = Vector3.new()

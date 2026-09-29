@@ -30,7 +30,8 @@ local Lib -- DealerUI.Lib (3D-Vorschau), optional
 local INTRO = "Hier kommen seltene Sondermodelle unter den Hammer – für alle Spieler auf diesem Server, eine "
 	.. "Versteigerung nach der anderen. NPC-Bieter bieten immer genau das Mindestgebot und höchstens bis zu ihrem "
 	.. "Limit (Spanne steht dabei). Ein Gebot in den letzten 15 Sekunden verlängert die Restzeit wieder auf 15 Sekunden. "
-	.. "Bezahlt wird erst beim Zuschlag – dann muss dein Guthaben noch reichen, sonst gewinnt das nächste Gebot."
+	.. "Bezahlt wird erst beim Zuschlag – dann muss dein Guthaben noch reichen. Deine Höchstgebote auf mehreren Losen "
+	.. "müssen zusammen gedeckt sein. Platzt das Höchstgebot, läuft die Auktion 30 Sekunden weiter."
 
 local function num(v)
 	v = tonumber(v)

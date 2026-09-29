@@ -248,6 +248,12 @@ local function rebuildLocal(dropRid)
 	for _, e in ipairs(keep) do
 		K.input(cur.p, cur.st, e.t, e.v, nil)
 	end
+	-- BLITZ-REAKTION: bereits bestätigte Server-Bewertungen behalten
+	if cur.serverRes and cur.st.res then
+		for i, res in pairs(cur.serverRes) do
+			cur.st.res[i] = res
+		end
+	end
 end
 
 local finishRound -- vorwärts
@@ -332,18 +338,21 @@ local function makeReaction(host, controlsHost)
 		refreshDots()
 	end
 
+	-- Die Ausgeh-Zeitpunkte g kennt der Client erst durch "arcade_go" (Server sendet sie im Moment selbst).
+	-- Bis dahin bleiben nach dem Aufleuchten alle Lampen an.
 	function v.frame(t)
 		local p = cur.p
 		local idx, a
 		for i, at in ipairs(p.attempts) do
-			if t <= at.g + p.window then
+			if t >= at.l or i == 1 then
 				idx, a = i, at
-				break
 			end
 		end
-		if not a then
+		if not a or (a.g and t > a.g + p.window and idx == #p.attempts) then
 			setLamps(0)
-			return
+			if not a then
+				return
+			end
 		end
 		if t >= a.l and shownAttempt ~= idx then
 			shownAttempt = idx
@@ -353,17 +362,17 @@ local function makeReaction(host, controlsHost)
 			gantryStroke.Color = N.dim
 		end
 		local count = 0
-		if t >= a.l and t < a.g then
+		if t >= a.l and (a.g == nil or t < a.g) then
 			count = math.min(p.lights, math.floor((t - a.l) / p.lightStep) + 1)
 		end
 		setLamps(count)
-		if t >= a.g and not goFlash[idx] then
+		if a.g and t >= a.g and not goFlash[idx] then
 			goFlash[idx] = true
 			gantryStroke.Color = N.green
 		end
 		-- Fenster vorbei ohne Druck: verpasst
 		for i, at in ipairs(p.attempts) do
-			if not missed[i] and not cur.st.res[i] and t > at.g + p.window then
+			if not missed[i] and not cur.st.res[i] and at.g and t > at.g + p.window then
 				missed[i] = true
 				big.Text = "Verpasst!"
 				big.TextColor3 = N.red
@@ -400,6 +409,29 @@ local function makeReaction(host, controlsHost)
 			pop("+" .. info.points, N.cyan, 0.5, 0.45)
 			if info.points >= 190 then
 				flash(N.green, 0.25)
+			end
+		end
+		refreshDots()
+	end
+
+	-- Bewertung des Servers (arcade_step) übernehmen: sie gilt, auch wenn "arcade_go" beim Drücken noch unterwegs war
+	function v.step(info)
+		local i = num(info.attempt)
+		if not i or not cur.p.attempts[i] then
+			return
+		end
+		local res = info.early and { early = true, points = 0 } or { r = num(info.reaction) or 0, points = num(info.points) or 0 }
+		cur.serverRes = cur.serverRes or {}
+		cur.serverRes[i] = res
+		local before = cur.st.res[i]
+		cur.st.res[i] = res
+		if not before or before.early ~= res.early or before.points ~= res.points then
+			if res.early then
+				big.Text = "FRÜHSTART!"
+				big.TextColor3 = N.red
+			else
+				big.Text = fmt(res.r, 3) .. " s"
+				big.TextColor3 = res.points >= 150 and N.green or (res.points > 0 and N.amber or N.red)
 			end
 		end
 		refreshDots()
@@ -1635,7 +1667,8 @@ local KEYMAP = {
 
 local function onAction(_, state, input)
 	local action = input and KEYMAP[input.KeyCode]
-	if not action or not cur or not cur.view or cur.result then
+	-- Nach Rundenende (finishing/result) gehören die Tasten wieder der Figur (Laufen, Springen)
+	if not action or not cur or not cur.view or cur.result or cur.finishing then
 		return Enum.ContextActionResult.Pass
 	end
 	if state == Enum.UserInputState.Begin then
@@ -1794,6 +1827,8 @@ finishRound = function()
 	end
 	cur.finishing = true
 	cur.finishAt = os.clock()
+	-- Tasten sofort freigeben: kommt die Auswertung nie an, bliebe die Figur sonst auf der Tastatur eingefroren
+	unbindKeys()
 	if cur.view then
 		pcall(cur.view.stop)
 	end
@@ -1993,8 +2028,20 @@ local function onStep(data)
 		end
 		return
 	end
-	if cur.kind == "engine" then
+	if cur.kind == "engine" or (cur.kind == "reaction" and cur.view.step) then
 		cur.view.step(data)
+	end
+end
+
+-- BLITZ-REAKTION: Lampen aus (mini_notice "arcade_go" {token, attempt, g})
+local function onGo(data)
+	if not cur or data.token ~= cur.token or cur.kind ~= "reaction" or cur.result then
+		return
+	end
+	local i, g = num(data.attempt), num(data.g)
+	local a = i and cur.p.attempts and cur.p.attempts[i]
+	if a and g then
+		a.g = g
 	end
 end
 
@@ -2243,6 +2290,8 @@ function ArcadeUI.OnNotice(data)
 			onRound(data)
 		elseif data.kind == "arcade_step" then
 			onStep(data)
+		elseif data.kind == "arcade_go" then
+			onGo(data)
 		elseif data.kind == "arcade_result" then
 			onResult(data)
 		end

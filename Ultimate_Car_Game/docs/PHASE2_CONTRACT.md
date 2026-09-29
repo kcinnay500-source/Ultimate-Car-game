@@ -23,7 +23,7 @@ d.games.carSerial = <int>
 d.games.activeCar = <int id oder 0>
 d.games.track     = { best=<Sekunden oder 0>, rewardedBest=<Sekunden oder 0>, runs=<int> }
 d.games.arcade    = { day=<"YYYY-MM-DD">, earned=<Cr heute>, best={ [gameKey]=<score> } }
-d.games.auction   = { won=<int>, sold=<int> }
+d.games.auction   = { won=<int>, sold=<int>, partners={ {u=<userId>, at=<unix>} } (≤ 20, 24 h), received={ <tid> } (≤ 20) }
 ```
 
 - Jedes Modul liefert `Default()` und `Load(raw, d, now)` (normalisiert, idempotent, NaN/negativ → Standard, unbekannte Modell-IDs verworfen). `MiniRules.DefaultGames/LoadGames` rufen sie auf.
@@ -44,7 +44,8 @@ d.games.auction   = { won=<int>, sold=<int> }
 | `src/mini/server/ArcadeService.lua` | Runden starten/auswerten, Aktionen §4 (Spielhalle) |
 | `src/mini/client/DealerUI.lua` | Tab `dealer`: Katalog mit 3D-Vorschau (ViewportFrame aus `GarageShared.PreviewCars`), Kaufen, Probefahrt, „Meine Autos“ (holen/abstellen/verkaufen) |
 | `src/mini/client/CarTuningUI.lua` | Unterseite im Tab `tuning` („Mein Auto tunen“) |
-| `src/mini/client/DriveClient.lua` | Tacho-HUD beim Fahren (km/h, Gang-Anzeige, Nitro-Taste N / Handy-Knopf), Zeitfahren-Anzeige, Kamera bleibt Roblox-Standard |
+| `src/mini/client/DriveClient.lua` | Tacho-HUD beim Fahren (km/h, Gang-Anzeige, Nitro-Taste N / Handy-Knopf) unter der 2.4.0-Fortschrittsleiste, weicht dem 2.4.0-Tablet; Zeitfahren-Anzeige; „Auto aufrichten“ (R / Handy-Knopf, wenn das Auto umgekippt liegen bleibt); Fahrwerte (Torque …) jedes Frame aus den Modell-Attributen; Kamera bleibt Roblox-Standard |
+| `src/mini/server/AuctionLedger.lua` | Auktionsbuch: Übergaben je Spieler (DataStore), Abgleich beim Laden (`Mini.Reconcile`) |
 | `src/mini/client/TrackUI.lua` | Tab `track`: Bestzeit, Start des Zeitfahrens |
 | `src/mini/client/AuctionUI.lua` | Tab `auction`: laufende NPC-Auktion, Spieler-Auktionen, Bieten, Einliefern |
 | `src/mini/client/ArcadeUI.lua` | Tab `arcade`: Automatenauswahl + die Spieloberflächen |
@@ -59,7 +60,7 @@ Teststrecke: `mini_track_start`, (Checkpoints serverseitig über Berührung).
 Auktion: `mini_auction_bid {lot, amount}` (Betrag ist ein Gebot = Absicht; Server prüft gegen Mindestgebot und Guthaben), `mini_auction_consign {id, start, duration}` (start aus erlaubten Stufen, duration ∈ {120, 300, 600}), `mini_auction_cancel {lot}` (nur ohne Gebote).
 Spielhalle: `mini_arcade_start {game}`, `mini_arcade_input {token, at, value}` (`at` = `GetServerTimeNow()` des Clients, nur zur Bewertung innerhalb enger Toleranz wie 2.4.0-QTE; `value` = gewählte Option), `mini_arcade_finish {token}`.
 
-Server → Client: `mini` (Snapshot), `mini_notice {kind=...}` mit `car_spawned`, `testdrive_end`, `track_checkpoint`, `track_finish`, `auction_update` (öffentlicher Auktionszustand an alle), `auction_won`, `auction_sold`, `arcade_round` (Rundenparameter), `arcade_result`.
+Server → Client: `mini` (Snapshot), `mini_notice {kind=...}` mit `car_spawned`, `testdrive_end`, `track_checkpoint`, `track_finish`, `auction_update` (öffentlicher Auktionszustand an alle), `auction_won`, `auction_sold`, `arcade_round` (Rundenparameter), `arcade_go` (BLITZ-REAKTION: Lampen aus), `arcade_result`.
 
 ## 5. Snapshot-Felder (zusätzlich)
 
@@ -68,9 +69,10 @@ Server → Client: `mini` (Snapshot), `mini_notice {kind=...}` mit `car_spawned`
 ## 6. Sicherheit
 
 - Kauf/Tuning/Stil: gesehene Stufe gegen Doppelklick, Level-Voraussetzung, Guthaben, Deckel `C.NumberCap`.
-- Fahrzeuge: max. 1 gespawntes Auto pro Spieler + 1 Probefahrt; Despawn beim Verlassen; Fahrzeug-Modelle unter `workspace.PlayerCars`; fremde Spieler können nicht einsteigen (Sitz leert sich sofort); Abstand-/Geschwindigkeits-Plausibilität beim Zeitfahren (Mindestzeit je Abschnitt).
-- Auktion: nur Spieler mit schreibbarem Profil (kein Studio-/Ersatzprofil) dürfen einliefern oder bei Spieler-Auktionen bieten. Übergabe Auto + Geld passiert synchron in einem Server-Schritt, danach sofort `P.Save` beider Profile. Verlässt der Verkäufer den Server, wird die Auktion abgebrochen (Auto entsperrt). Verlässt ein Bieter, fällt sein Gebot weg. Gebot erfordert Guthaben ≥ Gebot zum Gebotszeitpunkt; bei Abrechnung erneut geprüft, sonst gewinnt das nächsthöhere gültige Gebot. Nie Geldänderung außerhalb `request()` für den Spieler ohne `transacting`-Prüfung: Abrechnung wartet, solange ein beteiligtes Profil `transacting` ist.
-- Spielhalle: Bewertung ausschließlich aus Server-Zeit + Rundentoken; ein Token = eine Auszahlung; Tageslimit.
+- Fahrzeuge: max. 1 gespawntes Auto pro Spieler + 1 Probefahrt; Despawn beim Verlassen; Fahrzeug-Modelle unter `workspace.PlayerCars`; fremde Spieler können nicht einsteigen (Sitz leert sich sofort); Abstand-/Geschwindigkeits-Plausibilität beim Zeitfahren (Mindestzeit je Abschnitt und je Runde aus dem Tempo des **gefahrenen** Autos: Spitze × Nitro × `speedMargin`; Tuning während des Laufs passt nur nach unten an).
+- Figur versetzen (Reise, Werkstatt, Probefahrt): vor jedem serverseitigen `PivotTo` der Figur zuerst die `SeatWeld` unter dem Sitz zerstören (`CityService.Unseat`), `Humanoid.Sit = false` allein löst sie auf einem Live-Server nicht sofort – sonst reist das ganze Auto mit.
+- Auktion: nur Spieler mit schreibbarem Profil (kein Studio-/Ersatzprofil) dürfen einliefern oder bei Spieler-Auktionen bieten. Übergabe Auto + Geld passiert synchron in einem Server-Schritt, danach sofort `P.Save` beider Profile. Verlässt der Verkäufer den Server, wird die Auktion abgebrochen (Auto entsperrt). Verlässt ein Bieter, fällt sein Gebot weg. Gebot erfordert **freies** Guthaben ≥ Gebot zum Gebotszeitpunkt (Guthaben minus eigene Höchstgebote auf anderen laufenden Losen); bei Abrechnung erneut geprüft. Fällt dabei das **Höchstgebot** weg (nicht gedeckt, Garage voll, …), läuft das Los 30 s weiter (höchstens 2-mal; Gebote des Bieters gestrichen, NPC-Bedenkzeiten neu), damit ein Scheingebot am Höchstbetrag nicht einem Niedriggebot den Zuschlag verschafft; wer nicht zahlen konnte, darf 10 Minuten nicht bieten. Verlässt der Höchstbieter kurz vor Schluss den Server, bleiben ebenfalls 30 s. Danach gewinnt das nächsthöhere gültige Gebot. Geldschieben: Käufer und Verkäufer einer Spieler-Auktion können 24 h lang nicht erneut miteinander handeln (beide Richtungen, `d.games.auction.partners`). Übergabe: nach dem Server-Schritt wird sie ins Auktionsbuch (DataStore `UCG_Auktionsbuch_v1`, Schlüssel `U_<userId>`) geschrieben, danach beide Profile gespeichert. Beim Laden gleicht `Mini.Reconcile` ab: Verkäufer-Profil mit dem übergebenen Auto (gleiche Id, Modell, Kaufzeit) → Auto weg, Auszahlung gutgeschrieben; Käufer-Profil ohne die Übergabe-Id in `received` → Auto dazu, Preis ab. Restrisiko: Absturz in den Millisekunden zwischen Übergabe und Buch-Eintrag, wenn genau dann ein Autosave eines der beiden Profile landet. Nie Geldänderung außerhalb `request()` für den Spieler ohne `transacting`-Prüfung: Abrechnung wartet, solange ein beteiligtes Profil `transacting` ist.
+- Spielhalle: Bewertung ausschließlich aus Server-Zeit + Rundentoken; ein Token = eine Auszahlung; Tageslimit. `at` darf höchstens bis Ankunft − Einweg-Latenz (`Player:GetNetworkPing()/2`, ≤ 0,15 s) − 0,05 s zurückliegen (sonst angehoben). BLITZ-REAKTION: Startzeiten fest getaktet, die Zeitpunkte des Lampen-Aus stehen nicht im Rundenpaket, sondern kommen erst im Moment selbst (`mini_notice arcade_go {token, attempt, g}`); die Reaktionszeit wird um die Einweg-Latenz bereinigt.
 - Keine Glücksspiel-Mechanik, keine bezahlten Zufallsbelohnungen.
 
 ## 7. Balance-Ziele

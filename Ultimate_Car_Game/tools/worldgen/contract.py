@@ -4,7 +4,7 @@ Zentral und tabellengesteuert, damit der Vertrag unabhängig vom Stand der Distr
 District-Module legen KEINE eigenen Stations/Arrivals an, sondern bauen nur die Kulisse drumherum.
 
 Station: City.Stations.<key>, unsichtbares verankertes Part 1x1x1, CanCollide false, Attribute MiniTab
-(+ MiniTitle, optional Game / Soon), ProximityPrompt "Öffnen" (E, Hold 0,25, Reichweite 10, ohne Sichtlinie),
+(+ MiniTitle, optional Game / GameKey / Soon), ProximityPrompt "Öffnen" (E, Hold 0,25, Reichweite 10, ohne Sichtlinie),
 Kind-Attachment "Arrival" 6 Studs auf der Spielerseite, 3,5 über dem Boden, Blick zum Anker.
 Arrival: City.Arrivals.<key>, unsichtbares Part 2x1x2 mit Mittelpunkt auf Bodenhöhe (CityService
 teleportiert nach CFrame * (0, Size.Y/2 + 3, 0) = Boden + 3,5), LookVector = Blickrichtung.
@@ -22,22 +22,22 @@ STATIONS = {
     "meile_map": ("map", "Meile-Verzeichnis", (-14, 2.5, -31.5), "S", -0.5, {}),     # Spec X -16 (Pylon verschoben)
     "goals_platz": ("goals", "Infotafel · Tagesziele", (30, 2.5, -145), "S", -0.5, {}),
     "leaderboard": ("leaderboard", "Bestenliste", (-30, 2.5, -145), "S", -0.5, {}),
-    "arcade": ("arcade", "Spielhalle · Punkte-Schalter", (-80, 3, -97), "S", 0, {"Soon": True}),
+    "arcade": ("arcade", "Spielhalle · Punkte-Schalter", (-80, 3, -97), "S", 0, {}),
     "quiz": ("quiz", "Meisterschule · Mechaniker-Quiz", (-116, 3, -148), "E", 0, {}),
     # Auktion: Spec X 81 -> 84.5, damit die Spielerseite neben der Portalwand 10 x 10 frei hat (plaza_buildings)
-    "auction": ("auction", "Auktionshaus · Bieterkasse", (84.5, 3, -101), "S", 0, {"Soon": True}),
-    "auction_consign": ("auction", "Auktionshaus · Einlieferung", (84.5, 3, -51), "N", 0, {"Soon": True}),
+    "auction": ("auction", "Auktionshaus · Bieterkasse", (84.5, 3, -101), "S", 0, {}),
+    "auction_consign": ("auction", "Auktionshaus · Einlieferung", (84.5, 3, -51), "N", 0, {}),
     "shop": ("shop", "Credit-Center", (114, 3, -152), "W", 0, {}),
     "parking": ("parking", "Parkplatz-Chaos", (-65, 2.5, -236.5), "S", -1.0, {}),
-    "dealer": ("dealer", "Autohaus · Verkauf", (-20, 3, 100), "N", 0, {"Soon": True}),
-    "testdrive": ("dealer", "Übergabe · Testfahrt", (90, 3, 70), "W", 0, {"Soon": True}),
+    "dealer": ("dealer", "Autohaus · Verkauf", (-20, 3, 100), "N", 0, {}),
+    "testdrive": ("dealer", "Übergabe · Testfahrt", (90, 3, 70), "W", 0, {}),
     "tuning": ("tuning", "Tuning-Zentrum", (234, 3, -201), "W", 0, {}),
     "dyno": ("tuning", "Leistungsprüfstand", (310, 3, -206), "S", 0, {}),
     "press": ("press", "Schrottpresse", (-321, 3, -220), "E", 0, {}),
     "scrap_trader": ("press", "Schrotthändler · Ankauf", (-220, 3, -213), "S", -1.0, {}),     # Betonzufahrt
     "scrapyard": ("scrapyard", "Zerlegeplatz", (-262, 3, -191), "N", -0.85, {}),        # auf der Fahrzeugwaage
-    "carwash": ("carwash", "Waschstraße", (304, 3, 218), "N", -1.0, {"Soon": True}),   # Spec 209: s. parking_misc
-    "track": ("track", "Teststrecke", (0, 3, 224), "N", -0.5, {"Soon": True}),
+    "carwash": ("carwash", "Waschstraße", (304, 3, 218), "N", -1.0, {}),   # Spec 209: s. parking_misc
+    "track": ("track", "Teststrecke", (0, 3, 224), "N", -0.5, {}),
 }
 ARCADE_GAMES = [
     ("arcade_1", "BLITZ-REAKTION", (-121, 3, -60), "E"),
@@ -50,7 +50,7 @@ ARCADE_GAMES = [
     ("arcade_8", "RENNSIMULATOR 2", (-90, 3, -43.5), "S"),
 ]
 for _k, _g, _p, _s in ARCADE_GAMES:
-    STATIONS[_k] = ("arcade", "Spielhalle · " + _g.title(), _p, _s, 0, {"Soon": True, "Game": _g})
+    STATIONS[_k] = ("arcade", "Spielhalle · " + _g.title(), _p, _s, 0, {"Game": _g, "GameKey": _k})
 
 # key: (x, Bodenhöhe, z, Blickrichtung)
 ARRIVALS = {

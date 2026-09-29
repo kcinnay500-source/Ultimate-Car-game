@@ -19,7 +19,6 @@ Was die automatischen Tests nicht abdecken können: Rendering, echtes Netzwerk, 
 - [ ] Die 2.4.0-Werkstatt funktioniert unverändert: Auftrag annehmen, OBD, Hebebühne (F), Motorhaube (H), Reparatur-QTE, Endkontrolle, Abrechnen, Hallenanbau, Rolltor.
 - [ ] Werkstätten auf der Südseite (gedreht): Ankunft, Rolltor und Bühnen funktionieren genauso.
 - [ ] Taste **M** öffnet die Minispiele; während einer Reparatur-QTE öffnet es nicht; Tablet (Tab) und Minispiele überlagern sich nicht.
-- [ ] Autohaus, Auktionshaus, Spielhalle zeigen „Eröffnet bald“.
 - [ ] Große Zahlen erscheinen als „1,2 Mio.“, „3,5 Mrd.“ usw.
 
 ## Schrottpresse
@@ -66,3 +65,20 @@ Was die automatischen Tests nicht abdecken können: Rendering, echtes Netzwerk, 
 
 - [ ] Ohne IDs zeigen beide Pässe „noch nicht eingerichtet“, der Kauf startet nicht.
 - [ ] Nach Eintragen echter IDs in `src/shared/Config.lua` (`Config.GamePasses`) und neuem Build startet das Kauffenster.
+
+## Autos, Fahren, Tuning (nur in Studio prüfbar: echte Physik)
+
+- [ ] Autohaus: Komet C1 kaufen (Bestätigung), unter „Meine Autos“ holen – das Auto erscheint am Spawnpunkt.
+- [ ] Einsteigen und fahren (WASD / Handy-Steuerung): Federung federt, Räder drehen, Lenkrichtung stimmt, Bremsen und Rückwärts funktionieren; Bordsteine und Einfahrten sind befahrbar.
+- [ ] Tacho zeigt km/h, Nitro (N / Knopf) gibt kurz Schub. Jede Karosserie einmal fahren (9 Stück): nichts schlägt aus, kein Kopf durchs Dach.
+- [ ] Ein anderer Spieler kann dein Auto nicht fahren. Umgekipptes Auto lässt sich wieder aufrichten.
+- [ ] Tuning-Zentrum: Motorstufe kaufen, während man im Auto sitzt → wirkt sofort; Lack/Felgen/Unterbodenlicht/Spoiler ändern sich sichtbar.
+- [ ] Probefahrt: 60 s, danach verschwindet das Auto. Waschstraße: Glanz-Effekt.
+- [ ] Teststrecke: Zeitfahren starten, Checkpoints zählen, Bestzeit und Belohnung.
+
+## Auktionshaus und Spielhalle
+
+- [ ] NPC-Auktion läuft, Bieten erhöht den Preis, Bildschirm im Saal zeigt Los, Gebot und Zeit; Gewinn landet unter „Meine Autos“.
+- [ ] Spieler-Auktion (2 Spieler, veröffentlichtes Spiel mit Speichern): einliefern, bieten, Übergabe von Auto und Credits; Verkäufer verlässt → Auktion abgebrochen.
+- [ ] Jeder der 8 Automaten startet, reagiert flüssig auf Maus/Touch und zahlt nach Leistung; Tageslimit greift.
+- [ ] Credit-Center öffnet den Credits-Shop (Robux-Produkte erst mit eingetragenen IDs).

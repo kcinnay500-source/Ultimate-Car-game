@@ -95,7 +95,7 @@ local function moveTo(p,part)
     local ch=p.player.Character;local root=ch:FindFirstChild("HumanoidRootPart")
     local humanoid=ch:FindFirstChildOfClass("Humanoid")
     if not root or not humanoid or humanoid.Health<=0 then return end
-    humanoid.Sit=false
+    Mini.Unseat(humanoid) -- 3.0: SeatWeld sofort lösen, sonst zieht PivotTo ein gefahrenes Auto mit
     ch:PivotTo(destination or plot*CFrame.new(here.X,3.5,here.Z+6)) -- 3.0: plotlokal statt Welt-X/Z
     root.AssemblyLinearVelocity=Vector3.new();root.AssemblyAngularVelocity=Vector3.new()
 end
@@ -407,6 +407,7 @@ local function join(player)
     if sessions[player] or joining[player] then return end
     joining[player]=true
     local profile=P.Load(player)
+    Mini.Reconcile(player,profile) -- 3.0: Auktions-Übergaben abgleichen, falls nur ein Profil gespeichert wurde
     if not player.Parent then joining[player]=nil;P.Save(profile,true);return end
     local p={player=player,profile=profile,tool="scanner",revision=1,cooldowns={},lastPush=0}
     local _,cycle=R.DayClock(now(),dayEpoch);p.dayCycle=cycle

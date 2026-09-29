@@ -24,8 +24,10 @@ return {
 		T.near(PR.GlobalMultiplier(d), global, 1e-9, "globaler Multiplikator")
 		T.near(PR.ClickPower(d), (5 + 2 * 1) * global, 1e-9, "Klickstärke mit Upgrades")
 		T.near(PR.MachinePower(d), (1 + 4 * 1 * 0.35) * global, 1e-9, "Maschine mit Upgrades")
-		T.near(PR.WorkshopMultiplier(d), 1 + (global - 1) * 0.6, 1e-9, "Werkstatt-Querbonus 0,6")
-		T.near(PR.TuningMultiplier(d), 1 + (global - 1) * 0.8, 1e-9, "Tuning-Querbonus 0,8")
+		local MCfg = g:MiniShared("MiniConfig")
+		T.near(PR.WorkshopMultiplier(d), 1 + (global - 1) * MCfg.PressWorkshopShare, 1e-9, "Werkstatt-Querbonus (Anteil aus MiniConfig)")
+		T.near(PR.TuningMultiplier(d), 1 + (global - 1) * MCfg.PressTuningShare, 1e-9, "Tuning-Querbonus (Anteil aus MiniConfig)")
+		T.check(MCfg.PressWorkshopShare > 0 and MCfg.PressWorkshopShare <= 0.1, "Presse-Querbonus klein (docs/BALANCE.md)")
 	end },
 
 	{ "Erstes Upgrade in höchstens 15 s Klicken", function(T, H)
@@ -242,14 +244,16 @@ return {
 		local g, p, d = joined(H)
 		local MC, MiniNet = g:MiniShared("MiniConfig"), g:MiniShared("MiniNet")
 		d.games.press.upgrades = {}
-		d.games.press.scrap = 150
-		d.games.press.lifetime = 150
+		local pack = MC.ScrapExchangePackages[1]
+		d.games.press.scrap = pack * 1.5
+		d.games.press.lifetime = pack * 1.5
 		local money = d.money
 		local m = g:Mark()
 		g:Act(p, "mini_press_exchange", { index = 1, rid = 1 })
-		T.eq(d.money, money + math.floor(100 / MC.ScrapPerCredit * MC.ScrapExchangePayout), "Kurs 100 Schrott -> 20 Cr")
-		T.check(d.games.press.scrap < 51, "Schrott abgezogen")
-		T.check(d.games.press.lifetime >= 150, "Bestenlistenwert sinkt nicht")
+		T.eq(d.money, money + math.floor(pack / MC.ScrapPerCredit * MC.ScrapExchangePayout), "Kurs aus MiniConfig")
+		T.check(math.floor(pack / MC.ScrapPerCredit * MC.ScrapExchangePayout) >= 1, "kleinstes Paket bringt mindestens 1 Cr")
+		T.check(d.games.press.scrap < pack * 0.5 + 1, "Schrott abgezogen")
+		T.check(d.games.press.lifetime >= pack * 1.5, "Bestenlistenwert sinkt nicht")
 		T.check(g:HasToast(p, "Schrotthändler", m), "Toast als 2.4.0-String")
 		T.eq(g:State(p).data.money, d.money, "2.4.0-Zustand zeigt den neuen Kontostand")
 		T.eq(p.leaderstats.Credits.Value, math.floor(d.money), "leaderstats aktualisiert")

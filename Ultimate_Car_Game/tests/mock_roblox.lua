@@ -11,7 +11,9 @@ local realOs = os
 
 ---------------------------------------------------------------- Kontexte (Server / Client je Spieler)
 -- Jede Coroutine erbt den Kontext ihres Erzeugers; Signal-Handler laufen im Kontext des Verbinders.
-local ctxOf = setmetatable({}, { __mode = "k" })
+-- Schlüssel und Werte schwach: Luau kennt keine Ephemeronen, und ctx -> env -> Scheduler -> Coroutine hielte sonst
+-- jede alte Mock-Welt für immer fest (mehrere GB über die Testsuite). Kontexte hält die Welt selbst (env.*Ctx).
+local ctxOf = setmetatable({}, { __mode = "kv" })
 local function currentCtx(env)
 	local co = coroutine.running()
 	local c = co and ctxOf[co]
@@ -2222,11 +2224,41 @@ function MM:GetPivot()
 	local mn, mx = boundingBox(parts)
 	return CFrame.new((mn + mx) / 2)
 end
+-- Roblox: Eine Figur, die noch per SeatWeld (Weld "SeatWeld" unter dem Sitz, Part1 in der Figur) an einem Sitz hängt,
+-- gehört zur Baugruppe des Fahrzeugs. PivotTo der Figur verschiebt dann das ganze Fahrzeug mit. (Humanoid.Sit = false
+-- löst die SeatWeld auf einem Live-Server erst später.) Rückgabe: Parts des Fahrzeugs oder nil
+local function seatedVehicleParts(model)
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	local seat = hum and rawget(hum, "__data").SeatPart
+	local weld = seat and seat.Parent and seat:FindFirstChild("SeatWeld")
+	local part1 = weld and weld.Part1
+	if not part1 or not part1:IsDescendantOf(model) then
+		return nil
+	end
+	local top = seat
+	local node = seat.Parent
+	while node and node.ClassName ~= "Workspace" and node.ClassName ~= "DataModel" do
+		if node.ClassName == "Model" then
+			top = node
+		end
+		node = node.Parent
+	end
+	if top == seat then
+		return { seat }
+	end
+	return partsOf(top)
+end
+Mock.SeatedVehicleParts = seatedVehicleParts
+
 function MM:PivotTo(target)
 	local d = rawget(self, "__data")
 	local old = self:GetPivot()
 	local delta = target * old:Inverse()
+	local dragged = seatedVehicleParts(self)
 	for _, p in ipairs(partsOf(self)) do
+		p.CFrame = delta * p.CFrame
+	end
+	for _, p in ipairs(dragged or {}) do
 		p.CFrame = delta * p.CFrame
 	end
 	local pp = d.PrimaryPart

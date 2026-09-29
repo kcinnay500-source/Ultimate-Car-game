@@ -10,6 +10,7 @@ local DriveClient = require(script.Parent:WaitForChild("DriveClient"))
 local TrackUI = {}
 
 local UI, Remote, T
+local ctxRef
 local refs = {}
 local state
 local startSentAt = -math.huge
@@ -22,6 +23,7 @@ end
 
 function TrackUI.Build(page, ctx)
 	UI, Remote = ctx.UI, ctx.Remote
+	ctxRef = ctx
 	T = UI.Theme
 	refs = {}
 
@@ -81,6 +83,10 @@ function TrackUI.OnNotice(data)
 	elseif data.kind == "track_start" then
 		refs.result.Visible = false
 		startSentAt = -math.huge
+		-- Panel schließen: der Countdown läuft, und auf dem Handy braucht der Spieler den Stick
+		if UI.IsOpen and ctxRef and ctxRef.Close then
+			ctxRef.Close()
+		end
 	elseif data.kind == "track_cancel" or data.kind == "track_abort" or data.kind == "track_invalid" or data.kind == "track_fail" then
 		refs.result.Text = type(data.text) == "string" and data.text or ("Lauf ungültig: " .. DriveClient.ReasonText(data.reason) .. ".")
 		refs.result.TextColor3 = T.red

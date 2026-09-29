@@ -220,7 +220,7 @@ GAMES = [  # (Nr, Titel, Akzent, Art, Lage)
 def _screen_art(lib, g, kind, title, accent):
     _frame(lib, g, "Grund", 0, 0, 1, 1, (12, 10, 28), 0, 1)
     _frame(lib, g, "Kopf", 0, 0, 1, 0.2, (26, 18, 44), 0, 2)
-    _label(lib, g, "Titel", title, 0.03, 0.03, 0.94, 0.15, accent, "GothamBlack", "center", 4)
+    _label(lib, g, "Title", title, 0.03, 0.03, 0.94, 0.15, accent, "GothamBlack", "center", 4)
     dim = tuple(int(c * 0.35) for c in accent)
     if kind == "reaction":
         for i, col in enumerate(((90, 20, 20), (110, 80, 20), (60, 230, 110))):
@@ -248,14 +248,13 @@ def _screen_art(lib, g, kind, title, accent):
             _frame(lib, g, "Linie", 0.15 + i * 0.24, 0.28, 0.02, 0.44, WHITE, 0, 2)
         _frame(lib, g, "Auto", 0.42, 0.34, 0.14, 0.3, accent, 0, 3, round_=0.2)
         _frame(lib, g, "Nachbar", 0.19, 0.36, 0.14, 0.3, dim, 0, 3, round_=0.2)
-    _label(lib, g, "Hinweis", "BALD VERFÜGBAR · HIGHSCORE ---", 0.04, 0.82, 0.92, 0.13, SCREEN_TXT, "GothamBold",
-           "center", 4)
+    _label(lib, g, "Status", "TASTE E · SPIELEN", 0.04, 0.82, 0.92, 0.13, SCREEN_TXT, "GothamBold", "center", 4)
 
 
 def _cabinet(lib, parent, anim, nr, title, accent, kind, ox, oz, fx, fz):
     """Arcade-Automat (13 Parts): Unterbau, Pult, Gehäuse, Bildschirm, Marquee (+ leuchtende Blende unter
     Animated), Seitenwangen, Knöpfe, Joystick, Themen-Requisite. (ox,oz) = Wandfläche, (fx,fz) = zur Spielerseite."""
-    m = lib.model(parent, "Automat_%d" % nr, attrs={"Game": title})
+    m = lib.model(parent, "Automat_%d" % nr, attrs={"Game": title, "GameKey": "arcade_%d" % nr})
     base = CF.at(ox, 0, oz, yaw_towards(fx, fz))
     P = _local(lib, m, base)
     body = (24, 18, 36)
@@ -263,7 +262,7 @@ def _cabinet(lib, parent, anim, nr, title, accent, kind, ox, oz, fx, fz):
     P("Pult", (4.6, 0.4, 1.4), (0, 3.6, -2.9), BLACK, "SmoothPlastic")
     P("Gehaeuse", (4.6, 4.4, 2.2), (0, 5.6, -1.1), body, "Metal")
     scr = P("Bildschirm", (3.6, 2.8, 0.12), (0, 5.7, -2.26), (18, 30, 70), "Neon", deco=True)
-    _screen_art(lib, _gui(lib, scr, "Front", 40), kind, title, accent)
+    _screen_art(lib, _gui(lib, scr, "Front", 40, "Screen"), kind, title, accent)
     P("Marquee", (4.8, 1.2, 2.6), (0, 8.4, -1.3), BLACK, "Metal")
     for s in (-1, 1):
         P("Seitenwange", (0.1, 7.8, 3.2), (s * 2.35, 3.9, -1.6), accent, "SmoothPlastic")
@@ -300,7 +299,8 @@ SIM_Z = -48.5          # Sitz der Rennsimulatoren (Spec -46; 2.5 nach Norden fü
 
 def _sim(lib, parent, nr, x, accent):
     """Rennsimulator (19 Parts), Sitz bei (x,0,SIM_Z), Blick nach Norden, Bildschirme 6 weiter nördlich."""
-    m = lib.model(parent, "Rennsimulator_%d" % nr, attrs={"Game": "RENNSIMULATOR %d" % nr})
+    m = lib.model(parent, "Rennsimulator_%d" % nr, attrs={"Game": "RENNSIMULATOR %d" % nr,
+                                                          "GameKey": "arcade_%d" % (6 + nr)})
     base = CF.at(x, 0, SIM_Z, 0)
     P = _local(lib, m, base)
     P("Plattform", (6, 0.3, 8), (0, 0.15, 0), BLACK, "DiamondPlate")
@@ -321,7 +321,7 @@ def _sim(lib, parent, nr, x, accent):
     P("Staenderfuss", (2.0, 0.2, 1.2), (0, 0.1, -6.2), BLACK, "Metal")
     P("Staender", (0.4, 3.4, 0.4), (0, 1.9, -6.2), (40, 44, 50), "Metal")
     scr = P("Bildschirm", (4.2, 2.6, 0.15), (0, 4.9, -6.0), (10, 12, 20), "SmoothPlastic")
-    _race_art(lib, _gui(lib, scr, "Back", 40), nr, accent, True)
+    _race_art(lib, _gui(lib, scr, "Back", 40, "Screen"), nr, accent, True)
     for s in (-1, 1):
         a = math.radians(35)
         cx, cz = s * (2.1 + math.cos(a) * 1.8), -6.0 + math.sin(a) * 1.8
@@ -346,7 +346,8 @@ def _race_art(lib, g, nr, accent, center):
         _frame(lib, g, "Motorhaube", 0.25, 0.86, 0.5, 0.14, accent, 0, 4, round_=0.3)
         _label(lib, g, "Runde", "RUNDE 2/3", 0.03, 0.03, 0.3, 0.1, WHITE, "GothamBlack", "left", 5)
         _label(lib, g, "Zeit", "1:12,408", 0.67, 0.03, 0.3, 0.1, AMBER, "GothamBlack", "right", 5)
-        _label(lib, g, "Hinweis", "BALD VERFÜGBAR", 0.3, 0.16, 0.4, 0.09, WHITE, "GothamBold", "center", 5)
+        _label(lib, g, "Title", "RENNSIMULATOR %d" % nr, 0.3, 0.14, 0.4, 0.1, WHITE, "GothamBlack", "center", 5)
+        _label(lib, g, "Status", "TASTE E · SPIELEN", 0.3, 0.25, 0.4, 0.07, AMBER, "GothamBold", "center", 5)
     else:
         _frame(lib, g, "Leitplanke", 0, 0.56, 1, 0.04, STEEL, 0, 2)
         for i in range(4):
@@ -750,16 +751,17 @@ def build_auktionshaus(lib, dm, anim):
     # LED-Wand
     _box(lib, inn, "LED-Rahmen", 128.95, x1 - WT, 11.5, 28.3, -100.5, -51.5, BRASS, "Metal")
     led = _box(lib, inn, "LED-Wand", 128.8, 128.95, 12, 28, -100, -52, (8, 8, 12), "SmoothPlastic")
-    g = _gui(lib, led, "Left", 30)
+    # SurfaceGui "AuctionScreen" mit den Labels Title / Lot / Bid / Time (AuctionService schreibt die Texte)
+    g = _gui(lib, led, "Left", 30, "AuctionScreen")
     _frame(lib, g, "Grund", 0, 0, 1, 1, (14, 10, 12), 0, 1)
-    for i, (kopf, wert, farbe) in enumerate((("LOS", "Nr. 017\nGT-Coupé · Burgund", WHITE),
-                                            ("AKTUELLES GEBOT", "48.500 Credits", AMBER),
-                                            ("RESTZEIT", "02:30", (255, 120, 110)))):
-        _frame(lib, g, "Feld", 0.02 + i * 0.33, 0.06, 0.3, 0.7, (40, 16, 22), 0, 2)
-        _label(lib, g, "Kopf", kopf, 0.03 + i * 0.33, 0.1, 0.28, 0.14, BRASS, "GothamBlack", "center", 3)
-        _label(lib, g, "Wert", wert, 0.03 + i * 0.33, 0.3, 0.28, 0.36, farbe, "GothamBlack", "center", 3)
-    _label(lib, g, "Laufband", "ERSTE VERSTEIGERUNG BALD · EINLIEFERUNG AM SCHALTER RECHTS · BIETEN AN DER KASSE",
-           0.02, 0.8, 0.96, 0.14, CREAM, "GothamBold", "center", 3)
+    _frame(lib, g, "Kopfband", 0.02, 0.04, 0.96, 0.16, (40, 16, 22), 0, 2)
+    _label(lib, g, "Title", "AUKTIONSHAUS", 0.04, 0.06, 0.92, 0.12, BRASS, "GothamBlack", "center", 3)
+    _frame(lib, g, "Feld", 0.02, 0.23, 0.96, 0.55, (40, 16, 22), 0, 2)
+    _label(lib, g, "Lot", "Gerade keine Versteigerung", 0.04, 0.25, 0.92, 0.2, WHITE, "GothamBlack", "center", 3)
+    _label(lib, g, "Bid", "Einliefern am Schalter rechts", 0.04, 0.47, 0.92, 0.15, AMBER, "GothamBlack", "center", 3)
+    _label(lib, g, "Time", "", 0.04, 0.63, 0.92, 0.12, (255, 120, 110), "GothamBold", "center", 3)
+    _label(lib, g, "Laufband", "SONDERMODELLE UND SPIELER-AUKTIONEN · EINLIEFERUNG AM SCHALTER RECHTS · BIETEN AN DER "
+           "KASSE", 0.02, 0.8, 0.96, 0.14, CREAM, "GothamBold", "center", 3)
     # Pult des Auktionators mit Klangholz
     lp = lib.model(inn, "Rednerpult")
     _box(lib, lp, "Pult", 110.3, 111.7, 3.0, 6.6, -96, -94, DARKWOOD, "Wood")
@@ -804,7 +806,8 @@ def build_auktionshaus(lib, dm, anim):
                       CF.angles(math.radians(-15), 0, 0), BLACK, "SmoothPlastic", deco=True)
         g = _gui(lib, sc, "Back", 40)
         _frame(lib, g, "Grund", 0.03, 0.05, 0.94, 0.9, (40, 16, 22), 0, 1)
-        _label(lib, g, "Text", "BALD", 0.05, 0.15, 0.9, 0.7, BRASS, "GothamBlack", "center", 3)
+        _label(lib, g, "Text", "BIETEN" if yaw == 0 else "EINLIEFERN", 0.05, 0.15, 0.9, 0.7, BRASS, "GothamBlack",
+               "center", 3)
         _box(lib, d, "Bildschirmfuss", 83.3 + dx, 83.7 + dx, 3.5, 3.9, mz - 0.2 + s * 0.2, mz + 0.2 + s * 0.2, BLACK,
              "Metal", deco=True)
         _cyl_y(lib, d, "Bieterkelle", 78.6 + dx, 3.5, 3.6, mz, 1.3, BURGUNDY, "SmoothPlastic", deco=True)

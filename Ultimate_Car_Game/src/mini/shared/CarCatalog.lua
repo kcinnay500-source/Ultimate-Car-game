@@ -18,18 +18,20 @@ CarCatalog.BaseGears = 5 -- Gang-Anzeige im Tacho (rein optisch)
 -- Händlerpreise und Fahrwerte je 2.4.0-Modell (Schlüssel = C.Cars.id).
 -- price: Cr beim Autohaus; power: PS; top: km/h (≈ Studs/s); weight: kg; grip: Reibwert der Reifen;
 -- steer: maximaler Lenkeinschlag in Grad; drive: FWD | RWD | AWD; paint: Standard-Lackfarbe (Index in Paints)
--- Balance (§7): erstes Auto (Kompakt) nach etwa 20–30 Minuten Werkstatt, Sportwagen nach mehreren Stunden,
--- Supersportwagen und Elektro als Langzeitziel (Level wie C.Cars).
+-- Balance (§7, tools/economy_sim.py, docs/BALANCE.md): erstes Auto (Kompakt) nach etwa 25 Minuten Werkstatt,
+-- Sportwagen nach etwa 4 Stunden, Supersportwagen/Elektro nach 12–18 Stunden (Level wie C.Cars).
+-- Richtwert der Preise ist der Kontostand eines Spielers, der nur Werkstatt-Aufträge macht und dabei Bühnen und
+-- Geräte ausbaut; die 2.4.0-Aufträge bringen auf Level 30–40 etwa 3.000–6.000 Cr pro Minute.
 CarCatalog.Dealer = {
 	komet = { price = 4500, power = 90, top = 78, weight = 1050, grip = 0.95, steer = 34, drive = "FWD", paint = 1 },
-	komet_s2 = { price = 14000, power = 180, top = 96, weight = 1200, grip = 1.0, steer = 33, drive = "FWD", paint = 2 },
-	nord = { price = 24000, power = 150, top = 92, weight = 1400, grip = 0.95, steer = 32, drive = "RWD", paint = 3 },
-	komet_urban = { price = 32000, power = 170, top = 90, weight = 1550, grip = 0.92, steer = 31, drive = "AWD", paint = 4 },
-	atlas = { price = 48000, power = 220, top = 100, weight = 1600, grip = 0.97, steer = 31, drive = "AWD", paint = 5 },
-	vektor = { price = 95000, power = 380, top = 118, weight = 1350, grip = 1.08, steer = 31, drive = "RWD", paint = 6 },
-	vektor_gtx = { price = 150000, power = 520, top = 126, weight = 1500, grip = 1.1, steer = 30, drive = "RWD", paint = 7 },
-	aureon = { price = 260000, power = 780, top = 140, weight = 1450, grip = 1.15, steer = 29, drive = "AWD", paint = 8 },
-	elys = { price = 320000, power = 700, top = 134, weight = 1900, grip = 1.12, steer = 30, drive = "AWD", paint = 9 },
+	komet_s2 = { price = 18000, power = 180, top = 96, weight = 1200, grip = 1.0, steer = 33, drive = "FWD", paint = 2 },
+	nord = { price = 28000, power = 150, top = 92, weight = 1400, grip = 0.95, steer = 32, drive = "RWD", paint = 3 },
+	komet_urban = { price = 40000, power = 170, top = 90, weight = 1550, grip = 0.92, steer = 31, drive = "AWD", paint = 4 },
+	atlas = { price = 72000, power = 220, top = 100, weight = 1600, grip = 0.97, steer = 31, drive = "AWD", paint = 5 },
+	vektor = { price = 390000, power = 380, top = 118, weight = 1350, grip = 1.08, steer = 31, drive = "RWD", paint = 6 },
+	vektor_gtx = { price = 850000, power = 520, top = 126, weight = 1500, grip = 1.1, steer = 30, drive = "RWD", paint = 7 },
+	aureon = { price = 2600000, power = 780, top = 140, weight = 1450, grip = 1.15, steer = 29, drive = "AWD", paint = 8 },
+	elys = { price = 4600000, power = 700, top = 134, weight = 1900, grip = 1.12, steer = 30, drive = "AWD", paint = 9 },
 }
 -- Rückfall für ein C.Cars-Modell ohne Eintrag oben: Preis = C.Cars.value, sonst Kompakt-Werte
 CarCatalog.DealerFallback = { power = 120, top = 85, weight = 1300, grip = 0.95, steer = 32, drive = "RWD", paint = 1 }
@@ -37,15 +39,15 @@ CarCatalog.DealerFallback = { power = 120, top = 85, weight = 1300, grip = 0.95,
 -- Sondermodelle: nicht beim Händler, nur über NPC-Auktionen (AuctionService: CarRules.GrantModel).
 -- value: Richtwert (Startgebot/Verkaufswert); rims/glow/spoiler: Auslieferungszustand
 CarCatalog.Specials = {
-	{ id = "komet_rally", name = "Komet C1 Rallye", brand = "Komet", body = "compact", level = 5, value = 16000,
+	{ id = "komet_rally", name = "Komet C1 Rallye", brand = "Komet", body = "compact", level = 5, value = 24000,
 		power = 160, top = 92, weight = 980, grip = 1.05, steer = 35, drive = "AWD", paint = 2, rims = 2, glow = 0, spoiler = true },
-	{ id = "nord_classic", name = "Nord R4 Classic", brand = "Nord", body = "sedan", level = 8, value = 30000,
+	{ id = "nord_classic", name = "Nord R4 Classic", brand = "Nord", body = "sedan", level = 8, value = 48000,
 		power = 200, top = 98, weight = 1350, grip = 0.98, steer = 32, drive = "RWD", paint = 11, rims = 3, glow = 0, spoiler = false },
-	{ id = "vektor_gold", name = "Vektor RS Goldstück", brand = "Vektor", body = "sport", level = 20, value = 140000,
+	{ id = "vektor_gold", name = "Vektor RS Goldstück", brand = "Vektor", body = "sport", level = 20, value = 520000,
 		power = 420, top = 124, weight = 1320, grip = 1.1, steer = 31, drive = "RWD", paint = 8, rims = 2, glow = 6, spoiler = true },
-	{ id = "aureon_nero", name = "Vektor Aureon Nero", brand = "Vektor", body = "super", level = 32, value = 380000,
+	{ id = "aureon_nero", name = "Vektor Aureon Nero", brand = "Vektor", body = "super", level = 32, value = 3400000,
 		power = 850, top = 146, weight = 1420, grip = 1.18, steer = 29, drive = "AWD", paint = 11, rims = 6, glow = 4, spoiler = true },
-	{ id = "elys_proto", name = "Nord Elys Prototyp", brand = "Nord", body = "electric", level = 40, value = 450000,
+	{ id = "elys_proto", name = "Nord Elys Prototyp", brand = "Nord", body = "electric", level = 40, value = 5800000,
 		power = 800, top = 140, weight = 1850, grip = 1.15, steer = 30, drive = "AWD", paint = 10, rims = 8, glow = 1, spoiler = true },
 }
 
@@ -139,19 +141,21 @@ CarCatalog.IdleDespawnSeconds = 600 -- unbenutztes Auto (niemand am Steuer) vers
 CarCatalog.Testdrive = { seconds = 60, cooldown = 15 }
 CarCatalog.Carwash = { price = 150, shineSeconds = 900, range = 70, cooldown = 10, reflectance = 0.18 }
 -- Spawn-Schlüssel für mini_car_spawn (City.CarSpawns.<key>; "workshop" = eigener Werkstatt-Parkplatz)
-CarCatalog.SpawnKeys = { "workshop", "dealer", "testdrive", "track", "carwash" }
+CarCatalog.SpawnKeys = { "workshop", "dealer", "testdrive", "track", "carwash", "plaza", "scrapyard", "tuning" }
 
 ---------------------------------------------------------------- Zeitfahren (TrackRules)
 CarCatalog.Track = {
 	countdown = 3, -- Sekunden bis zum Start (Startampel)
 	maxRunSeconds = 240, -- danach verfällt der Lauf
-	firstReward = 400, -- erste gültige Runde
-	perSecond = 60, -- Cr je Sekunde Verbesserung der belohnten Bestzeit
-	baselineSeconds = 60, -- Verbesserungen zählen erst unterhalb dieser Zeit (langsame erste Runde bringt nichts)
-	maxReward = 1500, -- Deckel je Lauf (vor Level-Bonus)
-	levelBonus = 0.04, -- +4 % je Spielerlevel über 1
+	-- Balance: eine Runde auf dem Oval (~780 Studs) dauert je nach Auto etwa 8–16 s. Der ganze Topf je Spieler
+	-- (erste Runde + alle Verbesserungen unter der Basiszeit) liegt bei ~400 Cr × Level-Bonus.
+	firstReward = 100, -- erste gültige Runde
+	perSecond = 15, -- Cr je Sekunde Verbesserung der belohnten Bestzeit
+	baselineSeconds = 30, -- Verbesserungen zählen erst unterhalb dieser Zeit (langsame erste Runde bringt nichts)
+	maxReward = 250, -- Deckel je Lauf (vor Level-Bonus)
+	levelBonus = 0.1, -- +10 % je Spielerlevel über 1 (Level 40: ×4,9)
 	minImprovement = 0.05, -- Sekunden
-	xp = 30, -- XP für eine neue Bestzeit
+	xp = 15, -- XP für eine neue Bestzeit
 	speedMargin = 1.3, -- Plausibilität: schneller als (schnellstes Auto × Nitro × 1,3) gilt als Teleport
 	segmentFloor = 0.5, -- Mindestzeit je Abschnitt in Sekunden
 	minLapSeconds = 6, -- Mindestzeit einer ganzen Runde

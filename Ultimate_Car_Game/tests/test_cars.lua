@@ -116,6 +116,28 @@ local function setup(H)
 	return S
 end
 
+-- Entfernt Teile der generierten Stadt (Fixture), damit ein Fall seine eigene Strecke/Spawns aufbauen
+-- oder den Rückfall ohne sie prüfen kann. Die echten Teile prüft test_phase2.lua.
+local function removeGenerated(g, names)
+	g:Activate()
+	local city = g.env.workspace:FindFirstChild("City")
+	for _, name in ipairs(names) do
+		local x = city and city:FindFirstChild(name)
+		if x then
+			x:Destroy()
+		end
+	end
+end
+
+local function removePlotSpawn(g, pl)
+	g:Activate()
+	local plot = g:Plot(pl)
+	local sp = plot and plot:FindFirstChild("CarSpawn", true)
+	if sp then
+		sp:Destroy()
+	end
+end
+
 local function countOwned(S, pl)
 	local folder = S.g.env.workspace:FindFirstChild("PlayerCars")
 	local n = 0
@@ -411,22 +433,27 @@ return {
 		local short = TR.NewRun({ 0.5 }, 0, 0)
 		T.eq((TR.Touch(short, 1, c.minLapSeconds - 1)), "tooFast", "Mindestrundenzeit")
 		-- Belohnung
+		-- Zeiten relativ zur Basiszeit (Verbesserungen zählen nur darunter)
+		local B = c.baselineSeconds
+		T.check(B > 12 and c.perSecond * (B - 1) > c.maxReward, "Konfiguration: Deckel erreichbar")
 		local track = TR.Default()
-		local r1 = TR.Complete(track, 50, 1)
+		local r1 = TR.Complete(track, B - 1, 1)
 		T.eq(r1.reward, c.firstReward, "erste Runde")
-		T.eq(track.best, 50, "Bestzeit")
+		T.eq(track.best, B - 1, "Bestzeit")
 		T.eq(track.runs, 1, "Läufe")
-		local r2 = TR.Complete(track, 55, 1)
+		local r2 = TR.Complete(track, B + 4, 1)
 		T.eq(r2.reward, 0, "langsamer: nichts")
-		T.eq(track.best, 50, "Bestzeit bleibt")
-		local r3 = TR.Complete(track, 49.99, 1)
+		T.eq(track.best, B - 1, "Bestzeit bleibt")
+		local r3 = TR.Complete(track, B - 1.01, 1)
 		T.eq(r3.reward, 0, "unter der Mindestverbesserung: nichts")
-		local r4 = TR.Complete(track, 40, 1)
-		T.eq(r4.reward, math.floor(c.perSecond * 10 + 0.5), "je Sekunde Verbesserung")
+		local r4 = TR.Complete(track, B - 6, 1)
+		T.eq(r4.reward, math.floor(math.min(c.maxReward, c.perSecond * 5) + 0.5), "je Sekunde Verbesserung")
 		T.check(r4.newBest and r4.xp > 0, "neue Bestzeit gibt XP")
-		local r5 = TR.Complete(track, 1, 1)
+		local track5 = TR.Default()
+		TR.Complete(track5, B, 1)
+		local r5 = TR.Complete(track5, 1, 1)
 		T.eq(r5.reward, c.maxReward, "gedeckelt")
-		T.eq(track.rewardedBest, 1, "belohnte Bestzeit")
+		T.eq(track5.rewardedBest, 1, "belohnte Bestzeit")
 		-- langsame erste Runde bringt kein Polster
 		local t2 = TR.Default()
 		TR.Complete(t2, 500, 1)
@@ -633,6 +660,7 @@ return {
 		local S = setup(H)
 		local g = S.g
 		local pl = S.join(601, "Alex")
+		removeGenerated(g, { "CarSpawns" })
 		local d = g:D(pl)
 		d.money = 100000
 		d.level = 5
@@ -655,6 +683,13 @@ return {
 		local plot = g:Plot(pl)
 		local here = plot:GetPivot():PointToObjectSpace(model:GetPivot().Position)
 		T.check(math.abs(here.X) < 40 and here.Z > 30 and here.Z < 90, "vor der eigenen Werkstatt (plotlokal " .. tostring(here) .. ")")
+		local plotSpot = plot:FindFirstChild("CarSpawn", true)
+		T.check(plotSpot ~= nil, "Plot-Vorlage hat einen Parkplatz CarSpawn")
+		if plotSpot then
+			local dx = model:GetPivot().Position - plotSpot.Position
+			T.check(Vector3.new(dx.X, 0, dx.Z).Magnitude < 1, "genau auf Werkstatt.CarSpawn")
+			T.check(model:GetPivot().LookVector:Dot(plotSpot.CFrame.LookVector) > 0.99, "Nase wie CarSpawn")
+		end
 		local snap = S.CS.SnapshotFields(g:MiniState(pl), d, g:Now())
 		T.eq(snap.spawnedCar, true, "Snapshot: Auto draußen")
 		T.eq(snap.spawnedId, id, "Snapshot: Id")
@@ -702,6 +737,17 @@ return {
 		T.eq(S.car(pl), nil, "Respawn baut das Auto ab")
 		T.eq(S.car(pl, "Probe_"), nil, "und die Probefahrt")
 		T.eq(countOwned(S, pl), 0, "nichts mehr draußen")
+		-- ohne CarSpawn in der Plot-Vorlage: Einfahrt vor der Halle (Physics.plotFallback)
+		removePlotSpawn(g, pl)
+		g:Advance(3.1)
+		S.act(pl, "mini_car_spawn", { id = id, at = "workshop" })
+		model = S.car(pl)
+		T.check(model ~= nil, "Rückfall ohne CarSpawn")
+		if model then
+			local f = g:MiniShared("CarCatalog").Physics.plotFallback
+			local local2 = plot:GetPivot():PointToObjectSpace(model:GetPivot().Position)
+			T.check(math.abs(local2.X - f[1]) < 12 and math.abs(local2.Z - f[3]) < 1, "Einfahrt plotlokal " .. tostring(local2))
+		end
 		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
 	end },
 
@@ -709,6 +755,7 @@ return {
 		local S = setup(H)
 		local g = S.g
 		local pl = S.join(611, "Cem")
+		removeGenerated(g, { "CarSpawns" })
 		g:Activate()
 		local city = g.env.workspace:FindFirstChild("City")
 		local spawns = Instance.new("Folder")
@@ -838,6 +885,7 @@ return {
 		local S = setup(H)
 		local g = S.g
 		local pl = S.join(631, "Emil")
+		removeGenerated(g, { "CarSpawns", "Track" })
 		local d = g:D(pl)
 		d.money = 100000
 		d.level = 1
@@ -957,11 +1005,12 @@ return {
 		S.sit(pl, model)
 		startAt = S.notices(pl, "track_start")[5].startAt
 		money = d.money
-		g:AdvanceTo(startAt + 1.75)
+		-- Abschnitte so schnell, wie ein Komet (Spitze × Reserve) es erlaubt: 100 Studs in 1 s, dann je 200 Studs in 2 s
+		g:AdvanceTo(startAt + 1)
 		drive(1)
-		g:AdvanceTo(startAt + 3.5)
+		g:AdvanceTo(startAt + 3)
 		drive(2)
-		g:AdvanceTo(startAt + 5.25)
+		g:AdvanceTo(startAt + 5)
 		drive(3)
 		local profile = g:Profile(pl)
 		profile.transacting = true
@@ -1062,6 +1111,156 @@ return {
 		g:Leave(pl)
 		g:Advance(0.5)
 		T.check(folder:FindFirstChild("Car_651") == nil, "Verlassen räumt ab")
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+	end },
+
+	{ "Sitzender Fahrer: Reise, Werkstatt und Probefahrt lösen die SeatWeld vor PivotTo (Auto bleibt stehen)", function(T, H)
+		local g = H.Garage()
+		local pl = g:Join(641, { name = "Fritz" })
+		g:Advance(0.5)
+		local d = g:D(pl)
+		d.money = 200000
+		d.level = 10
+		T.eq(g:Act(pl, "mini_car_buy", { model = "komet" }), "ok", "kaufen")
+		local id = d.games.cars[1].id
+		T.eq(g:Act(pl, "mini_car_spawn", { id = id, at = "dealer" }), "ok", "holen")
+		g:Activate()
+		local model = g.env.workspace.PlayerCars:FindFirstChild("Car_641")
+		T.check(model ~= nil, "Auto draußen")
+		if not model then
+			return
+		end
+		local seat = model.DriverSeat
+		-- wie Roblox: Sitzen = SeatWeld (Part0 Sitz, Part1 HumanoidRootPart), Humanoid.SeatPart, Occupant.
+		-- Humanoid.Sit = false löst die SeatWeld auf einem Live-Server NICHT sofort (der Mock ebenso).
+		local function seatIn(target)
+			g:Activate()
+			local ch = pl.Character
+			local hum = ch:FindFirstChildOfClass("Humanoid")
+			local w = Instance.new("Weld")
+			w.Name = "SeatWeld"
+			w.Part0 = target
+			w.Part1 = ch.HumanoidRootPart
+			w.C0 = CFrame.new(0, 1.5, 0)
+			w.Parent = target
+			ch:PivotTo(target.CFrame * CFrame.new(0, 3, 0))
+			hum.SeatPart = target
+			hum.Sit = true
+			target.Occupant = hum
+			g:Flush()
+			return w, hum
+		end
+		-- Gegenprobe: der Mock zieht das Auto mit, solange die SeatWeld besteht
+		local w0 = seatIn(seat)
+		local pivot0 = model:GetPivot()
+		g:Activate()
+		pl.Character:PivotTo(pl.Character:GetPivot() + Vector3.new(0, 0, 50))
+		T.check((model:GetPivot().Position - pivot0.Position).Magnitude > 40, "Mock: SeatWeld verbindet Figur und Auto")
+		model:PivotTo(pivot0)
+		w0:Destroy()
+		g:Flush()
+
+		local function check(label, fn)
+			local weld = seatIn(seat)
+			local before = model:GetPivot()
+			local status = fn()
+			g:Activate()
+			T.eq(status, "ok", label .. ": Aktion angenommen")
+			T.eq(weld.Parent, nil, label .. ": SeatWeld zerstört")
+			local moved = (model:GetPivot().Position - before.Position).Magnitude
+			T.check(moved < 0.01, label .. ": Auto bleibt stehen (verschoben um " .. string.format("%.1f", moved) .. ")")
+			T.check((pl.Character:GetPivot().Position - before.Position).Magnitude > 3, label .. ": Figur ist woanders")
+			seat.Occupant = nil
+			pl.Character:FindFirstChildOfClass("Humanoid").SeatPart = nil
+			g:Flush()
+			g:Advance(3.2)
+		end
+		local arrivals = g.env.workspace.City:FindFirstChild("Arrivals")
+		local key
+		for _, x in ipairs(arrivals and arrivals:GetChildren() or {}) do
+			if (x:IsA("BasePart") or x:IsA("Model")) and x.Name ~= "dealer" then
+				key = x.Name
+				break
+			end
+		end
+		T.check(key ~= nil, "Ankunftspunkt in der Stadt")
+		check("Karte (CityService.Travel)", function()
+			return g:Act(pl, "mini_travel", { key = key })
+		end)
+		check("Werkstatt (GarageServer.moveTo)", function()
+			return g:Act(pl, "mini_travel", { key = "workshop" })
+		end)
+		check("Probefahrt aus dem eigenen Auto", function()
+			return g:Act(pl, "mini_car_testdrive", { model = "nord" })
+		end)
+		local probe = g.env.workspace.PlayerCars:FindFirstChild("Probe_641")
+		T.check(probe ~= nil, "Probewagen steht bereit")
+		if probe then
+			T.check((probe:GetPivot().Position - model:GetPivot().Position).Magnitude > 6, "eigenes Auto nicht in den Probewagen geschoben")
+		end
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+	end },
+
+	{ "Zeitfahren: Plausibilität mit dem Tempo des gefahrenen Autos (Kompakt kann keine Supersportwagen-Runde)", function(T, H)
+		local g = H.Garage({ noServer = true })
+		local _, CarRules, TR = modules(g)
+		local c = g:MiniShared("CarCatalog").Track
+		local komet = CarRules.Stats(CarRules.NewCar("komet", NOW))
+		local speed = TR.CarSpeed(komet)
+		T.near(speed, komet.topSpeedStuds * komet.nitro.boost * c.speedMargin, 1e-6, "Spitze × Nitro × Reserve")
+		T.check(speed < TR.MaxSpeed() * 0.6, "Komet deutlich langsamer als das schnellste Auto des Katalogs")
+		-- Oval ~780 Studs: 4 Abschnitte à 195 Studs
+		local points = { Vector3.new(0, 0, 195), Vector3.new(0, 0, 390), Vector3.new(0, 0, 585), Vector3.new(0, 0, 780) }
+		local minLap = TR.MinLap(Vector3.new(0, 0, 0), points, speed)
+		T.near(minLap, 780 / speed, 1e-6, "Mindestrunde = Strecke / Tempo")
+		T.check(minLap > c.minLapSeconds + 1, "mehr als die feste Untergrenze")
+		-- Teleport-Runde in 6,5 s: mit Katalog-Höchsttempo gültig, mit dem Komet nicht
+		local function lap(maxSpeed, total)
+			local run = TR.NewRun(TR.MinTimes(Vector3.new(0, 0, 0), points, maxSpeed), 0, 0, TR.MinLap(Vector3.new(0, 0, 0), points, maxSpeed), maxSpeed)
+			local res
+			for i = 1, 4 do
+				res = TR.Touch(run, i, total * i / 4)
+				if res ~= "checkpoint" then
+					break
+				end
+			end
+			return res, run
+		end
+		T.eq((lap(TR.MaxSpeed(), 6.5)), "finish", "alte Prüfung (Katalog) hätte 6,5 s angenommen")
+		T.eq((lap(speed, 6.5)), "tooFast", "Komet: 6,5 s als Teleport erkannt")
+		T.eq((lap(speed, minLap + 0.5)), "finish", "ehrliche Runde des Komet gültig")
+		-- Tuning während des Laufs macht das Auto schneller: offene Abschnitte werden angepasst, nie verlängert
+		local run = TR.NewRun(TR.MinTimes(Vector3.new(0, 0, 0), points, speed), 0, 0, minLap, speed)
+		local before = run.minTimes[3]
+		T.eq(TR.Rescale(run, speed * 0.5), false, "langsamer: keine Änderung")
+		T.eq(TR.Rescale(run, speed * 1.25), true, "schneller: angepasst")
+		T.near(run.minTimes[3], math.max(c.segmentFloor, before / 1.25), 1e-6, "Abschnitt kürzer")
+		T.near(run.minLap, math.max(c.minLapSeconds, minLap / 1.25), 1e-6, "Runde kürzer")
+	end },
+
+	{ "CarService: mini_track_start nutzt das Tempo des gespawnten Autos", function(T, H)
+		local S = setup(H)
+		local g = S.g
+		local pl = S.join(651, "Gerd")
+		local d = g:D(pl)
+		d.money = 100000
+		S.act(pl, "mini_car_buy", { model = "komet" })
+		g:Advance(0.1)
+		S.act(pl, "mini_track_start")
+		local run = S.CS.States[pl].run
+		T.check(run ~= nil, "Lauf gestartet")
+		if run then
+			local _, CarRules, TR = modules(g)
+			local speed = TR.CarSpeed(CarRules.Stats(d.games.cars[1]))
+			T.near(run.maxSpeed, speed, 1e-6, "Höchsttempo des Komet")
+			T.check(run.minLap >= g:MiniShared("CarCatalog").Track.minLapSeconds, "Mindestrunde gesetzt")
+			-- Motor-Tuning während des Laufs: Mindestzeiten passen sich an
+			d.money = 1e7
+			d.level = 50
+			local lvl = d.games.cars[1].engine
+			S.act(pl, "mini_car_tune", { id = d.games.cars[1].id, part = "engine", level = lvl })
+			T.check(run.maxSpeed > speed, "schnelleres Auto: Lauf angepasst")
+		end
 		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
 	end },
 }

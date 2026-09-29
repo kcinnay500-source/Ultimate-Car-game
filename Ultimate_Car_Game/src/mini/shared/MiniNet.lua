@@ -29,6 +29,22 @@ MiniNet.Actions = {
 	mini_pass_prompt = { pass = "string" },
 	mini_travel = { key = "string" },
 	mini_sync = {},
+	mini_auction_bid = { lot = "number", amount = "number" },
+	mini_auction_consign = { id = "number", start = "number", duration = "number" },
+	mini_auction_cancel = { lot = "number" },
+	mini_car_buy = { model = "string" },
+	mini_car_sell = { id = "number" },
+	mini_car_spawn = { id = "number", at = "string" },
+	mini_car_despawn = {},
+	mini_car_testdrive = { model = "string" },
+	mini_car_tune = { id = "number", part = "string", level = "number" },
+	mini_car_style = { id = "number", paint = "number", rims = "number", glow = "number", spoiler = "boolean" },
+	mini_car_nitro = {},
+	mini_carwash = {},
+	mini_track_start = {},
+	mini_arcade_start = { game = "string" },
+	mini_arcade_input = { token = "number", at = "number", value = "number" },
+	mini_arcade_finish = { token = "number" },
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -40,6 +56,19 @@ MiniNet.Cooldowns = {
 	mini_leaderboard_refresh = 5,
 	mini_pass_prompt = 3,
 	mini_sync = 1,
+	mini_auction_bid = 0.5,
+	mini_auction_consign = 2,
+	mini_auction_cancel = 1,
+	mini_car_buy = 1,
+	mini_car_sell = 1,
+	mini_car_spawn = 3,
+	mini_car_despawn = 1,
+	mini_car_testdrive = 3,
+	mini_car_style = 0.5,
+	mini_car_nitro = 0.5,
+	mini_carwash = 2,
+	mini_track_start = 3,
+	mini_arcade_input = 0, -- eigenes Budget in ArcadeService (25/s); 0,12 s verwürfe schnelle Eingaben
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",
@@ -50,6 +79,12 @@ MiniNet.Targets = {
 	mini_parking_tap = "cell",
 	mini_daily_goal_claim = "id",
 	mini_milestone_claim = "id",
+	mini_auction_bid = "lot",
+	mini_auction_cancel = "lot",
+	mini_car_buy = "model",
+	mini_car_sell = "id",
+	mini_car_tune = "part",
+	mini_car_style = "id",
 }
 
 -- Ereignisse Server -> Client
@@ -60,7 +95,7 @@ MiniNet.Events = {
 }
 
 -- Tabs der Minispiel-Oberfläche (auch Werte des Attributs MiniTab an City.Stations.<key>)
-MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map" }
+MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade" }
 MiniNet.TabSet = {}
 for _, tab in ipairs(MiniNet.Tabs) do
 	MiniNet.TabSet[tab] = true

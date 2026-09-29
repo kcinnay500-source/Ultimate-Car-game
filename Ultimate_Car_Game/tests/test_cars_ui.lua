@@ -433,12 +433,14 @@ return {
 			city.Name = "City"
 			city.Parent = g.env.workspace
 		end
-		local spawns = city:FindFirstChild("CarSpawns")
-		if not spawns then
-			spawns = Instance.new("Folder")
-			spawns.Name = "CarSpawns"
-			spawns.Parent = city
+		-- eigene Abholpunkte statt der generierten Stadt (deren Autohaus-Spawn läge sonst ebenfalls in der Nähe)
+		local generated = city:FindFirstChild("CarSpawns")
+		if generated then
+			generated:Destroy()
 		end
+		local spawns = Instance.new("Folder")
+		spawns.Name = "CarSpawns"
+		spawns.Parent = city
 		local spot = Instance.new("Part")
 		spot.Name = "dealer"
 		spot.Anchored = true
@@ -1193,15 +1195,175 @@ return {
 				return Drive.Gui()
 			end)
 			local screen = gui.AbsoluteSize
-			for _, x in ipairs({ refs.panel, refs.nitro }) do
+			for _, x in ipairs({ refs.panel, refs.nitro, refs.flip }) do
 				local pos, size = x.AbsolutePosition, x.AbsoluteSize
 				T.check(pos.X >= 0 and pos.Y >= 0 and pos.X + size.X <= screen.X and pos.Y + size.Y <= screen.Y,
 					x.Name .. " liegt im Bild bei " .. vp.X .. "×" .. vp.Y)
 			end
 			T.check(refs.nitro.AbsoluteSize.X >= 44 and refs.nitro.AbsoluteSize.Y >= 44, "Nitro-Knopf ≥ 44 px")
-			T.check(refs.panel.AbsolutePosition.Y + refs.panel.AbsoluteSize.Y <= 62, "Tacho über dem Toast-Bereich")
+			-- 2.4.0-Fortschrittsleiste CompactProgress (Level, XP, Credits) liegt bei y 8..54 oben mittig: Tacho darunter
+			T.check(refs.panel.AbsolutePosition.Y >= 54, "Tacho unter der 2.4.0-Fortschrittsleiste")
+			local toastTop = g:InClient(p, function()
+				return Drive.ToastOffset()
+			end)
+			T.check(toastTop ~= nil and toastTop >= refs.panel.AbsolutePosition.Y + refs.panel.AbsoluteSize.Y, "Toasts rücken während der Fahrt unter den Tacho")
+			T.check(refs.flip.AbsolutePosition.Y >= refs.panel.AbsolutePosition.Y + refs.panel.AbsoluteSize.Y, "Aufrichten-Knopf unter dem Tacho")
+			T.check(refs.flip.AbsoluteSize.Y >= 44, "Aufrichten-Knopf ≥ 44 px")
 			T.check(refs.nitro.AbsolutePosition.Y + refs.nitro.AbsoluteSize.Y <= screen.Y - 138, "Nitro-Knopf über dem 2.4.0-HUD")
 			noOwnErrors(T, g)
 		end
+	end },
+
+	{ "Fahren: Tuning während der Fahrt wirkt sofort auf das Antriebsmoment (Torque jedes Frame)", function(T, H)
+		local g, p = start(H)
+		local rec = recorder(T)
+		local Drive = startDrive(g, p, rec)
+		local v = makeVehicle(g, p.UserId)
+		sit(g, p, v.seat)
+		v.seat.ThrottleFloat = 1
+		frame(g)
+		T.eq(v.rl.MotorMaxTorque, 5000, "Antriebsmoment beim Einsteigen")
+		-- Server: VehicleFactory.ApplyStats nach mini_car_tune (Motor/Getriebe) setzt neue Attribute am Modell
+		g:Activate()
+		v.model:SetAttribute("Torque", 7200)
+		frame(g)
+		T.eq(v.rl.MotorMaxTorque, 7200, "neues Moment ohne Aus- und Einsteigen")
+		T.eq(v.rr.MotorMaxTorque, 7200, "an allen angetriebenen Rädern")
+		-- Bremsmoment ohne eigenes Attribut folgt dem neuen Antriebsmoment
+		v.seat.AssemblyLinearVelocity = Vector3.new(0, 0, -30)
+		v.seat.ThrottleFloat = -1
+		frame(g)
+		T.eq(v.rl.MotorMaxTorque, 7200 * 2.5, "Bremsmoment passt zum neuen Moment")
+		noOwnErrors(T, g)
+	end },
+
+	{ "Fahren: umgekipptes Auto aufrichten (Taste R / Knopf), nur wenn es liegen bleibt", function(T, H)
+		local g, p = start(H)
+		local rec = recorder(T)
+		local Drive = startDrive(g, p, rec)
+		local v = makeVehicle(g, p.UserId)
+		sit(g, p, v.seat)
+		frame(g)
+		local _, refs = g:InClient(p, function()
+			return Drive.Gui()
+		end)
+		T.eq(refs.flip.Visible, false, "aufrecht: kein Aufrichten-Knopf")
+		T.eq(g:Key(p, Enum.KeyCode.R), false, "R wird aufrecht nicht geschluckt")
+		-- Auto liegt auf der Seite (Nase zeigt nach -X)
+		g:Activate()
+		local chassis = v.model.Chassis
+		local side = CFrame.new(20, 1.5, -40) * CFrame.Angles(0, math.pi / 2, 0) * CFrame.Angles(0, 0, math.pi / 2)
+		local rel = chassis.CFrame:Inverse() * v.model:GetPivot()
+		v.model:PivotTo(side * rel)
+		chassis.AssemblyLinearVelocity = Vector3.new(0.5, 0, 0)
+		frame(g)
+		T.eq(refs.flip.Visible, false, "noch nicht: erst nach FlipDelay")
+		g:Advance(Drive.FlipDelay + 0.3)
+		T.eq(refs.flip.Visible, true, "„Auto aufrichten“ erscheint")
+		T.check(tostring(refs.flip.Text):find("aufrichten", 1, true) ~= nil, "Beschriftung")
+		local before = chassis.Position
+		T.eq(g:Key(p, Enum.KeyCode.R), true, "Taste R richtet auf (geschluckt)")
+		g:Activate()
+		T.check(chassis.CFrame.UpVector.Y > 0.99, "aufrecht (UpVector.Y " .. tostring(chassis.CFrame.UpVector.Y) .. ")")
+		T.near(chassis.Position.Y, before.Y + Drive.FlipLift, 1e-3, "4 Studs höher")
+		T.near(chassis.Position.X, before.X, 1e-3, "gleiche Stelle (X)")
+		T.near(chassis.Position.Z, before.Z, 1e-3, "gleiche Stelle (Z)")
+		T.check(chassis.CFrame.LookVector:Dot(Vector3.new(-1, 0, 0)) > 0.99, "Blickrichtung bleibt")
+		T.eq(chassis.AssemblyLinearVelocity.Magnitude, 0, "Bewegung gestoppt")
+		frame(g)
+		T.eq(refs.flip.Visible, false, "Knopf wieder weg")
+		-- fährt schnell auf der Seite (z. B. rutscht): kein Aufrichten
+		g:Activate()
+		v.model:PivotTo(side * rel)
+		chassis.AssemblyLinearVelocity = Vector3.new(20, 0, 0)
+		g:Advance(Drive.FlipDelay + 0.5)
+		T.eq(refs.flip.Visible, false, "in Bewegung: kein Aufrichten")
+		-- Handy-Knopf (Abklingzeit abgelaufen)
+		chassis.AssemblyLinearVelocity = Vector3.zero
+		g:Advance(Drive.FlipCooldown + Drive.FlipDelay)
+		T.eq(refs.flip.Visible, true, "wieder angeboten")
+		press(g, refs.flip)
+		T.check(chassis.CFrame.UpVector.Y > 0.99, "Knopf richtet auf")
+		-- Aussteigen: R wieder frei
+		sit(g, p, nil)
+		frame(g)
+		T.eq(g.env.casBindings.UCG_Aufrichten, nil, "Taste R nach dem Aussteigen nicht mehr gebunden")
+		noOwnErrors(T, g)
+	end },
+
+	{ "Fahren: Tacho weicht dem 2.4.0-Tablet, Toast rückt unter den Tacho", function(T, H)
+		local g, p = start(H, { viewport = Vector2.new(390, 844) })
+		local rec = recorder(T)
+		local tabletOpen = false
+		local MiniUI = g:ClientModule(p, "Mini.MiniUI")
+		local Drive = g:ClientModule(p, "Mini.DriveClient")
+		g:InClient(p, function()
+			Drive.Start({
+				UI = MiniUI, Remote = rec, Toast = function() end,
+				IsTabletOpen = function()
+					return tabletOpen
+				end,
+				IsBlocked = function()
+					return false
+				end,
+			})
+		end)
+		local v = makeVehicle(g, p.UserId)
+		sit(g, p, v.seat)
+		frame(g)
+		local gui = p.PlayerGui:FindFirstChild("Fahren")
+		T.eq(gui.Enabled, true, "Tacho sichtbar")
+		-- 2.4.0-Toast während der Fahrt: unter dem Tacho statt darunter verdeckt
+		g:Activate()
+		g.env.services.ReplicatedStorage.GarageShared.Remotes.Event:FireClient(p, "toast", "Probe-Hinweis")
+		g:Advance(0.1)
+		local toastPanel
+		for _, x in ipairs(p.PlayerGui.UltimateCarGame:GetDescendants()) do
+			if x:IsA("TextLabel") and x.Text == "Probe-Hinweis" then
+				toastPanel = x.Parent
+			end
+		end
+		T.check(toastPanel ~= nil, "2.4.0-Toast gefunden")
+		if toastPanel then
+			T.eq(toastPanel.Position.Y.Offset, Drive.ToastTop, "Toast unter dem Tacho (y " .. tostring(toastPanel.Position.Y.Offset) .. ")")
+		end
+		-- Tablet offen: Tacho, Nitro-Knopf aus (lägen sonst über dem Tablet)
+		tabletOpen = true
+		frame(g)
+		T.eq(gui.Enabled, false, "Tacho und Nitro-Knopf weichen dem Tablet")
+		T.eq(g:InClient(p, function()
+			return Drive.ToastOffset()
+		end), nil, "ohne Tacho wieder die 2.4.0-Stelle für Toasts")
+		tabletOpen = false
+		frame(g)
+		T.eq(gui.Enabled, true, "danach wieder sichtbar")
+		noOwnErrors(T, g)
+	end },
+
+	{ "Panel schließt, wenn der Server den Spieler ins Auto setzt (Zeitfahren, Waschstraße): Handy-Steuerung frei", function(T, H)
+		local g, p = start(H, { viewport = Vector2.new(390, 844) })
+		local MiniClient = g:ClientModule(p, "Mini.MiniClient")
+		local GuiService = g.env.services.GuiService
+		local function notice(data)
+			g:Activate()
+			g.env.services.ReplicatedStorage.GarageShared.Remotes.Event:FireClient(p, "mini_notice", data)
+			g:Advance(0.1)
+		end
+		for _, case in ipairs({
+			{ tab = "track", data = { kind = "track_start", startAt = g:Now() + 3, total = 4, countdown = 3 } },
+			{ tab = "track", data = { kind = "car_spawned", id = 1, model = "komet", name = "Komet C1", testdrive = false, at = "track" } },
+			{ tab = "carwash", data = { kind = "car_spawned", id = 1, model = "komet", name = "Komet C1", testdrive = false, at = "carwash" } },
+		}) do
+			g:InClient(p, function()
+				MiniClient.Open(case.tab)
+			end)
+			g:Advance(0.1)
+			T.eq(MiniClient.IsOpen(), true, "Panel offen (" .. case.tab .. ")")
+			T.eq(GuiService.TouchControlsEnabled, false, "Touch-Steuerung aus, solange das Panel offen ist")
+			notice(case.data)
+			T.eq(MiniClient.IsOpen(), false, case.data.kind .. " auf Tab " .. case.tab .. " schließt das Panel")
+			T.eq(GuiService.TouchControlsEnabled, true, "Stick wieder da")
+		end
+		noOwnErrors(T, g)
 	end },
 }

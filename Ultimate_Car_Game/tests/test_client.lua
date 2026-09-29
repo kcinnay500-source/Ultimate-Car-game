@@ -200,7 +200,7 @@ return {
 			T.eq(d.games.press.rebirths, 1, "Server: Rebirth durchgeführt")
 		end
 		-- Umtausch
-		d.games.press.scrap = 5e6
+		d.games.press.scrap = g:MiniShared("MiniConfig").ScrapExchangePackages[1] * 5 -- genug für das kleinste Paket
 		g:Advance(1.6) -- nächster Snapshot kommt spätestens nach 1 s + einem Tick
 		local ex
 		for _, x in ipairs(page:GetDescendants()) do

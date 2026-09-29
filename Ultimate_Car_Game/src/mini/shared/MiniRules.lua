@@ -4,6 +4,11 @@
 local MiniConfig = require(script.Parent:WaitForChild("MiniConfig"))
 local MiniCatalog = require(script.Parent:WaitForChild("MiniCatalog"))
 local C = require(script.Parent.Parent:WaitForChild("Config"))
+-- 3.x: Autos, Teststrecke, Auktion, Spielhalle (keine Ringabhängigkeit: diese Module laden MiniRules erst beim Aufruf)
+local CarRules = require(script.Parent:WaitForChild("CarRules"))
+local TrackRules = require(script.Parent:WaitForChild("TrackRules"))
+local AuctionRules = require(script.Parent:WaitForChild("AuctionRules"))
+local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
 
 local MiniRules = {}
 
@@ -84,13 +89,14 @@ for _, key in ipairs(MiniRules.STAT_KEYS) do
 	STAT_SET[key] = true
 end
 
--- Tiefe höchstens 3 unter games (games.press.upgrades.pu1); R.Snapshot erlaubt 12.
+-- Tiefe höchstens 3 unter games (games.press.upgrades.pu1, games.cars[1].paint, games.arcade.best.arcade_1);
+-- R.Snapshot erlaubt 12.
 function MiniRules.DefaultGames()
 	local stats = {}
 	for _, key in ipairs(MiniRules.STAT_KEYS) do
 		stats[key] = 0
 	end
-	return {
+	local g = {
 		v = MiniRules.GamesVersion,
 		parts = MiniConfig.StartParts,
 		tuningLevel = 1,
@@ -113,7 +119,12 @@ function MiniRules.DefaultGames()
 		stats = stats,
 		milestones = {},
 		daily = { day = "", claimed = false, active = false, progress = {}, goalsClaimed = {} },
+		auction = AuctionRules.Default(),
+		track = TrackRules.Default(),
+		arcade = ArcadeRules.Default(),
 	}
+	CarRules.ApplyDefault(g) -- cars = {}, carSerial = 0, activeCar = 0
+	return g
 end
 
 function MiniRules.NormalizePuzzle(pz)
@@ -152,6 +163,10 @@ function MiniRules.LoadGames(raw, d, now)
 		g.stats.jobsDone = loadInt(completed, 0, 0, MAX_SAFE)
 		return g
 	end
+	g.auction = AuctionRules.Load(raw.auction, d, now)
+	g.track = TrackRules.Load(raw.track)
+	g.arcade = ArcadeRules.Load(raw.arcade, d, now)
+	CarRules.ApplyLoad(g, raw, d, now)
 	g.parts = loadInt(raw.parts, g.parts, 0, MAX_SAFE)
 	for _, u in ipairs(MiniConfig.Upgrades) do
 		g[u.key] = loadInt(raw[u.key], u.start, u.start, u.max)

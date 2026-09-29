@@ -1,4 +1,4 @@
-TESTBERICHT – Ultimate Car Game 3.0.0 (Werkstattmeile)
+TESTBERICHT – Ultimate Car Game 3.0.0 (Werkstattmeile, Ausbaustufen 1–3)
 =====================================================
 
 Datum: 2026-09-29
@@ -7,13 +7,14 @@ Befehle:
   python tools/export_fixture.py
   python tools/validate.py Ultimate_Car_Game.rbxlx
 
-Ergebnis: 818 Validierungsprüfungen + 46.468 Testprüfungen, 0 Fehler, 0 Warnungen
+Ergebnis: 1.227 Validierungsprüfungen + 54.111 Testprüfungen, 0 Fehler, 0 Warnungen
+Balance: tools/economy_sim.py --check → 0 Verstöße (docs/BALANCE.md)
 
 Basis
   - Place = Original 2.4.0 + Skripte aus src/ + Stadt aus tools/worldgen.
   - Roundtrip: gegenüber 2.4.0 nur Skripte geändert (9 Skripte, jede Änderung mit "-- 3.0:" markiert).
-  - Luau-Compiler: 63 Dateien, 0 Fehler.
-  - 22 Minispiel-Aktionen, 22 Server-Handler, alle vom Client gesendet, 107 requires geprüft.
+  - Luau-Compiler: 85 Dateien, 0 Fehler.
+  - 38 Minispiel-Aktionen, 38 Server-Handler, alle vom Client gesendet, 107 requires geprüft.
 
 Tests (Roblox-Mock führt den echten GarageServer und GarageClient aus)
   - 2.4.0-Ablauf: Beitritt, Grundstück, Auftrag, Diagnose, Reparatur-QTE, Endkontrolle, Abrechnen, Speichern.
@@ -23,6 +24,10 @@ Tests (Roblox-Mock führt den echten GarageServer und GarageClient aus)
   - Grundstücke: 8 Slots überlappen weder sich noch die Stadt; Drehung 180° für Ankunft, Rolltor, Bühne.
   - Client: alle Bereiche rendern, Tasten senden nur Absichten, 10.000 Klicks ohne Instanzflut.
   - Mehrspieler: 8 Spieler getrennt, 9. Spieler ohne Grundstück.
+  - Autos: Kauf/Verkauf/Tuning idempotent, fahrbares Fahrzeug strukturell (Schweißungen, Achsen, Motoren, Lenkung, Sitz),
+    Besitzer-Schutz, Probefahrt, Zeitfahren mit Plausibilitätsprüfung, Aussteigen vor Teleport.
+  - Auktionshaus: Überbieten, Deckung bei Abrechnung, Verkäufer/Bieter verlässt, Auktionsbuch gegen Duplikate.
+  - Spielhalle: Bewertung aus Serverzeit, ein Token = eine Auszahlung, Tageslimit.
 
 Stadt (tools/worldgen/checks.py)
   - 10.477 Parts (Budget 12.000), 105 Lichter (Budget 120), alles verankert.
@@ -30,7 +35,7 @@ Stadt (tools/worldgen/checks.py)
     freie Fläche und Kamera-Raum an jeder Station geprüft.
 
 Reviews
-  - Adversariales Code-Review (4 Blickwinkel, jeder Befund 2× gegengeprüft): 14 bestätigt, alle behoben mit Regressionstest.
+  - Adversariales Code-Review Stufe 1: 14 bestätigte Befunde, Stufe 2+3: 13 bestätigte Befunde – alle behoben mit Regressionstest.
   - Visuelle Prüfung anhand gerenderter Ansichten: 46 Befunde, 38 behoben, Rest begründet.
 
-Nur in Studio prüfbar: siehe STUDIO_TESTS.md (Rendering, Licht, echte Physik, Netzwerk, Touch).
+Nur in Studio prüfbar: siehe STUDIO_TESTS.md – vor allem das echte Fahrverhalten (Physik), Rendering, Licht, Netzwerk, Touch.

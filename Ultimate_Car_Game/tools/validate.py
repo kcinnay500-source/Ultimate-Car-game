@@ -39,6 +39,8 @@ STUDIO_STORE = "UltimateCarGame_Studio_v2"
 LEADERBOARD_STORE = "UltimateCarGame_ScrapLeaderboard_v1"
 # Nutzlast-Felder, die ein Client nie senden darf (Serverautorität)
 FORBIDDEN_FIELDS = {"amount", "price", "cost", "credits", "money", "scrap", "reward", "gain", "xp", "time", "now", "timestamp", "result", "correct"}
+# Ausnahmen laut PHASE2_CONTRACT §4: ein Gebot ist eine Absicht (Server prüft Mindestgebot, Deckel und Guthaben)
+INTENT_FIELDS = {("mini_auction_bid", "amount")}
 
 errors = []
 warnings = []
@@ -238,7 +240,7 @@ def validate_static():
     check(len(actions) >= 20, f"MiniNet.Actions unvollständig ({len(actions)})")
     for name, fields in actions.items():
         for f in fields:
-            check(f not in FORBIDDEN_FIELDS, f"MiniNet.Actions.{name}: Feld {f} wäre ein Client-Betrag")
+            check(f not in FORBIDDEN_FIELDS or (name, f) in INTENT_FIELDS, f"MiniNet.Actions.{name}: Feld {f} wäre ein Client-Betrag")
     registered = []
     for p, text in texts.items():
         if side_of(p) == ("mini", "server"):
@@ -255,7 +257,7 @@ def validate_static():
                 sent_mini.add(a)
                 check(a in actions, f"{rel(p)}: sendet undefinierte Aktion {a}")
                 for field in re.findall(r"([a-zA-Z_]+)\s*=", m.group(2) or ""):
-                    check(field not in FORBIDDEN_FIELDS, f"{rel(p)}: Client sendet verbotenes Feld {field} ({a})")
+                    check(field not in FORBIDDEN_FIELDS or (a, field) in INTENT_FIELDS, f"{rel(p)}: Client sendet verbotenes Feld {field} ({a})")
                     check(field in actions.get(a, set()), f"{rel(p)}: {a} sendet Feld {field}, das MiniNet nicht kennt")
             check("Command:FireServer" not in text or p.name == "MiniRemote.lua", f"{rel(p)}: sendet am MiniRemote vorbei")
     for a in actions:

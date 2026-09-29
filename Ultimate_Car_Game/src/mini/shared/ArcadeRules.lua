@@ -4,8 +4,12 @@
 -- Ablauf einer Runde (serverautoritativ, PHASE2_CONTRACT §4/§6):
 --   NewRound(key, seed, now, token)  Server: Parameter aus dem Seed, Start nach Countdown (startAt = now + 3)
 --   View(round)                      öffentliche Parameter für den Client (mini_notice "arcade_round"), ohne Geheimnisse
+--                                    (BLITZ-REAKTION: ohne die Zeitpunkte, an denen die Lampen ausgehen; die kommen erst
+--                                    im Moment selbst als mini_notice "arcade_go", siehe GoEvents/GoView)
 --   Input(round, at, value, now)     eine Eingabe: at = GetServerTimeNow() des Clients, nur gültig in
 --                                    [now − 0,5; now + 0,06] (wie das 2.4.0-Mess-QTE), streng in Zeitreihenfolge.
+--                                    Zurückdatieren ist begrenzt: gewertet wird höchstens
+--                                    now − Latenz − LatencySlack (Latenz = Einweg-Schätzung, höchstens LatencyCap).
 --                                    Bewertet wird ausschließlich auf der Zeitachse des Servers (startAt aus dem Seed).
 --   Finish(round, now)               Punkte 0..1000 aus den angenommenen Eingaben; danach ist die Runde geschlossen.
 --   Reward(key, score)               Credits hängen nur von den Punkten ab (kein Einsatz, kein Zufall).
@@ -20,6 +24,11 @@ local MOD = 2147483647
 ArcadeRules.Countdown = 3 -- Sekunden von der Startbestätigung bis zum Spielbeginn
 ArcadeRules.PastTolerance = 0.5 -- Eingabe darf höchstens so alt sein (Serverzeit bei Ankunft − at)
 ArcadeRules.FutureTolerance = 0.06 -- … und höchstens so weit in der Zukunft liegen
+-- Rückdatierung: at wird auf mindestens (Ankunft − Latenz − LatencySlack) angehoben. Latenz = halbe Round-Trip-Zeit
+-- (Player:GetNetworkPing), höchstens LatencyCap; ohne Messung DefaultLatency.
+ArcadeRules.LatencyCap = 0.15
+ArcadeRules.LatencySlack = 0.05
+ArcadeRules.DefaultLatency = 0.08
 ArcadeRules.FinishGrace = 60 -- Abrechnung bis endAt + FinishGrace, danach verfällt die Runde
 ArcadeRules.StartCooldown = 1 -- Sekunden zwischen zwei Rundenstarts
 ArcadeRules.MaxInputs = 600 -- Eingaben je Runde (danach wird nichts mehr angenommen)
@@ -206,6 +215,23 @@ function ArcadeRules.AcceptTime(at, now)
 	return finite(at) and finite(now) and at >= now - ArcadeRules.PastTolerance and at <= now + ArcadeRules.FutureTolerance
 end
 
+-- Einweg-Latenz aus der Round-Trip-Zeit (Player:GetNetworkPing, Sekunden), begrenzt auf [0; LatencyCap]
+function ArcadeRules.Latency(ping)
+	if not finite(ping) or ping < 0 then
+		return ArcadeRules.DefaultLatency
+	end
+	return clamp(ping / 2, 0, ArcadeRules.LatencyCap)
+end
+
+-- Gewerteter Zeitpunkt einer Eingabe: nie früher als Ankunft − Latenz − LatencySlack (Rückdatierung begrenzt)
+function ArcadeRules.InputTime(at, now, lat)
+	local floor = now - clamp(finite(lat) and lat or 0, 0, ArcadeRules.LatencyCap) - ArcadeRules.LatencySlack
+	if at < floor then
+		return floor
+	end
+	return at
+end
+
 function ArcadeRules.Rating(score)
 	score = finite(score) and score or 0
 	if score >= 900 then
@@ -236,29 +262,47 @@ function ArcadeRules.ReactionPoints(r)
 	return math.floor(c.points * clamp((c.zero - r) / (c.zero - c.full), 0, 1) + 0.5)
 end
 
+-- Feste Taktung: Start i beginnt bei (i−1) × Periode, unabhängig von den Pausen davor. So verraten weder der
+-- nächste Start noch die Rundendauer, wann die Lampen des vorigen Starts ausgegangen sind (View zeigt nur l).
+function ArcadeRules.ReactionPeriod()
+	local c = ArcadeRules.Reaction
+	return (c.lights - 1) * c.lightStep + c.maxDelay + c.window + c.gap
+end
+
 function Reaction.gen(r)
 	local c = ArcadeRules.Reaction
-	local list, t = {}, 0
+	local list = {}
+	local period = ArcadeRules.ReactionPeriod()
 	local steps = math.floor((c.maxDelay - c.minDelay) / 0.05 + 0.5)
 	for i = 1, c.attempts do
+		local t = (i - 1) * period
 		local delay = c.minDelay + r.int(0, steps) * 0.05
-		local go = r3(t + (c.lights - 1) * c.lightStep + delay)
-		list[i] = { l = r3(t), g = go }
-		t = go + c.window + c.gap
+		list[i] = { l = r3(t), g = r3(t + (c.lights - 1) * c.lightStep + delay) }
 	end
-	local last = list[#list]
-	return { attempts = list, lights = c.lights, lightStep = c.lightStep, window = c.window }, {}, r3(last.g + c.window + c.tail)
+	local lastL = list[#list].l
+	local duration = r3(lastL + (c.lights - 1) * c.lightStep + c.maxDelay + c.window + c.tail)
+	return { attempts = list, lights = c.lights, lightStep = c.lightStep, window = c.window }, {}, duration
 end
 
 function Reaction.new()
 	return { res = {} }
 end
 
--- Welcher Start ist zur Zeit t offen? (von den ersten Lampen bis Ende des Reaktionsfensters)
+-- Welcher Start ist zur Zeit t offen? (von den ersten Lampen bis Ende des Reaktionsfensters). Auf dem Client ist
+-- g erst nach "arcade_go" bekannt: bis dahin gilt der Start bis zum Beginn des nächsten als offen.
 function ArcadeRules.ReactionAttempt(p, t)
 	for i, a in ipairs(p.attempts) do
-		if t >= a.l and t <= a.g + p.window then
-			return i, a
+		if t >= a.l then
+			local open
+			if a.g ~= nil then
+				open = t <= a.g + p.window
+			else
+				local nextA = p.attempts[i + 1]
+				open = nextA == nil or t < nextA.l
+			end
+			if open then
+				return i, a
+			end
 		end
 	end
 	return nil
@@ -269,7 +313,9 @@ function Reaction.input(p, st, t)
 	if not i or st.res[i] then
 		return false, nil
 	end
-	local r = t - a.g
+	-- Lampen noch nicht aus (Client: g noch unbekannt) = Frühstart. Die Reaktionszeit wird um die Einweg-Latenz
+	-- (p.lat, höchstens LatencyCap) bereinigt: "arcade_go" kommt so viel später beim Spieler an.
+	local r = a.g and (t - a.g - (p.lat or 0)) or -1
 	if r < ArcadeRules.Reaction.minReaction then
 		st.res[i] = { early = true, points = 0 }
 		return true, { attempt = i, early = true, points = 0 }
@@ -1173,7 +1219,8 @@ local KINDS = { reaction = Reaction, brake = Brake, pitstop = Pitstop, torque = 
 ArcadeRules.Kinds = KINDS
 
 -- Neue Runde. seed bestimmt alle Parameter; startAt = now + Countdown. Rückgabe: round oder nil
-function ArcadeRules.NewRound(key, seed, now, token)
+-- lat = Einweg-Latenz des Spielers (ArcadeRules.Latency), wird für die Runde festgehalten.
+function ArcadeRules.NewRound(key, seed, now, token, lat)
 	local def = ArcadeRules.GameByKey[key]
 	if not def or not finite(seed) or not finite(now) then
 		return nil
@@ -1181,13 +1228,49 @@ function ArcadeRules.NewRound(key, seed, now, token)
 	local K = KINDS[def.kind]
 	local r = ArcadeRules.Rng(seed)
 	local p, secret, duration = K.gen(r, def)
+	lat = clamp(finite(lat) and lat or 0, 0, ArcadeRules.LatencyCap)
+	p.lat = lat
 	local startAt = now + ArcadeRules.Countdown
 	return {
 		token = token, key = def.key, kind = def.kind, seed = seed,
 		startAt = startAt, duration = duration, endAt = startAt + duration,
-		p = p, secret = secret, st = K.new(p, secret),
+		p = p, secret = secret, st = K.new(p, secret), lat = lat,
 		lastAt = -math.huge, inputs = 0, rejected = 0, closed = false,
 	}
+end
+
+-- Öffentliche Parameter: BLITZ-REAKTION ohne die Ausgeh-Zeitpunkte g (sonst könnte ein Skript genau g + 0,2 senden)
+local function publicParams(round)
+	if round.kind ~= "reaction" then
+		return round.p
+	end
+	local p = table.clone(round.p)
+	p.attempts = {}
+	for i, a in ipairs(round.p.attempts) do
+		p.attempts[i] = { l = a.l }
+	end
+	return p
+end
+ArcadeRules.PublicParams = publicParams
+
+-- BLITZ-REAKTION: Zeitpunkte (Serverzeit), zu denen der Server "arcade_go" sendet. Rückgabe: { {attempt, at} }
+function ArcadeRules.GoEvents(round)
+	local out = {}
+	if round.kind == "reaction" then
+		for i, a in ipairs(round.p.attempts) do
+			table.insert(out, { attempt = i, at = round.startAt + a.g })
+		end
+	end
+	return out
+end
+
+-- Inhalt von mini_notice "arcade_go" (erst im Moment, in dem die Lampen ausgehen)
+function ArcadeRules.GoView(round, i)
+	local a = round.p.attempts and round.p.attempts[i]
+	if round.kind ~= "reaction" or not a then
+		return nil
+	end
+	return { token = round.token, attempt = i, g = a.g }
 end
 
 -- Öffentliche Rundendaten für den Client. Ohne Seed und ohne Lösungen: aus dem Seed ließen sich mit diesem
@@ -1196,7 +1279,7 @@ end
 function ArcadeRules.View(round)
 	return {
 		token = round.token, game = round.key, gameKind = round.kind,
-		startAt = round.startAt, endAt = round.endAt, duration = round.duration, params = round.p,
+		startAt = round.startAt, endAt = round.endAt, duration = round.duration, params = publicParams(round),
 	}
 end
 
@@ -1215,6 +1298,7 @@ function ArcadeRules.Input(round, at, value, now)
 		round.rejected += 1
 		return false, { reject = at < now and "late" or "early" }
 	end
+	at = ArcadeRules.InputTime(at, now, round.lat)
 	if at < round.lastAt then
 		round.rejected += 1
 		return false, { reject = "order" }

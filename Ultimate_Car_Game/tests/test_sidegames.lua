@@ -54,7 +54,7 @@ return {
 		local c = d.money
 		g:Act(player, "mini_scrapyard_sell", { rid = 6 })
 		T.eq(d.games.parts, 2, "5 Altteile verkauft")
-		T.check(d.money >= c + 220, "220 Cr")
+		T.check(d.money >= c + g:MiniShared("MiniConfig").ScrapyardSellCredits, "Verkaufserlös (MiniConfig)")
 		g:Advance(0.2)
 		g:Act(player, "mini_scrapyard_sell", { rid = 7 })
 		T.eq(d.games.parts, 2, "zu wenig Altteile: nichts")
@@ -188,7 +188,7 @@ return {
 		local money = d.money
 		g:Act(player, "mini_quiz_answer", { token = cur.token, choice = find(cur.order, 1), rid = 32 })
 		T.eq(d.games.quiz.diagPoints, 1, "Diagnosepunkt")
-		T.check(d.money >= money + 90, "90 Cr")
+		T.check(d.money >= money + g:MiniShared("MiniConfig").QuizCorrectCredits, "Credits für die richtige Antwort (MiniConfig)")
 		-- ungültige Wahl verbraucht die Frage nicht
 		g:Advance(1.1)
 		g:Act(player, "mini_quiz_new", { rid = 33 })
@@ -275,7 +275,7 @@ return {
 		g:Act(player, "mini_parking_tap", { cell = pz.target, rid = 50 })
 		T.eq(pz.solved, true, "gelöst")
 		T.eq(d.games.parking.streak, 1, "Serie 1")
-		T.check(d.money >= money + 135, "Belohnung 120 + 15")
+		T.check(d.money >= money + SG.ParkingReward(1), "Belohnung Grundwert + 1 × Serienanteil")
 		g:Advance(0.2)
 		g:Act(player, "mini_parking_tap", { cell = pz.target, rid = 51 })
 		T.eq(d.games.parking.streak, 1, "kein doppeltes Lösen")
@@ -295,13 +295,17 @@ return {
 		T.check(crashed, "blockiertes Ziel: Blechschaden, Serie beendet")
 		-- Deckel und Querboni
 		d.games.parking.streak = 1000
-		T.eq(CB.CustomerBonus(d), 1.7, "Serienbonus gedeckelt auf 1,7")
+		T.eq(CB.CustomerBonus(d), MC.CustomerBonusCap, "Serienbonus gedeckelt")
+		T.check(MC.CustomerBonusCap > 1 and MC.CustomerBonusCap <= 1.7, "Kundenbonus-Deckel in sinnvollem Bereich")
 		T.eq(CB.OfferBonus(d), 5, "Zusatzangebote gedeckelt auf +5")
-		-- Serienanteil der Belohnung gedeckelt wie der Kundenbonus (Serie 24)
-		T.eq(MC.ParkingRewardStreakCap, 24, "Deckel bei Serie 24")
-		T.eq(SG.ParkingReward(24), 120 + 24 * 15, "Serie 24")
-		T.eq(SG.ParkingReward(3000), 120 + 24 * 15, "Serie 3000 zahlt nicht mehr als Serie 24")
-		T.eq(SG.ParkingReward(1e300), 120 + 24 * 15, "riesige Serie")
+		-- Serienanteil der Belohnung gedeckelt wie der Kundenbonus (Serie, ab der der Kundenbonus voll ist)
+		local cap = math.ceil((MC.CustomerBonusCap - 1) / MC.CustomerBonusPerStreak - 1e-9)
+		T.eq(MC.ParkingRewardStreakCap, cap, "Deckel bei Serie " .. cap)
+		T.eq(math.min(MC.CustomerBonusCap, 1 + cap * MC.CustomerBonusPerStreak), MC.CustomerBonusCap, "bei dieser Serie ist der Kundenbonus voll")
+		local full = MC.ParkingRewardBase + cap * MC.ParkingRewardPerStreak
+		T.eq(SG.ParkingReward(cap), full, "Serie " .. cap)
+		T.eq(SG.ParkingReward(3000), full, "Serie 3000 zahlt nicht mehr als die Deckel-Serie")
+		T.eq(SG.ParkingReward(1e300), full, "riesige Serie")
 		-- Abbruch beendet die Serie
 		g:Advance(0.2)
 		g:Act(player, "mini_parking_new", { rid = 300 })
@@ -396,9 +400,13 @@ return {
 		local job = { kind = C.Jobs[1].id, carId = C.Cars[1].id, quality = 100, usedParts = {} }
 		d.games.parking.streak = 0
 		local reward = R.Reward(d, job)
-		d.games.parking.streak = 10
+		local MCq = g:MiniShared("MiniConfig")
+		local streak = math.max(1, MCq.ParkingRewardStreakCap - 1) -- unterhalb des Deckels
+		d.games.parking.streak = streak
+		local bonus = math.min(MCq.CustomerBonusCap, 1 + streak * MCq.CustomerBonusPerStreak)
+		T.check(bonus > 1, "Serie wirkt")
 		local def, car = C.JobById[job.kind], C.CarById[job.carId]
-		T.eq(R.Reward(d, job), math.floor(def.reward * car.reward * 1.3 * 1.25 + 0.5), "Kundenbonus ×1,3")
+		T.eq(R.Reward(d, job), math.floor(def.reward * car.reward * bonus * 1.25 + 0.5), "Kundenbonus der Serie")
 		T.check(R.Reward(d, job) > reward, "mehr Vergütung mit Serie")
 	end },
 }

@@ -4,6 +4,17 @@ local MiniLocale = require(Mini:WaitForChild("MiniLocale"))
 
 local TuningUI = {}
 
+-- Autos: Abschnitt "Mein Auto tunen" (CarTuningUI); fehlt er, bleibt die Idle-Garage nutzbar
+local CarTuning
+do
+	local ok, mod = pcall(function()
+		return require(script.Parent:WaitForChild("CarTuningUI", 10))
+	end)
+	if ok and type(mod) == "table" then
+		CarTuning = mod
+	end
+end
+
 local UI, Remote, T
 local refs = {}
 local state
@@ -12,6 +23,9 @@ local snapClock = 0
 function TuningUI.Build(page, ctx)
 	UI, Remote = ctx.UI, ctx.Remote
 	T = UI.Theme
+	if CarTuning then
+		refs.carTuning = CarTuning.Build(page, ctx, 0)
+	end
 
 	local head = UI.Card(page, 1)
 	UI.Title(head, "Idle Tuning Garage", 1)
@@ -63,6 +77,9 @@ function TuningUI.Build(page, ctx)
 end
 
 function TuningUI.Step()
+	if CarTuning then
+		CarTuning.Step()
+	end
 	if not state or not state.tuning then
 		return
 	end
@@ -84,6 +101,9 @@ function TuningUI.Step()
 end
 
 function TuningUI.Render(s)
+	if CarTuning then
+		CarTuning.Render(s)
+	end
 	local tu = s.tuning
 	if not tu then
 		return

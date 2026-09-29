@@ -1,7 +1,8 @@
 -- TrackRules: Zeitfahren auf der Teststrecke als reine Funktionen (Serverzeit, keine Instanzen).
 -- Ablauf: NewRun (Startampel) -> Touch je Checkpoint in Reihenfolge -> "finish" -> Complete (Bestzeit, Belohnung).
 -- Plausibilität: jeder Abschnitt braucht mindestens Luftlinie / Höchsttempo (gegen Teleport), die ganze
--- Runde mindestens Track.minLapSeconds. Belohnung nur für eine verbesserte Bestzeit, gedeckelt.
+-- Runde mindestens max(Track.minLapSeconds, Streckenlänge / Höchsttempo). Höchsttempo = das des GEFAHRENEN Autos
+-- (CarSpeed: Spitze × Nitro × speedMargin), nicht das schnellste Auto des Katalogs. Belohnung nur für eine verbesserte Bestzeit, gedeckelt.
 -- Daten: d.games.track = { best = <Sekunden oder 0>, rewardedBest = <Sekunden oder 0>, runs = <int> }
 local CarCatalog = require(script.Parent:WaitForChild("CarCatalog"))
 
@@ -62,6 +63,15 @@ function TrackRules.MaxSpeed()
 	return tuned * boost / CarCatalog.KmhPerStud * cfg().speedMargin
 end
 
+-- Höchstes glaubwürdiges Tempo eines bestimmten Autos (stats = CarRules.Stats(car)) in Studs/s
+function TrackRules.CarSpeed(stats)
+	if type(stats) ~= "table" or not finite(stats.topSpeedStuds) or stats.topSpeedStuds <= 0 then
+		return TrackRules.MaxSpeed()
+	end
+	local boost = type(stats.nitro) == "table" and finite(stats.nitro.boost) and math.max(1, stats.nitro.boost) or 1
+	return stats.topSpeedStuds * boost * cfg().speedMargin
+end
+
 local function pos(p)
 	if type(p) == "table" then
 		return p.X or p.x or p[1] or 0, p.Y or p.y or p[2] or 0, p.Z or p.z or p[3] or 0
@@ -89,12 +99,26 @@ function TrackRules.MinTimes(start, points, maxSpeed)
 	return out
 end
 
+-- Mindestzeit der ganzen Runde: Luftlinien-Summe über alle Checkpoints / Höchsttempo, mindestens minLapSeconds
+function TrackRules.MinLap(start, points, maxSpeed)
+	maxSpeed = maxSpeed or TrackRules.MaxSpeed()
+	local total, prev = 0, start
+	for _, p in ipairs(points) do
+		total += prev and dist(prev, p) or 0
+		prev = p
+	end
+	return math.max(cfg().minLapSeconds, total / maxSpeed)
+end
+
 ---------------------------------------------------------------- Lauf
 -- Neuer Lauf: Zeit läuft ab startAt = now + Countdown. minTimes aus MinTimes (Länge = Anzahl Checkpoints).
-function TrackRules.NewRun(minTimes, now, countdown)
+-- minLap = Mindestzeit der ganzen Runde (MinLap), maxSpeed = zugrunde gelegtes Höchsttempo (für Rescale).
+function TrackRules.NewRun(minTimes, now, countdown, minLap, maxSpeed)
 	countdown = countdown or cfg().countdown
 	local startAt = now + countdown
 	return {
+		minLap = finite(minLap) and minLap or cfg().minLapSeconds,
+		maxSpeed = maxSpeed,
 		startAt = startAt,
 		lastAt = startAt,
 		next = 1,
@@ -103,6 +127,21 @@ function TrackRules.NewRun(minTimes, now, countdown)
 		splits = {},
 		expiresAt = startAt + cfg().maxRunSeconds,
 	}
+end
+
+-- Tuning während des Laufs: das Auto ist schneller geworden -> offene Abschnitte und Rundenzeit passend kürzen
+-- (nie verlängern). Rückgabe: true, wenn angepasst
+function TrackRules.Rescale(run, maxSpeed)
+	if type(run) ~= "table" or not finite(maxSpeed) or not finite(run.maxSpeed) or maxSpeed <= run.maxSpeed then
+		return false
+	end
+	local f = run.maxSpeed / maxSpeed
+	for i = run.next, run.total do
+		run.minTimes[i] = math.max(cfg().segmentFloor, (run.minTimes[i] or 0) * f)
+	end
+	run.minLap = math.max(cfg().minLapSeconds, run.minLap * f)
+	run.maxSpeed = maxSpeed
+	return true
 end
 
 function TrackRules.Elapsed(run, now)
@@ -143,7 +182,7 @@ function TrackRules.Touch(run, index, now)
 	local info = { index = index, total = run.total, time = time, split = split }
 	if index >= run.total then
 		run.done = true
-		if time + 1e-6 < cfg().minLapSeconds then
+		if time + 1e-6 < (run.minLap or cfg().minLapSeconds) then
 			return "tooFast", info
 		end
 		return "finish", info

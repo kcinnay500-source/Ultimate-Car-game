@@ -17,7 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.collections import PolyCollection  # noqa: E402
-from matplotlib.patches import Circle  # noqa: E402
+from matplotlib.patches import Circle, Polygon  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from worldgen import scan  # noqa: E402
@@ -92,6 +92,40 @@ def stage_parts(tree):
     return out
 
 
+def overlays(tree, city, with_plots=False):
+    """Umrisse der unsichtbaren Fahrzeug-Parts: CarSpawns als Auto-Stellfläche mit Nasen-Pfeil (orange),
+    Checkpoints (gelb), Ziel (rot); mit --plots auch der Werkstatt-CarSpawn an allen Slots."""
+    from worldgen import drive
+    out = []
+
+    def car(nm, cf):
+        lk = cf.look
+        rt = (-lk[2], lk[0])
+        c = cf.p
+        hw, hl = drive.CAR_HALF_W, drive.CAR_HALF_L
+        pts = [(c[0] + rt[0] * a * hw + lk[0] * b * hl, c[2] + rt[1] * a * hw + lk[2] * b * hl)
+               for a, b in ((-1, -1), (1, -1), (1, 1), (0, 1.35), (-1, 1))]
+        out.append((nm, pts, "#ff9f1a"))
+    f = child(city, "CarSpawns")
+    for it in children(f) if f is not None else []:
+        car(name_of(it), read_cf(it))
+    tr = child(city, "Track")
+    if tr is not None:
+        for it in tr.iter("Item"):
+            if it.get("class") == "Part":
+                p = scan.record(it, name_of(it))
+                out.append((p.name, hull([(q[0], q[2]) for q in p.corners()]),
+                            "#ff3030" if p.name == "Ziel" else "#ffe02a"))
+    if with_plots:
+        from worldgen.plots import SLOTS, slot_cf
+        wk = child(scan.workspace(tree), "Werkstatt")
+        cs = child(wk, "CarSpawn") if wk is not None else None
+        if cs is not None:
+            for slot, house, px, pz, rot in SLOTS:
+                car("Plot%d" % slot, slot_cf(px, pz, rot) * read_cf(cs))
+    return out
+
+
 def markers(city):
     out = []
     for folder, col in (("Stations", "#ff2d95"), ("Arrivals", "#00e5ff")):
@@ -104,7 +138,7 @@ def markers(city):
     return out
 
 
-def top_view(parts, rect, path, marks=(), title="", px_per_stud=3.0, labels=True):
+def top_view(parts, rect, path, marks=(), title="", px_per_stud=3.0, labels=True, overlays=()):
     x0, x1, z0, z1 = rect
     sel = []
     for p in parts:
@@ -122,6 +156,8 @@ def top_view(parts, rect, path, marks=(), title="", px_per_stud=3.0, labels=True
     cols = [rgba(p) for p in sel]
     edge = [tuple(c * 0.6 for c in col[:3]) + (min(1, col[3] + 0.2),) for col in cols]
     ax.add_collection(PolyCollection(polys, facecolors=cols, edgecolors=edge, linewidths=0.15))
+    for nm, poly, col in overlays:
+        ax.add_patch(Polygon(poly, closed=True, fill=False, edgecolor=col, linewidth=0.9, zorder=5))
     for nm, (x, y, z), col in marks:
         if x0 <= x <= x1 and z0 <= z <= z1:
             ax.add_patch(Circle((x, z), 1.6, color=col, zorder=5))
@@ -326,15 +362,17 @@ def main(argv):
     tree = scan.load(place)
     city, parts = gather(tree, with_plots)
     marks = markers(city)
+    ovl = overlays(tree, city, with_plots)
     suffix = "_plots" if with_plots else ""
     if rect is None:
         p = out / ("city_top%s.png" % suffix)
         top_view(parts, (-665, 665, -475, 545), p, marks, "Werkstattmeile - Draufsicht", px_per_stud=3.2,
-                 labels=False)
+                 labels=False, overlays=ovl)
         print(p)
     else:
         p1 = out / ("%s_top%s.png" % (name, suffix))
-        top_view(parts, rect, p1, marks, name, px_per_stud=max(4.0, 2400 / max(rect[1] - rect[0], rect[3] - rect[2])))
+        top_view(parts, rect, p1, marks, name, px_per_stud=max(4.0, 2400 / max(rect[1] - rect[0], rect[3] - rect[2])),
+                 overlays=ovl)
         if cut is not None:
             p2 = out / ("%s_cut%g_iso%s.png" % (name, cut, suffix))
             iso_view(parts, rect, p2, "%s (Schnitt Y %g)" % (name, cut), ymax=cut)

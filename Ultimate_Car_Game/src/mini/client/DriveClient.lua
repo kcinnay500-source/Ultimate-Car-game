@@ -8,6 +8,11 @@
 --     Werte ohne Verzögerung. Der Server stellt beim Bau nur die Parkbremse ein.
 --   * Tacho (km/h, Gang), Nitro-Taste N / Gamepad X / Handy-Knopf (sendet nur mini_car_nitro; der Server setzt
 --     NitroUntil/NitroReadyAt), Zeitfahren-Anzeige (mini_notice track_*), Probefahrt-Restzeit.
+--   * Auto aufrichten: liegt das Auto auf der Seite/dem Dach (UpVector.Y < FlipUp) und steht fast (< FlipSpeed)
+--     länger als FlipDelay, erscheint „Auto aufrichten [R]“ (Handy: Knopf). Der Fahrer ist Netzwerk-Besitzer, daher
+--     setzt der Client das Auto selbst 4 Studs höher aufrecht hin (gleiche Stelle, gleiche Blickrichtung).
+--   * Tuning wirkt sofort: Torque/BrakeTorque/MaxSpeed usw. werden jedes Frame aus den Modell-Attributen gelesen.
+--   * Das HUD weicht dem 2.4.0-Tablet und QTE/Diagnose (ctx.IsTabletOpen/ctx.IsBlocked).
 --   * Die Kamera bleibt Roblox-Standard.
 --
 -- Fahrzeug-Aufbau (VehicleFactory), zwei Namensschemata werden erkannt:
@@ -40,6 +45,14 @@ DriveClient.HighSpeedSteer = 0.45 -- bei Spitze nur noch 45 % Lenkeinschlag
 DriveClient.NitroBoost = 1.35
 DriveClient.NitroSendGap = 0.75
 DriveClient.Action = "UCG_Nitro"
+DriveClient.FlipAction = "UCG_Aufrichten"
+DriveClient.FlipUp = 0.3 -- UpVector.Y darunter: Auto liegt auf der Seite oder dem Dach
+DriveClient.FlipSpeed = 3 -- Studs/s: darunter gilt das Auto als liegen geblieben
+DriveClient.FlipDelay = 2 -- Sekunden, bis „Auto aufrichten“ angeboten wird
+DriveClient.FlipLift = 4 -- Studs über der aktuellen Stelle
+DriveClient.FlipCooldown = 3
+DriveClient.HudTop = 58 -- Tacho unter der 2.4.0-Fortschrittsleiste (y 8..54)
+DriveClient.ToastTop = 118 -- Toasts während der Fahrt unter dem Tacho (sonst y 62)
 
 local CORNERS = { "FL", "FR", "RL", "RR" }
 local MOTOR_CLASSES = { HingeConstraint = true, CylindricalConstraint = true }
@@ -53,6 +66,7 @@ local gui, refs = nil, {}
 local drive = nil -- { seat, model, motors = {{c, dir}}, steers = {{c, dir}}, baseTorque, last = {} }
 local cachedChar, cachedHum
 local lastNitroSent = -math.huge
+local flipSince, lastFlip = nil, -math.huge
 local shownSpeed = 0
 local info = { driving = false, speed = 0, kmh = 0, gear = "N", nitro = false }
 
@@ -194,10 +208,11 @@ local function buildHud()
 	gui.Enabled = false
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	-- Tacho oben mittig (unten liegen 2.4.0-HUD, Stick und Sprungknopf; Toasts beginnen bei y 62)
+	-- Tacho oben mittig UNTER der 2.4.0-Fortschrittsleiste (CompactProgress y 8..54, zeigt Level/XP/Credits);
+	-- unten liegen das 2.4.0-HUD, Stick und Sprungknopf. Toasts rücken während der Fahrt unter den Tacho (ToastTop).
 	local panel = UI.Frame(gui, {
 		Name = "Tacho", BackgroundColor3 = T.bg, BackgroundTransparency = 0.12, AutomaticSize = Enum.AutomaticSize.None,
-		AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 4), Size = UDim2.new(0, 200, 0, 54),
+		AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, DriveClient.HudTop), Size = UDim2.new(0, 200, 0, 54),
 	})
 	UI.Corner(panel, 12)
 	refs.panel = panel
@@ -253,6 +268,14 @@ local function buildHud()
 	if corner then
 		corner.CornerRadius = UDim.new(0.5, 0)
 	end
+
+	-- Auto aufrichten (nur sichtbar, wenn das Auto umgekippt liegen bleibt)
+	refs.flip = UI.Button(gui, "Auto aufrichten [R]", T.yellow, function()
+		DriveClient.Flip()
+	end, {
+		Name = "Aufrichten", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, DriveClient.HudTop + 62),
+		Size = UDim2.new(0, 200, 0, 48), TextSize = 16, Visible = false,
+	})
 end
 
 local function setSide(visible)
@@ -293,6 +316,69 @@ end
 local function onNitroAction(_, inputState)
 	if inputState == Enum.UserInputState.Begin then
 		DriveClient.Nitro()
+		return Enum.ContextActionResult.Sink
+	end
+	return Enum.ContextActionResult.Pass
+end
+
+---------------------------------------------------------------- Auto aufrichten
+local function chassisOf(d)
+	return d.model:FindFirstChild("Chassis") or d.model.PrimaryPart or d.seat
+end
+
+-- Liegt das Auto seit FlipDelay auf der Seite/dem Dach und steht fast? (clock = os.clock())
+function DriveClient.Flippable(d, clock)
+	d = d or drive
+	if not d then
+		return false
+	end
+	local body = chassisOf(d)
+	local up = body.CFrame.UpVector.Y
+	local speed = body.AssemblyLinearVelocity.Magnitude
+	if up < DriveClient.FlipUp and speed < DriveClient.FlipSpeed then
+		flipSince = flipSince or clock
+	else
+		flipSince = nil
+	end
+	return flipSince ~= nil and clock - flipSince >= DriveClient.FlipDelay
+end
+
+-- Stellt das Auto an derselben Stelle aufrecht hin (Blickrichtung waagerecht erhalten) und stoppt alle Bewegung.
+-- Nur der Fahrer (Netzwerk-Besitzer) ruft das auf; die Änderung repliziert über den Netzwerk-Besitz.
+function DriveClient.Flip()
+	local d = drive
+	local clock = os.clock()
+	if not d or clock - lastFlip < DriveClient.FlipCooldown or not DriveClient.Flippable(d, clock) then
+		return false
+	end
+	local body = chassisOf(d)
+	local pos = body.Position
+	local look = body.CFrame.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	if flat.Magnitude < 0.1 then
+		-- steht auf der Nase/dem Heck: Richtung aus der Oberseite nehmen
+		local upv = body.CFrame.UpVector
+		flat = Vector3.new(upv.X, 0, upv.Z)
+	end
+	local yaw = flat.Magnitude >= 0.1 and math.atan2(-flat.X, -flat.Z) or 0
+	lastFlip = clock
+	flipSince = nil
+	-- Ziel für das Chassis; der Modell-Pivot folgt mit seinem Versatz zum Chassis (PrimaryPart muss es nicht sein)
+	local target = CFrame.new(pos + Vector3.new(0, DriveClient.FlipLift, 0)) * CFrame.Angles(0, yaw, 0)
+	d.model:PivotTo(target * (body.CFrame:Inverse() * d.model:GetPivot()))
+	for _, x in ipairs(d.model:GetDescendants()) do
+		if x:IsA("BasePart") and not x.Anchored then
+			x.AssemblyLinearVelocity = Vector3.zero
+			x.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+	refs.flip.Visible = false
+	return true
+end
+
+local function onFlipAction(_, inputState)
+	if inputState == Enum.UserInputState.Begin and drive and refs.flip.Visible then
+		DriveClient.Flip()
 		return Enum.ContextActionResult.Sink
 	end
 	return Enum.ContextActionResult.Pass
@@ -353,6 +439,10 @@ local function enter(seat, model)
 	gui.Enabled = true
 	refs.nitro.Text = isTouch() and "NITRO" or "NITRO\n[N]"
 	ContextActionService:BindActionAtPriority(DriveClient.Action, onNitroAction, false, 3000, Enum.KeyCode.N, Enum.KeyCode.ButtonX)
+	ContextActionService:BindActionAtPriority(DriveClient.FlipAction, onFlipAction, false, 3000, Enum.KeyCode.R, Enum.KeyCode.ButtonY)
+	flipSince = nil
+	refs.flip.Visible = false
+	refs.flip.Text = isTouch() and "Auto aufrichten" or "Auto aufrichten [R]"
 end
 
 local function exit()
@@ -364,6 +454,11 @@ local function exit()
 		gui.Enabled = false
 	end
 	ContextActionService:UnbindAction(DriveClient.Action)
+	ContextActionService:UnbindAction(DriveClient.FlipAction)
+	flipSince = nil
+	if refs.flip then
+		refs.flip.Visible = false
+	end
 	if not d then
 		return
 	end
@@ -396,7 +491,8 @@ local function control(d, dt)
 	local steerMax = num(model:GetAttribute("SteerAngle")) or DriveClient.SteerAngle
 	local driveSign = (num(model:GetAttribute("DriveSign")) or 1) < 0 and -1 or 1
 	local steerSign = (num(model:GetAttribute("SteerSign")) or 1) < 0 and -1 or 1
-	local torque = d.baseTorque
+	-- Jedes Frame aus dem Attribut: Tuning (VehicleFactory.ApplyStats) wirkt sofort, auch während der Fahrt
+	local torque = num(model:GetAttribute("Torque")) or d.baseTorque
 	local brake = num(model:GetAttribute("BrakeTorque")) or torque * DriveClient.BrakeFactor
 	local coast = num(model:GetAttribute("CoastTorque")) or brake * DriveClient.CoastFactor
 
@@ -525,6 +621,32 @@ local function render(d)
 	end
 end
 
+-- 2.4.0-Tablet oder QTE/Diagnose offen: Tacho und Knöpfe ausblenden (sonst lägen sie über dem Tablet)
+local function hudHidden()
+	if not ctx then
+		return false
+	end
+	for _, key in ipairs({ "IsTabletOpen", "IsBlocked" }) do
+		local fn = ctx[key]
+		if type(fn) == "function" then
+			local ok, res = pcall(fn)
+			if ok and res == true then
+				return true
+			end
+		end
+	end
+	return false
+end
+DriveClient.HudHidden = hudHidden
+
+-- Oberkante für Toasts: während der Fahrt (Tacho sichtbar) unter dem Tacho, sonst die 2.4.0-Stelle
+function DriveClient.ToastOffset()
+	if drive and gui and gui.Enabled then
+		return DriveClient.ToastTop
+	end
+	return nil
+end
+
 local function step(dt)
 	local hum = humanoid()
 	local seat = hum and hum.SeatPart or nil
@@ -541,7 +663,9 @@ local function step(dt)
 	end
 	if drive then
 		control(drive, dt)
+		gui.Enabled = not hudHidden()
 		render(drive)
+		refs.flip.Visible = DriveClient.Flippable(drive, os.clock())
 	end
 end
 
@@ -665,6 +789,7 @@ function DriveClient.Start(c)
 			info.driving = false
 			gui.Enabled = false
 			ContextActionService:UnbindAction(DriveClient.Action)
+			ContextActionService:UnbindAction(DriveClient.FlipAction)
 			warn("[Fahren] " .. tostring(err))
 		end
 	end)

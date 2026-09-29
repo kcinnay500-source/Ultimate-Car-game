@@ -790,7 +790,8 @@ return {
 		s2.p.profile.transacting = false
 		W.tick()
 		T.eq(lot2.state, "sold", "dann verkauft")
-		-- dauerhaft transacting: nach SettleWaitMax gewinnt das nächste Gebot
+		-- dauerhaft transacting: nach SettleWaitMax fällt das Höchstgebot weg, das Los läuft ReopenSeconds weiter,
+		-- danach gewinnt das nächste Gebot
 		local s3, sd3 = W.join(5, "Sara", 0, 10)
 		local c3 = giveCar(W.g, sd3, "komet")
 		local lot3 = W.consign(s3, c3, 1, 120)
@@ -798,6 +799,8 @@ return {
 		W.bid(a, lot3)
 		a.p.profile.transacting = true
 		W.run(120 + W.AR.SettleWaitMax + 2)
+		T.eq(lot3.state, "open", "Höchstgebot weggefallen: Los läuft weiter")
+		W.run(W.AR.ReopenSeconds + 1)
 		T.eq(lot3.state, "sold", "nicht ewig blockiert")
 		T.eq(lot3.result.userId, 3, "Ben als nächstes Gebot")
 		T.check(W.toasted(a, "gespeichert"), "Anna erfährt den Grund")
@@ -944,7 +947,7 @@ return {
 			l.Parent = gui
 			labels[key] = l
 		end
-		local a = W.join(1, "Anna", 200000, 50)
+		local a = W.join(1, "Anna", 10000000, 50) -- genug für das Startgebot des Sondermodells
 		W.tick()
 		T.check(labels.Title.Text ~= "" and labels.Lot.Text:find("Als Nächstes", 1, true) ~= nil, "Ankündigung: " .. labels.Lot.Text)
 		local lot = W.AS.StartNpcLot("vektor_gold", W.t)
@@ -1297,5 +1300,153 @@ return {
 		for _, w in ipairs(g:Warnings()) do
 			T.check(not tostring(w):find("AuctionUI", 1, true), "Warnung: " .. tostring(w))
 		end
+	end },
+
+	{ "Scheingebot am Höchstbetrag: Los läuft weiter, NPCs bieten wieder, Niedriggebot gewinnt nicht; Bietsperre", function(T, H)
+		local W = world(H)
+		local b, bd = W.join(2, "Ben", 100000, 10)
+		local c, cd = W.join(3, "Chris", 100000, 10)
+		local e, ed = W.join(4, "Eva", 100000, 10)
+		local lot = W.AS.StartNpcLot("komet_rally", W.t)
+		T.check(lot ~= nil, "NPC-Los komet_rally")
+		W.bid(b, lot, lot.start)
+		T.eq(W.AR.Top(lot).userId, 2, "Ben vorn mit dem Startgebot")
+		W.bid(c, lot, lot.maxBid)
+		T.eq(W.AR.Top(lot).amount, lot.maxBid, "Chris am Höchstbetrag")
+		W.bid(e, lot)
+		T.eq(W.AR.Top(lot).userId, 3, "ehrliches Gebot ist gedeckelt")
+		-- Chris gibt kurz vor Schluss sein Geld aus
+		W.run(lot.endsAt - W.t - 1)
+		cd.money = 100
+		W.run(2)
+		T.eq(lot.state, "open", "Höchstgebot nicht gedeckt: Los läuft weiter statt Zuschlag an Ben")
+		T.check(lot.endsAt >= W.t + W.AR.ReopenSeconds - 1, "noch etwa 30 s")
+		T.eq(W.AR.Top(lot).userId, 2, "Chris' Gebote gestrichen")
+		T.check(W.toasted(b, "nachbieten"), "Bieter erfahren es")
+		T.check(W.toasted(c, "nicht gedeckt"), "Chris erfährt den Grund")
+		-- Chris darf vorerst nicht mehr bieten
+		cd.money = 100000
+		local n = #lot.bids
+		W.bid(c, lot)
+		T.eq(#lot.bids, n, "Bietsperre für Chris")
+		T.check(W.toasted(c, "wieder in"), "Hinweis zur Sperre")
+		W.runUntilEnded(lot)
+		T.eq(lot.state, "sold", "zugeschlagen")
+		T.check(lot.result.amount > lot.start, "nicht zum Startgebot (" .. tostring(lot.result.amount) .. ")")
+		T.check(lot.result.npc == true or lot.result.userId ~= 2 or lot.result.amount > lot.start, "NPCs haben wieder mitgeboten")
+		T.eq(countModel(cd, "komet_rally"), 0, "Chris bekommt nichts")
+		-- nach der Sperre wieder erlaubt
+		W.t += W.AR.DropBanSeconds + 1
+		T.eq((W.AS.State().banned[3] or 0) < W.t, true, "Sperre abgelaufen")
+		W.done(T)
+	end },
+
+	{ "Freies Guthaben: eigene Höchstgebote auf anderen Losen sind verplant", function(T, H)
+		local W = world(H)
+		local s1, sd1 = W.join(1, "Sina", 0, 10)
+		local s2, sd2 = W.join(5, "Sven", 0, 10)
+		local a, ad = W.join(2, "Anna", 30000, 10)
+		local l1 = W.consign(s1, giveCar(W.g, sd1, "nord"), 2, 300)
+		local l2 = W.consign(s2, giveCar(W.g, sd2, "nord"), 2, 300)
+		T.check(l1 and l2, "zwei Lose")
+		ad.money = l1.start + math.floor(l2.start / 2)
+		W.bid(a, l1, l1.start)
+		T.eq(W.AR.Top(l1).userId, 2, "Anna führt Los 1")
+		T.check(l1.start + l2.start > ad.money, "beide Startgebote zusammen nicht gedeckt")
+		W.bid(a, l2, l2.start)
+		T.eq(#l2.bids, 0, "zweites Gebot abgelehnt")
+		T.check(W.toasted(a, "verplant"), "Hinweis: Guthaben verplant")
+		-- überboten: das Guthaben ist wieder frei
+		local x, xd = W.join(6, "Xaver", 1000000, 10)
+		W.bid(x, l1)
+		W.bid(a, l2, l2.start)
+		T.eq(W.AR.Top(l2) and W.AR.Top(l2).userId, 2, "nach dem Überbieten wieder frei")
+		W.done(T)
+	end },
+
+	{ "Geldschieben: dasselbe Auto nicht hin und zurück (24 h zwischen zwei Konten), Dritte dürfen", function(T, H)
+		local W = world(H)
+		local a, ad = W.join(1, "Alt-A", 0, 10)
+		local b, bd = W.join(2, "Alt-B", 1000000, 10)
+		local c, cd = W.join(3, "Clara", 1000000, 10)
+		local car = giveCar(W.g, ad, "komet")
+		local lot = W.consign(a, car, 1, 120)
+		W.bid(b, lot, lot.maxBid)
+		W.runUntilEnded(lot)
+		T.eq(lot.result and lot.result.userId, 2, "B kauft zum Höchstbetrag")
+		T.eq(W.AR.RecentPartner(ad, 2, W.t), true, "A merkt sich B")
+		T.eq(W.AR.RecentPartner(bd, 1, W.t), true, "B merkt sich A")
+		W.t += W.AR.ConsignCooldown
+		local back = W.consign(b, bd.games.cars[1], 1, 120)
+		T.check(back ~= nil, "B liefert wieder ein")
+		ad.money = 1000000
+		W.bid(a, back, back.start)
+		T.eq(#back.bids, 0, "A darf nicht zurückkaufen")
+		T.check(W.toasted(a, "24 Stunden"), "Hinweis 24 h")
+		W.bid(c, back, back.start)
+		T.eq(W.AR.Top(back).userId, 3, "Dritte dürfen bieten")
+		-- nach 24 h wieder erlaubt; Load verwirft alte Einträge
+		T.eq(W.AR.RecentPartner(ad, 2, W.t + W.AR.PartnerSeconds + 1), false, "nach 24 h frei")
+		local loaded = W.AR.Load(H.Copy(ad.games.auction), nil, W.t + W.AR.PartnerSeconds + 1)
+		T.eq(#loaded.partners, 0, "Load räumt abgelaufene Partner auf")
+		local kept = W.AR.Load(H.Copy(ad.games.auction), nil, W.t)
+		T.eq(#kept.partners, 1, "frische Partner bleiben")
+		W.done(T)
+	end },
+
+	{ "Höchstbieter verlässt kurz vor Schluss den Server: noch 30 s für NPCs und andere", function(T, H)
+		local W = world(H)
+		local b, bd = W.join(2, "Ben", 100000, 10)
+		local c, cd = W.join(3, "Chris", 100000, 10)
+		local lot = W.AS.StartNpcLot("komet_rally", W.t)
+		W.bid(b, lot, lot.start)
+		W.bid(c, lot, lot.maxBid)
+		W.run(lot.endsAt - W.t - 2)
+		W.leave(c)
+		T.eq(W.AR.Top(lot).userId, 2, "Chris' Gebot weg")
+		T.check(lot.endsAt - W.t >= W.AR.ReopenSeconds - 0.01, "Restzeit auf 30 s")
+		W.runUntilEnded(lot)
+		T.check(lot.result and lot.result.amount > lot.start, "nicht zum Startgebot zugeschlagen")
+		W.done(T)
+	end },
+
+	{ "Auktionsbuch (rein): Abgleich Verkäufer/Käufer ist idempotent und trifft nur das übergebene Auto", function(T, H)
+		local W = world(H)
+		local s, sd = W.join(1, "Sina", 0, 10)
+		local b, bd = W.join(2, "Ben", 100000, 10)
+		local car = giveCar(W.g, sd, "komet")
+		local other = giveCar(W.g, sd, "komet")
+		local lot = W.consign(s, car, 1, 120)
+		W.bid(b, lot)
+		local staleS, staleB = H.Copy(sd), H.Copy(bd)
+		local transfer
+		W.api.recordTransfer = function(t)
+			transfer = t
+		end
+		W.runUntilEnded(lot)
+		T.eq(lot.state, "sold", "verkauft")
+		T.check(transfer ~= nil, "api.recordTransfer vor dem Speichern gerufen")
+		local saves = W.saves(s)
+		T.check(#saves >= 1, "danach gespeichert")
+		if not transfer then
+			return
+		end
+		T.eq(W.AR.ReconcileSeller(sd, { transfer.seller }), 0, "gespeichertes Verkäufer-Profil: nichts zu tun")
+		T.eq(W.AR.ReconcileBuyer(bd, { transfer.buyer }), 0, "gespeichertes Käufer-Profil: nichts zu tun")
+		T.eq(W.AR.ReconcileSeller(staleS, { transfer.seller }), 1, "alter Verkäufer-Stand: nachgeholt")
+		T.eq(W.CR.Find(staleS, car.id), nil, "übergebenes Auto entfernt")
+		T.check(W.CR.Find(staleS, other.id) ~= nil, "anderes Auto bleibt")
+		T.eq(staleS.money, sd.money, "Auszahlung wie im Live-Profil")
+		T.eq(W.AR.ReconcileSeller(staleS, { transfer.seller }), 0, "zweimal: nichts doppelt")
+		T.eq(W.AR.ReconcileBuyer(staleB, { transfer.buyer }), 1, "alter Käufer-Stand: nachgeholt")
+		T.eq(staleB.money, bd.money, "Preis abgezogen")
+		T.eq(countModel(staleB, "komet"), 1, "Auto beim Käufer")
+		T.eq(W.AR.ReconcileBuyer(staleB, { transfer.buyer }), 0, "zweimal: nichts doppelt")
+		-- neues Auto mit derselben Id (anderer Kaufzeitpunkt) wird nicht getroffen
+		local fresh = W.CR.NewCar("komet", NOW + 99999)
+		fresh.id = car.id
+		table.insert(staleS.games.cars, W.CR.NormalizeCar(fresh))
+		T.eq(W.AR.ReconcileSeller(staleS, { transfer.seller }), 0, "gleiche Id, anderes Auto: bleibt")
+		W.done(T)
 	end },
 }

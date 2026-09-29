@@ -13,12 +13,14 @@ return {
 		g:Act(player, "mini_milestone_claim", { id = "m_scrap_10k", rid = 1 })
 		T.eq(d.games.milestones.m_scrap_10k, nil, "nicht erreicht: keine Belohnung")
 		T.eq(d.money, money, "keine Credits")
-		d.games.press.lifetime = 10000
+		local MC = g:MiniShared("MiniConfig")
+		local def = MC.MilestoneById.m_scrap_10k
+		d.games.press.lifetime = def.target
 		g:Advance(0.2)
 		g:Act(player, "mini_milestone_claim", { id = "m_scrap_10k", rid = 2 })
 		T.eq(d.games.milestones.m_scrap_10k, true, "abgeholt")
 		local after = d.money
-		T.check(after >= money + 500, "Belohnung")
+		T.check(after >= money + def.credits, "Belohnung")
 		g:Advance(0.2)
 		g:Act(player, "mini_milestone_claim", { id = "m_scrap_10k", rid = 3 })
 		g:Advance(0.2)
@@ -34,7 +36,7 @@ return {
 		T.eq(d2.money, c2, "nach Rejoin nicht erneut")
 		g:Act(p2, "mini_milestone_claim", { id = "gibtsnicht", rid = 6 })
 		T.eq(d2.money, c2, "unbekannter Meilenstein")
-		d2.games.press.runScrap = 1e9
+		d2.games.press.runScrap = MC.RebirthBaseThreshold
 		g:Act(p2, "mini_press_rebirth", { rebirths = 0, rid = 7 })
 		T.eq(d2.games.milestones.m_scrap_10k, true, "Meilenstein bleibt nach Rebirth")
 	end },

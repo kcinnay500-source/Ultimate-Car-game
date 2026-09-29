@@ -434,7 +434,7 @@ def build_tankstelle(dm, lib):
     box(lib, t, "Saeule", 303.0, 305.0, Y_G, 4.6, 220.4, 221.8, SLATE, "Metal")
     box(lib, t, "Haube", 302.7, 305.3, 4.6, 5.0, 220.0, 222.0, CYAN, "SmoothPlastic")
     panel(lib, t, "Bildschirm", 1.7, 1.5, CF.at(304, 3.1, 220.35, 180), NIGHT_BLUE,
-          [("WASCHEN", CYAN, 1.2), ("Programm wählen", (255, 255, 255), 0.8), ("bald verfügbar", MAGENTA, 0.8)],
+          [("WASCHEN", CYAN, 1.2), ("Programm wählen", (255, 255, 255), 0.8), ("Glanz für dein Auto", MAGENTA, 0.8)],
           thick=0.1)
     return m
 

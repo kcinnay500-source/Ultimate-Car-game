@@ -358,7 +358,7 @@ return {
 		ds.updateYield = 0
 		g:Advance(0.2)
 		T.eq(g:Act(p, "mini_scrapyard_sell", { rid = 5 }), "ok", "danach wieder spielbar")
-		T.eq(d.money, before + product.credits + 220, "Verkauf nach dem Kauf")
+		T.eq(d.money, before + product.credits + g:MiniShared("MiniConfig").ScrapyardSellCredits, "Verkauf nach dem Kauf")
 		local _ = decision
 		noErrors(T, g)
 	end },
@@ -384,6 +384,7 @@ return {
 				{ key = "presse", tab = "press", pos = Vector3.new(0, 1, -350) },
 				{ key = "autohaus", tab = "dealer", pos = Vector3.new(40, 1, -350) },
 				{ key = "heim", tab = "workshop", pos = Vector3.new(80, 1, -350) },
+				{ key = "dragstrecke", tab = "dragstrip", title = "Die Dragstrecke", pos = Vector3.new(120, 1, -350) },
 			} })
 		end })
 		local a = g:Join(615, { name = "Fee" })
@@ -404,7 +405,14 @@ return {
 		g:Teleport(a, Vector3.new(40, 3, -345))
 		m = g:Mark()
 		g:Trigger(a, prompt("autohaus"), { force = true })
-		T.check(g:HasToast(a, "Das Autohaus eröffnet bald.", m), "unbekannter Bereich: eröffnet bald")
+		opened = g:Events(a, "mini_open", m)
+		T.eq(opened[1] and opened[1].tab, "dealer", "Autohaus ist seit Ausbaustufe 2 ein echter Tab")
+		T.check(not g:HasToast(a, "eröffnet bald", m), "Autohaus: kein 'eröffnet bald' mehr")
+		g:Teleport(a, Vector3.new(120, 3, -345))
+		m = g:Mark()
+		g:Trigger(a, prompt("dragstrecke"), { force = true })
+		T.check(g:HasToast(a, "Die Dragstrecke eröffnet bald.", m), "unbekannter Bereich: eröffnet bald")
+		T.eq(#g:Events(a, "mini_open", m), 0, "unbekannter Bereich öffnet keinen Tab")
 		g:Teleport(a, Vector3.new(80, 3, -345))
 		g:Trigger(a, prompt("heim"), { force = true })
 		local home = g:Station(a, "home")

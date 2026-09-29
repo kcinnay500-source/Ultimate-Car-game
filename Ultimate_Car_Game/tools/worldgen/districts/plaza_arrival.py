@@ -545,7 +545,7 @@ def build_hall(lib, dm, anim):
             (1, "TAGESZIELE", ["Drücke [E] für deine Ziele des Tages", "Belohnung: Credits & Erfahrung",
                                "Neue Ziele jeden Tag um Mitternacht"], AMBER),
             (-1, "STADTINFO", ["Schnellreise: Stadtplan-Säule rechts", "Bestenliste: am Zahnradbrunnen",
-                               "Bald: Spielhalle, Auktionshaus, Teststrecke"], TEAL)):
+                               "Neu: Autohaus, Teststrecke, Auktionshaus"], TEAL)):
         x0, x1 = sorted((s * (HX1 - WT), s * (HX1 - WT - 0.2)))
         bd = _box(lib, inner, "Tagesziele" if s > 0 else "Stadtinfo", x0, x1, 4, 12, -219, -209, BLACK,
                   "SmoothPlastic")
@@ -857,8 +857,8 @@ def build_boards(lib, p):
                    "center", 3)
             news = [(AMBER, "Tagesziele: drücke [E] an dieser Tafel"),
                     (LWHITE, "Autohaus: neue Modelle in der Rotunde"),
-                    (MAGENTA, "Spielhalle: Geschick statt Glück – bald"),
-                    (BRASS, "Auktionshaus: erste Versteigerung bald"),
+                    (MAGENTA, "Spielhalle: Geschick statt Glück"),
+                    (BRASS, "Auktionshaus: Sondermodelle ersteigern"),
                     (RUST_L, "Schrottpresse: Ankauf täglich geöffnet"),
                     (TEAL, "Tuning-Zentrum: Prüfstand ist frei"),
                     (BLUE, "Parkplatz-Chaos: neues Rätsel jeden Tag")]

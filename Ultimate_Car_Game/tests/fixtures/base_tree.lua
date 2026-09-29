@@ -3,14 +3,14 @@
 -- Knoten: {Klasse, Name, {Eigenschaften}, {Kinder}?, id=Referent?, attrs={...}?, tags={...}?}
 return {
 	format = 1,
-	instances = 16911,
+	instances = 16931,
 	source = "base+worldgen",
 	sources = {
 		{path="base/Ultimate_Car_Game_2.4.0.rbxlx",size=5636778,hash="481beef3348e9985"},
 		{path="tools/build_place.py",size=11631,hash="63b479f900849d69"},
-		{path="tools/worldgen/__init__.py",size=2690,hash="63e668d0108e46e6"},
-		{path="tools/worldgen/checks.py",size=30788,hash="68b5bd88102991a7"},
-		{path="tools/worldgen/contract.py",size=5679,hash="62e6d69a2d2e070c"},
+		{path="tools/worldgen/__init__.py",size=2805,hash="434447cb31bef405"},
+		{path="tools/worldgen/checks.py",size=40642,hash="7149a397205556cd"},
+		{path="tools/worldgen/contract.py",size=5606,hash="0986b554073064fd"},
 		{path="tools/worldgen/design/ascii.py",size=4133,hash="5017d38f2e8d536c"},
 		{path="tools/worldgen/design/check.py",size=8818,hash="202e84ee220d8a3d"},
 		{path="tools/worldgen/design/layout.py",size=7859,hash="5096b69129da6371"},
@@ -20,20 +20,23 @@ return {
 		{path="tools/worldgen/design/walk.py",size=4722,hash="0d3f3ce81cfbf2cd"},
 		{path="tools/worldgen/design/walk_out.txt",size=2328,hash="083504e82c6a5529"},
 		{path="tools/worldgen/districts/__init__.py",size=775,hash="35fd0bd012babe7a"},
-		{path="tools/worldgen/districts/dealer_track.py",size=39541,hash="53eb8f642c5656d3"},
-		{path="tools/worldgen/districts/parking_misc.py",size=60722,hash="4e3acd8f1db23f8b"},
-		{path="tools/worldgen/districts/plaza_arrival.py",size=63333,hash="5762cae4364703a9"},
-		{path="tools/worldgen/districts/plaza_buildings.py",size=58551,hash="324e497934e6b431"},
+		{path="tools/worldgen/districts/dealer_track.py",size=39533,hash="447b6b891af4dda0"},
+		{path="tools/worldgen/districts/parking_misc.py",size=60727,hash="679c23831fee61a2"},
+		{path="tools/worldgen/districts/plaza_arrival.py",size=63321,hash="1684e6641c15acf6"},
+		{path="tools/worldgen/districts/plaza_buildings.py",size=58983,hash="4215fe420ed01967"},
 		{path="tools/worldgen/districts/scrapyard.py",size=44799,hash="3e775baa1929f500"},
-		{path="tools/worldgen/districts/tuning.py",size=32525,hash="19129b4722679141"},
+		{path="tools/worldgen/districts/tuning.py",size=32523,hash="6786bedc11352674"},
+		{path="tools/worldgen/drive.py",size=8454,hash="3a4e1849172535b9"},
 		{path="tools/worldgen/ground_roads.py",size=41576,hash="6a913e671b6b6846"},
 		{path="tools/worldgen/lib.py",size=33730,hash="773ab3f90fe1ffdb"},
 		{path="tools/worldgen/plot_slots.json",size=667,hash="7fa2e06029faaee1"},
 		{path="tools/worldgen/plots.py",size=11028,hash="0a00dd1b04a84756"},
-		{path="tools/worldgen/render.py",size=13337,hash="67911cf00afd0857"},
-		{path="tools/worldgen/scan.py",size=4049,hash="6e2c012c2071f4d1"}
+		{path="tools/worldgen/render.py",size=15036,hash="4567c4c438d0576d"},
+		{path="tools/worldgen/scan.py",size=4049,hash="6e2c012c2071f4d1"},
+		{path="tools/worldgen/test_vehicles.py",size=8633,hash="1a630b652a5b5e19"},
+		{path="tools/worldgen/vehicles.py",size=6908,hash="06a17ef73aeac52f"}
 	},
-	worldgen = {"__init__.py","checks.py","contract.py","ground_roads.py","lib.py","plot_slots.json","plots.py","render.py","scan.py"},
+	worldgen = {"__init__.py","checks.py","contract.py","drive.py","ground_roads.py","lib.py","plot_slots.json","plots.py","render.py","scan.py","test_vehicles.py","vehicles.py"},
 	build = function(T)
 		local CF, V3, V2, C3, C3u, U, U2, E, EV, R, NS, CS, NR, BC, RC = T.CF, T.V3, T.V2, T.C3, T.C3u, T.U, T.U2, T.E, T.EV, T.R, T.NS, T.CS, T.NR, T.BC, T.RC
 		return {
@@ -851,7 +854,8 @@ return {
 {"Part","compressor",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-62,0,-11)}},
 {"Part","engine_crane",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-70,0,-4.5)}},
 {"Part","hv_station",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-62,0,-4.5)}}}},
-{"Folder","Equipment",{}}}},
+{"Folder","Equipment",{}},
+{"Part","CarSpawn",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(8,1,16),Shape=E.PartType.Block,CFrame=CF(7.5,-0.5,64,-1,0,0,0,1,0,0,0,-1)},attrs={["Title"]="Werkstatt",["AltSteps"]="1,-1,2",["Floor"]=-1}}}},
 {"Camera","Camera",{CFrame=CF(-102,42,104,0.685364699,0.176529693,-0.706478943,0,0.970171588,0.242419245,0.728199993,-0.166145593,0.664921358),Focus=CF(0,7,8),FieldOfView=60},id="RBX004345"},
 {"Model","City",{},{
 {"Folder","Ground",{},{
@@ -2335,7 +2339,7 @@ return {
 {"Frame","Strich",{Size=U2(0.8,0,0.012,0),Position=U2(0.1,0,0.29,0),BackgroundColor3=C3(0.184314,0.662745,0.639216),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
 {"TextLabel","Zeile1",{Size=U2(0.88,0,0.14,0),Position=U2(0.06,0,0.36,0),BackgroundTransparency=1,Text="Schnellreise: Stadtplan-Säule rechts",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}},
 {"TextLabel","Zeile2",{Size=U2(0.88,0,0.14,0),Position=U2(0.06,0,0.55,0),BackgroundTransparency=1,Text="Bestenliste: am Zahnradbrunnen",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}},
-{"TextLabel","Zeile3",{Size=U2(0.88,0,0.14,0),Position=U2(0.06,0,0.74,0),BackgroundTransparency=1,Text="Bald: Spielhalle, Auktionshaus, Teststrecke",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}}}}}},
+{"TextLabel","Zeile3",{Size=U2(0.88,0,0.14,0),Position=U2(0.06,0,0.74,0),BackgroundTransparency=1,Text="Neu: Autohaus, Teststrecke, Auktionshaus",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}}}}}},
 {"Part","Deckenleuchte",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(232,246,249),Material=E.Material.Neon,Size=V3(1,0.4,20),Shape=E.PartType.Block,CFrame=CF(-28,23.8,-201)},{
 {"PointLight","Light",{Range=30,Brightness=0.9,Color=C3(0.878431,0.933333,1),Shadows=false}}}},
 {"Part","Deckenleuchte",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(232,246,249),Material=E.Material.Neon,Size=V3(1,0.4,20),Shape=E.PartType.Block,CFrame=CF(0,23.8,-201)},{
@@ -3068,9 +3072,9 @@ return {
 {"Frame","Punkt",{Size=U2(0.025,0,0.035,0),Position=U2(0.05,0,0.355,0),BackgroundColor3=C3(0.921569,0.933333,0.941176),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
 {"TextLabel","Zeile2",{Size=U2(0.86,0,0.08,0),Position=U2(0.1,0,0.325,0),BackgroundTransparency=1,Text="Autohaus: neue Modelle in der Rotunde",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}},
 {"Frame","Punkt",{Size=U2(0.025,0,0.035,0),Position=U2(0.05,0,0.46,0),BackgroundColor3=C3(1,0.25098,0.705882),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Zeile3",{Size=U2(0.86,0,0.08,0),Position=U2(0.1,0,0.43,0),BackgroundTransparency=1,Text="Spielhalle: Geschick statt Glück – bald",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}},
+{"TextLabel","Zeile3",{Size=U2(0.86,0,0.08,0),Position=U2(0.1,0,0.43,0),BackgroundTransparency=1,Text="Spielhalle: Geschick statt Glück",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}},
 {"Frame","Punkt",{Size=U2(0.025,0,0.035,0),Position=U2(0.05,0,0.565,0),BackgroundColor3=C3(0.788235,0.635294,0.352941),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Zeile4",{Size=U2(0.86,0,0.08,0),Position=U2(0.1,0,0.535,0),BackgroundTransparency=1,Text="Auktionshaus: erste Versteigerung bald",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}},
+{"TextLabel","Zeile4",{Size=U2(0.86,0,0.08,0),Position=U2(0.1,0,0.535,0),BackgroundTransparency=1,Text="Auktionshaus: Sondermodelle ersteigern",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}},
 {"Frame","Punkt",{Size=U2(0.025,0,0.035,0),Position=U2(0.05,0,0.67,0),BackgroundColor3=C3(0.784314,0.431373,0.196078),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
 {"TextLabel","Zeile5",{Size=U2(0.86,0,0.08,0),Position=U2(0.1,0,0.64,0),BackgroundTransparency=1,Text="Schrottpresse: Ankauf täglich geöffnet",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Left}},
 {"Frame","Punkt",{Size=U2(0.025,0,0.035,0),Position=U2(0.05,0,0.775,0),BackgroundColor3=C3(0.184314,0.662745,0.639216),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
@@ -3694,10 +3698,10 @@ return {
 {"Part","Pult",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(4.6,0.4,1.4),Shape=E.PartType.Block,CFrame=CF(-126.3,3.6,-60,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Gehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,4.4,2.2),Shape=E.PartType.Block,CFrame=CF(-128.1,5.6,-60,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(18,30,70),Material=E.Material.Neon,Size=V3(3.6,2.8,0.12),Shape=E.PartType.Block,CFrame=CF(-126.94,5.7,-60,0,0,-1,0,1,0,1,0,0)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","Screen",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.047059,0.039216,0.109804),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
 {"Frame","Kopf",{Size=U2(1,0,0.2,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.101961,0.070588,0.172549),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Titel",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="BLITZ-REAKTION",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(1,0.25098,0.705882),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Title",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="BLITZ-REAKTION",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(1,0.25098,0.705882),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
 {"Frame","Lampe",{Size=U2(0.16,0,0.2,0),Position=U2(0.2,0,0.28,0),BackgroundColor3=C3(0.352941,0.078431,0.078431),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3},{
 {"UICorner","UICorner",{CornerRadius=U(0.5,0)}}}},
 {"Frame","Lampe",{Size=U2(0.16,0,0.2,0),Position=U2(0.42,0,0.28,0),BackgroundColor3=C3(0.431373,0.313725,0.078431),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3},{
@@ -3705,7 +3709,7 @@ return {
 {"Frame","Lampe",{Size=U2(0.16,0,0.2,0),Position=U2(0.64,0,0.28,0),BackgroundColor3=C3(0.235294,0.901961,0.431373),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3},{
 {"UICorner","UICorner",{CornerRadius=U(0.5,0)}}}},
 {"TextLabel","Wert",{Size=U2(0.8,0,0.22,0),Position=U2(0.1,0,0.52,0),BackgroundTransparency=1,Text="0,187 s",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
-{"TextLabel","Hinweis",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="BALD VERFÜGBAR · HIGHSCORE ---",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Status",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="TASTE E · SPIELEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Marquee",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(4.8,1.2,2.6),Shape=E.PartType.Block,CFrame=CF(-127.9,8.4,-60,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(255,64,180),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,3.9,-62.35,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(255,64,180),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,3.9,-57.65,0,0,-1,0,1,0,1,0,0)}},
@@ -3713,22 +3717,22 @@ return {
 {"Part","Knopf",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(0.5,0.5,0.5),Shape=E.PartType.Ball,CFrame=CF(-126.5,3.95,-58.3,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Joystick",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.7,0.15,0.15),Shape=E.PartType.Block,CFrame=CF(-126.3,4.15,-61.4,0,0,-1,1,0,0,0,-1,0)}},
 {"Part","Joystickkugel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(0.45,0.45,0.45),Shape=E.PartType.Ball,CFrame=CF(-126.3,4.55,-61.4,0,0,-1,0,1,0,1,0,0)}},
-{"Part","Buzzer",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(230,40,40),Material=E.Material.Neon,Size=V3(0.35,1.1,1.1),Shape=E.PartType.Cylinder,CFrame=CF(-126.3,3.975,-60,0,0,-1,1,0,0,0,-1,0)}}},attrs={["Game"]="BLITZ-REAKTION"}},
+{"Part","Buzzer",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(230,40,40),Material=E.Material.Neon,Size=V3(0.35,1.1,1.1),Shape=E.PartType.Cylinder,CFrame=CF(-126.3,3.975,-60,0,0,-1,1,0,0,0,-1,0)}}},attrs={["Game"]="BLITZ-REAKTION",["GameKey"]="arcade_1"}},
 {"Model","Automat_2",{},{
 {"Part","Unterbau",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,3.4,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,1.7,-72,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Pult",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(4.6,0.4,1.4),Shape=E.PartType.Block,CFrame=CF(-126.3,3.6,-72,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Gehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,4.4,2.2),Shape=E.PartType.Block,CFrame=CF(-128.1,5.6,-72,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(18,30,70),Material=E.Material.Neon,Size=V3(3.6,2.8,0.12),Shape=E.PartType.Block,CFrame=CF(-126.94,5.7,-72,0,0,-1,0,1,0,1,0,0)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","Screen",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.047059,0.039216,0.109804),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
 {"Frame","Kopf",{Size=U2(1,0,0.2,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.101961,0.070588,0.172549),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Titel",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="BREMSWEG-PROFI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.235294,0.862745,1),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Title",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="BREMSWEG-PROFI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.235294,0.862745,1),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
 {"Frame","Strasse",{Size=U2(1,0,0.2,0),Position=U2(0,0,0.5,0),BackgroundColor3=C3(0.180392,0.203922,0.231373),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
 {"Frame","Auto",{Size=U2(0.18,0,0.12,0),Position=U2(0.12,0,0.52,0),BackgroundColor3=C3(0.235294,0.862745,1),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3},{
 {"UICorner","UICorner",{CornerRadius=U(0.2,0)}}}},
 {"Frame","Haltelinie",{Size=U2(0.025,0,0.2,0),Position=U2(0.78,0,0.5,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3}},
 {"TextLabel","Wert",{Size=U2(0.9,0,0.2,0),Position=U2(0.05,0,0.25,0),BackgroundTransparency=1,Text="BREMSWEG 12,4 m",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
-{"TextLabel","Hinweis",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="BALD VERFÜGBAR · HIGHSCORE ---",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Status",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="TASTE E · SPIELEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Marquee",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(4.8,1.2,2.6),Shape=E.PartType.Block,CFrame=CF(-127.9,8.4,-72,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,220,255),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,3.9,-74.35,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,220,255),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,3.9,-69.65,0,0,-1,0,1,0,1,0,0)}},
@@ -3736,16 +3740,16 @@ return {
 {"Part","Knopf",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(0.5,0.5,0.5),Shape=E.PartType.Ball,CFrame=CF(-126.5,3.95,-70.3,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Joystick",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.7,0.15,0.15),Shape=E.PartType.Block,CFrame=CF(-126.3,4.15,-73.4,0,0,-1,1,0,0,0,-1,0)}},
 {"Part","Joystickkugel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(0.45,0.45,0.45),Shape=E.PartType.Ball,CFrame=CF(-126.3,4.55,-73.4,0,0,-1,0,1,0,1,0,0)}},
-{"Part","Bremspedal",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(1.2,0.2,1.6),Shape=E.PartType.Block,CFrame=CF(-125.2,0.5,-72,0,-0.309017,-0.951057,0,0.951057,-0.309017,1,0,0)}}},attrs={["Game"]="BREMSWEG-PROFI"}},
+{"Part","Bremspedal",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(1.2,0.2,1.6),Shape=E.PartType.Block,CFrame=CF(-125.2,0.5,-72,0,-0.309017,-0.951057,0,0.951057,-0.309017,1,0,0)}}},attrs={["Game"]="BREMSWEG-PROFI",["GameKey"]="arcade_2"}},
 {"Model","Automat_3",{},{
 {"Part","Unterbau",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,3.4,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,1.7,-84,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Pult",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(4.6,0.4,1.4),Shape=E.PartType.Block,CFrame=CF(-126.3,3.6,-84,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Gehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,4.4,2.2),Shape=E.PartType.Block,CFrame=CF(-128.1,5.6,-84,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(18,30,70),Material=E.Material.Neon,Size=V3(3.6,2.8,0.12),Shape=E.PartType.Block,CFrame=CF(-126.94,5.7,-84,0,0,-1,0,1,0,1,0,0)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","Screen",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.047059,0.039216,0.109804),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
 {"Frame","Kopf",{Size=U2(1,0,0.2,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.101961,0.070588,0.172549),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Titel",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="BOXENSTOPP",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.588235,0.313725,1),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Title",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="BOXENSTOPP",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.588235,0.313725,1),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
 {"Frame","Auto",{Size=U2(0.28,0,0.4,0),Position=U2(0.36,0,0.3,0),BackgroundColor3=C3(0.588235,0.313725,1),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3},{
 {"UICorner","UICorner",{CornerRadius=U(0.2,0)}}}},
 {"Frame","Reifen",{Size=U2(0.06,0,0.1,0),Position=U2(0.3,0,0.32,0),BackgroundColor3=C3(0.039216,0.039216,0.047059),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=4}},
@@ -3753,7 +3757,7 @@ return {
 {"Frame","Reifen",{Size=U2(0.06,0,0.1,0),Position=U2(0.3,0,0.58,0),BackgroundColor3=C3(0.039216,0.039216,0.047059),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=4}},
 {"Frame","Reifen",{Size=U2(0.06,0,0.1,0),Position=U2(0.64,0,0.58,0),BackgroundColor3=C3(0.039216,0.039216,0.047059),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=4}},
 {"TextLabel","Wert",{Size=U2(0.28,0,0.2,0),Position=U2(0.7,0,0.4,0),BackgroundTransparency=1,Text="2,8 s",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
-{"TextLabel","Hinweis",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="BALD VERFÜGBAR · HIGHSCORE ---",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Status",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="TASTE E · SPIELEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Marquee",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(4.8,1.2,2.6),Shape=E.PartType.Block,CFrame=CF(-127.9,8.4,-84,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(150,80,255),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,3.9,-86.35,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(150,80,255),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,3.9,-81.65,0,0,-1,0,1,0,1,0,0)}},
@@ -3761,21 +3765,21 @@ return {
 {"Part","Knopf",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(0.5,0.5,0.5),Shape=E.PartType.Ball,CFrame=CF(-126.5,3.95,-82.3,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Joystick",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.7,0.15,0.15),Shape=E.PartType.Block,CFrame=CF(-126.3,4.15,-85.4,0,0,-1,1,0,0,0,-1,0)}},
 {"Part","Joystickkugel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(0.45,0.45,0.45),Shape=E.PartType.Ball,CFrame=CF(-126.3,4.55,-85.4,0,0,-1,0,1,0,1,0,0)}},
-{"Part","Reifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(1,2.6,2.6),Shape=E.PartType.Cylinder,CFrame=CF(-127.9,10.3,-84,0,0,-1,0,1,0,1,0,0)}}},attrs={["Game"]="BOXENSTOPP"}},
+{"Part","Reifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(1,2.6,2.6),Shape=E.PartType.Cylinder,CFrame=CF(-127.9,10.3,-84,0,0,-1,0,1,0,1,0,0)}}},attrs={["Game"]="BOXENSTOPP",["GameKey"]="arcade_3"}},
 {"Model","Automat_4",{},{
 {"Part","Unterbau",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,3.4,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,1.7,-96,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Pult",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(4.6,0.4,1.4),Shape=E.PartType.Block,CFrame=CF(-126.3,3.6,-96,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Gehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,4.4,2.2),Shape=E.PartType.Block,CFrame=CF(-128.1,5.6,-96,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(18,30,70),Material=E.Material.Neon,Size=V3(3.6,2.8,0.12),Shape=E.PartType.Block,CFrame=CF(-126.94,5.7,-96,0,0,-1,0,1,0,1,0,0)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","Screen",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.047059,0.039216,0.109804),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
 {"Frame","Kopf",{Size=U2(1,0,0.2,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.101961,0.070588,0.172549),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Titel",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="DREHMOMENT",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Title",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="DREHMOMENT",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
 {"Frame","Skala",{Size=U2(0.4,0,0.52,0),Position=U2(0.3,0,0.24,0),BackgroundColor3=C3(0.337255,0.239216,0.086275),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2},{
 {"UICorner","UICorner",{CornerRadius=U(0.5,0)}}}},
 {"Frame","Zeiger",{Size=U2(0.02,0,0.24,0),Position=U2(0.49,0,0.3,0),BackgroundColor3=C3(0.968627,0.690196,0.247059),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3,Rotation=40}},
 {"TextLabel","Wert",{Size=U2(0.5,0,0.16,0),Position=U2(0.25,0,0.58,0),BackgroundTransparency=1,Text="320 Nm",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
-{"TextLabel","Hinweis",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="BALD VERFÜGBAR · HIGHSCORE ---",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Status",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="TASTE E · SPIELEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Marquee",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(4.8,1.2,2.6),Shape=E.PartType.Block,CFrame=CF(-127.9,8.4,-96,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,3.9,-98.35,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-127.6,3.9,-93.65,0,0,-1,0,1,0,1,0,0)}},
@@ -3783,16 +3787,16 @@ return {
 {"Part","Knopf",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(0.5,0.5,0.5),Shape=E.PartType.Ball,CFrame=CF(-126.5,3.95,-94.3,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Joystick",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.7,0.15,0.15),Shape=E.PartType.Block,CFrame=CF(-126.3,4.15,-97.4,0,0,-1,1,0,0,0,-1,0)}},
 {"Part","Joystickkugel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(0.45,0.45,0.45),Shape=E.PartType.Ball,CFrame=CF(-126.3,4.55,-97.4,0,0,-1,0,1,0,1,0,0)}},
-{"Part","Drehmomentschluessel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(3.8,0.25,0.5),Shape=E.PartType.Block,CFrame=CF(-127.9,9.125,-96,0.309017,0,-0.951057,0,1,0,0.951057,0,0.309017)}}},attrs={["Game"]="DREHMOMENT"}},
+{"Part","Drehmomentschluessel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(3.8,0.25,0.5),Shape=E.PartType.Block,CFrame=CF(-127.9,9.125,-96,0.309017,0,-0.951057,0,1,0,0.951057,0,0.309017)}}},attrs={["Game"]="DREHMOMENT",["GameKey"]="arcade_4"}},
 {"Model","Automat_5",{},{
 {"Part","Unterbau",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,3.4,3.2),Shape=E.PartType.Block,CFrame=CF(-112,1.7,-108.6,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Pult",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(4.6,0.4,1.4),Shape=E.PartType.Block,CFrame=CF(-112,3.6,-107.3,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Gehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,4.4,2.2),Shape=E.PartType.Block,CFrame=CF(-112,5.6,-109.1,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(18,30,70),Material=E.Material.Neon,Size=V3(3.6,2.8,0.12),Shape=E.PartType.Block,CFrame=CF(-112,5.7,-107.94,-1,0,0,0,1,0,0,0,-1)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","Screen",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.047059,0.039216,0.109804),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
 {"Frame","Kopf",{Size=U2(1,0,0.2,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.101961,0.070588,0.172549),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Titel",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="MOTOR-OHR",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.235294,0.862745,1),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Title",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="MOTOR-OHR",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.235294,0.862745,1),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
 {"Frame","Welle",{Size=U2(0.05,0,0.1,0),Position=U2(0.06,0,0.47,0),BackgroundColor3=C3(0.235294,0.862745,1),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3}},
 {"Frame","Welle",{Size=U2(0.05,0,0.25,0),Position=U2(0.135,0,0.395,0),BackgroundColor3=C3(0.235294,0.862745,1),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3}},
 {"Frame","Welle",{Size=U2(0.05,0,0.4,0),Position=U2(0.21,0,0.32,0),BackgroundColor3=C3(0.235294,0.862745,1),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3}},
@@ -3805,7 +3809,7 @@ return {
 {"Frame","Welle",{Size=U2(0.05,0,0.35,0),Position=U2(0.735,0,0.345,0),BackgroundColor3=C3(0.235294,0.862745,1),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3}},
 {"Frame","Welle",{Size=U2(0.05,0,0.15,0),Position=U2(0.81,0,0.445,0),BackgroundColor3=C3(0.235294,0.862745,1),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3}},
 {"Frame","Welle",{Size=U2(0.05,0,0.28,0),Position=U2(0.885,0,0.38,0),BackgroundColor3=C3(0.235294,0.862745,1),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3}},
-{"TextLabel","Hinweis",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="BALD VERFÜGBAR · HIGHSCORE ---",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Status",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="TASTE E · SPIELEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Marquee",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(4.8,1.2,2.6),Shape=E.PartType.Block,CFrame=CF(-112,8.4,-108.9,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,220,255),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-109.65,3.9,-108.6,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,220,255),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-114.35,3.9,-108.6,-1,0,0,0,1,0,0,0,-1)}},
@@ -3813,16 +3817,16 @@ return {
 {"Part","Knopf",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(0.5,0.5,0.5),Shape=E.PartType.Ball,CFrame=CF(-113.7,3.95,-107.5,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Joystick",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.7,0.15,0.15),Shape=E.PartType.Block,CFrame=CF(-110.6,4.15,-107.3,0,1,0,1,0,0,0,0,-1)}},
 {"Part","Joystickkugel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(0.45,0.45,0.45),Shape=E.PartType.Ball,CFrame=CF(-110.6,4.55,-107.3,-1,0,0,0,1,0,0,0,-1)}},
-{"Part","Motorblock",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(104,110,114),Material=E.Material.Metal,Size=V3(2.2,1.2,1.6),Shape=E.PartType.Block,CFrame=CF(-112,9.6,-108.9,-1,0,0,0,1,0,0,0,-1)}}},attrs={["Game"]="MOTOR-OHR"}},
+{"Part","Motorblock",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(104,110,114),Material=E.Material.Metal,Size=V3(2.2,1.2,1.6),Shape=E.PartType.Block,CFrame=CF(-112,9.6,-108.9,-1,0,0,0,1,0,0,0,-1)}}},attrs={["Game"]="MOTOR-OHR",["GameKey"]="arcade_5"}},
 {"Model","Automat_6",{},{
 {"Part","Unterbau",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,3.4,3.2),Shape=E.PartType.Block,CFrame=CF(-98,1.7,-108.6,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Pult",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(4.6,0.4,1.4),Shape=E.PartType.Block,CFrame=CF(-98,3.6,-107.3,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Gehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(24,18,36),Material=E.Material.Metal,Size=V3(4.6,4.4,2.2),Shape=E.PartType.Block,CFrame=CF(-98,5.6,-109.1,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(18,30,70),Material=E.Material.Neon,Size=V3(3.6,2.8,0.12),Shape=E.PartType.Block,CFrame=CF(-98,5.7,-107.94,-1,0,0,0,1,0,0,0,-1)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","Screen",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,112),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.047059,0.039216,0.109804),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
 {"Frame","Kopf",{Size=U2(1,0,0.2,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.101961,0.070588,0.172549),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Titel",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="EINPARK-PROFI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(1,0.25098,0.705882),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Title",{Size=U2(0.94,0,0.15,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="EINPARK-PROFI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(1,0.25098,0.705882),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}},
 {"Frame","Linie",{Size=U2(0.02,0,0.44,0),Position=U2(0.15,0,0.28,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
 {"Frame","Linie",{Size=U2(0.02,0,0.44,0),Position=U2(0.39,0,0.28,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
 {"Frame","Linie",{Size=U2(0.02,0,0.44,0),Position=U2(0.63,0,0.28,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
@@ -3831,7 +3835,7 @@ return {
 {"UICorner","UICorner",{CornerRadius=U(0.2,0)}}}},
 {"Frame","Nachbar",{Size=U2(0.14,0,0.3,0),Position=U2(0.19,0,0.36,0),BackgroundColor3=C3(0.34902,0.086275,0.243137),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=3},{
 {"UICorner","UICorner",{CornerRadius=U(0.2,0)}}}},
-{"TextLabel","Hinweis",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="BALD VERFÜGBAR · HIGHSCORE ---",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Status",{Size=U2(0.92,0,0.13,0),Position=U2(0.04,0,0.82,0),BackgroundTransparency=1,Text="TASTE E · SPIELEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843),ZIndex=4,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Marquee",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(4.8,1.2,2.6),Shape=E.PartType.Block,CFrame=CF(-98,8.4,-108.9,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(255,64,180),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-95.65,3.9,-108.6,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Seitenwange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(255,64,180),Material=E.Material.SmoothPlastic,Size=V3(0.1,7.8,3.2),Shape=E.PartType.Block,CFrame=CF(-100.35,3.9,-108.6,-1,0,0,0,1,0,0,0,-1)}},
@@ -3841,7 +3845,7 @@ return {
 {"Part","Joystickkugel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(0.45,0.45,0.45),Shape=E.PartType.Ball,CFrame=CF(-96.6,4.55,-107.3,-1,0,0,0,1,0,0,0,-1)}},
 {"Model","Leitkegel",{},{
 {"Part","ConeBase",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(225,95,30),Material=E.Material.Plastic,Size=V3(1.4,0.15,1.4),Shape=E.PartType.Block,CFrame=CF(-98,9.075,-108.9)}},
-{"Part","ConeBody",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(240,110,35),Material=E.Material.Plastic,Size=V3(1.6,0.7,0.7),Shape=E.PartType.Cylinder,CFrame=CF(-98,9.95,-108.9,0,-1,0,1,0,0,0,0,1)}}}}},attrs={["Game"]="EINPARK-PROFI"}},
+{"Part","ConeBody",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(240,110,35),Material=E.Material.Plastic,Size=V3(1.6,0.7,0.7),Shape=E.PartType.Cylinder,CFrame=CF(-98,9.95,-108.9,0,-1,0,1,0,0,0,0,1)}}}}},attrs={["Game"]="EINPARK-PROFI",["GameKey"]="arcade_6"}},
 {"Model","Rennsimulator_1",{},{
 {"Part","Plattform",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.DiamondPlate,Size=V3(6,0.3,8),Shape=E.PartType.Block,CFrame=CF(-110,0.15,-48.5)}},
 {"Part","Unterleuchte",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(255,64,180),Material=E.Material.Neon,Size=V3(0.12,0.15,8),Shape=E.PartType.Block,CFrame=CF(-113.06,0.1,-48.5)}},
@@ -3859,7 +3863,7 @@ return {
 {"Part","Staenderfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(2,0.2,1.2),Shape=E.PartType.Block,CFrame=CF(-110,0.1,-54.7)}},
 {"Part","Staender",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(40,44,50),Material=E.Material.Metal,Size=V3(0.4,3.4,0.4),Shape=E.PartType.Block,CFrame=CF(-110,1.9,-54.7)}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(10,12,20),Material=E.Material.SmoothPlastic,Size=V3(4.2,2.6,0.15),Shape=E.PartType.Block,CFrame=CF(-110,4.9,-54.5)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(168,104),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","Screen",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(168,104),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Himmel",{Size=U2(1,0,0.5,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.27451,0.431373,0.705882),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
 {"Frame","Horizont",{Size=U2(1,0,0.08,0),Position=U2(0,0,0.42,0),BackgroundColor3=C3(0.54902,0.627451,0.784314),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
 {"Frame","Wiese",{Size=U2(1,0,0.5,0),Position=U2(0,0,0.5,0),BackgroundColor3=C3(0.235294,0.470588,0.235294),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
@@ -3875,7 +3879,8 @@ return {
 {"UICorner","UICorner",{CornerRadius=U(0.3,0)}}}},
 {"TextLabel","Runde",{Size=U2(0.3,0,0.1,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="RUNDE 2/3",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=5,TextXAlignment=E.TextXAlignment.Left}},
 {"TextLabel","Zeit",{Size=U2(0.3,0,0.1,0),Position=U2(0.67,0,0.03,0),BackgroundTransparency=1,Text="1:12,408",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059),ZIndex=5,TextXAlignment=E.TextXAlignment.Right}},
-{"TextLabel","Hinweis",{Size=U2(0.4,0,0.09,0),Position=U2(0.3,0,0.16,0),BackgroundTransparency=1,Text="BALD VERFÜGBAR",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=5,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Title",{Size=U2(0.4,0,0.1,0),Position=U2(0.3,0,0.14,0),BackgroundTransparency=1,Text="RENNSIMULATOR 1",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=5,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Status",{Size=U2(0.4,0,0.07,0),Position=U2(0.3,0,0.25,0),BackgroundTransparency=1,Text="TASTE E · SPIELEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059),ZIndex=5,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(10,12,20),Material=E.Material.SmoothPlastic,Size=V3(3.6,2.6,0.15),Shape=E.PartType.Block,CFrame=CF(-113.574474,4.9,-53.467562,0.819152,0,0.573576,0,1,0,-0.573576,0,0.819152)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,104),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Himmel",{Size=U2(1,0,0.5,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.27451,0.431373,0.705882),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
@@ -3906,7 +3911,7 @@ return {
 {"UICorner","UICorner",{CornerRadius=U(0.5,0)}}}}}}}},
 {"Part","Schild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(35,22,50),Material=E.Material.SmoothPlastic,Size=V3(4.2,0.9,0.15),Shape=E.PartType.Block,CFrame=CF(-110,6.65,-54.5)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(168,36),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Titel",{Size=U2(0.94,0,0.8,0),Position=U2(0.03,0,0.1,0),BackgroundTransparency=1,Text="RENNSIMULATOR 1",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(1,0.25098,0.705882),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}}},attrs={["Game"]="RENNSIMULATOR 1"}},
+{"TextLabel","Titel",{Size=U2(0.94,0,0.8,0),Position=U2(0.03,0,0.1,0),BackgroundTransparency=1,Text="RENNSIMULATOR 1",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(1,0.25098,0.705882),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}}},attrs={["Game"]="RENNSIMULATOR 1",["GameKey"]="arcade_7"}},
 {"Model","Rennsimulator_2",{},{
 {"Part","Plattform",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.DiamondPlate,Size=V3(6,0.3,8),Shape=E.PartType.Block,CFrame=CF(-90,0.15,-48.5)}},
 {"Part","Unterleuchte",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(60,220,255),Material=E.Material.Neon,Size=V3(0.12,0.15,8),Shape=E.PartType.Block,CFrame=CF(-93.06,0.1,-48.5)}},
@@ -3924,7 +3929,7 @@ return {
 {"Part","Staenderfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(2,0.2,1.2),Shape=E.PartType.Block,CFrame=CF(-90,0.1,-54.7)}},
 {"Part","Staender",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(40,44,50),Material=E.Material.Metal,Size=V3(0.4,3.4,0.4),Shape=E.PartType.Block,CFrame=CF(-90,1.9,-54.7)}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(10,12,20),Material=E.Material.SmoothPlastic,Size=V3(4.2,2.6,0.15),Shape=E.PartType.Block,CFrame=CF(-90,4.9,-54.5)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(168,104),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","Screen",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(168,104),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Himmel",{Size=U2(1,0,0.5,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.27451,0.431373,0.705882),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
 {"Frame","Horizont",{Size=U2(1,0,0.08,0),Position=U2(0,0,0.42,0),BackgroundColor3=C3(0.54902,0.627451,0.784314),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
 {"Frame","Wiese",{Size=U2(1,0,0.5,0),Position=U2(0,0,0.5,0),BackgroundColor3=C3(0.235294,0.470588,0.235294),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
@@ -3940,7 +3945,8 @@ return {
 {"UICorner","UICorner",{CornerRadius=U(0.3,0)}}}},
 {"TextLabel","Runde",{Size=U2(0.3,0,0.1,0),Position=U2(0.03,0,0.03,0),BackgroundTransparency=1,Text="RUNDE 2/3",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=5,TextXAlignment=E.TextXAlignment.Left}},
 {"TextLabel","Zeit",{Size=U2(0.3,0,0.1,0),Position=U2(0.67,0,0.03,0),BackgroundTransparency=1,Text="1:12,408",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059),ZIndex=5,TextXAlignment=E.TextXAlignment.Right}},
-{"TextLabel","Hinweis",{Size=U2(0.4,0,0.09,0),Position=U2(0.3,0,0.16,0),BackgroundTransparency=1,Text="BALD VERFÜGBAR",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=5,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Title",{Size=U2(0.4,0,0.1,0),Position=U2(0.3,0,0.14,0),BackgroundTransparency=1,Text="RENNSIMULATOR 2",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=5,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Status",{Size=U2(0.4,0,0.07,0),Position=U2(0.3,0,0.25,0),BackgroundTransparency=1,Text="TASTE E · SPIELEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059),ZIndex=5,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Bildschirm",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(10,12,20),Material=E.Material.SmoothPlastic,Size=V3(3.6,2.6,0.15),Shape=E.PartType.Block,CFrame=CF(-93.574474,4.9,-53.467562,0.819152,0,0.573576,0,1,0,-0.573576,0,0.819152)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(144,104),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Himmel",{Size=U2(1,0,0.5,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.27451,0.431373,0.705882),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
@@ -3971,7 +3977,7 @@ return {
 {"UICorner","UICorner",{CornerRadius=U(0.5,0)}}}}}}}},
 {"Part","Schild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(35,22,50),Material=E.Material.SmoothPlastic,Size=V3(4.2,0.9,0.15),Shape=E.PartType.Block,CFrame=CF(-90,6.65,-54.5)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(168,36),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Titel",{Size=U2(0.94,0,0.8,0),Position=U2(0.03,0,0.1,0),BackgroundTransparency=1,Text="RENNSIMULATOR 2",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.235294,0.862745,1),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}}},attrs={["Game"]="RENNSIMULATOR 2"}},
+{"TextLabel","Titel",{Size=U2(0.94,0,0.8,0),Position=U2(0.03,0,0.1,0),BackgroundTransparency=1,Text="RENNSIMULATOR 2",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.235294,0.862745,1),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}}},attrs={["Game"]="RENNSIMULATOR 2",["GameKey"]="arcade_8"}},
 {"Model","Punkte-Schalter",{},{
 {"Part","Tresen",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(35,22,50),Material=E.Material.Metal,Size=V3(12,3.2,6),Shape=E.PartType.Block,CFrame=CF(-80,1.6,-103)}},
 {"Part","Tresenplatte",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(12.4,0.3,6.4),Shape=E.PartType.Block,CFrame=CF(-80,3.35,-103),Reflectance=0.15}},
@@ -4371,18 +4377,15 @@ return {
 {"Part","Schabracke",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(110,30,40),Material=E.Material.Fabric,Size=V3(2,1.6,42),Shape=E.PartType.Block,CFrame=CF(127.8,29.2,-76)}},
 {"Part","LED-Rahmen",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(201,162,90),Material=E.Material.Metal,Size=V3(0.25,16.8,49),Shape=E.PartType.Block,CFrame=CF(129.075,19.9,-76)}},
 {"Part","LED-Wand",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(8,8,12),Material=E.Material.SmoothPlastic,Size=V3(0.15,16,48),Shape=E.PartType.Block,CFrame=CF(128.875,20,-76)},{
-{"SurfaceGui","SurfaceGui",{Face=E.NormalId.Left,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(1440,480),LightInfluence=0,AlwaysOnTop=false},{
+{"SurfaceGui","AuctionScreen",{Face=E.NormalId.Left,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(1440,480),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.054902,0.039216,0.047059),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
-{"Frame","Feld",{Size=U2(0.3,0,0.7,0),Position=U2(0.02,0,0.06,0),BackgroundColor3=C3(0.156863,0.062745,0.086275),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Kopf",{Size=U2(0.28,0,0.14,0),Position=U2(0.03,0,0.1,0),BackgroundTransparency=1,Text="LOS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.788235,0.635294,0.352941),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
-{"TextLabel","Wert",{Size=U2(0.28,0,0.36,0),Position=U2(0.03,0,0.3,0),BackgroundTransparency=1,Text="Nr. 017\nGT-Coupé · Burgund",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
-{"Frame","Feld",{Size=U2(0.3,0,0.7,0),Position=U2(0.35,0,0.06,0),BackgroundColor3=C3(0.156863,0.062745,0.086275),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Kopf",{Size=U2(0.28,0,0.14,0),Position=U2(0.36,0,0.1,0),BackgroundTransparency=1,Text="AKTUELLES GEBOT",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.788235,0.635294,0.352941),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
-{"TextLabel","Wert",{Size=U2(0.28,0,0.36,0),Position=U2(0.36,0,0.3,0),BackgroundTransparency=1,Text="48.500 Credits",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
-{"Frame","Feld",{Size=U2(0.3,0,0.7,0),Position=U2(0.68,0,0.06,0),BackgroundColor3=C3(0.156863,0.062745,0.086275),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
-{"TextLabel","Kopf",{Size=U2(0.28,0,0.14,0),Position=U2(0.69,0,0.1,0),BackgroundTransparency=1,Text="RESTZEIT",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.788235,0.635294,0.352941),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
-{"TextLabel","Wert",{Size=U2(0.28,0,0.36,0),Position=U2(0.69,0,0.3,0),BackgroundTransparency=1,Text="02:30",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(1,0.470588,0.431373),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
-{"TextLabel","Laufband",{Size=U2(0.96,0,0.14,0),Position=U2(0.02,0,0.8,0),BackgroundTransparency=1,Text="ERSTE VERSTEIGERUNG BALD · EINLIEFERUNG AM SCHALTER RECHTS · BIETEN AN DER KASSE",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.839216,0.745098),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"Frame","Kopfband",{Size=U2(0.96,0,0.16,0),Position=U2(0.02,0,0.04,0),BackgroundColor3=C3(0.156863,0.062745,0.086275),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
+{"TextLabel","Title",{Size=U2(0.92,0,0.12,0),Position=U2(0.04,0,0.06,0),BackgroundTransparency=1,Text="AUKTIONSHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.788235,0.635294,0.352941),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
+{"Frame","Feld",{Size=U2(0.96,0,0.55,0),Position=U2(0.02,0,0.23,0),BackgroundColor3=C3(0.156863,0.062745,0.086275),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=2}},
+{"TextLabel","Lot",{Size=U2(0.92,0,0.2,0),Position=U2(0.04,0,0.25,0),BackgroundTransparency=1,Text="Gerade keine Versteigerung",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.878431,0.905882,0.901961),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Bid",{Size=U2(0.92,0,0.15,0),Position=U2(0.04,0,0.47,0),BackgroundTransparency=1,Text="Einliefern am Schalter rechts",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Time",{Size=U2(0.92,0,0.12,0),Position=U2(0.04,0,0.63,0),BackgroundTransparency=1,Text="",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(1,0.470588,0.431373),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}},
+{"TextLabel","Laufband",{Size=U2(0.96,0,0.14,0),Position=U2(0.02,0,0.8,0),BackgroundTransparency=1,Text="SONDERMODELLE UND SPIELER-AUKTIONEN · EINLIEFERUNG AM SCHALTER RECHTS · BIETEN AN DER KASSE",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.839216,0.745098),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Model","Rednerpult",{},{
 {"Part","Pult",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(80,52,36),Material=E.Material.Wood,Size=V3(1.4,3.6,2),Shape=E.PartType.Block,CFrame=CF(111,4.8,-95)}},
 {"Part","Pultplatte",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(130,90,60),Material=E.Material.Wood,Size=V3(1.8,0.2,2.4),Shape=E.PartType.Block,CFrame=CF(111,6.7,-95)}},
@@ -4418,7 +4421,7 @@ return {
 {"Part","Bildschirm",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(2.4,1.5,0.15),Shape=E.PartType.Block,CFrame=CF(87,4.4,-103.8,1,0,0,0,0.965926,0.258819,0,-0.258819,0.965926)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(96,60),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(0.94,0,0.9,0),Position=U2(0.03,0,0.05,0),BackgroundColor3=C3(0.156863,0.062745,0.086275),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
-{"TextLabel","Text",{Size=U2(0.9,0,0.7,0),Position=U2(0.05,0,0.15,0),BackgroundTransparency=1,Text="BALD",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.788235,0.635294,0.352941),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Text",{Size=U2(0.9,0,0.7,0),Position=U2(0.05,0,0.15,0),BackgroundTransparency=1,Text="BIETEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.788235,0.635294,0.352941),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Bildschirmfuss",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.4,0.4,0.4),Shape=E.PartType.Block,CFrame=CF(87,3.7,-103.8)}},
 {"Part","Bieterkelle",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(110,30,40),Material=E.Material.SmoothPlastic,Size=V3(0.1,1.3,1.3),Shape=E.PartType.Cylinder,CFrame=CF(82.1,3.55,-104,0,-1,0,1,0,0,0,0,1)}}}},
 {"Model","Einlieferung",{},{
@@ -4431,7 +4434,7 @@ return {
 {"Part","Bildschirm",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(2.4,1.5,0.15),Shape=E.PartType.Block,CFrame=CF(87,4.4,-48.2,-1,0,0,0,0.965926,0.258819,0,0.258819,-0.965926)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(96,60),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Grund",{Size=U2(0.94,0,0.9,0),Position=U2(0.03,0,0.05,0),BackgroundColor3=C3(0.156863,0.062745,0.086275),BackgroundTransparency=0,BorderSizePixel=0,ZIndex=1}},
-{"TextLabel","Text",{Size=U2(0.9,0,0.7,0),Position=U2(0.05,0,0.15,0),BackgroundTransparency=1,Text="BALD",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.788235,0.635294,0.352941),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}},
+{"TextLabel","Text",{Size=U2(0.9,0,0.7,0),Position=U2(0.05,0,0.15,0),BackgroundTransparency=1,Text="EINLIEFERN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.788235,0.635294,0.352941),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}}},
 {"Part","Bildschirmfuss",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.4,0.4,0.4),Shape=E.PartType.Block,CFrame=CF(87,3.7,-48.2)}},
 {"Part","Bieterkelle",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(110,30,40),Material=E.Material.SmoothPlastic,Size=V3(0.1,1.3,1.3),Shape=E.PartType.Cylinder,CFrame=CF(82.1,3.55,-48,0,-1,0,1,0,0,0,0,1)}}}},
 {"Model","Kronleuchter",{},{
@@ -5152,8 +5155,8 @@ return {
 {"Part","Werkbankplatte",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(130,90,60),Material=E.Material.Wood,Size=V3(16.6,0.3,2.65),Shape=E.PartType.Block,CFrame=CF(-276,3.15,-166.275)}},
 {"Part","Platzlinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(240,190,40),Material=E.Material.SmoothPlastic,Size=V3(26,0.05,0.4),Shape=E.PartType.Block,CFrame=CF(-262,0.025,-182)}},
 {"Part","Platzlinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(240,190,40),Material=E.Material.SmoothPlastic,Size=V3(26,0.05,0.4),Shape=E.PartType.Block,CFrame=CF(-262,0.025,-170)}},
-{"Model","Zerlegewagen",{PrimaryPart=R("RBXN0007602")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-262,1.5,-176,0,0,1,0,1,0,-1,0,0)},id="RBXN0007602"},
+{"Model","Zerlegewagen",{PrimaryPart=R("RBXN0007601")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-262,1.5,-176,0,0,1,0,1,0,-1,0,0)},id="RBXN0007601"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,16.5),Shape=E.PartType.Block,CFrame=CF(-260.85,3.15,-176,0,0,1,0,1,0,-1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(120,110,95),Material=E.Material.Metal,Size=V3(7.8,1.35,12.100000000000001),Shape=E.PartType.Block,CFrame=CF(-258.65,4,-176,0,0,1,0,1,0,-1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(120,110,95),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(-267.025,4.45,-172.325,0,0,1,0,1,0,-1,0,0)}},
@@ -5506,8 +5509,8 @@ return {
 {"Part","Schildpfosten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.6,8.5,0.6),Shape=E.PartType.Block,CFrame=CF(283,4.25,-218.25)}},
 {"Part","Schild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(10,3,0.2),Shape=E.PartType.Block,CFrame=CF(282.6,7,-222.25,0,0,-1,0,1,0,1,0,0)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(400,120),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="DEIN AUTO · BALD",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}},
-{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Bring dein Projekt ins Tuning-Zentrum",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
+{"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="DEIN AUTO · TUNEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}},
+{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Leistung & Optik am Tuning-Tresen",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(282.46,5.75,-226.25,0,0,-1,0,1,0,1,0,0)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(282.46,8.25,-226.25,0,0,-1,0,1,0,1,0,0)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(282.46,5.75,-218.25,0,0,-1,0,1,0,1,0,0)}},
@@ -5534,8 +5537,8 @@ return {
 {"Part","Zufahrtslinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(224,231,230),Material=E.Material.SmoothPlastic,Size=V3(30,0.06,0.4),Shape=E.PartType.Block,CFrame=CF(193,-0.97,-240)}},
 {"WedgePart","Showcar_Rampe",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(31,43,55),Material=E.Material.Metal,Size=V3(10,2.529735,18),CFrame=CF(196,0.264868,-276,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Rampe_Neon",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(0.2,0.12,10),Shape=E.PartType.Block,CFrame=CF(205.1,-0.94,-276)}},
-{"Model","Showcar",{PrimaryPart=R("RBXN0008675")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(196,0.264868,-276,0,0.139173,0.990268,0,0.990268,-0.139173,-1,0,0)},id="RBXN0008675"},
+{"Model","Showcar",{PrimaryPart=R("RBXN0008674")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(196,0.264868,-276,0,0.139173,0.990268,0,0.990268,-0.139173,-1,0,0)},id="RBXN0008674"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.7),Shape=E.PartType.Block,CFrame=CF(196.972337,1.79443,-276,0,0.139173,0.990268,0,0.990268,-0.139173,-1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(120,60,200),Material=E.Material.Metal,Size=V3(7.8,1.35,11.3),Shape=E.PartType.Block,CFrame=CF(199.269224,2.329977,-276,0,0.139173,0.990268,0,0.990268,-0.139173,-1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(120,60,200),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(191.434464,3.885503,-272.325,0,0.139173,0.990268,0,0.990268,-0.139173,-1,0,0)}},
@@ -5747,8 +5750,8 @@ return {
 {"Part","Buchtkante",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(84.4,0.05,0.4),Shape=E.PartType.Block,CFrame=CF(400,-0.975,-297.8)}},
 {"Part","Unterbodenlicht",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(6,0.05,12),Shape=E.PartType.Block,CFrame=CF(379,-0.975,-287)},{
 {"PointLight","TreffLicht",{Range=18,Brightness=1.6,Color=C3(0.352941,0.901961,0.862745),Shadows=false}}}},
-{"Model","Treffauto",{PrimaryPart=R("RBXN0008908")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(379,-1,-287)},id="RBXN0008908"},
+{"Model","Treffauto",{PrimaryPart=R("RBXN0008907")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(379,-1,-287)},id="RBXN0008907"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,16.5),Shape=E.PartType.Block,CFrame=CF(379,0.65,-285.85)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(20,22,26),Material=E.Material.Metal,Size=V3(7.8,1.35,12.100000000000001),Shape=E.PartType.Block,CFrame=CF(379,1.5,-283.65)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(20,22,26),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(375.325,1.95,-292.025)}},
@@ -6096,8 +6099,8 @@ return {
 {"Part","Lichtlinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(232,246,249),Material=E.Material.Neon,Size=V3(0.4,0.15,44),Shape=E.PartType.Block,CFrame=CF(20,25.925,86)}},
 {"Part","Podestlicht",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(14.4,0.1,18.1),Shape=E.PartType.Block,CFrame=CF(-44,0.05,72,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)}},
 {"Part","Podest",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.SmoothPlastic,Size=V3(14,0.3,18),Shape=E.PartType.Block,CFrame=CF(-44,0.25,72,0.866025,0,-0.5,0,1,0,0.5,0,0.866025),Reflectance=0.1}},
-{"Model","Ausstellung_gt_coupe",{PrimaryPart=R("RBXN0009477")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-44,0.4,72,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)},id="RBXN0009477"},
+{"Model","Ausstellung_gt_coupe",{PrimaryPart=R("RBXN0009476")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-44,0.4,72,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)},id="RBXN0009476"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.6),Shape=E.PartType.Block,CFrame=CF(-44.35,2.05,72.606218,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(38,78,140),Material=E.Material.Metal,Size=V3(7.8,1.35,11.2),Shape=E.PartType.Block,CFrame=CF(-45.45,2.9,74.511474,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(38,78,140),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(-44.670143,3.35,65.810722,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)}},
@@ -6256,8 +6259,8 @@ return {
 {"TextLabel","Level",{Size=U2(0.8,0,0.16,0),Position=U2(0.1,0,0.72,0),BackgroundTransparency=0,BackgroundColor3=C3(0.184314,0.662745,0.639216),BorderSizePixel=0,Text="ab Level 24",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}}}},
 {"Part","Podestlicht",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(14.4,0.1,18.1),Shape=E.PartType.Block,CFrame=CF(44,0.05,72,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)}},
 {"Part","Podest",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.SmoothPlastic,Size=V3(14,0.3,18),Shape=E.PartType.Block,CFrame=CF(44,0.25,72,0.866025,0,0.5,0,1,0,-0.5,0,0.866025),Reflectance=0.1}},
-{"Model","Ausstellung_electric",{PrimaryPart=R("RBXN0009637")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(44,0.4,72,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)},id="RBXN0009637"},
+{"Model","Ausstellung_electric",{PrimaryPart=R("RBXN0009636")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(44,0.4,72,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)},id="RBXN0009636"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,14.899999999999999),Shape=E.PartType.Block,CFrame=CF(44.175,2.05,72.303109,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(7.8,1.35,10.5),Shape=E.PartType.Block,CFrame=CF(45.275,2.9,74.208365,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(38.304857,3.35,69.485722,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)}},
@@ -6417,8 +6420,8 @@ return {
 {"TextLabel","Level",{Size=U2(0.8,0,0.16,0),Position=U2(0.1,0,0.72,0),BackgroundTransparency=0,BackgroundColor3=C3(0.184314,0.662745,0.639216),BorderSizePixel=0,Text="ab Level 38",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}}}},
 {"Part","Podestlicht",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(14.4,0.1,18.1),Shape=E.PartType.Block,CFrame=CF(-44,0.05,93,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)}},
 {"Part","Podest",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.SmoothPlastic,Size=V3(14,0.3,18),Shape=E.PartType.Block,CFrame=CF(-44,0.25,93,0.866025,0,-0.5,0,1,0,0.5,0,0.866025),Reflectance=0.1}},
-{"Model","Ausstellung_crossover",{PrimaryPart=R("RBXN0009798")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-44,0.4,93,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)},id="RBXN0009798"},
+{"Model","Ausstellung_crossover",{PrimaryPart=R("RBXN0009797")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-44,0.4,93,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)},id="RBXN0009797"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,14.8),Shape=E.PartType.Block,CFrame=CF(-44.15,2.05,93.259808,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,66,74),Material=E.Material.Metal,Size=V3(7.8,1.35,10.4),Shape=E.PartType.Block,CFrame=CF(-45.25,2.9,95.165064,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,66,74),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(-44.670143,3.35,86.810722,0.866025,0,-0.5,0,1,0,0.5,0,0.866025)}},
@@ -6564,8 +6567,8 @@ return {
 {"TextLabel","Level",{Size=U2(0.8,0,0.16,0),Position=U2(0.1,0,0.72,0),BackgroundTransparency=0,BackgroundColor3=C3(0.184314,0.662745,0.639216),BorderSizePixel=0,Text="ab Level 7",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}}}},
 {"Part","Podestlicht",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(14.4,0.1,18.1),Shape=E.PartType.Block,CFrame=CF(44,0.05,93,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)}},
 {"Part","Podest",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.SmoothPlastic,Size=V3(14,0.3,18),Shape=E.PartType.Block,CFrame=CF(44,0.25,93,0.866025,0,0.5,0,1,0,-0.5,0,0.866025),Reflectance=0.1}},
-{"Model","Ausstellung_sedan",{PrimaryPart=R("RBXN0009945")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(44,0.4,93,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)},id="RBXN0009945"},
+{"Model","Ausstellung_sedan",{PrimaryPart=R("RBXN0009944")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(44,0.4,93,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)},id="RBXN0009944"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.299999999999999),Shape=E.PartType.Block,CFrame=CF(44.275,2.05,93.476314,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(110,30,40),Material=E.Material.Metal,Size=V3(7.8,1.35,10.899999999999999),Shape=E.PartType.Block,CFrame=CF(45.375,2.9,95.38157,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(110,30,40),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(38.304857,3.35,90.485722,0.866025,0,0.5,0,1,0,-0.5,0,0.866025)}},
@@ -6715,11 +6718,11 @@ return {
 {"Part","Monitorfuss",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.2,0.25,0.2),Shape=E.PartType.Block,CFrame=CF(-24,3.575,106.4)}},
 {"Part","Monitor",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(27,72,82),Material=E.Material.SmoothPlastic,Size=V3(2.6,1.5,0.15),Shape=E.PartType.Block,CFrame=CF(-24,4.45,106.3,-1,0,0,0,1,0,0,0,-1)},{
 {"SurfaceGui","Bildschirm",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(104,60),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS\nEröffnet bald",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843)}}}}}},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS\nJetzt geöffnet",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843)}}}}}},
 {"Part","Tresenschild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(14,3,0.2),Shape=E.PartType.Block,CFrame=CF(-20,10.5,110.1,-1,0,0,0,1,0,0,0,-1)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(560,120),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="VERKAUF · BERATUNG",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}},
-{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Neuwagen · Finanzierung · Eröffnet bald",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
+{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Neuwagen · Meine Autos · Probefahrt",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(-14,9.25,109.96,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(-14,11.75,109.96,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(-26,9.25,109.96,-1,0,0,0,1,0,0,0,-1)}},
@@ -6746,8 +6749,8 @@ return {
 {"Part","Stellflaeche",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(150,154,156),Material=E.Material.Concrete,Size=V3(12,0.05,21),Shape=E.PartType.Block,CFrame=CF(-97,-0.975,46,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},{
 {"SurfaceGui","Rahmen",{Face=E.NormalId.Top,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(120,210),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Rahmen0",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=1,BorderSizePixel=4,BorderColor3=C3(0.878431,0.905882,0.901961),BorderMode=E.BorderMode.Inset}}}}}},
-{"Model","Gebraucht_hot_hatch",{PrimaryPart=R("RBXN0010127")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-97,-0.95,46,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},id="RBXN0010127"},
+{"Model","Gebraucht_hot_hatch",{PrimaryPart=R("RBXN0010126")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-97,-0.95,46,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},id="RBXN0010126"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.5),Shape=E.PartType.Block,CFrame=CF(-96.752513,0.7,45.752513,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(200,50,50),Material=E.Material.Metal,Size=V3(7.8,1.35,9.100000000000001),Shape=E.PartType.Block,CFrame=CF(-98.308148,1.55,47.308148,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(200,50,50),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(-96.045406,2,39.848171,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
@@ -6894,8 +6897,8 @@ return {
 {"Part","Stellflaeche",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(150,154,156),Material=E.Material.Concrete,Size=V3(12,0.05,21),Shape=E.PartType.Block,CFrame=CF(-97,-0.975,76,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},{
 {"SurfaceGui","Rahmen",{Face=E.NormalId.Top,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(120,210),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Rahmen0",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=1,BorderSizePixel=4,BorderColor3=C3(0.878431,0.905882,0.901961),BorderMode=E.BorderMode.Inset}}}}}},
-{"Model","Gebraucht_wagon",{PrimaryPart=R("RBXN0010275")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-97,-0.95,76,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},id="RBXN0010275"},
+{"Model","Gebraucht_wagon",{PrimaryPart=R("RBXN0010274")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-97,-0.95,76,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},id="RBXN0010274"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,16.5),Shape=E.PartType.Block,CFrame=CF(-97.813173,0.7,76.813173,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(170,176,180),Material=E.Material.Metal,Size=V3(7.8,1.35,12.100000000000001),Shape=E.PartType.Block,CFrame=CF(-99.368808,1.55,78.368808,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(170,176,180),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(-96.045406,2,69.848171,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
@@ -7040,8 +7043,8 @@ return {
 {"Part","Stellflaeche",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(150,154,156),Material=E.Material.Concrete,Size=V3(12,0.05,21),Shape=E.PartType.Block,CFrame=CF(-97,-0.975,106,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},{
 {"SurfaceGui","Rahmen",{Face=E.NormalId.Top,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(120,210),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Rahmen0",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=1,BorderSizePixel=4,BorderColor3=C3(0.878431,0.905882,0.901961),BorderMode=E.BorderMode.Inset}}}}}},
-{"Model","Gebraucht_compact",{PrimaryPart=R("RBXN0010421")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-97,-0.95,106,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},id="RBXN0010421"},
+{"Model","Gebraucht_compact",{PrimaryPart=R("RBXN0010420")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-97,-0.95,106,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},id="RBXN0010420"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.1),Shape=E.PartType.Block,CFrame=CF(-96.611091,0.7,105.611091,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(7.8,1.35,8.7),Shape=E.PartType.Block,CFrame=CF(-98.166726,1.55,107.166726,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(-96.045406,2,99.848171,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
@@ -7175,8 +7178,8 @@ return {
 {"Part","Stellflaeche",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(150,154,156),Material=E.Material.Concrete,Size=V3(12,0.05,21),Shape=E.PartType.Block,CFrame=CF(-97,-0.975,136,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},{
 {"SurfaceGui","Rahmen",{Face=E.NormalId.Top,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(120,210),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Rahmen0",{Size=U2(1,0,1,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=1,BorderSizePixel=4,BorderColor3=C3(0.878431,0.905882,0.901961),BorderMode=E.BorderMode.Inset}}}}}},
-{"Model","Gebraucht_sport",{PrimaryPart=R("RBXN0010556")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-97,-0.95,136,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},id="RBXN0010556"},
+{"Model","Gebraucht_sport",{PrimaryPart=R("RBXN0010555")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(-97,-0.95,136,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},id="RBXN0010555"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,14),Shape=E.PartType.Block,CFrame=CF(-96.929289,0.7,135.929289,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,190,40),Material=E.Material.Metal,Size=V3(7.8,1.35,9.600000000000001),Shape=E.PartType.Block,CFrame=CF(-98.484924,1.55,137.484924,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,190,40),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(-96.045406,2,129.848171,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
@@ -7374,8 +7377,8 @@ return {
 {"PointLight","Uebergabelicht",{Range=30,Brightness=0.9,Color=C3(0.878431,0.933333,1),Shadows=false}}}},
 {"Part","Lichtlinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(232,246,249),Material=E.Material.Neon,Size=V3(32,0.15,0.4),Shape=E.PartType.Block,CFrame=CF(102,23.925,64)}},
 {"Part","Lichtlinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(232,246,249),Material=E.Material.Neon,Size=V3(32,0.15,0.4),Shape=E.PartType.Block,CFrame=CF(102,23.925,88)}},
-{"Model","Uebergabe_compact",{PrimaryPart=R("RBXN0010755")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(106,0,76,0,0,1,0,1,0,-1,0,0)},id="RBXN0010755"},
+{"Model","Uebergabe_compact",{PrimaryPart=R("RBXN0010754")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(106,0,76,0,0,1,0,1,0,-1,0,0)},id="RBXN0010754"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.1),Shape=E.PartType.Block,CFrame=CF(105.45,1.65,76,0,0,1,0,1,0,-1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(7.8,1.35,8.7),Shape=E.PartType.Block,CFrame=CF(107.65,2.5,76,0,0,1,0,1,0,-1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(100.975,2.95,79.675,0,0,1,0,1,0,-1,0,0)}},
@@ -7508,7 +7511,7 @@ return {
 {"Part","Pultplatte",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(3.4,0.2,7.4),Shape=E.PartType.Block,CFrame=CF(92.5,3.3,70),Reflectance=0.2}},
 {"Part","Pultmonitor",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(27,72,82),Material=E.Material.SmoothPlastic,Size=V3(2.2,1.4,0.15),Shape=E.PartType.Block,CFrame=CF(93,4.1,70,0,0,-1,0,1,0,1,0,0)},{
 {"SurfaceGui","Bildschirm",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(88,56),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TESTFAHRT\nEröffnet bald",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843)}}}}}},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="PROBEFAHRT\n60 Sekunden",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.47451,0.882353,0.807843)}}}}}},
 {"Part","Wandschild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(14,2.8,0.2),Shape=E.PartType.Block,CFrame=CF(101,11,56.9)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(560,112),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="SCHLÜSSELÜBERGABE",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}},
@@ -7532,8 +7535,8 @@ return {
 {"Frame","Linie8",{Size=U2(0.004,0,0.4,0),Position=U2(0.996,0,0.04,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0}},
 {"Frame","Linie9",{Size=U2(0.004,0,0.4,0),Position=U2(0.996,0,0.56,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0}},
 {"Frame","Linie10",{Size=U2(0.4,0,0.03,0),Position=U2(0.3,0,0.485,0),BackgroundColor3=C3(0.968627,0.690196,0.247059),BackgroundTransparency=0,BorderSizePixel=0}}}}}},
-{"Model","Kundenauto_sedan",{PrimaryPart=R("RBXN0010913")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(19.5,-0.95,136)},id="RBXN0010913"},
+{"Model","Kundenauto_sedan",{PrimaryPart=R("RBXN0010912")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(19.5,-0.95,136)},id="RBXN0010912"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.299999999999999),Shape=E.PartType.Block,CFrame=CF(19.5,0.7,136.55)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,66,74),Material=E.Material.Metal,Size=V3(7.8,1.35,10.899999999999999),Shape=E.PartType.Block,CFrame=CF(19.5,1.55,138.75)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,66,74),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(15.825,2,130.975)}},
@@ -7570,8 +7573,8 @@ return {
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(16.7,2.05,144.3)}},
 {"Part","Headlamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(226,247,255),Material=E.Material.Neon,Size=V3(1.9,0.42,0.2),Shape=E.PartType.Block,CFrame=CF(22.3,2.11,128.55)}},
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(22.3,2.05,144.3)}}},attrs={["Parked"]=true,["Body"]="sedan",["Lite"]=true}},
-{"Model","Kundenauto_hot_hatch",{PrimaryPart=R("RBXN0011050")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(41.5,-0.95,136)},id="RBXN0011050"},
+{"Model","Kundenauto_hot_hatch",{PrimaryPart=R("RBXN0011049")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(41.5,-0.95,136)},id="RBXN0011049"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.5),Shape=E.PartType.Block,CFrame=CF(41.5,0.7,135.65)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(200,50,50),Material=E.Material.Metal,Size=V3(7.8,1.35,9.100000000000001),Shape=E.PartType.Block,CFrame=CF(41.5,1.55,137.85)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(200,50,50),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(37.825,2,130.975)}},
@@ -7610,8 +7613,8 @@ return {
 {"Part","Headlamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(226,247,255),Material=E.Material.Neon,Size=V3(1.8,0.12,0.18),Shape=E.PartType.Block,CFrame=CF(44.3,1.91,128.55)}},
 {"Part","Headlamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(226,247,255),Material=E.Material.Neon,Size=V3(1.8,0.12,0.18),Shape=E.PartType.Block,CFrame=CF(44.3,2.31,128.55)}},
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(44.3,2.05,142.5)}}},attrs={["Parked"]=true,["Body"]="hot_hatch",["Lite"]=true}},
-{"Model","Kundenauto_wagon",{PrimaryPart=R("RBXN0011188")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(30.5,-0.95,160,-1,0,0,0,1,0,0,0,-1)},id="RBXN0011188"},
+{"Model","Kundenauto_wagon",{PrimaryPart=R("RBXN0011187")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(30.5,-0.95,160,-1,0,0,0,1,0,0,0,-1)},id="RBXN0011187"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,16.5),Shape=E.PartType.Block,CFrame=CF(30.5,0.7,158.85,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(7.8,1.35,12.100000000000001),Shape=E.PartType.Block,CFrame=CF(30.5,1.55,156.65,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(34.175,2,165.025,-1,0,0,0,1,0,0,0,-1)}},
@@ -7648,8 +7651,8 @@ return {
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(33.3,2.05,150.5,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Headlamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(226,247,255),Material=E.Material.Neon,Size=V3(1.9,0.42,0.2),Shape=E.PartType.Block,CFrame=CF(27.7,2.11,167.45,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(27.7,2.05,150.5,-1,0,0,0,1,0,0,0,-1)}}},attrs={["Parked"]=true,["Body"]="wagon",["Lite"]=true}},
-{"Model","Kundenauto_crossover",{PrimaryPart=R("RBXN0011324")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(52.5,-0.95,160,-1,0,0,0,1,0,0,0,-1)},id="RBXN0011324"},
+{"Model","Kundenauto_crossover",{PrimaryPart=R("RBXN0011323")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(52.5,-0.95,160,-1,0,0,0,1,0,0,0,-1)},id="RBXN0011323"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,14.8),Shape=E.PartType.Block,CFrame=CF(52.5,0.7,159.7,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(38,78,140),Material=E.Material.Metal,Size=V3(7.8,1.35,10.4),Shape=E.PartType.Block,CFrame=CF(52.5,1.55,157.5,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(38,78,140),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(56.175,2,165.025,-1,0,0,0,1,0,0,0,-1)}},
@@ -7805,8 +7808,8 @@ return {
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUFBEREITUNG",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","Rueckseite",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(480,64),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUFBEREITUNG",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}}}},
-{"Model","Pflegeauto_gt_coupe",{PrimaryPart=R("RBXN0011581")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(76,-1,136,-1,0,0,0,1,0,0,0,-1)},id="RBXN0011581"},
+{"Model","Pflegeauto_gt_coupe",{PrimaryPart=R("RBXN0011580")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(76,-1,136,-1,0,0,0,1,0,0,0,-1)},id="RBXN0011580"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.6),Shape=E.PartType.Block,CFrame=CF(76,0.65,135.3,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(20,22,26),Material=E.Material.Metal,Size=V3(7.8,1.35,11.2),Shape=E.PartType.Block,CFrame=CF(76,1.5,133.1,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(20,22,26),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(79.675,1.95,141.025,-1,0,0,0,1,0,0,0,-1)}},
@@ -7928,8 +7931,8 @@ return {
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="START · ZIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}}},
 {"Part","Rundentafel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(4.6,2.6,0.2),Shape=E.PartType.Block,CFrame=CF(0,9.5,254.9,-1,0,0,0,1,0,0,0,-1)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(184,104),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="BESTZEIT 0:41,8",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}},
-{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Runde 3 / 5 · Teststrecke",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
+{"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="ZEITFAHREN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}},
+{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Start an der Kasse · Uhrzeigersinn",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
 {"Part","Ziellinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(224,231,230),Material=E.Material.SmoothPlastic,Size=V3(2.4,0.05,23),Shape=E.PartType.Block,CFrame=CF(0,-0.925,270)},{
 {"SurfaceGui","Zielflagge",{Face=E.NormalId.Top,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(50,460),LightInfluence=0,AlwaysOnTop=false},{
 {"Frame","Linie0",{Size=U2(0.5,0,0.0625,0),Position=U2(0,0,0,0),BackgroundColor3=C3(0.086275,0.101961,0.121569),BackgroundTransparency=0,BorderSizePixel=0}},
@@ -7978,7 +7981,7 @@ return {
 {"Part","Kassenschild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(236,238,240),Material=E.Material.SmoothPlastic,Size=V3(16,3.4,0.2),Shape=E.PartType.Block,CFrame=CF(0,7.6,227.1,-1,0,0,0,1,0,0,0,-1)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(640,136),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="TESTSTRECKE",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.784314,0.196078,0.196078)}},
-{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Tribüne · Rundenzeiten · Eröffnet bald",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.121569,0.168627,0.215686)}}}}}},
+{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Tribüne · Zeitfahren · Bestzeiten",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.121569,0.168627,0.215686)}}}}}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(7,6.15,226.96,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(7,9.05,226.96,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(-7,6.15,226.96,-1,0,0,0,1,0,0,0,-1)}},
@@ -8241,8 +8244,8 @@ return {
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(123.194077,29.25,-238.537223,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(123.194077,38.75,-238.537223,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)}},
 {"Model","Autos",{},{
-{"Model","Deckauto_sedan",{PrimaryPart=R("RBXN0012206")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(90,25,-260)},id="RBXN0012206"},
+{"Model","Deckauto_sedan",{PrimaryPart=R("RBXN0012205")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(90,25,-260)},id="RBXN0012205"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.299999999999999),Shape=E.PartType.Block,CFrame=CF(90,26.65,-259.45)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(40,110,200),Material=E.Material.Metal,Size=V3(7.8,1.35,10.899999999999999),Shape=E.PartType.Block,CFrame=CF(90,27.5,-257.25)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(40,110,200),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(86.325,27.95,-265.025)}},
@@ -8378,8 +8381,8 @@ return {
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(85.8,27.95,-259.07)}},
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(85.8,27.95,-258.94)}},
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(85.8,27.95,-258.81)}}},attrs={["Display"]="Parkhaus",["Body"]="sedan"}},
-{"Model","Deckauto_wagon",{PrimaryPart=R("RBXN0012343")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(108,25,-290,-1,0,0,0,1,0,0,0,-1)},id="RBXN0012343"},
+{"Model","Deckauto_wagon",{PrimaryPart=R("RBXN0012342")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(108,25,-290,-1,0,0,0,1,0,0,0,-1)},id="RBXN0012342"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,16.5),Shape=E.PartType.Block,CFrame=CF(108,26.65,-291.15,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(180,186,190),Material=E.Material.Metal,Size=V3(7.8,1.35,12.100000000000001),Shape=E.PartType.Block,CFrame=CF(108,27.5,-293.35,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(180,186,190),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(111.675,27.95,-284.975,-1,0,0,0,1,0,0,0,-1)}},
@@ -8514,8 +8517,8 @@ return {
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(112.2,27.95,-290.93,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(112.2,27.95,-291.06,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(112.2,27.95,-291.19,-1,0,0,0,1,0,0,0,-1)}}},attrs={["Display"]="Parkhaus",["Body"]="wagon"}},
-{"Model","Parkauto_crossover",{PrimaryPart=R("RBXN0012479")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(100,-1,-300,0,0,1,0,1,0,-1,0,0)},id="RBXN0012479"},
+{"Model","Parkauto_crossover",{PrimaryPart=R("RBXN0012478")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(100,-1,-300,0,0,1,0,1,0,-1,0,0)},id="RBXN0012478"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,14.8),Shape=E.PartType.Block,CFrame=CF(100.3,0.65,-300,0,0,1,0,1,0,-1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(7.8,1.35,10.4),Shape=E.PartType.Block,CFrame=CF(102.5,1.5,-300,0,0,1,0,1,0,-1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(94.975,1.95,-296.325,0,0,1,0,1,0,-1,0,0)}},
@@ -8769,8 +8772,8 @@ return {
 {"TextLabel","Zeile2",{Size=U2(0.92,0,0.4968,0),Position=U2(0.04,0,0.4356,0),BackgroundTransparency=1,Text="1,79",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}}},
 {"Part","Zapfpistole",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.35,0.9,0.5),Shape=E.PartType.Block,CFrame=CF(237.275,2.45,195)}},
 {"Part","Schlauch",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Plastic,Size=V3(0.22,0.22,1.403567),Shape=E.PartType.Block,CFrame=CF(237.25,3.6,195,0,0.997459,-0.071247,0,0.071247,0.997459,1,0,0)}}}},
-{"Model","Tankauto_compact",{PrimaryPart=R("RBXN0012734")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(216,-1,188,0,0,-1,0,1,0,1,0,0)},id="RBXN0012734"},
+{"Model","Tankauto_compact",{PrimaryPart=R("RBXN0012733")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(216,-1,188,0,0,-1,0,1,0,1,0,0)},id="RBXN0012733"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.1),Shape=E.PartType.Block,CFrame=CF(216.55,0.65,188,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(200,50,50),Material=E.Material.Metal,Size=V3(7.8,1.35,8.7),Shape=E.PartType.Block,CFrame=CF(214.35,1.5,188,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(200,50,50),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(221.025,1.95,184.325,0,0,-1,0,1,0,1,0,0)}},
@@ -8984,8 +8987,8 @@ return {
 {"Frame","Linie2",{Size=U2(0.008,0,0.9,0),Position=U2(0.496,0,0.05,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0}},
 {"Frame","Linie3",{Size=U2(0.008,0,0.9,0),Position=U2(0.746,0,0.05,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0}},
 {"Frame","Linie4",{Size=U2(0.008,0,0.9,0),Position=U2(0.996,0,0.05,0),BackgroundColor3=C3(0.878431,0.905882,0.901961),BackgroundTransparency=0,BorderSizePixel=0}}}}}},
-{"Model","Parkauto_compact",{PrimaryPart=R("RBXN0012949")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(256.25,-0.95,246)},id="RBXN0012949"},
+{"Model","Parkauto_compact",{PrimaryPart=R("RBXN0012948")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(256.25,-0.95,246)},id="RBXN0012948"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.1),Shape=E.PartType.Block,CFrame=CF(256.25,0.7,245.45)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,110,170),Material=E.Material.Metal,Size=V3(7.8,1.35,8.7),Shape=E.PartType.Block,CFrame=CF(256.25,1.55,247.65)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,110,170),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(252.575,2,240.975)}},
@@ -9022,8 +9025,8 @@ return {
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(253.45,2.05,252.1)}},
 {"Part","Headlamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(226,247,255),Material=E.Material.Neon,Size=V3(0.16,0.83,0.83),Shape=E.PartType.Cylinder,CFrame=CF(259.05,2.05,238.55,0,0,1,0,1,0,-1,0,0)}},
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(259.05,2.05,252.1)}}},attrs={["Parked"]=true,["Body"]="compact",["Lite"]=true}},
-{"Model","Parkauto_wagon",{PrimaryPart=R("RBXN0013074")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(268.75,-0.95,246,-1,0,0,0,1,0,0,0,-1)},id="RBXN0013074"},
+{"Model","Parkauto_wagon",{PrimaryPart=R("RBXN0013073")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(268.75,-0.95,246,-1,0,0,0,1,0,0,0,-1)},id="RBXN0013073"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,16.5),Shape=E.PartType.Block,CFrame=CF(268.75,0.7,244.85,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(180,60,50),Material=E.Material.Metal,Size=V3(7.8,1.35,12.100000000000001),Shape=E.PartType.Block,CFrame=CF(268.75,1.55,242.65,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(180,60,50),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(272.425,2,251.025,-1,0,0,0,1,0,0,0,-1)}},
@@ -9060,8 +9063,8 @@ return {
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(271.55,2.05,236.5,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","Headlamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(226,247,255),Material=E.Material.Neon,Size=V3(1.9,0.42,0.2),Shape=E.PartType.Block,CFrame=CF(265.95,2.11,253.45,-1,0,0,0,1,0,0,0,-1)}},
 {"Part","TailLamp",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,78,65),Material=E.Material.Neon,Size=V3(1.9,0.35,0.2),Shape=E.PartType.Block,CFrame=CF(265.95,2.05,236.5,-1,0,0,0,1,0,0,0,-1)}}},attrs={["Parked"]=true,["Body"]="wagon",["Lite"]=true}},
-{"Model","Parkauto_sedan",{PrimaryPart=R("RBXN0013210")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(293.75,-0.95,246)},id="RBXN0013210"},
+{"Model","Parkauto_sedan",{PrimaryPart=R("RBXN0013209")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(293.75,-0.95,246)},id="RBXN0013209"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.299999999999999),Shape=E.PartType.Block,CFrame=CF(293.75,0.7,246.55)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(230,230,225),Material=E.Material.Metal,Size=V3(7.8,1.35,10.899999999999999),Shape=E.PartType.Block,CFrame=CF(293.75,1.55,248.75)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(230,230,225),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(290.075,2,240.975)}},
@@ -9220,7 +9223,7 @@ return {
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(68,60),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Zeile1",{Size=U2(0.92,0,0.354857,0),Position=U2(0.04,0,0.059714,0),BackgroundTransparency=1,Text="WASCHEN",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.235294,0.862745,1)}},
 {"TextLabel","Zeile2",{Size=U2(0.92,0,0.236571,0),Position=U2(0.04,0,0.447429,0),BackgroundTransparency=1,Text="Programm wählen",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(1,1,1)}},
-{"TextLabel","Zeile3",{Size=U2(0.92,0,0.236571,0),Position=U2(0.04,0,0.710286,0),BackgroundTransparency=1,Text="bald verfügbar",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(1,0.25098,0.705882)}}}}}}}}}},
+{"TextLabel","Zeile3",{Size=U2(0.92,0,0.236571,0),Position=U2(0.04,0,0.710286,0),BackgroundTransparency=1,Text="Glanz für dein Auto",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(1,0.25098,0.705882)}}}}}}}}}},
 {"Model","Waschstrasse",{},{
 {"Part","Boden",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(96,104,112),Material=E.Material.Concrete,Size=V3(60,1,24),Shape=E.PartType.Block,CFrame=CF(340,-0.5,188)}},
 {"WedgePart","Auffahrt_West",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(96,104,112),Material=E.Material.Concrete,Size=V3(18,1,6),CFrame=CF(307,-0.5,188,0,0,1,0,1,0,-1,0,0)}},
@@ -9262,8 +9265,8 @@ return {
 {"Part","Ampelgehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,4,1.4),Shape=E.PartType.Block,CFrame=CF(309.7,11.4,177.7)}},
 {"Part","Ampel_Rot",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(90,20,20),Material=E.Material.SmoothPlastic,Size=V3(0.9,0.9,0.9),Shape=E.PartType.Ball,CFrame=CF(309.35,12.4,177.7)}},
 {"Part","Ampel_Gruen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(60,230,90),Material=E.Material.Neon,Size=V3(0.9,0.9,0.9),Shape=E.PartType.Ball,CFrame=CF(309.35,10.4,177.7)}},
-{"Model","Waschauto_hot_hatch",{PrimaryPart=R("RBXN0013512")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(340,0,188,0,0,-1,0,1,0,1,0,0)},id="RBXN0013512"},
+{"Model","Waschauto_hot_hatch",{PrimaryPart=R("RBXN0013511")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(340,0,188,0,0,-1,0,1,0,1,0,0)},id="RBXN0013511"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.5),Shape=E.PartType.Block,CFrame=CF(340.35,1.65,188,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(7.8,1.35,9.100000000000001),Shape=E.PartType.Block,CFrame=CF(338.15,2.5,188,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(345.025,2.95,184.325,0,0,-1,0,1,0,1,0,0)}},
@@ -10752,16 +10755,16 @@ return {
 {"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="leaderboard",["MiniTitle"]="Bestenliste",["PlayerSide"]="S"}},
 {"Part","arcade",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-80,3,-97)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Punkte-Schalter",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Punkte-Schalter",["PlayerSide"]="S",["Soon"]=true}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Punkte-Schalter",["PlayerSide"]="S"}},
 {"Part","quiz",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-116,3,-148)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Meisterschule · Mechaniker-Quiz",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
 {"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="quiz",["MiniTitle"]="Meisterschule · Mechaniker-Quiz",["PlayerSide"]="E"}},
 {"Part","auction",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(84.5,3,-101)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Auktionshaus · Bieterkasse",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="auction",["MiniTitle"]="Auktionshaus · Bieterkasse",["PlayerSide"]="S",["Soon"]=true}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="auction",["MiniTitle"]="Auktionshaus · Bieterkasse",["PlayerSide"]="S"}},
 {"Part","auction_consign",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(84.5,3,-51)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Auktionshaus · Einlieferung",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="auction",["MiniTitle"]="Auktionshaus · Einlieferung",["PlayerSide"]="N",["Soon"]=true}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="auction",["MiniTitle"]="Auktionshaus · Einlieferung",["PlayerSide"]="N"}},
 {"Part","shop",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(114,3,-152)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Credit-Center",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
 {"Attachment","Arrival",{CFrame=CF(-6,0.5,0,0,0,-1,0,1,0,1,0,0)}}},attrs={["MiniTab"]="shop",["MiniTitle"]="Credit-Center",["PlayerSide"]="W"}},
@@ -10770,10 +10773,10 @@ return {
 {"Attachment","Arrival",{CFrame=CF(0,0,6)}}},attrs={["MiniTab"]="parking",["MiniTitle"]="Parkplatz-Chaos",["PlayerSide"]="S"}},
 {"Part","dealer",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-20,3,100)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Autohaus · Verkauf",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="dealer",["MiniTitle"]="Autohaus · Verkauf",["PlayerSide"]="N",["Soon"]=true}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="dealer",["MiniTitle"]="Autohaus · Verkauf",["PlayerSide"]="N"}},
 {"Part","testdrive",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(90,3,70)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Übergabe · Testfahrt",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(-6,0.5,0,0,0,-1,0,1,0,1,0,0)}}},attrs={["MiniTab"]="dealer",["MiniTitle"]="Übergabe · Testfahrt",["PlayerSide"]="W",["Soon"]=true}},
+{"Attachment","Arrival",{CFrame=CF(-6,0.5,0,0,0,-1,0,1,0,1,0,0)}}},attrs={["MiniTab"]="dealer",["MiniTitle"]="Übergabe · Testfahrt",["PlayerSide"]="W"}},
 {"Part","tuning",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(234,3,-201)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Tuning-Zentrum",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
 {"Attachment","Arrival",{CFrame=CF(-6,0.5,0,0,0,-1,0,1,0,1,0,0)}}},attrs={["MiniTab"]="tuning",["MiniTitle"]="Tuning-Zentrum",["PlayerSide"]="W"}},
@@ -10791,34 +10794,34 @@ return {
 {"Attachment","Arrival",{CFrame=CF(0,-0.35,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="scrapyard",["MiniTitle"]="Zerlegeplatz",["PlayerSide"]="N"}},
 {"Part","carwash",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(304,3,218)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Waschstraße",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,-0.5,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="carwash",["MiniTitle"]="Waschstraße",["PlayerSide"]="N",["Soon"]=true}},
+{"Attachment","Arrival",{CFrame=CF(0,-0.5,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="carwash",["MiniTitle"]="Waschstraße",["PlayerSide"]="N"}},
 {"Part","track",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(0,3,224)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Teststrecke",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="track",["MiniTitle"]="Teststrecke",["PlayerSide"]="N",["Soon"]=true}},
+{"Attachment","Arrival",{CFrame=CF(0,0,-6,-1,0,0,0,1,0,0,0,-1)}}},attrs={["MiniTab"]="track",["MiniTitle"]="Teststrecke",["PlayerSide"]="N"}},
 {"Part","arcade_1",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-121,3,-60)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Blitz-Reaktion",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Blitz-Reaktion",["PlayerSide"]="E",["Soon"]=true,["Game"]="BLITZ-REAKTION"}},
+{"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Blitz-Reaktion",["PlayerSide"]="E",["Game"]="BLITZ-REAKTION",["GameKey"]="arcade_1"}},
 {"Part","arcade_2",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-121,3,-72)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Bremsweg-Profi",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Bremsweg-Profi",["PlayerSide"]="E",["Soon"]=true,["Game"]="BREMSWEG-PROFI"}},
+{"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Bremsweg-Profi",["PlayerSide"]="E",["Game"]="BREMSWEG-PROFI",["GameKey"]="arcade_2"}},
 {"Part","arcade_3",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-121,3,-84)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Boxenstopp",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Boxenstopp",["PlayerSide"]="E",["Soon"]=true,["Game"]="BOXENSTOPP"}},
+{"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Boxenstopp",["PlayerSide"]="E",["Game"]="BOXENSTOPP",["GameKey"]="arcade_3"}},
 {"Part","arcade_4",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-121,3,-96)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Drehmoment",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Drehmoment",["PlayerSide"]="E",["Soon"]=true,["Game"]="DREHMOMENT"}},
+{"Attachment","Arrival",{CFrame=CF(6,0.5,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Drehmoment",["PlayerSide"]="E",["Game"]="DREHMOMENT",["GameKey"]="arcade_4"}},
 {"Part","arcade_5",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-112,3,-104)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Motor-Ohr",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Motor-Ohr",["PlayerSide"]="S",["Soon"]=true,["Game"]="MOTOR-OHR"}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Motor-Ohr",["PlayerSide"]="S",["Game"]="MOTOR-OHR",["GameKey"]="arcade_5"}},
 {"Part","arcade_6",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-98,3,-104)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Einpark-Profi",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Einpark-Profi",["PlayerSide"]="S",["Soon"]=true,["Game"]="EINPARK-PROFI"}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Einpark-Profi",["PlayerSide"]="S",["Game"]="EINPARK-PROFI",["GameKey"]="arcade_6"}},
 {"Part","arcade_7",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-110,3,-43.5)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Rennsimulator 1",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Rennsimulator 1",["PlayerSide"]="S",["Soon"]=true,["Game"]="RENNSIMULATOR 1"}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Rennsimulator 1",["PlayerSide"]="S",["Game"]="RENNSIMULATOR 1",["GameKey"]="arcade_7"}},
 {"Part","arcade_8",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-90,3,-43.5)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Spielhalle · Rennsimulator 2",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Rennsimulator 2",["PlayerSide"]="S",["Soon"]=true,["Game"]="RENNSIMULATOR 2"}}}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="arcade",["MiniTitle"]="Spielhalle · Rennsimulator 2",["PlayerSide"]="S",["Game"]="RENNSIMULATOR 2",["GameKey"]="arcade_8"}}}},
 {"Folder","Arrivals",{},{
 {"Part","hub",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(2,1,2),Shape=E.PartType.Block,CFrame=CF(0,0,-192,-1,0,0,0,1,0,0,0,-1)},attrs={["Look"]="S"}},
 {"Part","plaza",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(2,1,2),Shape=E.PartType.Block,CFrame=CF(0,-0.5,-165,-1,0,0,0,1,0,0,0,-1)},attrs={["Look"]="S"}},
@@ -11954,15 +11957,15 @@ return {
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(176,36),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Titel",{Size=U2(0.94,0,0.84,0),Position=U2(0.03,0,0.08,0),BackgroundTransparency=1,Text="EINPARK-PROFI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.078431,0.039216,0.117647),ZIndex=3,TextXAlignment=E.TextXAlignment.Center}}}}},attrs={["Anim"]="neon",["Period"]=2.4000000000000004,["ColorB"]=C3(1,0.5254902243614197,0.9803921580314636)}},
 {"Model","Auktionshammer",{},{
-{"Model","Hammer",{PrimaryPart=R("RBXN0006598")},{
-{"Part","Knauf",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(80,52,36),Material=E.Material.Wood,Size=V3(0.3,0.3,0.3),Shape=E.PartType.Ball,CFrame=CF(110.8,6.95,-96)},id="RBXN0006598"},
+{"Model","Hammer",{PrimaryPart=R("RBXN0006597")},{
+{"Part","Knauf",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(80,52,36),Material=E.Material.Wood,Size=V3(0.3,0.3,0.3),Shape=E.PartType.Ball,CFrame=CF(110.8,6.95,-96)},id="RBXN0006597"},
 {"Part","Stiel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(80,52,36),Material=E.Material.Wood,Size=V3(0.16,0.16,1.422146),Shape=E.PartType.Block,CFrame=CF(110.8,7.075,-95.3,-1,0,0,0,0.984428,-0.175791,0,-0.175791,-0.984428)}},
 {"Part","Kopf",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(80,52,36),Material=E.Material.Wood,Size=V3(1,0.5,0.5),Shape=E.PartType.Cylinder,CFrame=CF(110.8,7.2,-94.6)}}}}},attrs={["Anim"]="gavel",["Period"]=6,["Angle"]=35}},
-{"Model","Auktion_Drehbuehne",{PrimaryPart=R("RBXN0006602")},{
-{"Part","Drehteller",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(80,52,36),Material=E.Material.Wood,Size=V3(0.3,19.4,19.4),Shape=E.PartType.Cylinder,CFrame=CF(118,3.15,-76,0,-1,0,1,0,0,0,0,1)},id="RBXN0006602"},
+{"Model","Auktion_Drehbuehne",{PrimaryPart=R("RBXN0006601")},{
+{"Part","Drehteller",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(80,52,36),Material=E.Material.Wood,Size=V3(0.3,19.4,19.4),Shape=E.PartType.Cylinder,CFrame=CF(118,3.15,-76,0,-1,0,1,0,0,0,0,1)},id="RBXN0006601"},
 {"Part","Messingring",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(201,162,90),Material=E.Material.Metal,Size=V3(0.2,20,20),Shape=E.PartType.Cylinder,CFrame=CF(118,3.1,-76,0,-1,0,1,0,0,0,0,1)}},
-{"Model","Los017_GT_Coupe",{PrimaryPart=R("RBXN0006605")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(118,3.3,-76,0.5,0,0.866025,0,1,0,-0.866025,0,0.5)},id="RBXN0006605"},
+{"Model","Los017_GT_Coupe",{PrimaryPart=R("RBXN0006604")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(118,3.3,-76,0.5,0,0.866025,0,1,0,-0.866025,0,0.5)},id="RBXN0006604"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.6),Shape=E.PartType.Block,CFrame=CF(118.606218,4.95,-75.65,0.5,0,0.866025,0,1,0,-0.866025,0,0.5)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(128,22,38),Material=E.Material.Metal,Size=V3(7.8,1.35,11.2),Shape=E.PartType.Block,CFrame=CF(120.511474,5.8,-74.55,0.5,0,0.866025,0,1,0,-0.866025,0,0.5)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(128,22,38),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(111.810722,6.25,-75.329857,0.5,0,0.866025,0,1,0,-0.866025,0,0.5)}},
@@ -12112,16 +12115,16 @@ return {
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(116.705404,6.25,-71.897693,0.5,0,0.866025,0,1,0,-0.866025,0,0.5)}},
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(116.817987,6.25,-71.832693,0.5,0,0.866025,0,1,0,-0.866025,0,0.5)}},
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(116.93057,6.25,-71.767693,0.5,0,0.866025,0,1,0,-0.866025,0,0.5)}}},attrs={["Role"]="AuctionLot",["Body"]="gt_coupe"}}},attrs={["Anim"]="turntable",["Speed"]=12}},
-{"Model","Tresorrad",{PrimaryPart=R("RBXN0006974")},{
-{"Part","Nabe",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.9,2,2),Shape=E.PartType.Cylinder,CFrame=CF(100,9,-172.95,0,0,1,0,1,0,-1,0,0)},id="RBXN0006974"},
+{"Model","Tresorrad",{PrimaryPart=R("RBXN0006973")},{
+{"Part","Nabe",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.9,2,2),Shape=E.PartType.Cylinder,CFrame=CF(100,9,-172.95,0,0,1,0,1,0,-1,0,0)},id="RBXN0006973"},
 {"Part","Speiche",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.4,7,0.3),Shape=E.PartType.Block,CFrame=CF(100,9,-173.1)}},
 {"Part","Speiche",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.4,7,0.2),Shape=E.PartType.Block,CFrame=CF(100,9,-173.1,0.5,-0.866025,0,0.866025,0.5,0,0,0,1)}},
 {"Part","Speiche",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.4,7,0.1),Shape=E.PartType.Block,CFrame=CF(100,9,-173.1,-0.5,-0.866025,0,0.866025,-0.5,0,0,0,1)}}},attrs={["Anim"]="vault",["Axis"]="X",["Period"]=8}}}},
 {"Folder","Schrottplatz",{},{
 {"Part","Torleuchte",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(1.4,1.4,1.4),Shape=E.PartType.Ball,CFrame=CF(-179.3,24.95,-201)},attrs={["Anim"]="beacon",["Period"]=1.2}},
 {"Model","Presse",{},{
-{"Model","Ram",{PrimaryPart=R("RBXN0007242")},{
-{"Part","Plate",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(86,92,98),Material=E.Material.Metal,Size=V3(20,2,12),Shape=E.PartType.Block,CFrame=CF(-352,17,-211)},id="RBXN0007242"},
+{"Model","Ram",{PrimaryPart=R("RBXN0007241")},{
+{"Part","Plate",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(86,92,98),Material=E.Material.Metal,Size=V3(20,2,12),Shape=E.PartType.Block,CFrame=CF(-352,17,-211)},id="RBXN0007241"},
 {"Part","Kolbenstange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(205,212,216),Material=E.Material.Metal,Size=V3(12.9,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(-357,24.45,-211,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Kolbenstange",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(205,212,216),Material=E.Material.Metal,Size=V3(12.9,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(-347,24.45,-211,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Plate_Kante",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(240,190,40),Material=E.Material.Metal,Size=V3(19.8,0.6,12.1),Shape=E.PartType.Block,CFrame=CF(-352,16.9,-211)}}}},
@@ -12153,8 +12156,8 @@ return {
 {"Part","Leuchtensockel",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.8,0.3,0.8),Shape=E.PartType.Block,CFrame=CF(-340,28.15,-211)}},
 {"Part","Rundumleuchte",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(1.3,1.3,1.3),Shape=E.PartType.Ball,CFrame=CF(-340,28.95,-211)},attrs={["Anim"]="beacon",["Period"]=0.8}}},attrs={["Anim"]="press",["Stroke"]=12.5,["Period"]=6,["Down"]=1.2,["Hold"]=0.4,["Up"]=2,["Squash"]=0.35,["RestY"]=16,["BedY"]=3}},
 {"Part","Kaminlicht",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(255,45,45),Material=E.Material.Neon,Size=V3(1.2,1.2,1.2),Shape=E.PartType.Ball,CFrame=CF(-304,56.9,-246)},attrs={["Anim"]="beacon",["Period"]=1,["Aviation"]=true}},
-{"Model","Magnetkran",{PrimaryPart=R("RBXN0007323")},{
-{"Part","Drehbuehne",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(70,76,82),Material=E.Material.Metal,Size=V3(8,0.6,8),Shape=E.PartType.Block,CFrame=CF(-420,53.3,-262,-0.998856,0,0.047816,0,1,0,-0.047816,0,-0.998856)},id="RBXN0007323"},
+{"Model","Magnetkran",{PrimaryPart=R("RBXN0007322")},{
+{"Part","Drehbuehne",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(70,76,82),Material=E.Material.Metal,Size=V3(8,0.6,8),Shape=E.PartType.Block,CFrame=CF(-420,53.3,-262,-0.998856,0,0.047816,0,1,0,-0.047816,0,-0.998856)},id="RBXN0007322"},
 {"Part","Drehkranz",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(60,66,72),Material=E.Material.Metal,Size=V3(1,6.4,6.4),Shape=E.PartType.Cylinder,CFrame=CF(-420,52.5,-262,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Kabine",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(240,190,40),Material=E.Material.Metal,Size=V3(4.4,4.6,4.6),Shape=E.PartType.Block,CFrame=CF(-425.146764,55.9,-261.145119,-0.998856,0,0.047816,0,1,0,-0.047816,0,-0.998856)}},
 {"Part","Kabinenfenster",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0.3,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(3.6,2.4,0.2),Shape=E.PartType.Block,CFrame=CF(-425.261522,56.6,-258.747864,-0.998856,0,0.047816,0,1,0,-0.047816,0,-0.998856)}},
@@ -12195,14 +12198,14 @@ return {
 {"Part","Hood",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(140,70,40),Material=E.Material.CorrodedMetal,Size=V3(7.039,0.159,3.839),Shape=E.PartType.Block,CFrame=CF(-417.255703,45.588009,-204.302783,-0.047816,0,-0.998856,0,1,0,0.998856,0,-0.047816)}},
 {"Part","WheelRLTire",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(30,31,34),Material=E.Material.SmoothPlastic,Size=V3(0.932,2.532,2.532),Shape=E.PartType.Cylinder,CFrame=CF(-425.753532,42.988009,-208.734183,-0.047816,0,-0.998856,0,1,0,0.998856,0,-0.047816)}}},attrs={["LiteWreck"]=true}}},attrs={["Anim"]="crane",["Swing"]=31.5,["Period"]=40,["MaxSlew"]=15,["CarryY"]=45,["DropY"]=3,["TrolleyR"]=57.5,["Bunker"]=V3(-392,-0.5,-211),["Pile1"]=V3(-445,-1,-315),["Pile2"]=V3(-390,-1,-305),["Pile3"]=V3(-452,-1,-215)}}}},
 {"Folder","Tuning",{},{
-{"Model","Eingangstuer_Nord",{PrimaryPart=R("RBXN0007854")},{
-{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.3,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(0.2,11.9,7),Shape=E.PartType.Block,CFrame=CF(215,5.95,-204.5)},id="RBXN0007854"},
+{"Model","Eingangstuer_Nord",{PrimaryPart=R("RBXN0007853")},{
+{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.3,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(0.2,11.9,7),Shape=E.PartType.Block,CFrame=CF(215,5.95,-204.5)},id="RBXN0007853"},
 {"Part","Stiel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.3,11.8,0.4),Shape=E.PartType.Block,CFrame=CF(215,5.9,-201.25)}}},attrs={["Anim"]="door",["Axis"]="Z",["Lift"]=-6.8,["Period"]=10,["Door"]="Tuning",["OpenRange"]=12,["OpenTime"]=0.6,["Mode"]="slide"}},
-{"Model","Eingangstuer_Sued",{PrimaryPart=R("RBXN0007857")},{
-{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.3,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(0.2,11.9,7),Shape=E.PartType.Block,CFrame=CF(215,5.95,-197.5)},id="RBXN0007857"},
+{"Model","Eingangstuer_Sued",{PrimaryPart=R("RBXN0007856")},{
+{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.3,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(0.2,11.9,7),Shape=E.PartType.Block,CFrame=CF(215,5.95,-197.5)},id="RBXN0007856"},
 {"Part","Stiel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.3,11.8,0.4),Shape=E.PartType.Block,CFrame=CF(215,5.9,-200.75)}}},attrs={["Anim"]="door",["Axis"]="Z",["Lift"]=6.8,["Period"]=10,["Door"]="Tuning",["OpenRange"]=12,["OpenTime"]=0.6,["Mode"]="slide"}},
-{"Model","Rolltor",{PrimaryPart=R("RBXN0007860")},{
-{"Part","Panel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(66,80,94),Material=E.Material.Metal,Size=V3(0.4,16,17.2),Shape=E.PartType.Block,CFrame=CF(215.2,8,-249)},id="RBXN0007860"},
+{"Model","Rolltor",{PrimaryPart=R("RBXN0007859")},{
+{"Part","Panel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(66,80,94),Material=E.Material.Metal,Size=V3(0.4,16,17.2),Shape=E.PartType.Block,CFrame=CF(215.2,8,-249)},id="RBXN0007859"},
 {"Part","Panel_Streifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(0.08,1.2,16.8),Shape=E.PartType.Block,CFrame=CF(214.96,8,-249)}}},attrs={["Anim"]="door",["Axis"]="Y",["Lift"]=13.8,["Period"]=14,["Door"]="Tuning",["OpenRange"]=12,["OpenTime"]=0.6,["Mode"]="roll"}},
 {"Model","Pruefstand",{},{
 {"Part","Rolle1",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(11,2.4,2.4),Shape=E.PartType.Cylinder,CFrame=CF(310,-0.835,-225.8)}},
@@ -12214,8 +12217,8 @@ return {
 {"Part","Walzenluefter_Blatt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(70,76,82),Material=E.Material.Metal,Size=V3(0.2,5.4,0.9),Shape=E.PartType.Block,CFrame=CF(310,3.7,-233.3,0,0,-1,0,1,0,1,0,0)}},
 {"Part","Walzenluefter_Blatt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(70,76,82),Material=E.Material.Metal,Size=V3(0.1,5.4,0.9),Shape=E.PartType.Block,CFrame=CF(310,3.7,-233.3,0,-1,0,0,0,-1,1,0,0)}},
 {"Part","Luefternabe",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(0.3,1.2,1.2),Shape=E.PartType.Cylinder,CFrame=CF(310,3.7,-233.05,0,0,1,0,1,0,-1,0,0)}},
-{"Model","Car",{PrimaryPart=R("RBXN0007965")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(310,0,-220)},id="RBXN0007965"},
+{"Model","Car",{PrimaryPart=R("RBXN0007964")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(310,0,-220)},id="RBXN0007964"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,14),Shape=E.PartType.Block,CFrame=CF(310,1.65,-220.1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(255,125,30),Material=E.Material.Metal,Size=V3(7.8,1.35,9.600000000000001),Shape=E.PartType.Block,CFrame=CF(310,2.5,-217.9)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(255,125,30),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(306.325,2.95,-225.025)}},
@@ -12419,14 +12422,14 @@ return {
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(1.2,12.8,1.6),Shape=E.PartType.Block,CFrame=CF(230.6,6.4,-274)}},
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(1.2,12.8,1.6),Shape=E.PartType.Block,CFrame=CF(243.4,6.4,-274)}},
 {"Part","Quertraeger",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(14,0.8,1.6),Shape=E.PartType.Block,CFrame=CF(237,13.2,-274)}},
-{"Model","Plattform",{PrimaryPart=R("RBXN0008204")},{
-{"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(233,0.25,-274)},id="RBXN0008204"},
+{"Model","Plattform",{PrimaryPart=R("RBXN0008203")},{
+{"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(233,0.25,-274)},id="RBXN0008203"},
 {"Part","Schlitten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.8,1.2,1.2),Shape=E.PartType.Block,CFrame=CF(231.6,0.6,-274)}},
 {"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(241,0.25,-274)}},
 {"Part","Schlitten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.8,1.2,1.2),Shape=E.PartType.Block,CFrame=CF(242.4,0.6,-274)}},
 {"Part","Traverse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(6,0.4,1),Shape=E.PartType.Block,CFrame=CF(237,0.2,-281.5)}},
-{"Model","Projektauto_1",{PrimaryPart=R("RBXN0008210")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(237,0.5,-274)},id="RBXN0008210"},
+{"Model","Projektauto_1",{PrimaryPart=R("RBXN0008209")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(237,0.5,-274)},id="RBXN0008209"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.1),Shape=E.PartType.Block,CFrame=CF(237,2.15,-274.55)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(150,220,40),Material=E.Material.Metal,Size=V3(7.8,1.35,8.7),Shape=E.PartType.Block,CFrame=CF(237,3,-272.35)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(150,220,40),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(233.325,3.45,-279.025)}},
@@ -12558,14 +12561,14 @@ return {
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(1.2,12.8,1.6),Shape=E.PartType.Block,CFrame=CF(256.6,6.4,-274)}},
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(1.2,12.8,1.6),Shape=E.PartType.Block,CFrame=CF(269.4,6.4,-274)}},
 {"Part","Quertraeger",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(14,0.8,1.6),Shape=E.PartType.Block,CFrame=CF(263,13.2,-274)}},
-{"Model","Plattform",{PrimaryPart=R("RBXN0008343")},{
-{"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(259,0.25,-274)},id="RBXN0008343"},
+{"Model","Plattform",{PrimaryPart=R("RBXN0008342")},{
+{"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(259,0.25,-274)},id="RBXN0008342"},
 {"Part","Schlitten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.8,1.2,1.2),Shape=E.PartType.Block,CFrame=CF(257.6,0.6,-274)}},
 {"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(267,0.25,-274)}},
 {"Part","Schlitten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.8,1.2,1.2),Shape=E.PartType.Block,CFrame=CF(268.4,0.6,-274)}},
 {"Part","Traverse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(6,0.4,1),Shape=E.PartType.Block,CFrame=CF(263,0.2,-281.5)}},
-{"Model","Projektauto_2",{PrimaryPart=R("RBXN0008349")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(263,0.5,-274)},id="RBXN0008349"},
+{"Model","Projektauto_2",{PrimaryPart=R("RBXN0008348")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(263,0.5,-274)},id="RBXN0008348"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.6),Shape=E.PartType.Block,CFrame=CF(263,2.15,-273.3)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(36,38,42),Material=E.Material.SmoothPlastic,Size=V3(7.8,1.35,11.2),Shape=E.PartType.Block,CFrame=CF(263,3,-271.1)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(36,38,42),Material=E.Material.SmoothPlastic,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(259.325,3.45,-279.025)}},
@@ -12723,14 +12726,14 @@ return {
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(1.2,12.8,1.6),Shape=E.PartType.Block,CFrame=CF(282.6,6.4,-274)}},
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(1.2,12.8,1.6),Shape=E.PartType.Block,CFrame=CF(295.4,6.4,-274)}},
 {"Part","Quertraeger",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(14,0.8,1.6),Shape=E.PartType.Block,CFrame=CF(289,13.2,-274)}},
-{"Model","Plattform",{PrimaryPart=R("RBXN0008508")},{
-{"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(285,0.25,-274)},id="RBXN0008508"},
+{"Model","Plattform",{PrimaryPart=R("RBXN0008507")},{
+{"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(285,0.25,-274)},id="RBXN0008507"},
 {"Part","Schlitten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.8,1.2,1.2),Shape=E.PartType.Block,CFrame=CF(283.6,0.6,-274)}},
 {"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(293,0.25,-274)}},
 {"Part","Schlitten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.8,1.2,1.2),Shape=E.PartType.Block,CFrame=CF(294.4,0.6,-274)}},
 {"Part","Traverse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(6,0.4,1),Shape=E.PartType.Block,CFrame=CF(289,0.2,-281.5)}},
-{"Model","Projektauto_3",{PrimaryPart=R("RBXN0008514")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(289,0.5,-274)},id="RBXN0008514"},
+{"Model","Projektauto_3",{PrimaryPart=R("RBXN0008513")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(289,0.5,-274)},id="RBXN0008513"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,13.5),Shape=E.PartType.Block,CFrame=CF(289,2.15,-274.35)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(7.8,1.35,9.100000000000001),Shape=E.PartType.Block,CFrame=CF(289,3,-272.15)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(285.325,3.45,-279.025)}},
@@ -12875,8 +12878,8 @@ return {
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(1.2,12.8,1.6),Shape=E.PartType.Block,CFrame=CF(308.6,6.4,-274)}},
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Metal,Size=V3(1.2,12.8,1.6),Shape=E.PartType.Block,CFrame=CF(321.4,6.4,-274)}},
 {"Part","Quertraeger",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(14,0.8,1.6),Shape=E.PartType.Block,CFrame=CF(315,13.2,-274)}},
-{"Model","Plattform",{PrimaryPart=R("RBXN0008660")},{
-{"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(311,0.25,-274)},id="RBXN0008660"},
+{"Model","Plattform",{PrimaryPart=R("RBXN0008659")},{
+{"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(311,0.25,-274)},id="RBXN0008659"},
 {"Part","Schlitten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.8,1.2,1.2),Shape=E.PartType.Block,CFrame=CF(309.6,0.6,-274)}},
 {"Part","Fahrschiene",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.DiamondPlate,Size=V3(2,0.5,16),Shape=E.PartType.Block,CFrame=CF(319,0.25,-274)}},
 {"Part","Schlitten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.8,1.2,1.2),Shape=E.PartType.Block,CFrame=CF(320.4,0.6,-274)}},
@@ -12885,7 +12888,7 @@ return {
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(360,140),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="PROJEKT FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Hebebühne verfügbar",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}}},attrs={["Anim"]="lift",["Lift"]=4,["Period"]=60,["Bay"]=4}},
-{"Model","Tuningfahne_1",{PrimaryPart=R("RBXN0008876")},{
+{"Model","Tuningfahne_1",{PrimaryPart=R("RBXN0008875")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(181,-0.7,-226,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(181,9.3,-226,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(181,19.35,-226)}},
@@ -12893,9 +12896,9 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TUNING",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.086275,0.101961,0.121569)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TUNING",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.086275,0.101961,0.121569)}}}}},id="RBXN0008876"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TUNING",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.086275,0.101961,0.121569)}}}}},id="RBXN0008875"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(184.2,14.6,-226)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}},
-{"Model","Tuningfahne_2",{PrimaryPart=R("RBXN0008886")},{
+{"Model","Tuningfahne_2",{PrimaryPart=R("RBXN0008885")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(181,-0.7,-182,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(181,9.3,-182,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(181,19.35,-182)}},
@@ -12903,7 +12906,7 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TUNING",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TUNING",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}}},id="RBXN0008886"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TUNING",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}}},id="RBXN0008885"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(184.2,14.6,-182)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}},
 {"Model","Treff-Bogen",{},{
 {"Part","Bogenpfosten",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(31,43,55),Material=E.Material.Metal,Size=V3(1.5,16,1.5),Shape=E.PartType.Block,CFrame=CF(386.5,7,-192)}},
@@ -12924,7 +12927,7 @@ return {
 {"Part","Lampe4",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0.8,Color=C3u(60,230,90),Material=E.Material.Neon,Size=V3(0.9,0.9,0.9),Shape=E.PartType.Ball,CFrame=CF(196,5.9,-351.25)}}},attrs={["Anim"]="startlight",["Period"]=5}}}},
 {"Folder","Autohaus",{},{
 {"Folder","Fahnen",{},{
-{"Model","Fahne_1",{PrimaryPart=R("RBXN0009124")},{
+{"Model","Fahne_1",{PrimaryPart=R("RBXN0009123")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(-52,-0.2,30,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(-52,9.8,30,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(-52,19.85,30)}},
@@ -12932,9 +12935,9 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}}},id="RBXN0009124"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}}},id="RBXN0009123"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(-48.8,15.4,30)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}},
-{"Model","Fahne_2",{PrimaryPart=R("RBXN0009134")},{
+{"Model","Fahne_2",{PrimaryPart=R("RBXN0009133")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(-40,-0.2,30,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(-40,9.8,30,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(-40,19.85,30)}},
@@ -12942,9 +12945,9 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}}},id="RBXN0009134"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}}},id="RBXN0009133"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(-36.8,15.4,30)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}},
-{"Model","Fahne_3",{PrimaryPart=R("RBXN0009144")},{
+{"Model","Fahne_3",{PrimaryPart=R("RBXN0009143")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(40,-0.2,30,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(40,9.8,30,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(40,19.85,30)}},
@@ -12952,9 +12955,9 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}}},id="RBXN0009144"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}}},id="RBXN0009143"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(43.2,15.4,30)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}},
-{"Model","Fahne_4",{PrimaryPart=R("RBXN0009154")},{
+{"Model","Fahne_4",{PrimaryPart=R("RBXN0009153")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(52,-0.2,30,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(52,9.8,30,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(52,19.85,30)}},
@@ -12962,14 +12965,14 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}}},id="RBXN0009154"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}}},id="RBXN0009153"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(55.2,15.4,30)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}}}},
-{"Model","Drehteller",{PrimaryPart=R("RBXN0009221")},{
-{"Part","Achse",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(36,40,46),Material=E.Material.SmoothPlastic,Size=V3(1,0.4,1),Shape=E.PartType.Block,CFrame=CF(0,0.3,58)},id="RBXN0009221"},
+{"Model","Drehteller",{PrimaryPart=R("RBXN0009220")},{
+{"Part","Achse",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(36,40,46),Material=E.Material.SmoothPlastic,Size=V3(1,0.4,1),Shape=E.PartType.Block,CFrame=CF(0,0.3,58)},id="RBXN0009220"},
 {"Part","Drehscheibe",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(36,40,46),Material=E.Material.Metal,Size=V3(0.6,22,22),Shape=E.PartType.Cylinder,CFrame=CF(0,0.3,58,0,-1,0,1,0,0,0,0,1),Reflectance=0.08}},
 {"Part","Leuchtring",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(0.3,22.4,22.4),Shape=E.PartType.Cylinder,CFrame=CF(0,0.3,58,0,-1,0,1,0,0,0,0,1)}},
-{"Model","Heldenauto_Aureon",{PrimaryPart=R("RBXN0009225")},{
-{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(0,0.6,58,0.939693,0,0.34202,0,1,0,-0.34202,0,0.939693)},id="RBXN0009225"},
+{"Model","Heldenauto_Aureon",{PrimaryPart=R("RBXN0009224")},{
+{"Part","Root",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(42,48,55),Material=E.Material.SmoothPlastic,Size=V3(0.1,0.1,0.1),Shape=E.PartType.Block,CFrame=CF(0,0.6,58,0.939693,0,0.34202,0,1,0,-0.34202,0,0.939693)},id="RBXN0009224"},
 {"Part","Chassis",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(7.3,0.45,15.7),Shape=E.PartType.Block,CFrame=CF(0.256515,2.25,58.704769,0.939693,0,0.34202,0,1,0,-0.34202,0,0.939693)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(7.8,1.35,11.3),Shape=E.PartType.Block,CFrame=CF(1.008959,3.1,60.772093,0.939693,0,0.34202,0,1,0,-0.34202,0,0.939693)}},
 {"Part","Paint",{Anchored=true,CanCollide=true,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.45,1.7,4.65),Shape=E.PartType.Block,CFrame=CF(-5.172022,3.55,54.534969,0.939693,0,0.34202,0,1,0,-0.34202,0,0.939693)}},
@@ -13104,27 +13107,27 @@ return {
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(-3.584168,3.55,60.432559,0.939693,0,0.34202,0,1,0,-0.34202,0,0.939693)}},
 {"Part","OBDPin",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(0.04,0.12,0.055),Shape=E.PartType.Block,CFrame=CF(-3.539705,3.55,60.554719,0.939693,0,0.34202,0,1,0,-0.34202,0,0.939693)}}},attrs={["Showcar"]=true,["Price"]=245000,["Body"]="super"}}},attrs={["Anim"]="turntable",["Speed"]=15,["Period"]=24}},
 {"Folder","Tueren",{},{
-{"Model","Rotundentuer_W",{PrimaryPart=R("RBXN0009368")},{
-{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.35,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(5.1,13.9,0.3),Shape=E.PartType.Block,CFrame=CF(-2.6,7,38)},id="RBXN0009368"},
+{"Model","Rotundentuer_W",{PrimaryPart=R("RBXN0009367")},{
+{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.35,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(5.1,13.9,0.3),Shape=E.PartType.Block,CFrame=CF(-2.6,7,38)},id="RBXN0009367"},
 {"Part","Stiel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(0.4,14,0.42),Shape=E.PartType.Block,CFrame=CF(-0.2,7,38)}},
 {"Part","Sockelleiste",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(4.8,0.4,0.4),Shape=E.PartType.Block,CFrame=CF(-2.8,0.2,38)}},
 {"Part","Griff",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.12,2.6,0.54),Shape=E.PartType.Block,CFrame=CF(-0.7,7,38)}}},attrs={["Anim"]="door",["Axis"]="X",["Lift"]=-5,["Period"]=10,["Door"]="Rotunde",["OpenRange"]=12,["OpenTime"]=0.6,["Mode"]="slide"}},
-{"Model","Rotundentuer_O",{PrimaryPart=R("RBXN0009373")},{
-{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.35,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(5.1,13.9,0.3),Shape=E.PartType.Block,CFrame=CF(2.6,7,38)},id="RBXN0009373"},
+{"Model","Rotundentuer_O",{PrimaryPart=R("RBXN0009372")},{
+{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.35,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(5.1,13.9,0.3),Shape=E.PartType.Block,CFrame=CF(2.6,7,38)},id="RBXN0009372"},
 {"Part","Stiel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(0.4,14,0.42),Shape=E.PartType.Block,CFrame=CF(0.2,7,38)}},
 {"Part","Sockelleiste",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(4.8,0.4,0.4),Shape=E.PartType.Block,CFrame=CF(2.8,0.2,38)}},
 {"Part","Griff",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.12,2.6,0.54),Shape=E.PartType.Block,CFrame=CF(0.7,7,38)}}},attrs={["Anim"]="door",["Axis"]="X",["Lift"]=5,["Period"]=10,["Door"]="Rotunde",["OpenRange"]=12,["OpenTime"]=0.6,["Mode"]="slide"}},
-{"Model","Hintertuer_W",{PrimaryPart=R("RBXN0009454")},{
-{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.35,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(5.9,13.9,0.3),Shape=E.PartType.Block,CFrame=CF(-3,7,109.95)},id="RBXN0009454"},
+{"Model","Hintertuer_W",{PrimaryPart=R("RBXN0009453")},{
+{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.35,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(5.9,13.9,0.3),Shape=E.PartType.Block,CFrame=CF(-3,7,109.95)},id="RBXN0009453"},
 {"Part","Stiel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(0.4,14,0.42),Shape=E.PartType.Block,CFrame=CF(-0.2,7,109.95)}},
 {"Part","Sockelleiste",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(5.6,0.4,0.4),Shape=E.PartType.Block,CFrame=CF(-3.2,0.2,109.95)}},
 {"Part","Griff",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.12,2.6,0.54),Shape=E.PartType.Block,CFrame=CF(-0.7,7,109.95)}}},attrs={["Anim"]="door",["Axis"]="X",["Lift"]=-5.8,["Period"]=10,["Door"]="Showroom hinten",["OpenRange"]=12,["OpenTime"]=0.6,["Mode"]="slide"}},
-{"Model","Hintertuer_O",{PrimaryPart=R("RBXN0009459")},{
-{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.35,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(5.9,13.9,0.3),Shape=E.PartType.Block,CFrame=CF(3,7,109.95)},id="RBXN0009459"},
+{"Model","Hintertuer_O",{PrimaryPart=R("RBXN0009458")},{
+{"Part","Glas",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=false,Transparency=0.35,Color=C3u(116,159,178),Material=E.Material.Glass,Size=V3(5.9,13.9,0.3),Shape=E.PartType.Block,CFrame=CF(3,7,109.95)},id="RBXN0009458"},
 {"Part","Stiel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Metal,Size=V3(0.4,14,0.42),Shape=E.PartType.Block,CFrame=CF(0.2,7,109.95)}},
 {"Part","Sockelleiste",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(5.6,0.4,0.4),Shape=E.PartType.Block,CFrame=CF(3.2,0.2,109.95)}},
 {"Part","Griff",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.12,2.6,0.54),Shape=E.PartType.Block,CFrame=CF(0.7,7,109.95)}}},attrs={["Anim"]="door",["Axis"]="X",["Lift"]=5.8,["Period"]=10,["Door"]="Showroom hinten",["OpenRange"]=12,["OpenTime"]=0.6,["Mode"]="slide"}}}},
-{"Model","Hof_Fahne_1",{PrimaryPart=R("RBXN0011737")},{
+{"Model","Hof_Fahne_1",{PrimaryPart=R("RBXN0011736")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(66,-0.7,172,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(66,9.3,172,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(66,19.35,172)}},
@@ -13132,9 +13135,9 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}}},id="RBXN0011737"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}}},id="RBXN0011736"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(69.2,14.6,172)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}},
-{"Model","Hof_Fahne_2",{PrimaryPart=R("RBXN0011747")},{
+{"Model","Hof_Fahne_2",{PrimaryPart=R("RBXN0011746")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(76,-0.7,172,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(76,9.3,172,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(76,19.35,172)}},
@@ -13142,9 +13145,9 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}}},id="RBXN0011747"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.184314,0.662745,0.639216)}}}}},id="RBXN0011746"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(79.2,14.6,172)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}},
-{"Model","Hof_Fahne_3",{PrimaryPart=R("RBXN0011757")},{
+{"Model","Hof_Fahne_3",{PrimaryPart=R("RBXN0011756")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(86,-0.7,172,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(19.4,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(86,9.3,172,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Mastspitze",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Metal,Size=V3(0.7,0.7,0.7),Shape=E.PartType.Ball,CFrame=CF(86,19.35,172)}},
@@ -13152,11 +13155,11 @@ return {
 {"SurfaceGui","AufdruckBack",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}},
 {"SurfaceGui","AufdruckFront",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}}},id="RBXN0011757"},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="AUTOHAUS",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.921569,0.933333,0.941176)}}}}},id="RBXN0011756"},
 {"Part","Fahnenstreifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(235,238,240),Material=E.Material.Fabric,Size=V3(5.9,0.6,0.2),Shape=E.PartType.Block,CFrame=CF(89.2,14.6,172)}}},attrs={["Anim"]="flag",["Swing"]=6,["Period"]=3.2}}}},
 {"Folder","Teststrecke",{},{
-{"Model","Startampel",{PrimaryPart=R("RBXN0011865")},{
-{"Part","Ampelgehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(1,2,11),Shape=E.PartType.Block,CFrame=CF(0,15,270)},id="RBXN0011865"},
+{"Model","Startampel",{PrimaryPart=R("RBXN0011864")},{
+{"Part","Ampelgehaeuse",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(1,2,11),Shape=E.PartType.Block,CFrame=CF(0,15,270)},id="RBXN0011864"},
 {"Part","Lampe1",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(255,40,40),Material=E.Material.Neon,Size=V3(0.3,1.3,1.3),Shape=E.PartType.Cylinder,CFrame=CF(-0.65,15,266)},attrs={["Index"]=1}},
 {"Part","Lampe2",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(255,40,40),Material=E.Material.Neon,Size=V3(0.3,1.3,1.3),Shape=E.PartType.Cylinder,CFrame=CF(-0.65,15,268)},attrs={["Index"]=2}},
 {"Part","Lampe3",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(255,40,40),Material=E.Material.Neon,Size=V3(0.3,1.3,1.3),Shape=E.PartType.Cylinder,CFrame=CF(-0.65,15,270)},attrs={["Index"]=3}},
@@ -13193,8 +13196,8 @@ return {
 {"Model","Schranke",{},{
 {"Part","Saeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(230,232,234),Material=E.Material.SmoothPlastic,Size=V3(1.5,3.2,1.5),Shape=E.PartType.Block,CFrame=CF(-111.75,0.6,-318)}},
 {"Part","Saeulenband",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(1.6,0.5,1.6),Shape=E.PartType.Block,CFrame=CF(-111.75,1.45,-318)}},
-{"Model","Schlagbaum",{PrimaryPart=R("RBXN0012121")},{
-{"Part","Drehlager",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.8,0.8,0.8),Shape=E.PartType.Block,CFrame=CF(-111.75,2.6,-318)},id="RBXN0012121"},
+{"Model","Schlagbaum",{PrimaryPart=R("RBXN0012120")},{
+{"Part","Drehlager",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.8,0.8,0.8),Shape=E.PartType.Block,CFrame=CF(-111.75,2.6,-318)},id="RBXN0012120"},
 {"Part","Baum",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(240,240,240),Material=E.Material.SmoothPlastic,Size=V3(21.75,0.4,0.4),Shape=E.PartType.Block,CFrame=CF(-100.475,2.6,-318)}},
 {"Part","Streifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(2.2,0.5,0.5),Shape=E.PartType.Block,CFrame=CF(-107.4,2.6,-318)}},
 {"Part","Streifen",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,50,50),Material=E.Material.SmoothPlastic,Size=V3(2.2,0.5,0.5),Shape=E.PartType.Block,CFrame=CF(-102.4,2.6,-318)}},
@@ -13898,7 +13901,27 @@ return {
 {"WedgePart","Foliage",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(69,111,70),Material=E.Material.Grass,Size=V3(5.72,4.4,2.86),CFrame=CF(347.024957,11.21,14.570218,0.999848,0,-0.017452,0,1,0,0.017452,0,0.999848)}},
 {"WedgePart","Foliage",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(57,91,58),Material=E.Material.Grass,Size=V3(5.72,4.4,2.86),CFrame=CF(348.429782,11.21,16.024957,-0.017452,0,-0.999848,0,1,0,0.999848,0,-0.017452)}},
 {"WedgePart","Foliage",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(61,97,62),Material=E.Material.Grass,Size=V3(5.72,4.4,2.86),CFrame=CF(346.975043,11.21,17.429782,-0.999848,0,0.017452,0,1,0,-0.017452,0,-0.999848)}}}}},attrs={["Slot"]=8}}},attrs={["Slot"]=8,["House"]=8,["PivotX"]=384,["PivotZ"]=109,["Rot"]=180}}}},
-{"SpawnLocation","CitySpawn",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(10,0.2,10),Shape=E.PartType.Block,CFrame=CF(0,0.1,-201,-1,0,0,0,1,0,0,0,-1),Neutral=true,Enabled=true,Duration=0,AllowTeamChangeOnTouch=false}}},attrs={["Spec"]="Werkstattmeile",["Version"]="3.0"}}}},
+{"SpawnLocation","CitySpawn",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(10,0.2,10),Shape=E.PartType.Block,CFrame=CF(0,0.1,-201,-1,0,0,0,1,0,0,0,-1),Neutral=true,Enabled=true,Duration=0,AllowTeamChangeOnTouch=false}},
+{"Folder","CarSpawns",{},{
+{"Part","dealer",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(8,1,16),Shape=E.PartType.Block,CFrame=CF(100,-0.45,46)},attrs={["Title"]="Autohaus",["AltSteps"]="1,-1",["Floor"]=-0.95}},
+{"Part","testdrive",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(8,1,16),Shape=E.PartType.Block,CFrame=CF(100,-0.45,158,-1,0,0,0,1,0,0,0,-1)},attrs={["Title"]="Übergabe · Probefahrt",["AltSteps"]="1,-1,2,-2",["Floor"]=-0.95}},
+{"Part","track",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(8,1,16),Shape=E.PartType.Block,CFrame=CF(-30,-0.45,274,0,0,-1,0,1,0,1,0,0)},attrs={["Title"]="Teststrecke",["AltSteps"]="1,-1",["Floor"]=-0.95}},
+{"Part","carwash",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(8,1,16),Shape=E.PartType.Block,CFrame=CF(322,-0.5,211,0,0,1,0,1,0,-1,0,0)},attrs={["Title"]="Waschstraße",["AltSteps"]="-1",["Floor"]=-1}},
+{"Part","plaza",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(8,1,16),Shape=E.PartType.Block,CFrame=CF(-25,-0.5,-235.5,0,0,1,0,1,0,-1,0,0)},attrs={["Title"]="Stadtplatz · Parkplatz",["AltSteps"]="1,2",["Floor"]=-1}},
+{"Part","scrapyard",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(8,1,16),Shape=E.PartType.Block,CFrame=CF(-192,-0.5,-201,0,0,-1,0,1,0,1,0,0)},attrs={["Title"]="Schrottplatz",["AltSteps"]="1,-1",["Floor"]=-1}},
+{"Part","tuning",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(8,1,16),Shape=E.PartType.Block,CFrame=CF(196,-0.5,-249,0,0,1,0,1,0,-1,0,0)},attrs={["Title"]="Tuning-Zentrum",["AltSteps"]="1,-1",["Floor"]=-1}}}},
+{"Folder","Track",{},{
+{"Folder","Checkpoints",{},{
+{"Part","CP1",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(60,6.05,270,0,0,-1,0,1,0,1,0,0)},attrs={["Index"]=1,["Total"]=10}},
+{"Part","CP2",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(134.497475,6.05,290.502525,-0.707107,0,-0.707107,0,1,0,0.707107,0,-0.707107)},attrs={["Index"]=2,["Total"]=10}},
+{"Part","CP3",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(155,6.05,340,-1,0,0,0,1,0,0,0,-1)},attrs={["Index"]=3,["Total"]=10}},
+{"Part","CP4",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(134.497475,6.05,389.497475,-0.707107,0,0.707107,0,1,0,-0.707107,0,-0.707107)},attrs={["Index"]=4,["Total"]=10}},
+{"Part","CP5",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(0,6.05,410,0,0,1,0,1,0,-1,0,0)},attrs={["Index"]=5,["Total"]=10}},
+{"Part","CP6",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(-134.497475,6.05,389.497475,0.707107,0,0.707107,0,1,0,-0.707107,0,0.707107)},attrs={["Index"]=6,["Total"]=10}},
+{"Part","CP7",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(-155,6.05,340)},attrs={["Index"]=7,["Total"]=10}},
+{"Part","CP8",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(-134.497475,6.05,290.502525,0.707107,0,-0.707107,0,1,0,0.707107,0,0.707107)},attrs={["Index"]=8,["Total"]=10}},
+{"Part","CP9",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(-60,6.05,270,0,0,-1,0,1,0,1,0,0)},attrs={["Index"]=9,["Total"]=10}}}},
+{"Part","Ziel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(247,176,63),Material=E.Material.SmoothPlastic,Size=V3(32,14,3),Shape=E.PartType.Block,CFrame=CF(0,6.05,270,0,0,-1,0,1,0,1,0,0)},attrs={["Index"]=10,["Total"]=10}}},attrs={["Laps"]=1,["Direction"]="Uhrzeigersinn",["Start"]="CarSpawns.track"}}},attrs={["Spec"]="Werkstattmeile",["Version"]="3.0"}}}},
 {"ServerStorage","ServerStorage",{},{
 {"Folder","WorkshopExtensions",{},{
 {"Model","Stage_2",{PrimaryPart=R("RBX000073")},{

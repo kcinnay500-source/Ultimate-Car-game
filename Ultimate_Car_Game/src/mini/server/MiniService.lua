@@ -32,6 +32,11 @@ local GoalsService = require(Server:WaitForChild("GoalsService"))
 local LeaderboardService = require(Server:WaitForChild("LeaderboardService"))
 local MiniPasses = require(Server:WaitForChild("MiniPasses"))
 local CityService = require(Server:WaitForChild("CityService"))
+local AuctionService = require(Server:WaitForChild("AuctionService"))
+local AuctionLedger = require(Server:WaitForChild("AuctionLedger"))
+local CarService = require(Server:WaitForChild("CarService"))
+local ArcadeService = require(Server:WaitForChild("ArcadeService"))
+local Profiles = require(Server.Parent:WaitForChild("Profiles"))
 
 local Mini = {}
 Mini.Handlers = {}
@@ -112,12 +117,32 @@ local function producing(d)
 	return PressRules.MachinePower(d) > 0 or #d.games.tuning.projects > 0
 end
 
+-- Große, selten geänderte Felder (Garage-Liste, Händlerkatalog) nur bei Änderungen (dirty), nach hello und
+-- spätestens alle SnapshotFullInterval Sekunden; reine Produktions-Snapshots (Presse, 1×/s) lassen sie weg.
+-- MiniClient übernimmt fehlende Felder aus dem vorigen Snapshot (MiniSnapshot.StickyKeys).
 local function sendSnapshot(ms, t)
+	local full = ms.dirty or t - (ms.fullSentAt or -math.huge) + EPSILON >= MiniConfig.SnapshotFullInterval
 	ms.dirty = false
 	ms.lastSent = t
 	local snap = MiniSnapshot.Build(ms.p.profile.data, t, ms.passes, ms.quiz)
 	if type(snap.press) == "table" then
 		snap.press.clickAcks = table.clone(ms.clickAcks or {}) -- bestätigte Klickpakete (PressUI-Vorhersage)
+	end
+	-- Autos und Teststrecke (PHASE2_CONTRACT §5): cars, activeCar, catalog, spawnedCar, track, testdrive, …
+	local okCars, fields = pcall(CarService.SnapshotFields, ms, ms.p.profile.data, t)
+	if okCars and type(fields) == "table" then
+		for k, v in pairs(fields) do
+			snap[k] = v
+		end
+		if full then
+			ms.fullSentAt = t
+		else
+			for _, key in ipairs(MiniSnapshot.StickyKeys) do
+				snap[key] = nil
+			end
+		end
+	elseif not okCars then
+		warn("[Minispiele] Auto-Snapshot: " .. tostring(fields))
 	end
 	emit(ms, MiniNet.Events.Snapshot, snap)
 end
@@ -190,6 +215,44 @@ end
 function api.alive(ms)
 	return alive(ms)
 end
+-- Geld/Autos außerhalb von request() geändert (Auktions-Zuschlag im Tick): 2.4.0-Revision + Push
+function api.changed(ms)
+	ms.dirty = true
+	if ctx and alive(ms) then
+		ms.lastChanged = now()
+		ms.changePending = false
+		ctx.changed(ms.p)
+	end
+end
+-- Sofort speichern (nach einer Auktions-Übergabe). Ein laufendes Speichern (Autosave) enthält die Änderung
+-- evtl. nicht: erst abwarten, dann selbst speichern. Beim Verlassen speichert PlayerRemoving (release).
+function api.save(ms)
+	local p = ms.p
+	task.spawn(function()
+		for _ = 1, 3 do
+			local prof = p.profile
+			local deadline = os.clock() + 15
+			while prof.saving and os.clock() < deadline do
+				task.wait(0.2)
+			end
+			if p.closing or not prof.writable or prof.receiptPending then
+				return
+			end
+			if Profiles.Save(prof, false) then
+				return
+			end
+			task.wait(2)
+		end
+	end)
+end
+-- Auktions-Übergabe ins Auktionsbuch schreiben (vor dem Speichern beider Profile; darf warten)
+function api.recordTransfer(transfer)
+	return AuctionLedger.Record(transfer)
+end
+-- Eingeliefertes Auto von der Straße holen
+function api.releaseCar(ms, id)
+	return CarService.ReleaseCar(ms.player, id, "auction")
+end
 
 ---------------------------------------------------------------- Prüfung der Nutzlast
 local function validPayload(schema, payload)
@@ -257,6 +320,23 @@ local function cooledDown(ms, action, clean, t)
 end
 
 ---------------------------------------------------------------- Öffentliche Schnittstelle
+-- Für GarageServer.moveTo: Figur vor PivotTo aus einem Fahrzeugsitz lösen (SeatWeld sofort weg)
+Mini.Unseat = CityService.Unseat
+
+-- Für GarageServer.join direkt nach P.Load (vor dem Sitzungsstart; darf warten): Auktions-Übergaben abgleichen,
+-- deren Speichern nur bei einem der beiden Profile gelandet ist (AuctionLedger). Nur schreibbare Profile.
+function Mini.Reconcile(player, profile)
+	if not profile or not profile.writable or type(profile.data) ~= "table" then
+		return 0
+	end
+	local ok, n = pcall(AuctionLedger.Reconcile, player.UserId, profile.data)
+	if not ok then
+		warn("[Auktion] Abgleich beim Laden: " .. tostring(n))
+		return 0
+	end
+	return n
+end
+
 function Mini.Handles(action)
 	return MiniNet.IsAction(action)
 end
@@ -324,6 +404,7 @@ function Mini.Hello(p)
 	if not ms.boardSent then
 		pushBoard(ms)
 	end
+	AuctionService.Hello(ms)
 end
 
 function Mini.OnJoin(p)
@@ -338,6 +419,9 @@ function Mini.OnJoin(p)
 		-- während der Prüfung geht – sonst wäre die Offline-Zeit mit dem neuen lastTick endgültig verloren).
 		ms.offlinePending = PressService.OnJoin(ms, d, t)
 		TuningService.OnJoin(ms, d, t)
+		CarService.OnJoin(ms, d, t)
+		ArcadeService.OnJoin(ms, d, t)
+		AuctionService.OnJoin(ms)
 		-- Game Passes (kann warten), danach den Offline-Ertrag gutschreiben: nur Schrott, nie Geld.
 		task.spawn(function()
 			local passes = MiniPasses.Check(ms.userId)
@@ -375,6 +459,12 @@ function Mini.Tick(p, t)
 			ctx.changed(p) -- nachgeholte, gedrosselte Revision (siehe Handle)
 		end
 		PressService.Tick(ms, d, t)
+		-- Autos: Probefahrt-Ende, Leerlauf/verlorene Autos, Zeitfahren-Timeout, Nitro, zurückgehaltene Belohnung
+		local okCars, errCars = pcall(CarService.Tick, ms, d, t)
+		if not okCars then
+			warn("[Minispiele] Autos: " .. tostring(errCars))
+		end
+		AuctionService.Tick(t) -- global; Mehrfachaufrufe im selben Tick entfallen
 		if GoalsService.Tick(ms, d, t) then
 			ms.dirty = true
 		end
@@ -437,6 +527,15 @@ function Mini.OnLeave(p, wasWritable)
 		return
 	end
 	Mini.Sessions[p.player] = nil
+	local okAuction, errAuction = pcall(AuctionService.OnLeave, ms) -- vor P.Save: Verkäufer-Lose abbrechen
+	if not okAuction then
+		warn("[Minispiele] Auktion verlassen: " .. tostring(errAuction))
+	end
+	pcall(ArcadeService.OnLeave, ms)
+	local okCars, errCars = pcall(CarService.OnLeave, ms) -- Autos abbauen, zurückgehaltene Belohnung vor P.Save
+	if not okCars then
+		warn("[Minispiele] Autos verlassen: " .. tostring(errCars))
+	end
 	if ms.offlinePending then
 		-- Verlassen vor Ende der Game-Pass-Prüfung: Offline-Ertrag jetzt (ohne Pass-Bonus) verbuchen.
 		local offline = ms.offlinePending
@@ -470,8 +569,19 @@ local function openStation(p, tab, station)
 	if not ms or p.closing then
 		return
 	end
-	if MiniNet.TabSet[tab] then
-		emit(ms, MiniNet.Events.Open, { tab = tab })
+	if tab == "shop" then
+		-- Credit-Center: 2.4.0-Credits-Shop (Tablet-Seite "shop", zeigt auch die Game Passes); ohne Tablet der Tab "shop"
+		emit(ms, MiniNet.Events.Open, { tab = tab, page = "credits" })
+	elseif MiniNet.TabSet[tab] then
+		-- Spielhalle: der Automat (Attribut GameKey/Game bzw. Stationsname arcade_N) wird gleich ausgewählt
+		local game = nil
+		if tab == "arcade" and station then
+			game = station:GetAttribute("Game") or station:GetAttribute("GameKey")
+			if type(game) ~= "string" and string.match(station.Name, "^arcade_%d+$") then
+				game = station.Name
+			end
+		end
+		emit(ms, MiniNet.Events.Open, { tab = tab, game = type(game) == "string" and game or nil })
 	elseif tab == "workshop" or tab == "home" then
 		CityService.Travel(p, "workshop", ctx.moveTo)
 	else
@@ -498,6 +608,7 @@ end)
 
 Actions.Register("mini_sync", function(ms)
 	flushNotices(ms)
+	AuctionService.Hello(ms)
 	if not ms.boardSent then
 		pushBoard(ms)
 	end
@@ -508,6 +619,9 @@ TuningService.Register(Actions, api)
 SideGamesService.Register(Actions, api)
 GoalsService.Register(Actions, api)
 LeaderboardService.Register(Actions, api)
+AuctionService.Register(Actions, api)
+CarService.Register(Actions, api)
+ArcadeService.Register(Actions, api)
 
 for name in pairs(MiniNet.Actions) do
 	assert(Mini.Handlers[name], "Kein Handler für " .. name)
@@ -537,6 +651,7 @@ function Mini.Init(c)
 		api.toast(ms, MiniLocale.T("pass_thanks"))
 	end)
 	CityService.Init({ getSession = c.getSession, onStation = openStation })
+	CarService.Init(c)
 end
 
 return Mini

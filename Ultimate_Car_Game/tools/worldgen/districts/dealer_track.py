@@ -335,9 +335,9 @@ def build_showroom(dm, anim, lib):
     lib.box(m, "Tresenleuchte", -29.5, -10.5, 0.3, 0.5, 103.85, 104, TEAL, "Neon", deco=True)
     lib.box(m, "Monitorfuss", -24.1, -23.9, 3.45, 3.7, 106.3, 106.5, STEEL, "Metal", deco=True)
     mon = lib.part(m, "Monitor", (2.6, 1.5, 0.15), CF.at(-24, 4.45, 106.3, 180), SCREEN, "SmoothPlastic", deco=True)
-    lib.surface_text(mon, "AUTOHAUS\nEröffnet bald", text_color=SCREEN_TEXT, name="Bildschirm")
+    lib.surface_text(mon, "AUTOHAUS\nJetzt geöffnet", text_color=SCREEN_TEXT, name="Bildschirm")
     lib.sign(m, "VERKAUF · BERATUNG", (14, 3), CF.at(-20, 10.5, 110.1, 180), TEAL, SLATE, name="Tresenschild",
-             sub="Neuwagen · Finanzierung · Eröffnet bald")
+             sub="Neuwagen · Meine Autos · Probefahrt")
     # --- Lounge X 20..40, Z 104..110
     lib.box(m, "Loungeteppich", 20, 40, 0, 0.05, 100, 109.6, (70, 76, 84), "Fabric")
     lib.box(m, "Sofa", 22, 38, 0.05, 1.5, 106.4, 109.2, LEATHER, "Fabric")
@@ -442,7 +442,7 @@ def build_handover(dm, lib):
     lib.box(m, "Uebergabepult", 91, 94, 0, 3.2, 66.5, 73.5, AH_WHITE, "Metal")
     lib.box(m, "Pultplatte", 90.8, 94.2, 3.2, 3.4, 66.3, 73.7, BLACK, "SmoothPlastic", reflectance=0.2)
     scr = lib.part(m, "Pultmonitor", (2.2, 1.4, 0.15), CF.at(93, 4.1, 70, -90), SCREEN, "SmoothPlastic", deco=True)
-    lib.surface_text(scr, "TESTFAHRT\nEröffnet bald", text_color=SCREEN_TEXT, name="Bildschirm")
+    lib.surface_text(scr, "PROBEFAHRT\n60 Sekunden", text_color=SCREEN_TEXT, name="Bildschirm")
     lib.sign(m, "SCHLÜSSELÜBERGABE", (14, 2.8), CF.at(101, 11, Z0 + T + 0.1, 0), TEAL, SLATE, name="Wandschild",
              sub="Neuwagen abholen · Probefahrt buchen", bolts=False)
     # Zufahrt: Meile-Absenkung (X 92..108) -> vor das offene Westtor -> Autohaus-Zufahrt (R9)
@@ -567,8 +567,8 @@ def build_track(dm, anim, lib):
     for yaw, x in ((-90, -1.6), (90, 1.6)):
         lib.sign(g, "START · ZIEL", (22, 2.6), CF.at(x, 17, 270, yaw), AMBER, SLATE, name="StartZielSchild",
                  bolts=yaw < 0)
-    lib.sign(g, "BESTZEIT 0:41,8", (4.6, 2.6), CF.at(0, 9.5, 254.9, 180), AMBER, SLATE, name="Rundentafel",
-             sub="Runde 3 / 5 · Teststrecke", bolts=False)
+    lib.sign(g, "ZEITFAHREN", (4.6, 2.6), CF.at(0, 9.5, 254.9, 180), AMBER, SLATE, name="Rundentafel",
+             sub="Start an der Kasse · Uhrzeigersinn", bolts=False)
     cl = lib.box(g, "Ziellinie", -1.2, 1.2, -0.95, -0.9, 258.5, 281.5, WHITE, "SmoothPlastic", deco=True)
     rects = []
     for i in range(2):
@@ -608,7 +608,7 @@ def build_track(dm, anim, lib):
     lib.box(tr, "Kassentresen", -4, 4, -0.5, 2.6, 224.8, 227.2, TRACK_RED, "Metal")
     lib.box(tr, "Kassenplatte", -4.2, 4.2, 2.6, 2.8, 224.6, 227.2, KERB_WHITE, "SmoothPlastic")
     lib.sign(tr, "TESTSTRECKE", (16, 3.4), CF.at(0, 7.6, 227.1, 180), TRACK_RED, KERB_WHITE, name="Kassenschild",
-             sub="Tribüne · Rundenzeiten · Eröffnet bald", sub_color=SLATE)
+             sub="Tribüne · Zeitfahren · Bestzeiten", sub_color=SLATE)
     # --- 4 Flutlichtmasten (±120, 250) und (±120, 430)
     for x, z in ((-120, 250), (120, 250), (-120, 430), (120, 430)):
         fm = lib.model(m, "Flutlichtmast")

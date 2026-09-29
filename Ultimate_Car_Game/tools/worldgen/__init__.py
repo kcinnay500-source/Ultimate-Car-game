@@ -2,15 +2,15 @@
 
 tools/build_place.py ruft apply(tree, new_referent) auf dem Basisbaum auf:
 * baut Workspace.City (Model) mit Ground, Roads, Lights, Districts, Stations, Arrivals, Animated,
-  CitySpawn und PlotSlots,
-* trimmt die Plot-Vorlage Workspace.Werkstatt (§4.1),
+  CitySpawn, PlotSlots, CarSpawns und Track (vehicles.py),
+* trimmt die Plot-Vorlage Workspace.Werkstatt (§4.1) und setzt dort den Part CarSpawn,
 * liefert eine Zusammenfassung (Parts und Lichter je Ordner) als String.
 
 Einzeln testen: python3 -c "import sys; sys.path.insert(0,'tools'); ..." - einfacher über build_place.py.
 """
 import importlib
 
-from . import contract, ground_roads, plots
+from . import contract, ground_roads, plots, vehicles
 from .lib import Lib, child, children, is_basepart, name_of
 from .districts import ORDER as DISTRICTS
 
@@ -42,6 +42,7 @@ def apply(tree, new_referent):
     for mod_name in DISTRICTS:
         mod = importlib.import_module(".districts." + mod_name, __name__)
         mod.build(city, lib, tree)
+    vehicles.build(city, lib, tree, ws)
     return summary(city, lib, plot_log)
 
 

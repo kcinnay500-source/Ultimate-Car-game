@@ -314,7 +314,7 @@ Node plates: at every road node, one asphalt plate covers carriageway plus sidew
 - Hierarchy: `Workspace.City{Ground, Roads, Lights, Districts.<Name>, Stations.<key>, Arrivals.<key>, Animated, CitySpawn, PlotSlots.Slot_N{Pylon, Vacant, Lot}}`.
 - Every district is a Model, so it is ready for ModelStreaming later.
 - **Station part:** `City.Stations.<key>`. Invisible anchored Part 1 × 1 × 1, CanCollide false.
-  - Attributes: `MiniTab`, optional `Game` / `Soon`.
+  - Attributes: `MiniTab`, optional `Game` / `GameKey` / `Soon` (`Soon` only for stations whose tab does not exist yet; since stage 2/3 no station carries it).
   - ProximityPrompt: ActionText "Öffnen", KeyCode E, HoldDuration 0.25, MaxActivationDistance 10, RequiresLineOfSight false.
   - Child **Attachment `Arrival`** placed at the player stand point (3.5 above the floor on the player side, 6 studs out), oriented to look at the anchor.
   - The server Triggered handler range-checks the player against `Arrival`.
@@ -732,7 +732,7 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 - **S (on the Meile):** shop window X −126..−74, Y 2..14.
 - **SE corner:** blade sign "ARCADE" 1.5 × 24 × 6 at (−68,20,−33), violet Neon edge.
 
-**Games** (MiniTab arcade, attributes `Game`, `Soon`)
+**Games** (MiniTab arcade, attributes `Game`, `GameKey`)
 
 | Key | Game | Prompt position | Player side |
 |---|---|---|---|
@@ -906,8 +906,8 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 - Rear path from the showroom door (0,111) to Z16 (0,200).
 
 **Stations**
-- `dealer` (Soon) (−20,3,100); player side N.
-- `testdrive` (MiniTab dealer, Soon) (90,3,70); player side W, stands at X 82..88 inside the hall.
+- `dealer` (−20,3,100); player side N.
+- `testdrive` (MiniTab dealer) (90,3,70); player side W, stands at X 82..88 inside the hall.
 
 **Arrival** `dealer` (0,−0.5,31), looking S.
 **Lights** 7:
@@ -1080,7 +1080,7 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 - Car hot_hatch teal at (340,0,188), yaw −90. Client-local 30 s pass through the tunnel.
 - Neon sign "WASCHSTRASSE" over the W opening.
 
-**Station** `carwash` (Soon) (304,3,209) at the pay terminal (304,·,212); player side N.
+**Station** `carwash` (304,3,209) at the pay terminal (304,·,212); player side N.
 **Arrival** `carwash` (186,−1,190), looking E.
 **Lights** 3: canopy 2, tunnel 1 at (340,22,188).
 **Parts** ≈ 99 + 2 cars.
@@ -1121,7 +1121,7 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 - 4 floodlight masts at (±120,250) and (±120,430).
 - Infield: 4 lite trees; billboard "ULTIMATE CAR GAME" 16 × 6 at (0,340), facing N.
 
-**Station** `track` (Soon) (0,3,224); player side N.
+**Station** `track` (0,3,224); player side N.
 **Arrival** `track` (0,−0.5,218), looking S.
 **Lights** 4. **Parts** ≈ 131.
 
@@ -1154,22 +1154,22 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 | meile_map | map | (−14,2.5,−31.5) | S | plaza |
 | goals_platz | goals | (30,2.5,−145) | S | plaza (0,−0.5,−165) → S |
 | leaderboard | leaderboard | (−30,2.5,−145) | S | plaza |
-| arcade | arcade (Soon) | (−80,3,−97) | S | arcade (−63,−0.5,−72) → W |
-| arcade_1..8 | arcade (Soon) + Game | see D3 | E / S | arcade |
+| arcade | arcade | (−80,3,−97) | S | arcade (−63,−0.5,−72) → W |
+| arcade_1..8 | arcade + Game | see D3 | E / S | arcade |
 | quiz | quiz | (−116,3,−148) | E | quiz (−63,−0.5,−148) → W |
-| auction | auction (Soon) | (84.5,3,−101) | S | auction (63,−0.5,−76) → E |
-| auction_consign | auction (Soon) | (84.5,3,−51) | N | auction |
+| auction | auction | (84.5,3,−101) | S | auction (63,−0.5,−76) → E |
+| auction_consign | auction | (84.5,3,−51) | N | auction |
 | shop | shop | (114,3,−152) | W | shop (63,−0.5,−152) → E |
 | parking | parking | (−65,2.5,−236.5) | S | parking (−65,−1,−230) → N |
-| dealer | dealer (Soon) | (−20,3,100) | N | dealer (0,−0.5,31) → S |
-| testdrive | dealer (Soon) | (90,3,70) | W | dealer |
+| dealer | dealer | (−20,3,100) | N | dealer (0,−0.5,31) → S |
+| testdrive | dealer | (90,3,70) | W | dealer |
 | tuning | tuning | (234,3,−201) | W | tuning (204,−1,−201) → E |
 | dyno | tuning | (310,3,−206) | S | tuning |
 | press | press | (−321,3,−220) | E | press (−300,−1,−211) → W |
 | scrap_trader | press | (−220,3,−213) | S | scrap_trader (−220,−1,−205) → N |
 | scrapyard | scrapyard | (−262,3,−191) | N | scrapyard (−262,−1,−200) → S |
-| carwash | carwash (Soon) | (304,3,218) | N | carwash (186,−1,190) → E |
-| track | track (Soon) | (0,3,224) | N | track (0,−0.5,218) → S |
+| carwash | carwash | (304,3,218) | N | carwash (186,−1,190) → E |
+| track | track | (0,3,224) | N | track (0,−0.5,218) → S |
 
 - Extra arrivals: `scrapyard_gate` (−168,−0.95,−201) → W; `park` (−186,−1,165) → W.
 - *As built (10 × 10 free player side, §1.3):* meile_map X −14 (directory pylon moved to X −14), auction/auction_consign X 84.5 (desks X 79.5..89.5, tribunes 3 risers X 91..106), carwash Z 218 (pay column Z 220.4..221.8), arcade_7/8 Z −43.5 (sims 2.5 north). Floors: scrap_trader −1.00 (Betonzufahrt), scrapyard −0.85 (on the vehicle scale; arrival `scrapyard` floor −0.85).
@@ -1384,3 +1384,14 @@ ceilings: Spielhalle 26, Meisterschule 24, Auktion 30, Credit 24, Ankunftshalle 
 
 
 Teile-Budget: 7740
+
+## Stage 2/3 additions (cars, track, auction, arcade)
+
+Built by `tools/worldgen/vehicles.py`, checked by `tools/worldgen/checks.py` (drivability) and `tools/worldgen/test_vehicles.py`:
+
+- `City.CarSpawns.<key>` (dealer, testdrive, track, carwash, plaza, scrapyard, tuning): invisible anchored Part 8×1×16, CanCollide/CanTouch/CanQuery false, underside on the ground, LookVector = drive-off direction (car nose −Z). Attributes `Title`, `AltSteps` (checked side slots in multiples of 11 studs, right = (−look.Z, 0, look.X); CarService only uses these), `Floor`.
+- Plot template: Part `CarSpawn` on the customer parking, plot-local (7.5, −1, 64), nose to the Meile (+Z); CarService falls back to the driveway (0, −1, 62) without it.
+- `City.Track`: `Checkpoints.CP1..CP9` and `Ziel` (32×14×3, invisible, CanCollide false, CanTouch true), clockwise like loop T; the track spawn is 30 studs before the finish line.
+- `AuctionScreen` (SurfaceGui on the LED wall of the auction house) with TextLabels `Title`, `Lot`, `Bid`, `Time`; arcade cabinets carry `GameKey` and a SurfaceGui `Screen` (`Title`, `Status`).
+- All stations above open real tabs (`dealer`, `track`, `carwash`, `auction`, `arcade`); the Credit-Center station `shop` opens the 2.4.0 credits shop in the tablet (including the game passes).
+

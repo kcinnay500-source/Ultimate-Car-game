@@ -8,7 +8,15 @@
 --           startedAt, endsAt, hardEnd, changedAt, state = "open" | "closing" | "sold" | "unsold" | "canceled",
 --           bids = { {userId, name, amount, at, npc = <Index in npcs> | nil}, ... }  (streng steigend),
 --           npcs = { {name, style, limit, think}, ... }, skipped = { [userId] = Grund }, result, endedAt, reason }
--- Profil (d.games.auction): { won = <int>, sold = <int> }
+-- Profil (d.games.auction): { won = <int>, sold = <int>, partners = { {u = <userId>, at = <unix>} }, received = { <tid> } }
+--   partners: Handelspartner der letzten 24 h (Käufer ↔ Verkäufer), received: zuletzt erhaltene Übergaben (tid)
+--
+-- Schutz gegen Scheingebote: beim Bieten zählt nur das freie Guthaben (Guthaben − eigene Höchstgebote auf anderen
+-- Losen). Fällt das Höchstgebot beim Zuschlag weg (nicht gedeckt, Bieter weg), läuft das Los ReopenSeconds weiter,
+-- damit NPCs und andere Spieler wieder bieten können (höchstens MaxReopens-mal); wer nicht zahlen konnte, darf
+-- DropBanSeconds nicht bieten. Geldschieben: zwischen zwei Konten höchstens eine Übergabe je 24 h (beide Richtungen).
+-- Übergaben: AuctionService schreibt jede Übergabe zusätzlich in ein Auktionsbuch (AuctionLedger); ReconcileSeller/
+-- ReconcileBuyer gleichen beim Laden ab, falls nur eines der beiden Profile gespeichert wurde.
 --
 -- NPC-Bieter (fair und nachvollziehbar): Limit und Bedenkzeit stehen beim Öffnen des Loses fest (aus dem Seed, nie
 -- abhängig von Spielern oder deren Guthaben). Ein NPC bietet nur, wenn er nicht vorn liegt, frühestens `think`
@@ -48,6 +56,12 @@ AuctionRules.ConsignCooldown = 10
 AuctionRules.SettleWaitMax = 45 -- so lange wartet der Zuschlag auf ein Profil mitten in einem Robux-Kauf
 AuctionRules.ResultSeconds = 30 -- beendete Lose bleiben so lange sichtbar
 AuctionRules.HistorySize = 6
+AuctionRules.ReopenSeconds = 30 -- Höchstgebot beim Zuschlag weggefallen: so lange läuft das Los weiter
+AuctionRules.MaxReopens = 2
+AuctionRules.DropBanSeconds = 600 -- Höchstgebot nicht gedeckt: so lange kein Bieten in diesem Auktionshaus
+AuctionRules.PartnerSeconds = 24 * 3600 -- Käufer und Verkäufer handeln höchstens einmal je 24 h miteinander
+AuctionRules.MaxPartners = 20
+AuctionRules.MaxReceived = 20 -- gemerkte Übergaben (tid) beim Käufer; so viele Einträge hält auch das Auktionsbuch
 
 AuctionRules.Npc = {
 	duration = 180, -- Laufzeit einer NPC-Versteigerung
@@ -75,6 +89,8 @@ local TEXT = {
 	top = "Du hast bereits das Höchstgebot.",
 	capped = "Das Höchstgebot für dieses Los ist erreicht.",
 	money = "Nicht genug Credits für dieses Gebot.",
+	committed = "Nicht genug freie Credits: Deine Höchstgebote auf anderen Losen sind schon verplant.",
+	partner = "Mit diesem Verkäufer hast du in den letzten 24 Stunden schon gehandelt. Bieten ist erst danach wieder möglich.",
 }
 AuctionRules.Text = TEXT
 
@@ -146,7 +162,7 @@ end
 
 ---------------------------------------------------------------- Profil (d.games.auction)
 function AuctionRules.Default()
-	return { won = 0, sold = 0 }
+	return { won = 0, sold = 0, partners = {}, received = {} }
 end
 
 -- raw = gespeichertes d.games.auction (auch das ganze games-Table wird erkannt). Idempotent, NaN/negativ -> 0.
@@ -160,6 +176,29 @@ function AuctionRules.Load(raw, d, now)
 	end
 	out.won = loadInt(raw.won)
 	out.sold = loadInt(raw.sold)
+	if type(raw.partners) == "table" then
+		for _, e in ipairs(raw.partners) do
+			if type(e) == "table" and finite(e.u) and e.u >= 1 and finite(e.at) and e.at >= 0 then
+				local at = math.floor(math.min(e.at, MAX_SAFE))
+				if not finite(now) or now - at < AuctionRules.PartnerSeconds then
+					table.insert(out.partners, { u = math.floor(math.min(e.u, MAX_SAFE)), at = at })
+				end
+			end
+		end
+		while #out.partners > AuctionRules.MaxPartners do
+			table.remove(out.partners, 1)
+		end
+	end
+	if type(raw.received) == "table" then
+		for _, tid in ipairs(raw.received) do
+			if type(tid) == "string" and #tid > 0 and #tid <= 64 then
+				table.insert(out.received, tid)
+			end
+		end
+		while #out.received > AuctionRules.MaxReceived do
+			table.remove(out.received, 1)
+		end
+	end
 	return out
 end
 
@@ -168,7 +207,111 @@ function AuctionRules.Stats(d)
 	if type(g.auction) ~= "table" then
 		g.auction = AuctionRules.Default()
 	end
-	return g.auction
+	local st = g.auction
+	if type(st.partners) ~= "table" then
+		st.partners = {}
+	end
+	if type(st.received) ~= "table" then
+		st.received = {}
+	end
+	return st
+end
+
+---------------------------------------------------------------- Handelspartner (gegen Geldschieben)
+-- Merkt sich den Handelspartner (Käufer beim Verkäufer und umgekehrt) mit Zeitpunkt
+function AuctionRules.NotePartner(d, userId, now)
+	if type(d) ~= "table" or type(d.games) ~= "table" or not finite(userId) or userId < 1 then
+		return
+	end
+	local list = AuctionRules.Stats(d).partners
+	for i = #list, 1, -1 do
+		if list[i].u == userId then
+			table.remove(list, i)
+		end
+	end
+	table.insert(list, { u = userId, at = finite(now) and math.max(0, math.floor(now)) or 0 })
+	while #list > AuctionRules.MaxPartners do
+		table.remove(list, 1)
+	end
+end
+
+-- Haben d und userId in den letzten PartnerSeconds miteinander gehandelt?
+function AuctionRules.RecentPartner(d, userId, now)
+	local st = type(d) == "table" and type(d.games) == "table" and d.games.auction
+	if type(st) ~= "table" or type(st.partners) ~= "table" then
+		return false
+	end
+	for _, e in ipairs(st.partners) do
+		if e.u == userId and (not finite(now) or now - e.at < AuctionRules.PartnerSeconds) then
+			return true
+		end
+	end
+	return false
+end
+
+---------------------------------------------------------------- Auktionsbuch (Abgleich beim Laden)
+-- Eintrag beim Verkäufer: {tid, carId, model, bought, payout, at}; beim Käufer: {tid, car = Datensatz, amount, at}.
+-- Verkäufer: steht das übergebene Auto (gleiche Id, gleiches Modell, gleicher Kaufzeitpunkt) noch im Profil, wurde
+-- sein Speichern nach der Übergabe nicht mehr geschrieben -> Auto entfernen, Auszahlung gutschreiben.
+-- Rückgabe: Anzahl nachgeholter Übergaben
+function AuctionRules.ReconcileSeller(d, entries)
+	local n = 0
+	if type(d) ~= "table" or type(d.games) ~= "table" or type(entries) ~= "table" then
+		return 0
+	end
+	for _, e in ipairs(entries) do
+		if type(e) == "table" and finite(e.carId) then
+			local car = CarRules.Find(d, e.carId)
+			if car and car.model == e.model and car.bought == e.bought then
+				CarRules.RemoveCar(d, e.carId)
+				if finite(e.payout) and e.payout > 0 then
+					mini().AddMoney(d, e.payout)
+				end
+				AuctionRules.Stats(d).sold += 1
+				n += 1
+			end
+		end
+	end
+	return n
+end
+
+-- Käufer: fehlt die Übergabe (tid) in received, wurde sein Speichern nicht geschrieben -> Auto hinzufügen, Preis
+-- abziehen (höchstens bis 0). Garage voll: Übergabe gilt als erledigt, nichts wird abgezogen.
+function AuctionRules.ReconcileBuyer(d, entries)
+	local n = 0
+	if type(d) ~= "table" or type(d.games) ~= "table" or type(entries) ~= "table" then
+		return 0
+	end
+	local st = AuctionRules.Stats(d)
+	local seen = {}
+	for _, tid in ipairs(st.received) do
+		seen[tid] = true
+	end
+	for _, e in ipairs(entries) do
+		if type(e) == "table" and type(e.tid) == "string" and not seen[e.tid] then
+			seen[e.tid] = true
+			AuctionRules.NoteReceived(d, e.tid)
+			local car = CarRules.AddCar(d, e.car)
+			if car then
+				mini().AddMoney(d, -(finite(e.amount) and e.amount or 0))
+				st.won += 1
+				n += 1
+			end
+		end
+	end
+	return n
+end
+
+function AuctionRules.NoteReceived(d, tid)
+	local list = AuctionRules.Stats(d).received
+	table.insert(list, tid)
+	while #list > AuctionRules.MaxReceived do
+		table.remove(list, 1)
+	end
+end
+
+function AuctionRules.TransferId(sellerId, carId, now)
+	return string.format("%d_%d_%d", sellerId or 0, carId or 0, finite(now) and math.floor(now) or 0)
 end
 
 -- Snapshot-Feld `auction` (PHASE2_CONTRACT §5; der öffentliche Zustand kommt über auction_update)
@@ -349,6 +492,9 @@ function AuctionRules.CheckBid(lot, bidder, amount, now)
 		if not bidder.writable then
 			return false, TEXT.writable
 		end
+		if bidder.partner then
+			return false, TEXT.partner
+		end
 	end
 	if not finite(amount) or amount % 1 ~= 0 or amount <= 0 then
 		return false, TEXT.invalid
@@ -376,7 +522,25 @@ function AuctionRules.CheckBid(lot, bidder, amount, now)
 	if not finite(bidder.money) or bidder.money < amount then
 		return false, TEXT.money
 	end
+	-- freies Guthaben: eigene Höchstgebote auf anderen Losen sind schon verplant
+	if finite(bidder.committed) and bidder.committed > 0 and bidder.money - bidder.committed < amount then
+		return false, TEXT.committed
+	end
 	return true
+end
+
+-- Summe der Höchstgebote eines Spielers auf anderen laufenden Losen (lots = Liste von Losen)
+function AuctionRules.Committed(lots, userId, exceptId)
+	local sum = 0
+	for _, lot in ipairs(lots) do
+		if lot.id ~= exceptId and (lot.state == "open" or lot.state == "closing") then
+			local top = AuctionRules.Top(lot)
+			if top and not top.npc and top.userId == userId then
+				sum += top.amount
+			end
+		end
+	end
+	return sum
 end
 
 -- Trägt ein (geprüftes) Gebot ein und verlängert bei Bedarf. npc = Index in lot.npcs oder nil.
@@ -390,8 +554,11 @@ function AuctionRules.PlaceBid(lot, userId, name, amount, now, npc)
 	return bid
 end
 
--- Bieter verlässt den Server: alle seine Gebote fallen weg. Rückgabe: Anzahl entfernter Gebote
+-- Bieter verlässt den Server: alle seine Gebote fallen weg. Rückgabe: Anzahl entfernter Gebote.
+-- War er vorn und das Los läuft noch, bleibt mindestens ReopenSeconds Zeit, damit NPCs und andere nachbieten können.
 function AuctionRules.RemoveBidder(lot, userId, now)
+	local top = AuctionRules.Top(lot)
+	local wasTop = top ~= nil and not top.npc and top.userId == userId
 	local removed = 0
 	for i = #lot.bids, 1, -1 do
 		local b = lot.bids[i]
@@ -402,8 +569,33 @@ function AuctionRules.RemoveBidder(lot, userId, now)
 	end
 	if removed > 0 then
 		lot.changedAt = now or lot.changedAt
+		if wasTop and lot.state == "open" and finite(now) and lot.endsAt - now < AuctionRules.ReopenSeconds then
+			lot.endsAt = now + AuctionRules.ReopenSeconds
+			lot.hardEnd = math.max(lot.hardEnd, lot.endsAt)
+		end
 	end
 	return removed
+end
+
+-- Höchstgebot fiel beim Zuschlag weg (nicht gedeckt usw.): Gebote dieses Bieters streichen und das Los
+-- ReopenSeconds weiterlaufen lassen (NPC-Bedenkzeiten beginnen neu). Rückgabe: true | false (Grenze erreicht)
+function AuctionRules.Reopen(lot, userId, now)
+	if lot.state ~= "closing" or (lot.reopens or 0) >= AuctionRules.MaxReopens then
+		return false
+	end
+	for i = #lot.bids, 1, -1 do
+		local b = lot.bids[i]
+		if not b.npc and b.userId == userId then
+			table.remove(lot.bids, i)
+		end
+	end
+	lot.reopens = (lot.reopens or 0) + 1
+	lot.state = "open"
+	lot.closingSince = nil
+	lot.changedAt = now
+	lot.endsAt = now + AuctionRules.ReopenSeconds
+	lot.hardEnd = math.max(lot.hardEnd, lot.endsAt)
+	return true
 end
 
 ---------------------------------------------------------------- NPC-Bieter
@@ -457,10 +649,12 @@ function AuctionRules.Candidates(lot)
 end
 
 -- Nächsthöheres gültiges Gebot. check(bid) -> "ok" | "wait" | Grund (ungültig, Bieter fällt für dieses Los raus).
--- NPC-Gebote sind immer gültig. Rückgabe: bid | nil, "wait" | nil
-function AuctionRules.PickWinner(lot, check)
+-- NPC-Gebote sind immer gültig. Rückgabe: bid | nil, "wait" | nil | nil, "reopen", bid, Grund
+-- Mit allowReopen: fällt das HÖCHSTE Gebot weg, gewinnt nicht sofort das nächste (sonst ließe ein Scheingebot am
+-- Höchstbetrag alle anderen außen vor und ein Niedriggebot gewänne), sondern der Aufrufer öffnet das Los erneut.
+function AuctionRules.PickWinner(lot, check, allowReopen)
 	lot.skipped = lot.skipped or {}
-	for _, b in ipairs(AuctionRules.Candidates(lot)) do
+	for i, b in ipairs(AuctionRules.Candidates(lot)) do
 		if b.npc then
 			return b
 		end
@@ -472,6 +666,9 @@ function AuctionRules.PickWinner(lot, check)
 				return nil, "wait"
 			end
 			lot.skipped[b.userId] = type(verdict) == "string" and verdict or "invalid"
+			if i == 1 and allowReopen and (lot.reopens or 0) < AuctionRules.MaxReopens then
+				return nil, "reopen", b, lot.skipped[b.userId]
+			end
 		end
 	end
 	return nil
@@ -554,8 +751,23 @@ function AuctionRules.Handover(lot, bid, buyerD, sellerD, now)
 	local paid = mini().AddMoney(sellerD, payout)
 	AuctionRules.Stats(buyerD).won += 1
 	AuctionRules.Stats(sellerD).sold += 1
+	AuctionRules.NotePartner(buyerD, lot.sellerId, now)
+	AuctionRules.NotePartner(sellerD, bid.userId, now)
+	local tid = AuctionRules.TransferId(lot.sellerId, lot.carId, now)
+	AuctionRules.NoteReceived(buyerD, tid)
 	finish(lot, "sold", now, { userId = bid.userId, name = bid.name, amount = amount, npc = false })
-	return true, { car = newCar, amount = amount, fee = fee, payout = paid }
+	local at = finite(now) and math.max(0, math.floor(now)) or 0
+	local carCopy = table.clone(record)
+	carCopy.locked = false
+	return true, {
+		car = newCar, amount = amount, fee = fee, payout = paid,
+		-- für das Auktionsbuch (AuctionLedger): Abgleich, falls nur eines der Profile gespeichert wird
+		transfer = {
+			tid = tid, sellerId = lot.sellerId, buyerId = bid.userId,
+			seller = { tid = tid, carId = record.id, model = record.model, bought = record.bought, payout = paid, at = at },
+			buyer = { tid = tid, car = carCopy, amount = amount, at = at },
+		},
+	}
 end
 
 -- NPC-Auktion, ein Spieler gewinnt: Geld ab, Sondermodell in die Garage (ein Schritt).

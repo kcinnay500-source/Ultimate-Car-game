@@ -20,9 +20,9 @@ return {
 		g:Advance(1)
 		local before = snapshotOf(da)
 		db.money = 1e7
-		db.games.press.scrap = 1e7
+		db.games.press.scrap = 1e9 -- reicht für das kleinste Umtauschpaket
 		db.games.press.runScrap = 1e12
-		db.games.press.lifetime = 1e7
+		db.games.press.lifetime = 1e9 -- über dem Ziel von m_scrap_10k
 		local rid = 0
 		local function actB(name, payload)
 			rid += 1

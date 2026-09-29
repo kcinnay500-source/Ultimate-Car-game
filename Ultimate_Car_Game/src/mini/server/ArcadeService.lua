@@ -1,9 +1,11 @@
 -- ArcadeService: die Spielhalle auf dem Server (PHASE2_CONTRACT §4 Spielhalle, §6 Sicherheit).
 -- Aktionen (über MiniService.Handle, also innerhalb von request()):
 --   mini_arcade_start  {game}               neue Runde: Token + Parameter aus einem Server-Seed (mini_notice "arcade_round")
---   mini_arcade_input  {token, at, value}   eine Eingabe; at = GetServerTimeNow() des Clients, nur in [now − 0,5; now + 0,06]
+--   mini_arcade_input  {token, at, value}   eine Eingabe; at = GetServerTimeNow() des Clients, nur in [now − 0,5; now + 0,06],
+--                                          gewertet frühestens ab Ankunft − Einweg-Latenz (≤ 0,15 s) − 0,05 s
 --   mini_arcade_finish {token}              Auswertung aus der Server-Zeitachse, genau eine Auszahlung je Token
--- Hinweise an den Client: "arcade_round" (Rundendaten), "arcade_step" (Rückmeldung zu einer Eingabe bzw. Ablehnung),
+-- Hinweise an den Client: "arcade_round" (Rundendaten), "arcade_go" (BLITZ-REAKTION: Lampen aus, erst im Moment
+-- selbst, damit der Client die Zeitpunkte nicht vorher kennt), "arcade_step" (Rückmeldung zu einer Eingabe bzw. Ablehnung),
 -- "arcade_result" (Punkte, Credits, Rekord). Eine erneute Abrechnung desselben Tokens sendet das Ergebnis noch einmal
 -- (replay = true) und zahlt nichts. Die laufende Runde liegt nur in der Server-Sitzung, nie im Profil.
 -- Schnittstelle für MiniService:
@@ -113,7 +115,7 @@ local function start(ms, data, d, now)
 	local a = ArcadeRules.Data(d)
 	ArcadeRules.EnsureDay(a, now)
 	local seed = rng:NextInteger(1, MAX_TOKEN)
-	local round = ArcadeRules.NewRound(def.key, seed, now, token)
+	local round = ArcadeRules.NewRound(def.key, seed, now, token, ArcadeService.Latency(ms))
 	if not round then
 		return
 	end
@@ -124,6 +126,23 @@ local function start(ms, data, d, now)
 	view.best = a.best[def.key] or 0
 	view.reward = def.reward
 	api.notice(ms, "arcade_round", view)
+	-- BLITZ-REAKTION: "Lampen aus" erst im Moment selbst senden
+	for _, ev in ipairs(ArcadeRules.GoEvents(round)) do
+		task.delay(math.max(0, ev.at - now), function()
+			if st.round == round and not round.closed and api.alive(ms) then
+				api.notice(ms, "arcade_go", ArcadeRules.GoView(round, ev.attempt))
+			end
+		end)
+	end
+end
+
+-- Einweg-Latenz des Spielers (halbe Round-Trip-Zeit, begrenzt; ohne Messung ArcadeRules.DefaultLatency)
+function ArcadeService.Latency(ms)
+	local player = ms and ms.player
+	local ok, ping = pcall(function()
+		return player:GetNetworkPing()
+	end)
+	return ArcadeRules.Latency(ok and ping or nil)
 end
 
 local function input(ms, data, _, now)
