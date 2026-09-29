@@ -2,8 +2,9 @@
 (CITY_SPEC §1.2, §2, §3, §6 "Werkstattmeile dressing" (Tore, Kreisel-Skulpturen), §9.1).
 
 Höhen-Stapel (§1.2, nie zwei überlappende Oberseiten auf gleicher Höhe):
-  Gras-Platte -1.10 | Bodenplatten -1.00 | Kreiselscheibe -0.98 | Fahrbahn -0.95 | Markierungen -0.90
-  | Gehwege/Platz -0.50 (Kreisel-Gehwegring abwechselnd -0.52/-0.54, Inselgras -0.45)
+  Gras-Platte -1.10 | Bodenplatten -1.00 | Kreiselscheibe -1.00 (Spec -0.98; 0.05 unter der Fahrbahn, die über
+  ihr endet) | Fahrbahn -0.95 | Markierungen -0.90 | Gehwege/Platz -0.50 (auch der Kreisel-Gehwegring: Trapez-Sektoren
+  ohne Überlappung) | Inselgras -0.45
 """
 import math
 
@@ -12,7 +13,7 @@ from .lib import (CF, AMBER, APRON, ASPHALT, BLACK, GRASS, HEDGE, PLAZA, RED, SI
 
 Y_GRASS = -1.10
 Y_GROUND = -1.00
-Y_DISC = -0.98
+Y_DISC = -1.00
 Y_ROAD = -0.95
 Y_MARK = -0.90
 Y_WALK = -0.50
@@ -45,10 +46,10 @@ KREISEL = [("Kreisel West", -518, 0), ("Kreisel Ost", 518, 0)]
 
 # Gehweg-Streifen außerhalb der Knoten (Name, x0,x1,z0,z1)
 SIDEWALKS = [
-    ("Meile Nord West", -480, -175, -23, -13), ("Meile Nord Mitte", -129, 129, -23, -13),
-    ("Meile Nord Ost", 175, 480, -23, -13),
-    ("Meile Sued West", -480, -175, 13, 23), ("Meile Sued Mitte", -129, 129, 13, 23),
-    ("Meile Sued Ost", 175, 480, 13, 23),
+    ("Meile Nord West", -484, -175, -23, -13), ("Meile Nord Mitte", -129, 129, -23, -13),
+    ("Meile Nord Ost", 175, 484, -23, -13),
+    ("Meile Sued West", -484, -175, 13, 23), ("Meile Sued Mitte", -129, 129, 13, 23),
+    ("Meile Sued Ost", 175, 484, 13, 23),
     ("Markt West W Nord", -174, -165, -320, -23), ("Markt West W Sued", -174, -165, 23, 178),
     ("Markt West O Nord", -139, -130, -320, -23), ("Markt West O Sued", -139, -130, 23, 178),
     ("Markt Ost W Nord", 130, 139, -320, -23), ("Markt Ost W Sued", 130, 139, 23, 178),
@@ -56,6 +57,13 @@ SIDEWALKS = [
     ("Nordring N", -130, 130, -364, -355), ("Nordring S", -130, 130, -329, -320),
     ("Suedring N", -130, 130, 178, 187), ("Suedring S", -130, 130, 213, 222),
 ]
+
+# Aussparungen in den Bezirks-Bodenplatten (x0,x1,z0,z1): dort liegt ein eigener Belag mit Oberseite -1.00
+GROUND_INSETS = {
+    "Autohaus-Gelaende": [(-126, -68, 30, 150)],          # Gebrauchtwagen-Belag (dealer_track)
+    "Tuning-Gelaende": [(350, 450, -300, -190)],          # Treffbelag (tuning)
+    "Schrottplatz-Boden": [(-310, -178, -209, -193)],     # Betonzufahrt (scrapyard)
+}
 
 # Absenkungen (§3.4): (Name, x0,x1,z0,z1, Vorfeld über den Grasstreifen oder None)
 CURB_CUTS = [
@@ -92,13 +100,37 @@ CROSSWALKS = [
 ]
 
 # Straßenlaternen (§9.1): (Gruppe, x, z, Auslegerrichtung)
+LAMP_CLEAR = 2.0      # Abstand Mastmitte - Rand einer Bordsteinabsenkung (Sockel 1.2 breit + Luft)
+
+
+def _cut_rects():
+    return [c[1:5] for c in CURB_CUTS + plot_cuts()]
+
+
+def off_cuts_x(x, z, clear=LAMP_CLEAR, rects=None):
+    """X eines Gehweg-Objekts so verschieben, dass es neben jeder Bordsteinabsenkung steht (§9.1: 0 Laternen in
+    Einfahrten). Liegt (x, z) in einer Absenkung, rückt es auf die nähere Seite (x0 - clear | x1 + clear)."""
+    rects = _cut_rects() if rects is None else rects
+    for _ in range(4):
+        hit = next((r for r in rects if r[0] - clear < x < r[1] + clear and r[2] - clear < z < r[3] + clear), None)
+        if hit is None:
+            return x
+        lo, hi = hit[0] - clear, hit[1] + clear
+        dl, dh = abs(x - lo), abs(x - hi)
+        # bei Gleichstand nach außen (weg von X 0), damit die Stadt symmetrisch bleibt
+        x = lo if dl < dh - 1e-9 or (abs(dl - dh) <= 1e-9 and x < 0) else hi
+    return x
+
+
 def street_lamps():
     out = []
+    rects = _cut_rects()
     meile = [(306, -14.5), (-306, 14.5), (-310, -14.5), (310, 14.5), (336, -14.5), (456, -14.5), (-336, 14.5),
              (-456, 14.5), (-460, -14.5), (-340, -14.5), (460, 14.5), (340, 14.5), (-100, -14.5), (-100, 14.5),
              (-20, 14.5), (-20, -14.5), (20, -14.5), (20, 14.5), (100, 14.5), (100, -14.5)]
     for x, z in meile:
-        out.append(("Meile", x, z, 0, 1 if z < 0 else -1))
+        # (100, 14.5) läge in der Absenkung Übergabe-Halle (X 92..108) -> X 110
+        out.append(("Meile", off_cuts_x(x, z, rects=rects), z, 0, 1 if z < 0 else -1))
     for sx in (-1, 1):
         for sz in (-1, 1):
             x, z = sx * 545, sz * 32.2
@@ -109,11 +141,18 @@ def street_lamps():
     for sg in (-1, 1):
         for i, z in enumerate(zs):
             x = sg * (137.5 if i % 2 == 0 else 166.5)
+            if sg > 0 and z == 175:
+                z = 180          # nicht in der Tankstellen-Einfahrt (Bordsteinabsenkung Z 164..176)
             dx = -1 if x in (-137.5, 166.5) else 1
             out.append(("Markt" + ("W" if sg < 0 else "O"), x, z, dx, 0))
     for x in (-100, -35, 35, 100):
-        out.append(("Nordring", x, -327.5, 0, -1))
-        out.append(("Suedring", x, 185.5, 0, 1))
+        # X -100 läge in der Parkplatz-Einfahrt (X -110..-90) -> -112; Südring X 100 in der Absenkung
+        # Autohaus hinten (X 92..108) -> 110
+        out.append(("Nordring", off_cuts_x(x, -327.5, rects=rects), -327.5, 0, -1))
+        out.append(("Suedring", off_cuts_x(x, 185.5, rects=rects), 185.5, 0, 1))
+    for grp, x, z, dx, dz in out:
+        assert not any(r[0] - 0.6 < x < r[1] + 0.6 and r[2] - 0.6 < z < r[3] + 0.6 for r in rects), \
+            "Laterne %s (%g,%g) in einer Bordsteinabsenkung" % (grp, x, z)
     return out
 
 
@@ -170,6 +209,39 @@ def path_point(pts, d):
             return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f), ((b[0] - a[0]) / ln, (b[1] - a[1]) / ln), total
     a, b, ln, st = segs[-1]
     return b, ((b[0] - a[0]) / ln, (b[1] - a[1]) / ln), total
+
+
+# ---------------------------------------------------------------- Polygon-Helfer (Kreisel-Sektoren)
+def _clip_half(poly, f):
+    """Konvexes Polygon auf die Halbebene f(p) >= 0 beschneiden"""
+    out = []
+    for i in range(len(poly)):
+        p, q = poly[i], poly[(i + 1) % len(poly)]
+        fp, fq = f(p), f(q)
+        if fp >= 0:
+            out.append(p)
+        if (fp >= 0) != (fq >= 0):
+            t = fp / (fp - fq)
+            out.append((p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t))
+    # doppelte Punkte entfernen
+    res = []
+    for p in out:
+        if not res or math.dist(p, res[-1]) > 1e-6:
+            res.append(p)
+    if len(res) > 1 and math.dist(res[0], res[-1]) <= 1e-6:
+        res.pop()
+    return res
+
+
+def _poly_area(poly):
+    return abs(sum(poly[i][0] * poly[(i + 1) % len(poly)][1] - poly[(i + 1) % len(poly)][0] * poly[i][1]
+                   for i in range(len(poly)))) / 2
+
+
+def _ccw(poly):
+    a = sum(poly[i][0] * poly[(i + 1) % len(poly)][1] - poly[(i + 1) % len(poly)][0] * poly[i][1]
+            for i in range(len(poly)))
+    return poly if a > 0 else list(reversed(poly))
 
 
 # ---------------------------------------------------------------- Rechteck-Helfer
@@ -238,13 +310,12 @@ def build(city, lib, tree):
     with lib.section("Straßenlaternen"):
         lamps = lib.folder(lights, "Strassenlaternen")
         for grp, x, z, dx, dz in street_lamps():
-            y = -0.5 if grp != "Kreisel" else -0.52
-            lib.street_lamp(lamps, x, z, y, dx, dz, name="Laterne_" + grp)
+            lib.street_lamp(lamps, x, z, Y_WALK, dx, dz, name="Laterne_" + grp)
     with lib.section("Ampeln"):
         build_signals(animated, lib)
     with lib.section("Verkehr (Wegpunkte)"):
         loops = build_loops(animated, lib)
-    with lib.section("Verkehr (Autos, außer Budget)"):
+    with lib.section("Verkehr (Lite-Autos + Bus)"):
         build_traffic_cars(animated, lib, loops)
 
 
@@ -260,13 +331,17 @@ def build_ground(ground, lib):
                            (-590, 590, -390.5, -389.5), (-590, 590, 469.5, 470.5)):
         lib.box(ground, "Grenze", x0, x1, Y_GRASS, Y_GRASS + 60, z0, z1, HEDGE, "SmoothPlastic", transparency=1,
                 cast_shadow=False, query=False, touch=False)
-    # Bodenplatten der Bezirke (0,3 dick, Oberseite -1.00)
+    # Bodenplatten der Bezirke (0,3 dick, Oberseite -1.00). Flächen mit eigenem Belag (GROUND_INSETS) werden
+    # ausgespart; die Bezirke setzen ihren Belag bündig (-1.30..-1.00) in die Lücke statt 0.02-0.03 darüber.
     y0, y1 = Y_GROUND - 0.3, Y_GROUND
-    lib.box(ground, "Schrottplatz-Boden", -468, -178, y0, y1, -364, -159, DIRT, "Pebble")
-    lib.box(ground, "Tuning-Gelaende", 178, 468, y0, y1, -364, -159, TUNING_GROUND, "Concrete")
-    lib.box(ground, "Tankstellen-Gelaende", 178, 400, y0, y1, 159, 260, APRON, "Concrete")
-    lib.box(ground, "Autohaus-Gelaende", -130, 130, y0, y1, 23, 178, APRON, "Concrete")
-    lib.box(ground, "Parkplatz-Chaos-Flaeche", -130, 130, y0, y1, -320, -229, ASPHALT, "Asphalt")
+    for nm, x0, x1, z0, z1, col, mat in (
+            ("Schrottplatz-Boden", -468, -178, -364, -159, DIRT, "Pebble"),
+            ("Tuning-Gelaende", 178, 468, -364, -159, TUNING_GROUND, "Concrete"),
+            ("Tankstellen-Gelaende", 178, 400, 159, 260, APRON, "Concrete"),
+            ("Autohaus-Gelaende", -130, 130, 23, 178, APRON, "Concrete"),
+            ("Parkplatz-Chaos-Flaeche", -130, 130, -320, -229, ASPHALT, "Asphalt")):
+        for p in subtract((x0, x1, z0, z1), GROUND_INSETS.get(nm, [])):
+            lib.box(ground, nm, p[0], p[1], y0, y1, p[2], p[3], col, mat)
     # Altstadt-Pflaster (Stadtplatz, Frontstreifen, Querachse-Promenaden, Hallenvorfeld), Oberseite -0.50
     lib.box(ground, "Altstadt-Pflaster", -130, 130, BOTTOM, Y_WALK, -229, -23, PLAZA, "Slate")
     # Gassen-Fußwege X ±320..±326 (Schrottgasse / Tuninggasse, §4.2)
@@ -443,11 +518,15 @@ def build_crosswalks(roads, lib):
                 lib.box(m, "Haltelinie", x0, x1, Y_ROAD, Y_MARK, z - 0.3, z + 0.3, WHITE, "SmoothPlastic", deco=True)
         # Blinklicht-Masten an Zebras ohne Ampel (Z2/Z3/Z14-16)
         if kind == "zebra":
+            rects = _cut_rects()
             for sd in (-1, 1):
-                if ax == "x":
-                    px, pz = hi + 1.3, c + sd * 15.5
+                # hinter dem Band; liegt der Platz in einer Absenkung (Z15 Ost: Tankstellen-Einfahrt), vor dem Band
+                for along in (hi + 1.3, lo - 1.3):
+                    px, pz = (along, c + sd * 15.5) if ax == "x" else (c + sd * 15.5, along)
+                    if not any(r[0] - 0.4 < px < r[1] + 0.4 and r[2] - 0.4 < pz < r[3] + 0.4 for r in rects):
+                        break
                 else:
-                    px, pz = c + sd * 15.5, hi + 1.3
+                    raise SystemExit("Zebra %s: kein Platz für die Bake" % cid)
                 lib.cylinder(m, "BakenMast", (px, Y_WALK + 3.25, pz), 6.5, 0.35, "Y", WHITE, "SmoothPlastic")
                 lib.ball(m, "Bake", (px, Y_WALK + 7.1, pz), 1.2, AMBER, "Neon", deco=True)
 
@@ -456,26 +535,50 @@ def build_kreisel(roads, animated, lib):
     kf = lib.folder(roads, "Kreisel")
     for nm, cx, cz in KREISEL:
         m = lib.model(kf, nm)
-        lib.cylinder(m, "Kreiselscheibe", (cx, Y_DISC - 0.15, cz), 0.3, 76, "Y", ASPHALT, "Asphalt")
+        # Ø77.6: reicht bis unter die Ecken des Gehweg-Vielecks (Apothem 38, Ecken r 38.74)
+        lib.cylinder(m, "Kreiselscheibe", (cx, Y_DISC - 0.15, cz), 0.3, 77.6, "Y", ASPHALT, "Asphalt")
         lib.cylinder(m, "Inselbord", (cx, (Y_DISC + Y_WALK) / 2, cz), Y_WALK - Y_DISC, 25, "Y", SIDEWALK, "Concrete")
         lib.cylinder(m, "Inselgras", (cx, (Y_DISC - 0.45) / 2, cz), -0.45 - Y_DISC, 23, "Y", GRASS, "Grass")
-        # Gehwegring r 38..46: 16 Sektoren, die 2 an der Meile-Mündung fehlen (abwechselnd -0.52/-0.54)
+        # Gehwegring r 38..46 (Apothemen): 16 Trapez-Sektoren à 22.5°, die 2 an der Meile-Mündung fehlen. Jeder
+        # Sektor = Quader (innere Sehnenbreite) + 2 Keile für die äußere Aufweitung -> keine Überlappung, alle
+        # Oberseiten -0.50. Die beiden Sektoren neben der Mündung werden am Meile-Gehweg (endet bei X ±484)
+        # abgeschnitten (konvexe Teilstücke).
         mouth = 180 if cx > 0 else 0
-        seq = []
+        half = math.radians(11.25)
+        ri, ro = 38.0, 46.0
+        wi, wo = ri * math.tan(half), ro * math.tan(half)
+        sx = 1 if cx > 0 else -1
+        xend = sx * 484
+        ring_parts = []
         for k in range(16):
             a = 11.25 + 22.5 * k
             dm = abs((a - mouth + 180) % 360 - 180)
             if dm < 22.5:
                 continue
-            seq.append(a)
-        seq.sort(key=lambda a: (a - mouth) % 360)
-        for i, a in enumerate(seq):
-            top = -0.52 if i % 2 == 0 else -0.54
             r = math.radians(a)
-            px, pz = cx + 42 * math.cos(r), cz + 42 * math.sin(r)
-            yaw = yaw_towards(math.cos(r), math.sin(r))   # lokales -Z zeigt radial nach außen
-            lib.part(m, "Ringgehweg", (18.5, top - BOTTOM, 8), CF.at(px, (top + BOTTOM) / 2, pz, yaw), SIDEWALK,
-                     "Concrete")
+            ux, uz = math.cos(r), math.sin(r)            # radial nach außen
+            tx, tz = -uz, ux                             # tangential
+
+            def w(rad, t):
+                return (cx + ux * rad + tx * t, cz + uz * rad + tz * t)
+            quad = [w(ri, -wi), w(ro, -wo), w(ro, wo), w(ri, wi)]
+            if dm < 45:
+                # Meile-Gehweg (X bis ±484, |Z| 13..23) herausschneiden: Teil jenseits X ±484 + Teil |Z| > 23
+                zs = 1 if uz > 0 else -1
+                beyond = _clip_half(quad, lambda p: sx * (p[0] - xend))
+                outside = _clip_half(_clip_half(quad, lambda p: -sx * (p[0] - xend)), lambda p: zs * p[1] - 23)
+                for piece in (beyond, outside):
+                    if len(piece) >= 3 and _poly_area(piece) > 0.05:
+                        ring_parts += lib.convex_slab(m, "Ringgehweg", _ccw(piece), BOTTOM, Y_WALK, SIDEWALK,
+                                                      "Concrete")
+                continue
+            yaw = yaw_towards(ux, uz)                    # lokales -Z zeigt radial nach außen
+            ring_parts.append(lib.part(m, "Ringgehweg", (2 * wi, Y_WALK - BOTTOM, ro - ri),
+                                       CF.at(cx + ux * (ri + ro) / 2, (Y_WALK + BOTTOM) / 2, cz + uz * (ri + ro) / 2,
+                                             yaw), SIDEWALK, "Concrete"))
+            for sgn in (-1, 1):
+                ring_parts.append(lib.flat_tri(m, "Ringgehweg", w(ro, sgn * wi), w(ri, sgn * wi), w(ro, sgn * wo),
+                                               BOTTOM, Y_WALK, SIDEWALK, "Concrete"))
     # Skulptur West: Schrottturm (rostige Säule, 6 gepresste Würfel, Rundumleuchte)
     cx = -518
     sk = lib.model(kf, "Schrottturm")
@@ -498,7 +601,9 @@ def build_kreisel(roads, animated, lib):
     tt = lib.model(kan, "KreiselDrehteller", attrs={"Anim": "turntable", "Speed": 15})
     disc = lib.cylinder(tt, "Drehteller", (cx, -0.2, 0), 0.5, 14, "Y", (36, 40, 46), "Metal")
     lib.cylinder(tt, "Leuchtring", (cx, -0.225, 0), 0.45, 14.6, "Y", AMBER, "Neon", deco=True)
-    lib.set_primary(tt, disc)
+    # PrimaryPart ohne Drehung (der Zylinder liegt um Z gedreht): CityClient dreht um die Hochachse des Pivots
+    piv = lib.part(tt, "Pivot", (1, 0.2, 1), CF(cx, -0.2, 0), transparency=1, deco=True)
+    lib.set_primary(tt, piv)
     with lib.section("Kreisel & Tore (Auto)"):
         lib.clone_car(tt, "sport", CF.at(cx, 0.05, 0, 135), TEAL, name="Sport_Kreisel")
 
@@ -540,7 +645,8 @@ def _signal_mast(parent, lib, name, x, z, group, serves, arm_dir, face_yaw, ped_
         hx, hz = x + arm_dir[0] * 6, z + arm_dir[1] * 6
         lib.beam(m, "Ausleger", (x, top - 0.3, z), (hx, top - 0.3, hz), 0.3, STEEL, "Metal", deco=True)
     if vehicle:
-        hy = top - 2.2 if arm else top - 1.8
+        # am Ausleger: Kopf-Oberkante bündig mit der Auslegerunterseite (top - 0.45), sonst schwebt er
+        hy = top - 0.45 - 1.6 if arm else top - 1.8
         head_cf = CF.at(hx, hy, hz, face_yaw)
         lib.part(m, "Signalkopf", (1.1, 3.2, 0.8), head_cf, BLACK, "SmoothPlastic", deco=True)
         for i, (nm, col, tr) in enumerate((("Red", (255, 50, 40), 0), ("Amber", (255, 170, 30), 0.7),
@@ -548,8 +654,10 @@ def _signal_mast(parent, lib, name, x, z, group, serves, arm_dir, face_yaw, ped_
             lib.cylinder(m, nm, head_cf.point((0, 1.0 - i * 1.0, 0.45)), 0.12, 0.75, "Z", col, "Neon",
                          yaw=face_yaw, transparency=tr, deco=True)
     ped_cf = CF.at(x, y + 0.6 + 3.4, z, ped_yaw) * CF(0, 0, 0.45)
-    lib.part(m, "PedRed", (0.7, 0.7, 0.25), ped_cf * CF(0, 0.4, 0), (255, 60, 50), "Neon", deco=True)
-    lib.part(m, "PedGreen", (0.7, 0.7, 0.25), ped_cf * CF(0, -0.4, 0), (60, 230, 90), "Neon", transparency=0.7,
+    # Gehäuse am Mast (Mast r 0.2, Gehäuse 0.2 tief -> liegt an), Lampen davor
+    lib.part(m, "PedKopf", (0.9, 1.7, 0.2), ped_cf * CF(0, 0, -0.15), BLACK, "SmoothPlastic", deco=True)
+    lib.part(m, "PedRed", (0.7, 0.7, 0.25), ped_cf * CF(0, 0.4, 0.075), (255, 60, 50), "Neon", deco=True)
+    lib.part(m, "PedGreen", (0.7, 0.7, 0.25), ped_cf * CF(0, -0.4, 0.075), (60, 230, 90), "Neon", transparency=0.7,
              deco=True)
     return m
 
@@ -575,12 +683,28 @@ def build_signals(animated, lib):
 
 
 # ---------------------------------------------------------------- Verkehr (§3.7)
+# Haltepunkte der Autos (Fahrzeugmitte, 7 vor der Haltelinie) an Ampel-Zebras, Format für CityClient: x,z,Serves.
+# Meile (Loop A): Z1 (Plaza), Z4/Z5 (K-West), Z8/Z9 (K-Ost); Marktstraße (B1/B2): Z6/Z7, Z10/Z11, Z12/Z13 (Querachse).
+_HALT = 7.0
+LOOP_STOPS = {
+    "A": [(-185.3 - _HALT, 6, "Meile"), (-8.3 - _HALT, 6, "Meile"), (118.7 - _HALT, 6, "Meile"),
+          (185.3 + _HALT, -6, "Meile"), (8.3 + _HALT, -6, "Meile"), (-118.7 + _HALT, -6, "Meile")],
+    "B1": [(146, -33.3 - _HALT, "Markt"), (146, -209.3 - _HALT, "Markt"),
+           (-146, 33.3 + _HALT, "Markt"), (-146, -192.7 + _HALT, "Markt")],
+    "B2": [(158, 33.3 + _HALT, "Markt"), (158, -192.7 + _HALT, "Markt"),
+           (-158, -33.3 - _HALT, "Markt"), (-158, -209.3 - _HALT, "Markt")],
+}
+
+
 def build_loops(animated, lib):
     lf = lib.folder(animated, "TrafficLoops")
     out = {}
     for key, title, pts, speed in traffic_loops():
         f = lib.folder(lf, "Loop_" + key)
-        set_attrs(f, {"Title": title, "Speed": speed, "Waypoints": len(pts)})
+        attrs = {"Title": title, "Speed": speed, "Waypoints": len(pts)}
+        if LOOP_STOPS.get(key):
+            attrs["Stops"] = ";".join("%g,%g,%s" % st for st in LOOP_STOPS[key])
+        set_attrs(f, attrs)
         for i, (x, z) in enumerate(pts):
             lib.part(f, "WP%d" % (i + 1), (0.5, 0.5, 0.5), CF(x, Y_ROAD, z), AMBER, "SmoothPlastic",
                      transparency=1, deco=True)
@@ -588,18 +712,88 @@ def build_loops(animated, lib):
     return out
 
 
-TRAFFIC_CARS = [("A", "hot_hatch", (200, 50, 50), 0.05), ("A", "sedan", (235, 238, 240), 0.55),
-                ("B1", "compact", (38, 78, 140), 0.3), ("B2", "wagon", (170, 176, 180), 0.7),
-                ("T", "gt_coupe", (247, 176, 63), 0.1)]
+# Verkehr §3.7: "Lite"-Autos (~35 Parts, aus den CarTemplates abgeleitet) 6 / 3 / 3 / 2 je Schleife mit gleichmäßig
+# verteilter Phase, dazu 1 Bus (Schleife A, 6 s Halt an der Haltestelle "Markt"). CityClient bewegt sie lokal.
+TRAFFIC = {
+    "A": [("hot_hatch", (200, 50, 50)), ("sedan", (235, 238, 240)), ("compact", (38, 78, 140)),
+          ("wagon", (170, 176, 180)), ("crossover", (40, 110, 200)), ("electric", (47, 169, 163))],
+    "B1": [("compact", (240, 190, 40)), ("sedan", (60, 64, 70)), ("hot_hatch", (235, 238, 240))],
+    "B2": [("wagon", (110, 30, 40)), ("crossover", (224, 214, 190)), ("electric", (135, 75, 196))],
+    "T": [("gt_coupe", (247, 176, 63)), ("super", (200, 50, 50))],
+}
+PHASE0 = {"A": 0.03, "B1": 0.11, "B2": 0.21, "T": 0.07}
+BUS_PHASE = 0.03 + 0.5 / 6          # auf Schleife A genau zwischen zwei Autos
+# Haltestelle "Markt" (Buchten Nord X 74..86 / Süd X -86..-74): westwärts auf Z -6.5 bei X 80, ostwärts auf Z 6.5
+# bei X -80 (vor den Wartehäuschen (80,-20) / (-80,20))
+BUS_STOPS = [(80, -6.5), (-80, 6.5)]
+BUS_LEN = 24
 
 
 def build_traffic_cars(animated, lib, loops):
     tf = lib.folder(animated, "Verkehr")
-    for i, (key, body, color, phase) in enumerate(TRAFFIC_CARS):
+    n = 0
+    for key, cars in TRAFFIC.items():
         f, pts, speed = loops[key]
-        (x, z), (dx, dz), total = path_point(pts, 0)
-        (x, z), (dx, dz), total = path_point(pts, phase * total)
-        cf = CF.at(x, Y_ROAD, z, yaw_towards(dx, dz))
-        lib.clone_car(tf, body, cf, color, name="Verkehr_%s_%d" % (key, i + 1),
-                      attrs={"Anim": "traffic", "Loop": key, "Path": "Loop_" + key, "Speed": speed,
-                             "Phase": phase})
+        for k, (body, color) in enumerate(cars):
+            n += 1
+            phase = round((PHASE0[key] + k / len(cars)) % 1.0, 4)
+            (x, z), (dx, dz), total = path_point(pts, phase * path_point(pts, 0)[2])
+            cf = CF.at(x, Y_ROAD, z, yaw_towards(dx, dz))
+            lib.lite_car(tf, body, cf, color, name="Verkehr_%s_%d" % (key, n),
+                         attrs={"Anim": "traffic", "Loop": key, "Path": "Loop_" + key, "Speed": speed,
+                                "Phase": phase, "Length": 16})
+    f, pts, speed = loops["A"]
+    (x, z), (dx, dz), total = path_point(pts, BUS_PHASE * path_point(pts, 0)[2])
+    build_bus(tf, lib, CF.at(x, Y_ROAD, z, yaw_towards(dx, dz)),
+              {"Anim": "traffic", "Loop": "A", "Path": "Loop_A", "Speed": 20, "Phase": round(BUS_PHASE, 4),
+               "Length": BUS_LEN, "Dwell": 6, "DwellAt": ";".join("%g,%g" % p for p in BUS_STOPS),
+               "StopName": "Markt"})
+
+
+def build_bus(parent, lib, cf, attrs):
+    """Stadtbus Linie A (~32 Parts), Nase lokal -Z, Räder auf lokal Y 0 (wie die CarTemplates), PrimaryPart Root."""
+    m = lib.model(parent, "Bus_Linie_A", attrs=attrs)
+    L = BUS_LEN / 2
+    W = 4.0
+    teal, cream, glass = TEAL, (236, 232, 220), (60, 86, 100)
+
+    def b(name, x0, x1, y0, y1, z0, z1, color, material="SmoothPlastic", **kw):
+        return lib.part(m, name, (x1 - x0, y1 - y0, z1 - z0), cf * CF((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2),
+                        color, material, **kw)
+    root = b("Root", -0.5, 0.5, 0.5, 1.5, -0.5, 0.5, SLATE, transparency=1, collide=False, touch=False,
+             query=False, cast_shadow=False)
+    lib.set_primary(m, root)
+    b("Unterbau", -3.7, 3.7, 1.0, 2.0, -L + 0.4, L - 0.4, BLACK, "Metal")
+    body = b("Karosserie", -W, W, 2.0, 5.2, -L, L, teal, "Metal")
+    lib.surface_text(body, "LINIE A · MEILE-SCHLEIFE", face="Right", text_color=(255, 255, 255))
+    lib.surface_text(body, "LINIE A · MEILE-SCHLEIFE", face="Left", text_color=(255, 255, 255), name="Links")
+    b("Zierband", -W - 0.05, W + 0.05, 4.6, 5.0, -L - 0.05, L + 0.05, AMBER, "SmoothPlastic", collide=False)
+    b("Fensterband", -W + 0.1, W - 0.1, 5.2, 8.6, -L + 1.6, L - 1.2, glass, "Glass", transparency=0.3)
+    for z in (-L + 5.5, -L + 10.0, -L + 14.5, -L + 19.0):
+        b("Fensterpfosten", -W, W, 5.2, 8.6, z - 0.25, z + 0.25, BLACK, "Metal")
+    b("Frontkappe", -W, W, 5.2, 8.6, -L, -L + 1.6, teal, "Metal")
+    b("Heckkappe", -W, W, 5.2, 8.6, L - 1.2, L, teal, "Metal")
+    b("Dach", -W, W, 8.6, 9.4, -L, L, cream, "SmoothPlastic")
+    b("Klimaanlage", -2.4, 2.4, 9.4, 10.2, 1.0, 7.0, STEEL, "Metal")
+    b("Frontscheibe", -3.6, 3.6, 4.9, 8.3, -L - 0.12, -L, glass, "Glass", transparency=0.2)
+    sign = b("Zielanzeige", -2.8, 2.8, 8.65, 9.3, -L - 0.12, -L, BLACK, "SmoothPlastic")
+    lib.surface_text(sign, "A  MARKT · MEILE", face="Front", text_color=AMBER)
+    b("Heckscheibe", -3.0, 3.0, 5.8, 8.2, L, L + 0.1, glass, "Glass", transparency=0.2)
+    for sx in (-1, 1):
+        b("Scheinwerfer", sx * 2.2 - 0.9, sx * 2.2 + 0.9, 2.8, 3.4, -L - 0.12, -L, (226, 247, 255), "Neon")
+        b("Ruecklicht", sx * 3.0 - 0.6, sx * 3.0 + 0.6, 3.0, 4.2, L, L + 0.1, (240, 78, 65), "Neon")
+        b("Spiegel", sx * (W + 0.5) - 0.2, sx * (W + 0.5) + 0.2, 6.4, 7.6, -L + 0.6, -L + 1.0, BLACK, "Metal")
+    b("Stossfaenger", -W, W, 1.4, 2.4, -L - 0.4, -L, BLACK, "Metal")
+    b("Stossfaenger", -W, W, 1.4, 2.4, L, L + 0.4, BLACK, "Metal")
+    # Türen rechts (Bordsteinseite, lokal +X)
+    for z0, z1 in ((-L + 1.8, -L + 4.8), (0.5, 3.5)):
+        b("Tuer", W, W + 0.08, 1.9, 8.4, z0, z1, glass, "Glass", transparency=0.15)
+    # 4 Räder (Zylinder, Achse lokal X), Reifen auf Y 0
+    for z in (-L + 4.0, L - 5.0):
+        for sx in (-1, 1):
+            lib.part(m, "Rad", (1.1, 3.0, 3.0), cf * CF(sx * (W - 0.45), 1.5, z), BLACK, "SmoothPlastic",
+                     shape="Cylinder")
+            lib.part(m, "Radkappe", (0.1, 1.6, 1.6), cf * CF(sx * (W + 0.15), 1.5, z), STEEL, "Metal",
+                     shape="Cylinder", collide=False)
+    set_attrs(m, {"Body": "bus", "Lite": True})
+    return m

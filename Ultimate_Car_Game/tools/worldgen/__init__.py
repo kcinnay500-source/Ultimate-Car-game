@@ -15,7 +15,7 @@ from .lib import Lib, child, children, is_basepart, name_of
 from .districts import ORDER as DISTRICTS
 
 TOP = ["Ground", "Roads", "Lights", "Districts", "Stations", "Arrivals", "Animated", "PlotSlots"]
-PART_BUDGET = 7740
+PART_BUDGET = 12000
 LIGHT_BUDGET = 120
 
 
@@ -67,8 +67,8 @@ def summary(city, lib, plot_log):
     for it in children(city):
         p, l = count(it)
         rows.append("%s %d/%d" % (name_of(it), p, l))
-    lines = ["City: %d Parts (ohne Verkehrsautos %d, Budget %d), %d Lichter (Budget %d)"
-             % (total_p, total_p - traffic, PART_BUDGET, total_l, LIGHT_BUDGET),
+    lines = ["City: %d Parts (Budget %d; darin Verkehr Lite-Autos + Bus %d), %d Lichter (Budget %d)"
+             % (total_p, PART_BUDGET, traffic, total_l, LIGHT_BUDGET),
              "  Ordner Parts/Lichter: " + ", ".join(rows),
              "  Abschnitte: " + "; ".join(lib.budget_report())]
     if plot_log:

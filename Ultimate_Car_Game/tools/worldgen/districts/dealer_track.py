@@ -1,7 +1,8 @@
 """Autohaus (D8) und Teststrecke (D13) - docs/CITY_SPEC.md §6 D8 / D13, §8, §9.2.
 
 Gebaut wird unter City.Districts.Autohaus (Model mit den Teil-Models Vorplatz, Rotunde, Showroom,
-Gebrauchtwagen, Uebergabe, Teststrecke) und City.Animated.Autohaus / City.Animated.Teststrecke:
+Gebrauchtwagen, Uebergabe, Hinterhof), City.Districts.Teststrecke und City.Animated.Autohaus /
+City.Animated.Teststrecke:
   * Drehteller (Anim turntable, 24 s je Umdrehung) mit dem Helden-Auto (super, amber), PrimaryPart = Achse
     ohne Drehung, damit PivotTo um die Hochachse dreht
   * Schiebetüren Rotunde + Showroom hinten (Anim door, Glas/Stiel/Sockelleiste/Griff wie die Ankunftshalle)
@@ -10,10 +11,11 @@ Stationen dealer / testdrive / track und die Ankunftspunkte dealer / track baut 
 Kulisse um die Anker (Verkaufstresen, Übergabe-Pult, Tribünen-Kasse).
 
 Höhen-Stapel (§1.2, nie zwei überlappende Oberseiten auf gleicher Höhe):
-  Autohaus-Gelände -1.00 (ground_roads) | Gebrauchtwagen-Belag -0.97 | Stellflächen -0.95 | Zufahrt-Asphalt -0.95
-  | Vorplatz / Tribünenwege -0.50 | Böden Showroom, Rotunden-Sockel, Übergabe 0 | Teppiche +0.05
-  Teststrecke: Kurvenscheiben -0.97 | Geraden + Boxen-Anschluss -0.95 | Ziellinie -0.90 | Innenfeld-Rasen
-  -0.93 (Kreise) / -0.91 (Mitte) | Kerbs abwechselnd -0.85 / -0.83
+  Autohaus-Gelände -1.00 (ground_roads; Gebrauchtwagen-Belag bündig -1.00 in einer Aussparung) | Stellflächen,
+  Kundenparkplatz, Zufahrt-Asphalt -0.95 | Vorplatz / Tribünenwege -0.50 | Böden Showroom, Rotunden-Sockel,
+  Übergabe 0 | Teppiche +0.05
+  Teststrecke: Kurvenscheiben -1.00 | Geraden, Boxen-Anschluss, Innenfeld-Kreise -0.95 | Ziellinie, Innenfeld-Mitte
+  -0.90 | Kerbs abwechselnd -0.85 / -0.83
 Markierungen (Linien, Raster, Stellflächen-Rahmen, Zielflagge) sind SurfaceGui-Frames auf der Oberseite: 0 Parts.
 """
 import math
@@ -105,10 +107,11 @@ def door_leaf(lib, parent, nm, center, size, lift, stile_side, door):
                   collide=False, cast_shadow=False)
     lib.set_primary(m, gl)
     ex = cx + stile_side * (sx / 2 - 0.2)
-    lib.part(m, "Stiel", (0.4, sy, sz + 0.06), CF(ex, cy, cz), AH_WHITE, "Metal", collide=False)
-    lib.part(m, "Sockelleiste", (sx - 0.4, 0.4, sz + 0.04), CF(cx - stile_side * 0.2, cy - sy / 2 + 0.2, cz),
+    # Rahmenteile je Seite >= 0.05 vor der Glasfläche (kein Flimmern)
+    lib.part(m, "Stiel", (0.4, sy, sz + 0.12), CF(ex, cy, cz), AH_WHITE, "Metal", collide=False)
+    lib.part(m, "Sockelleiste", (sx - 0.4, 0.4, sz + 0.1), CF(cx - stile_side * 0.2, cy - sy / 2 + 0.2, cz),
              STEEL, "Metal", collide=False)
-    lib.part(m, "Griff", (0.12, 2.6, sz + 0.1), CF(ex - stile_side * 0.5, cy, cz), BLACK, "Metal", deco=True)
+    lib.part(m, "Griff", (0.12, 2.6, sz + 0.24), CF(ex - stile_side * 0.5, cy, cz), BLACK, "Metal", deco=True)
     return m
 
 
@@ -175,7 +178,7 @@ def build_forecourt(dm, anim, lib):
         tuch = lib.part(f, "Fahne", (6, 4, 0.1), CF(x + 3.2, 16.8, 30), cloth, "Fabric", deco=True)
         # PrimaryPart ohne Drehung: CityClient dreht die Fahne um die Hochachse des Pivots (am Mast)
         lib.set_primary(f, tuch)
-        lib.part(f, "Fahnenstreifen", (5.9, 0.6, 0.14), CF(x + 3.2, 15.4, 30), stripe, "Fabric", deco=True)
+        lib.part(f, "Fahnenstreifen", (5.9, 0.6, 0.2), CF(x + 3.2, 15.4, 30), stripe, "Fabric", deco=True)
         for face in ("Back", "Front"):
             lib.surface_text(tuch, "AUTOHAUS", face=face, text_color=stripe, font="GothamBlack",
                              name="Aufdruck" + face)
@@ -275,6 +278,9 @@ def build_showroom(dm, anim, lib):
         lib.box(m, "Blende_Nord", fa, fb, 26, 31, 59.4, 60, AH_WHITE, "SmoothPlastic")
         la, lb = sorted((sx * 21.6, sx * 61.0))
         lib.box(m, "Blendenleuchte", la, lb, 25.7, 25.95, 59.3, 59.55, TEAL, "Neon", deco=True)
+    # Innenblende zur Rotunde: die Deckenstufe 32 -> 26 bei Z 60 bekommt eine weiße Blende mit Leuchtband
+    lib.box(m, "Blende_Rotunde", -21.05, 21.05, 25, 27, 59.4, 60, AH_WHITE, "SmoothPlastic")
+    lib.box(m, "Blendenleuchte", -21.0, 21.0, 25.2, 25.45, 59.25, 59.4, TEAL, "Neon", deco=True)
     # --- Ost/West: Glasvorhang, Pfosten außen, Eckstützen
     for sx in (-1, 1):
         xa, xb = sorted((sx * 59.6, sx * 60))
@@ -350,23 +356,24 @@ def build_showroom(dm, anim, lib):
 
 def build_used_lot(dm, lib):
     m = lib.model(dm, "Gebrauchtwagen")
-    lot = lib.box(m, "Gebrauchtwagen-Belag", -126, -68, -1.0, -0.97, 30, 150, LOT, "Concrete")
-    lib.box(m, "Hecke", -70, -68, -0.97, 1.6, 36, 144, HEDGE, "Grass")
+    # Belag bündig in der Aussparung der Autohaus-Bodenplatte (ground_roads.GROUND_INSETS), Oberseite -1.00
+    lib.box(m, "Gebrauchtwagen-Belag", -126, -68, -1.3, -1.0, 30, 150, LOT, "Concrete")
+    lib.box(m, "Hecke", -70, -68, -1.0, 1.6, 36, 144, HEDGE, "Grass")
     cars = [("hot_hatch", (200, 50, 50), 46, "Komet S2", "11.900 Cr", "gebraucht · Level 3"),
             ("wagon", (170, 176, 180), 76, "Nord Atlas Tourer", "33.500 Cr", "gebraucht · Level 10"),
             ("compact", (47, 169, 163), 106, "Komet C1", "4.500 Cr", "gebraucht · Level 1"),
             ("sport", (240, 190, 40), 136, "Vektor RS", "68.000 Cr", "gebraucht · Level 18")]
     for body, col, z, model, price, badge in cars:
-        pad = lib.part(m, "Stellflaeche", (12, 0.02, 21), CF.at(-97, -0.96, z, -45), PAD, "Concrete")
+        pad = lib.part(m, "Stellflaeche", (12, 0.05, 21), CF.at(-97, -0.975, z, -45), PAD, "Concrete")
         paint(lib, pad, [(0, 0, 1, 1, WHITE, "rahmen", 4)], px=10, name="Rahmen")
         with lib.section("D8 Autohaus (Autos)"):
             lib.clone_car(m, body, CF.at(-97, -0.95, z, -45), col, name="Gebraucht_" + body,
                           attrs={"Showcar": True, "Used": True})
-        price_stand(lib, m, -80.5, -0.97, z + 3, face_yaw(1, -1), model, price, badge, (200, 110, 40))
+        price_stand(lib, m, -80.5, -1.0, z + 3, face_yaw(1, -1), model, price, badge, (200, 110, 40))
     # Wimpelkette an 3 Masten (Z 60 / 90 / 120); an den Masten Z 60 und Z 120 die Platzleuchten
     tops = []
     for z in (60, 90, 120):
-        lib.cylinder(m, "Wimpelmast", (-97, -0.97 + 7.25, z), 14.5, 0.35, "Y", STEEL, "Metal")
+        lib.cylinder(m, "Wimpelmast", (-97, -1.0 + 7.28, z), 14.56, 0.35, "Y", STEEL, "Metal")
         tops.append((-97, 13.3, z))
         if z in (60, 120):
             head = lib.part(m, "Platzleuchte", (1.6, 0.4, 1.6), CF(-97, 13.73, z), LAMP, "SmoothPlastic", deco=True)
@@ -446,6 +453,75 @@ def build_handover(dm, lib):
     return m
 
 
+def flag_pole(lib, parent, name, x, fy, z, cloth, stripe, text="AUTOHAUS", h=19.4):
+    """Fahnenmast mit Tuch (Anim flag, ±6°), 5 Parts; Tuch nach +X"""
+    f = lib.model(parent, name, attrs={"Anim": "flag", "Swing": 6, "Period": 3.2})
+    lib.cylinder(f, "Mastfuss", (x, fy + 0.3, z), 0.6, 1.4, "Y", BLACK, "Metal")
+    lib.cylinder(f, "Fahnenmast", (x, fy + 0.6 + h / 2, z), h, 0.4, "Y", STEEL, "Metal")
+    top = fy + 0.6 + h
+    lib.ball(f, "Mastspitze", (x, top + 0.35, z), 0.7, AMBER, "Metal", deco=True)
+    tuch = lib.part(f, "Fahne", (6, 4, 0.1), CF(x + 3.2, top - 3.0, z), cloth, "Fabric", deco=True)
+    lib.set_primary(f, tuch)
+    lib.part(f, "Fahnenstreifen", (5.9, 0.6, 0.2), CF(x + 3.2, top - 4.4, z), stripe, "Fabric", deco=True)
+    for face in ("Back", "Front"):
+        lib.surface_text(tuch, text, face=face, text_color=stripe, font="GothamBlack", name="Aufdruck" + face)
+    return f
+
+
+def build_backyard(dm, anim, lib):
+    """Hinterhof X -60..90, Z 113..178 (bisher leere Betonfläche): Kundenparkplatz mit Lite-Autos, Baumhain mit
+    Bänken beidseits des Hinterwegs, Aufbereitungs-Carport, 3 Fahnen zum Südring."""
+    m = lib.model(dm, "Hinterhof")
+    # Kundenparkplatz X 14..58, Z 124..172 (Belag -0.95), 2 x 4 Buchten, Linien als SurfaceGui (0 Parts)
+    x0, x1, z0, z1 = 14, 58, 124, 172
+    pad = lib.box(m, "Kundenparkplatz", x0, x1, -1.0, -0.95, z0, z1, LOT, "Concrete")
+    rects = []
+    for k in range(5):
+        u = k * 11 / (x1 - x0)
+        for v0, v1 in ((0.04, 0.44), (0.56, 0.96)):
+            rects.append((max(0, u - 0.004), v0, min(1, u + 0.004), v1, WHITE))
+    rects.append((0.3, 0.485, 0.7, 0.515, AMBER))
+    paint(lib, pad, rects, px=8, name="Buchten")
+    parked = [("sedan", (60, 66, 74), 19.5, 136, 0), ("hot_hatch", (200, 50, 50), 41.5, 136, 0),
+              ("wagon", AH_WHITE, 30.5, 160, 180), ("crossover", (38, 78, 140), 52.5, 160, 180)]
+    for body, col, x, z, yaw in parked:
+        lib.lite_car(m, body, CF.at(x, -0.95, z, yaw), col, name="Kundenauto_" + body, attrs={"Parked": True})
+    lib.sign(m, "KUNDENPARKPLATZ", (10, 1.8), CF.at(36, 3.4, z0 - 0.6, 180), AMBER, SLATE, name="Parkschild",
+             sub="nur für Kunden des Autohauses")
+    for x in (31.8, 40.2):
+        lib.box(m, "Schildpfosten", x - 0.15, x + 0.15, -0.95, 2.5, z0 - 0.75, z0 - 0.45, STEEL, "Metal")
+    # Baumhain West (X -52..-12) mit Pflanzinseln und Bänken zum Hinterweg
+    for i, (x, z) in enumerate(((-50, 130), (-32, 128), (-14, 134), (-46, 156), (-26, 160), (-12, 168))):
+        lib.box(m, "Pflanzinsel", x - 2, x + 2, -1.0, -0.6, z - 2, z + 2, AH_WHITE, "Concrete")
+        lib.tree_lite(m, x, -0.6, z, scale=1.3, seed=i + 11, name="Hofbaum")
+    for x, z, dx in ((-8, 125, 1), (-8, 150, 1), (8, 138, -1), (8, 163, -1)):
+        bm = lib.model(m, "Bank")
+        yaw = 90 if dx > 0 else -90
+        lib.part(bm, "Sitz", (4.4, 0.3, 1.4), CF.at(x, 0.4, z, yaw), (181, 153, 112), "Wood")
+        lib.part(bm, "Lehne", (4.4, 1.2, 0.25), CF.at(x, 1.15, z, yaw) * CF(0, 0, -0.6), (181, 153, 112), "Wood")
+        for s in (-1, 1):
+            lib.part(bm, "Bein", (0.3, 1.25, 1.2), CF.at(x, -0.375, z, yaw) * CF(s * 1.8, 0, 0), BLACK, "Metal")
+    # Aufbereitung: Carport X 64..88, Z 126..146 (Y 12), Auto in Pflege, Hochdruckreiniger
+    cx0, cx1, cz0, cz1 = 64, 88, 126, 146
+    for x in (cx0 + 0.5, cx1 - 0.5):
+        for z in (cz0 + 0.5, cz1 - 0.5):
+            lib.box(m, "Carportstuetze", x - 0.4, x + 0.4, -1.0, 12, z - 0.4, z + 0.4, AH_WHITE, "Metal")
+    lib.box(m, "Carportdach", cx0, cx1, 12, 12.6, cz0, cz1, AH_WHITE, "SmoothPlastic")
+    lib.box(m, "Carportblende", cx0 - 0.1, cx1 + 0.1, 11.6, 12.0, cz1, cz1 + 0.15, TEAL, "Neon", deco=True)
+    cs = lib.sign(m, "AUFBEREITUNG", (12, 1.6), CF.at((cx0 + cx1) / 2, 13.4, cz1 - 0.3, 0), TEAL, AH_WHITE,
+                  name="Carportschild", bolts=False)
+    lib.surface_text(cs, "AUFBEREITUNG", face="Front", text_color=TEAL, name="Rueckseite")
+    lib.lite_car(m, "gt_coupe", CF.at(76, -1.0, 136, 180), (20, 22, 26), name="Pflegeauto_gt_coupe",
+                 attrs={"Parked": True})
+    lib.box(m, "Reinigergeraet", 84.5, 86.5, -1.0, 1.6, 139, 141, (200, 50, 50), "Metal")
+    lib.beam(m, "Reinigerschlauch", (84.6, 0.4, 140), (81.5, -0.9, 138.5), 0.2, BLACK, "Plastic", deco=True)
+    # 3 Fahnen zum Südring (Anim flag)
+    for i, x in enumerate((66, 76, 86)):
+        flag_pole(lib, anim, "Hof_Fahne_%d" % (i + 1), x, -1.0, 172,
+                  TEAL if i % 2 == 0 else AH_WHITE, AH_WHITE if i % 2 == 0 else TEAL)
+    return m
+
+
 # ================================================================ Teststrecke (D13)
 T_CX, T_CZ = 85.0, 340.0
 T_R, T_W = 70.0, 24.0
@@ -459,10 +535,12 @@ def build_track(dm, anim, lib):
         g = lib.box(m, nm, -85, 85, -1.25, -0.95, z0, z1, TRACK_ASPHALT, "Asphalt")
         e0, e1 = 0.7 / 24, 1.2 / 24
         paint(lib, g, [(0, e0, 1, e1, WHITE), (0, 1 - e1, 1, 1 - e0, WHITE)], px=6, name="Randlinien")
+    # Kurvenscheiben 0.05 unter den Geraden (die über ihnen enden); Innenfeld-Kreise berühren die Geraden nur
+    # (r 58 = 340 - 282) und liegen auf Geradenhöhe, das Mittelfeld 0.05 darüber
     for sx in (-1, 1):
-        lib.cylinder(m, "Kurve", (sx * T_CX, -1.12, T_CZ), 0.3, 2 * ro, "Y", TRACK_ASPHALT, "Asphalt")
-        lib.cylinder(m, "Innenfeld", (sx * T_CX, -1.08, T_CZ), 0.3, 2 * ri, "Y", GRASS_IN, "Grass")
-    lib.box(m, "Innenfeld", -85, 85, -1.21, -0.91, 282, 398, GRASS_IN, "Grass")
+        lib.cylinder(m, "Kurve", (sx * T_CX, -1.15, T_CZ), 0.3, 2 * ro, "Y", TRACK_ASPHALT, "Asphalt")
+        lib.cylinder(m, "Innenfeld", (sx * T_CX, -1.1, T_CZ), 0.3, 2 * ri, "Y", GRASS_IN, "Grass")
+    lib.box(m, "Innenfeld", -85, 85, -1.2, -0.9, 282, 398, GRASS_IN, "Grass")
     lib.box(m, "Boxen-Anschluss", 88, 112, -1.25, -0.95, 258, 266, TRACK_ASPHALT, "Asphalt")
     # --- Kerbs rot/weiß: 12 je Rand je Kurve, abwechselnd Höhe (keine gemeinsamen Flächen)
     kerbs = lib.model(m, "Kerbs")
@@ -484,7 +562,7 @@ def build_track(dm, anim, lib):
     # --- Start/Ziel-Brücke: Pfeiler (0,·,256) und (0,·,284), Träger Y 16..18
     g = lib.model(m, "StartZiel")
     lib.box(g, "Pfeiler", -1, 1, -0.5, 16, 255, 257, TRACK_RED, "Metal")
-    lib.box(g, "Pfeiler", -1, 1, -0.91, 16, 283, 285, TRACK_RED, "Metal")
+    lib.box(g, "Pfeiler", -1, 1, -0.9, 16, 283, 285, TRACK_RED, "Metal")
     lib.box(g, "Traeger", -1.5, 1.5, 16, 18, 254.5, 285.5, SLATE, "Metal")
     for yaw, x in ((-90, -1.6), (90, 1.6)):
         lib.sign(g, "START · ZIEL", (22, 2.6), CF.at(x, 17, 270, yaw), AMBER, SLATE, name="StartZielSchild",
@@ -541,9 +619,9 @@ def build_track(dm, anim, lib):
         lib.spot_light(head, 60, 1.3, (244, 248, 255), 80, "Front", False, name="Flutlicht")
     # --- Innenfeld: 4 Bäume + Plakatwand "ULTIMATE CAR GAME" 16 x 6 bei (0,340), Text nach Norden
     for i, (x, z) in enumerate(((-48, 312), (48, 312), (-48, 368), (48, 368))):
-        lib.tree_lite(m, x, -0.91, z, scale=1.4, seed=i + 3, name="Innenfeldbaum")
+        lib.tree_lite(m, x, -0.9, z, scale=1.4, seed=i + 3, name="Innenfeldbaum")
     for x in (-6, 6):
-        lib.box(m, "Plakatstuetze", x - 0.3, x + 0.3, -0.91, 5, 340.15, 340.75, STEEL, "Metal")
+        lib.box(m, "Plakatstuetze", x - 0.3, x + 0.3, -0.9, 5, 340.15, 340.75, STEEL, "Metal")
     bb = lib.sign(m, "ULTIMATE CAR GAME", (16, 6), CF.at(0, 8, 340, 180), AMBER, SLATE, name="Plakatwand",
                   thickness=0.3, font="GothamBlack", sub="TESTSTRECKE · WERKSTATTMEILE", sub_color=WHITE)
     lib.surface_text(bb, "ULTIMATE CAR GAME", face="Front", text_color=AMBER, font="GothamBlack", name="Rueckseite")
@@ -552,8 +630,9 @@ def build_track(dm, anim, lib):
 
 # ================================================================ Einstieg
 def build(city, lib, tree):
-    """Baut Autohaus (D8) und Teststrecke (D13) (siehe docs/CITY_SPEC.md §6)."""
-    dm = lib.model(lib.folder(city, "Districts"), NAME)
+    """Baut Autohaus (D8) und Teststrecke (D13) als eigene District-Models (siehe docs/CITY_SPEC.md §1.5, §6)."""
+    districts = lib.folder(city, "Districts")
+    dm = lib.model(districts, NAME)
     anim_ah = lib.folder(lib.folder(city, "Animated"), "Autohaus")
     anim_ts = lib.folder(lib.folder(city, "Animated"), "Teststrecke")
     with lib.section("D8 Autohaus"):
@@ -562,6 +641,7 @@ def build(city, lib, tree):
         build_showroom(dm, anim_ah, lib)
         build_used_lot(dm, lib)
         build_handover(dm, lib)
+        build_backyard(dm, anim_ah, lib)
     with lib.section("D13 Teststrecke"):
-        build_track(dm, anim_ts, lib)
+        build_track(lib.model(districts, "Teststrecke"), anim_ts, lib)
     return dm

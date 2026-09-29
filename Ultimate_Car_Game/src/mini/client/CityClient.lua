@@ -1,13 +1,22 @@
 -- CityClient: rein optische Animationen der Stadt, nur auf dem Client (nichts wird repliziert, nichts ist spielrelevant).
--- Animiert werden Parts oder Models unter Workspace.City.Animated mit dem Attribut Anim (CITY_SPEC §8):
+-- Animiert werden Parts oder Models unter Workspace.City.Animated (und City.PlotSlots) mit dem Attribut Anim (CITY_SPEC §8):
 --   press      Presse: die Pressplatte fährt periodisch herunter (1,2 s runter, 0,4 s halten, 2 s hoch); eigene Klicks
 --              in der PressUI lösen einen zusätzlichen Stoß aus. Bewegt wird das direkte Kind mit Attribut Mover=true,
 --              sonst das Kind mit genau einem dieser Namen: Platen, Ram, Stempel, Kolben, Pressplatte, Platte
 --              (ganzer Name, keine Teilwörter – "Crosshead" oder "Frame" bewegen sich nie). Ein Model ohne solches
 --              Kind bleibt stehen (Warnung). Attribute: Stroke (12,5), Period (3,6), Down (1,2 s), Hold (0,4 s), Up (2 s)
---   crane      Kran schwenkt um die Hochachse. Attribute: Swing (Grad, 50), Period (14)
+--              Quetschzyklus: ein Kind "Car" wird zwischen Bett (BedY, sonst Unterkante des Autos) und Platte flach
+--              gedrückt, bleibt beim Hochfahren platt und ist oben wieder heil ("nächstes Auto"). Ein Kind "Spark"
+--              blitzt beim Aufschlag kurz auf.
+--   crane      Kran. Mit Vector3-Attributen Bunker und Pile1..n sowie Kindern Magnet/Trolley/Cable (Worldgen):
+--              Arbeitsspiel je Period (40 s): zum Haufen schwenken (Laufkatze fährt auf den Radius), Magnet absenken,
+--              Wrack ("Wreck") aufnehmen, heben, zum Bunker schwenken, absenken, Wrack fallen lassen, heben.
+--              Haufen der Reihe nach (Serverzeit). Höhen per Raycast (einmal), sonst CarryY/DropY. Sonst einfacher
+--              Schwenk um die Hochachse. Attribute: Swing (Grad, 50), Period (14), TrolleyR, CarryY, DropY
 --   turntable  Drehteller dreht sich. Attribute: Speed (Grad/s, 18)
 --   door       Tor öffnet und schließt periodisch. Attribute: Lift (Studs, 90 % der Höhe), Period (10), Axis ("Y"|"X"|"Z")
+--              Mit OpenRange (Studs): öffnet, sobald eine Spielfigur näher als OpenRange an der Türmitte ist, und
+--              schließt wieder; OpenTime (s, 0,6) je Bewegung.
 --   fountain   Wasserstrahl pulsiert (Parts mit "Wasser"/"Water"/"Jet"/"Strahl" im Namen, sonst das Part selbst).
 --              Attribute: Amplitude (Anteil, 0.35), Period (2). Crown = Name eines Kind-Models (z. B. Zahnradkrone), das
 --              sich um Center (Vector3, sonst sein Pivot) dreht: YawPeriod (s, Hochachse) und SpinPeriod (s, Welt-Z-Achse);
@@ -16,9 +25,13 @@
 --              Attribute: Axis ("X"|"Y"|"Z", "Z"), Period (s pro Umdrehung, 12), YawPeriod (s pro Umdrehung, aus)
 --   vault      Tresorrad dreht sich (wie spin). Attribute: Axis ("Z"), Period (8)
 --   neon       Leuchtreklame pulsiert (Farbe → ColorB, sonst Transparenz), Lichter dimmen mit. Attribute: Period (1.6), ColorB
+--              Lauflicht: mit Step (s) und Chase (1..n) leuchtet die Gruppe genau in ihrem Schritt (Serverzeit), sonst
+--              ColorB bzw. gedimmt; n = Period / Step.
 --   beacon     Warnleuchte blinkt (wie neon). Attribute: Period (1)
---   pylon      Hausnummer-Pylon pulsiert, solange das Attribut Owner nicht leer ist. Attribute: Period (2.4)
---   dyno       Leistungsprüfstand: Rollen ("Roll"/"Rolle"/"Walze" im Namen) drehen, das Auto darauf vibriert (nur nah).
+--   pylon      Hausnummer-Pylon (unter City.PlotSlots) pulsiert, solange das Attribut Owner nicht leer ist; Kappe mit
+--              FreeColor/OwnedColor wechselt die Farbe, beim Einzug 3 Blitze. Attribute: Period (2.4)
+--   dyno       Leistungsprüfstand: Rollen ("Roll"/"Rolle"/"Walze" im Namen) drehen, das Auto darauf vibriert (nur nah),
+--              seine Räder (WheelXX*) drehen um ihre Achse mit, "Auspuffflamme" flackert unter Volllast.
 --              Attribute: Speed (Grad/s, 720), Period (12)
 --   lift       Hebebühne fährt hoch und wieder herunter. Mover wie bei press (Namen Platform, Plattform, Buehne, Bühne),
 --              sonst das Objekt selbst. Attribute: Lift (3.6), Period (60)
@@ -35,6 +48,11 @@
 --   startlight Startampel: Neon-Lampen (nach Namen sortiert) gehen nacheinander an, dann alle aus. Attribute: Period (5)
 --   wash       Waschbürsten ("Buerste"/"Bürste"/"Brush" im Namen) drehen um ihre Achse. Attribute: Speed (Grad/s, 240), Axis ("X")
 --   parkgrid   bekannt, keine Animation (lokale Rätselautos)
+--   nightwindows bekannt; die Fenster schaltet die Nachtschaltung (unten)
+-- Nachtschaltung (CITY_SPEC §9.3, nach Lighting.ClockTime, Nacht < 6,5 oder > 17,5 Uhr, Prüfung 1×/s):
+--   Parts in City mit NightNeon=true → Material Neon (Farbe/Transparenz aus NightColor/NightTransparency am Part
+--   oder am Eltern-Model), NeonStrip=true → Transparenz 0; Lichter unter City.Lights nur nachts an.
+--   Alle Stadtlichter weiter als 300 Studs von der Kamera sind aus (LOD).
 --   traffic    Autos fahren eine Wegpunktliste ab. Wegpunkte: Vector3-Attribute WP1..WPn, String-Attribut Waypoints
 --              ("x,y,z;x,y,z"), Kind-Parts WP1..WPn (auch im Kind-Ordner "Waypoints") oder Attribut Path = Name eines
 --              Ordners/Models in City mit WP1..WPn. Attribute: Speed (Studs/s, 14), Loop (false = hin und zurück, sonst
@@ -43,16 +61,20 @@
 --              Haltelinien: String-Attribut Stops ("x,z,Serves;…") am Pfad-Ordner oder am Auto; das Auto hält dort,
 --              solange die Ampel für Serves nicht grün ist. Autos auf demselben Pfad halten 14 Studs Abstand.
 --              Die Teile eines Verkehrsautos werden lokal CanCollide/CanQuery/CanTouch=false gesetzt (rein optisch).
+--              Length (Studs, 16): Fahrzeuglänge für den Abstand. Bus: DwellAt ("x,z;x,z") + Dwell (s) = Haltestellen,
+--              an denen das Fahrzeug einmal pro Runde hält.
 --   flag       Fahne weht (Drehung um die Mastkante bzw. den Pivot). Attribute: Swing (Grad, 12), Period (3)
 -- Unbekannte Anim-Werte werden einmal je Wert gemeldet (warn) und nicht animiert.
 -- Kosten (CITY_SPEC §3.7/§8): nur Objekte bis 300 Studs von der Kamera laufen; bis 120 Studs jedes Frame, dahinter im
--- 0,25-s-Takt. Höchstens 8 Autos (die nächsten) werden jedes Frame bewegt, die übrigen im 0,25-s-Takt (Parts per Tween).
+-- 0,25-s-Takt, zeitlich versetzt (jedes Objekt mit eigenem Takt-Versatz). Höchstens 8 Autos (die nächsten) werden
+-- jedes Frame bewegt, die übrigen im 0,25-s-Takt (Parts per Tween). Ein Fehler in einem Objekt stoppt nur dieses.
 -- Neon, Fahnen, Fontänen, Pylonen und Warnleuchten laufen als endlose Tweens ohne Lua-Arbeit pro Frame.
 -- Periodische Bewegungen richten sich nach der Serverzeit, damit alle Spieler dasselbe sehen.
 -- Fehlt Workspace.City (oder Animated), wartet das Modul still, bis es erscheint.
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
 
 local CityClient = {}
 
@@ -203,6 +225,34 @@ local function axisAngles(axisName, a)
 	return CFrame.Angles(0, 0, a)
 end
 
+-- Halbe senkrechte Ausdehnung eines (gedrehten) Parts
+local function halfY(part)
+	local cf, s = part.CFrame, part.Size
+	return 0.5 * (math.abs(cf.XVector.Y) * s.X + math.abs(cf.YVector.Y) * s.Y + math.abs(cf.ZVector.Y) * s.Z)
+end
+
+-- Positionen aller Spielfiguren (HumanoidRootPart), höchstens alle 0,2 s neu gelesen
+local rootCache, rootCacheAt = {}, -math.huge
+local function playerRoots()
+	local c = os.clock()
+	if c - rootCacheAt < 0.2 then
+		return rootCache
+	end
+	rootCacheAt = c
+	local list = {}
+	local ok = pcall(function()
+		for _, pl in ipairs(Players:GetPlayers()) do
+			local ch = pl.Character
+			local root = ch and ch:FindFirstChild("HumanoidRootPart")
+			if root then
+				table.insert(list, root.Position)
+			end
+		end
+	end)
+	rootCache = ok and list or {}
+	return rootCache
+end
+
 local function camPos()
 	local cam = workspace.CurrentCamera
 	return cam and cam.CFrame and cam.CFrame.Position or nil
@@ -299,6 +349,54 @@ function Kinds.press(inst)
 	local down = downS * scale / period
 	local hold = down + holdS * scale / period
 	local up = hold + upS * scale / period
+	-- Quetschen (Worldgen): Kind "Car" zwischen Bett und Platte, Kind "Spark" als Aufschlag-Blitz
+	local car = inst:IsA("Model") and inst:FindFirstChild("Car") or nil
+	if car and movable(car) and car ~= mover then
+		local parts = {}
+		local bottom, top = math.huge, -math.huge
+		for _, part in ipairs(baseParts(car)) do
+			local cf, hy = part.CFrame, halfY(part)
+			bottom = math.min(bottom, cf.Position.Y - hy)
+			top = math.max(top, cf.Position.Y + hy)
+			-- die lokale Achse, die am ehesten senkrecht steht, wird gestaucht
+			local ax = math.abs(cf.XVector.Y) >= math.abs(cf.YVector.Y) and math.abs(cf.XVector.Y) >= math.abs(cf.ZVector.Y) and 1
+				or math.abs(cf.YVector.Y) >= math.abs(cf.ZVector.Y) and 2 or 3
+			table.insert(parts, { part = part, cf = cf, size = part.Size, ax = ax })
+		end
+		local plateBottom
+		if mover:IsA("BasePart") then
+			plateBottom = mover.Position.Y - halfY(mover)
+		else
+			local ok, cf, size = pcall(function()
+				return mover:GetBoundingBox()
+			end)
+			plateBottom = ok and cf and (cf.Position.Y - size.Y / 2) or nil
+		end
+		local bed = num(inst, "BedY", bottom)
+		if #parts > 0 and plateBottom and top > bed + 0.1 then
+			rec.car = { parts = parts, bed = bed, height = top - bed, plate0 = plateBottom, minS = math.clamp(num(inst, "Squash", 0.35) * 0.3, 0.05, 1), shown = 1, crushed = 1 }
+		end
+	end
+	local spark = inst:IsA("Model") and inst:FindFirstChild("Spark") or nil
+	if spark and spark:IsA("BasePart") then
+		rec.spark = { part = spark, tr = spark.Transparency, size = spark.Size, on = false }
+	end
+	local function squash(c, sq)
+		if math.abs(sq - c.shown) < 0.002 then
+			return
+		end
+		c.shown = sq
+		for _, e in ipairs(c.parts) do
+			if e.part.Parent then
+				local pos = e.cf.Position
+				local y = c.bed + (pos.Y - c.bed) * sq
+				local sz = e.size
+				e.part.Size = e.ax == 1 and Vector3.new(sz.X * sq, sz.Y, sz.Z) or e.ax == 2 and Vector3.new(sz.X, sz.Y * sq, sz.Z)
+					or Vector3.new(sz.X, sz.Y, sz.Z * sq)
+				e.part.CFrame = CFrame.new(pos.X, y, pos.Z) * (e.cf - pos)
+			end
+		end
+	end
 	rec.update = function(r, t)
 		local p = phaseOf(t, r.period)
 		local f
@@ -317,12 +415,222 @@ function Kinds.press(inst)
 			f = math.max(f, 0.7 * g)
 		end
 		r.inst:PivotTo(CFrame.new(0, -r.stroke * f, 0) * r.base)
+		local c = r.car
+		if c then
+			-- Platte drückt das Auto flach; platt bleibt es, bis die Platte wieder oben ruht (dann: nächstes Auto)
+			local gap = (c.plate0 - r.stroke * f) - c.bed
+			local sq = math.clamp(gap / c.height, c.minS, 1)
+			if p >= up then
+				c.crushed = 1
+			else
+				c.crushed = math.min(c.crushed, sq)
+			end
+			squash(c, c.crushed)
+		end
+		local sp = r.spark
+		if sp and sp.part.Parent then
+			-- Funkenblitz 0,25 s ab dem Aufschlag unten
+			local since = (p - down) * r.period
+			local on = since >= 0 and since < 0.25
+			if on then
+				local k = 1 + since * 4
+				sp.part.Size = sp.size * k
+				sp.part.Transparency = 0.1 + since * 3
+				sp.on = true
+			elseif sp.on then
+				sp.on = false
+				sp.part.Size = sp.size
+				sp.part.Transparency = sp.tr
+			end
+		end
 	end
 	table.insert(pressRecs, rec)
 	return rec
 end
 
+-- Arbeitsspiel des Worldgen-Magnetkrans (Anteile der Periode)
+local CRANE_PLAN = {
+	slewOut = 0.2, -- Bunker → Haufen schwenken (Katze fährt auf den Haufenradius)
+	lower1 = 0.3, grab = 0.34, raise1 = 0.44, -- absenken, greifen, heben
+	slewBack = 0.64, -- Haufen → Bunker
+	lower2 = 0.72, drop = 0.76, raise2 = 0.86, -- absenken, fallen lassen, heben; danach Pause
+}
+
+local function flatAngle(from, to)
+	-- Drehwinkel um +Y (wie CFrame.Angles(0, a, 0)), der from auf to dreht (beide waagrecht)
+	return math.atan2(from.Z * to.X - from.X * to.Z, from.X * to.X + from.Z * to.Z)
+end
+
+local function craneCycle(inst)
+	local magnet = inst:FindFirstChild("Magnet")
+	local bunker = inst:GetAttribute("Bunker")
+	local piles = {}
+	local i = 1
+	while typeof(inst:GetAttribute("Pile" .. i)) == "Vector3" do
+		table.insert(piles, inst:GetAttribute("Pile" .. i))
+		i += 1
+	end
+	if not (inst:IsA("Model") and magnet and magnet:IsA("BasePart") and typeof(bunker) == "Vector3" and #piles > 0) then
+		return nil
+	end
+	local base = inst:GetPivot()
+	local mast = base.Position
+	local jib = Vector3.new(base.LookVector.X, 0, base.LookVector.Z)
+	if jib.Magnitude < 1e-3 then
+		return nil
+	end
+	jib = jib.Unit
+	local trolleyR = num(inst, "TrolleyR", 57.5)
+	-- Teile: Katze (nur radial), Seil (radial + länger), Magnet/Rand/Wrack (radial + senkrecht), Rest (nur Schwenk)
+	local entries, wreck = {}, {}
+	local wreckModel = inst:FindFirstChild("Wreck")
+	local cable = inst:FindFirstChild("Cable")
+	local wreckBottom = math.huge
+	for _, part in ipairs(baseParts(inst)) do
+		local group = "slew"
+		if part.Name == "Trolley" then
+			group = "trolley"
+		elseif part == cable then
+			group = "cable"
+		elseif part == magnet or part.Name == "MagnetRim" or (wreckModel and part:IsDescendantOf(wreckModel)) then
+			group = "hook"
+		end
+		local e = { part = part, rel = base:Inverse() * part.CFrame, group = group, size = part.Size }
+		if wreckModel and part:IsDescendantOf(wreckModel) then
+			e.wreck = true
+			e.tr = part.Transparency
+			table.insert(wreck, e)
+			wreckBottom = math.min(wreckBottom, part.Position.Y - halfY(part))
+		end
+		table.insert(entries, e)
+	end
+	local magnetBottom = magnet.Position.Y - halfY(magnet)
+	local wreckH = wreck[1] and math.max(0.5, magnetBottom - wreckBottom) or 1.5
+	local cableAxis
+	if cable and cable:IsA("BasePart") then
+		local cf = cable.CFrame
+		cableAxis = math.abs(cf.XVector.Y) >= math.abs(cf.YVector.Y) and math.abs(cf.XVector.Y) >= math.abs(cf.ZVector.Y) and 1
+			or math.abs(cf.YVector.Y) >= math.abs(cf.ZVector.Y) and 2 or 3
+	end
+	local function aim(v)
+		local d = Vector3.new(v.X - mast.X, 0, v.Z - mast.Z)
+		return flatAngle(jib, d.Magnitude > 1e-3 and d.Unit or jib), d.Magnitude
+	end
+	local rec = {
+		inst = inst, base = base, period = math.max(8, num(inst, "Period", 40)), entries = entries, wreck = wreck,
+		bunker = bunker, piles = piles, trolleyR = trolleyR, magnetBottom = magnetBottom, wreckH = wreckH,
+		carryY = num(inst, "CarryY", magnetBottom), dropY = num(inst, "DropY", bunker.Y + 3), cableAxis = cableAxis,
+		surfaces = {}, shownKey = nil, wreckShown = nil,
+	}
+	rec.aBunker, rec.rBunker = aim(bunker)
+	rec.aims = {}
+	for k, v in ipairs(piles) do
+		local a, r = aim(v)
+		rec.aims[k] = { a = a, r = r }
+	end
+	-- Oberfläche unter einem Ziel (Raycast einmal, am Kran vorbei); nil → Ersatzhöhe
+	local function surface(key, v, fallback)
+		local hit = rec.surfaces[key]
+		if hit == nil then
+			hit = false
+			pcall(function()
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				params.FilterDescendantsInstances = { inst }
+				local res = workspace:Raycast(Vector3.new(v.X, magnetBottom - 1, v.Z), Vector3.new(0, -(magnetBottom + 20), 0), params)
+				if res then
+					hit = res.Position.Y
+				end
+			end)
+			rec.surfaces[key] = hit
+		end
+		return hit or fallback
+	end
+	rec.update = function(r, t)
+		local P = CRANE_PLAN
+		local cycle = math.floor(t / r.period)
+		local p = (t % r.period) / r.period
+		local k = cycle % #r.piles + 1
+		local tgt, pile = r.aims[k], r.piles[k]
+		-- Hubhöhen: Magnet-Unterkante über dem Haufen (Wrack hängt darunter) bzw. über dem Bunker
+		local pileTop = surface("pile" .. k, pile, pile.Y + 9)
+		local bunkerTop = surface("bunker", r.bunker, r.dropY - 3)
+		local hPile = math.max(0, r.magnetBottom - (pileTop + r.wreckH + 0.1))
+		local hBunker = math.max(0, r.magnetBottom - (bunkerTop + r.wreckH + 1.5))
+		local a, rad, h, carry, fall = r.aBunker, r.rBunker, 0, false, 0
+		if p < P.slewOut then
+			local f = smooth(p / P.slewOut)
+			a, rad = r.aBunker + (tgt.a - r.aBunker) * f, r.rBunker + (tgt.r - r.rBunker) * f
+		elseif p < P.raise1 then
+			a, rad = tgt.a, tgt.r
+			if p < P.lower1 then
+				h = hPile * smooth((p - P.slewOut) / (P.lower1 - P.slewOut))
+			elseif p < P.grab then
+				h, carry = hPile, true
+			else
+				h, carry = hPile * (1 - smooth((p - P.grab) / (P.raise1 - P.grab))), true
+			end
+		elseif p < P.slewBack then
+			local f = smooth((p - P.raise1) / (P.slewBack - P.raise1))
+			a, rad, carry = tgt.a + (r.aBunker - tgt.a) * f, tgt.r + (r.rBunker - tgt.r) * f, true
+		elseif p < P.lower2 then
+			h, carry = hBunker * smooth((p - P.slewBack) / (P.lower2 - P.slewBack)), true
+		elseif p < P.raise2 then
+			h = p < P.drop and hBunker or hBunker * (1 - smooth((p - P.drop) / (P.raise2 - P.drop)))
+			-- Wrack fällt in 0,6 s in den Bunker und verschwindet dort
+			local since = (p - P.lower2) * r.period
+			if since < 0.6 then
+				carry = true
+				fall = math.min(r.wreckH + 1.5, 0.5 * 9.8 * since * since * 2)
+			end
+		end
+		local key = string.format("%.4f|%.2f|%.2f|%.2f|%s", a, rad, h, fall, tostring(carry))
+		if key == r.shownKey then
+			return
+		end
+		r.shownKey = key
+		local slew = r.base * CFrame.Angles(0, a, 0)
+		local dr = rad - r.trolleyR
+		local out = CFrame.new(0, 0, -dr)
+		local hook = CFrame.new(0, -h, -dr)
+		local wreckCf = CFrame.new(0, -h - fall, -dr)
+		for _, e in ipairs(r.entries) do
+			local part = e.part
+			if part.Parent then
+				if e.group == "slew" then
+					part.CFrame = slew * e.rel
+				elseif e.group == "trolley" then
+					part.CFrame = slew * out * e.rel
+				elseif e.group == "cable" then
+					local sz = e.size
+					local ax = r.cableAxis or 2
+					part.Size = ax == 1 and Vector3.new(sz.X + h, sz.Y, sz.Z) or ax == 2 and Vector3.new(sz.X, sz.Y + h, sz.Z)
+						or Vector3.new(sz.X, sz.Y, sz.Z + h)
+					part.CFrame = slew * CFrame.new(0, -h / 2, -dr) * e.rel
+				elseif e.wreck then
+					part.CFrame = slew * wreckCf * e.rel
+				else
+					part.CFrame = slew * hook * e.rel
+				end
+			end
+		end
+		if r.wreckShown ~= carry then
+			r.wreckShown = carry
+			for _, e in ipairs(r.wreck) do
+				if e.part.Parent then
+					e.part.Transparency = carry and e.tr or 1
+				end
+			end
+		end
+	end
+	return rec
+end
+
 function Kinds.crane(inst)
+	local cyc = craneCycle(inst)
+	if cyc then
+		return cyc
+	end
 	local rec = { inst = inst, base = inst:GetPivot(), swing = math.rad(num(inst, "Swing", 50)), period = num(inst, "Period", 14) }
 	rec.update = function(r, t)
 		local a = r.swing * math.sin(phaseOf(t, r.period) * 2 * math.pi)
@@ -346,6 +654,37 @@ function Kinds.door(inst)
 	local axisName = inst:GetAttribute("Axis")
 	local axis = axisName == "X" and Vector3.new(1, 0, 0) or axisName == "Z" and Vector3.new(0, 0, 1) or Vector3.new(0, 1, 0)
 	local rec = { inst = inst, base = inst:GetPivot(), lift = num(inst, "Lift", extentsY(inst) * 0.9), period = num(inst, "Period", 10), axis = axis }
+	local range = inst:GetAttribute("OpenRange")
+	if type(range) == "number" and range > 0 then
+		-- Annäherung: Türmitte = Ruheposition des Flügels minus halber Öffnungsweg
+		rec.range, rec.openTime, rec.open, rec.target, rec.checkAt = range, math.max(0.05, num(inst, "OpenTime", 0.6)), 0, 0, -math.huge
+		rec.center = (rec.base * CFrame.new(axis * (-rec.lift / 2))).Position
+		rec.update = function(r, t, dt)
+			local c = os.clock()
+			if c >= r.checkAt then
+				r.checkAt = c + 0.2
+				local near = false
+				for _, pos in ipairs(playerRoots()) do
+					local d = pos - r.center
+					if Vector3.new(d.X, 0, d.Z).Magnitude < r.range and math.abs(d.Y) < 20 then
+						near = true
+						break
+					end
+				end
+				r.target = near and 1 or 0
+			end
+			if r.open ~= r.target then
+				local stepAmount = (dt or 0) / r.openTime
+				if r.target > r.open then
+					r.open = math.min(r.target, r.open + stepAmount)
+				else
+					r.open = math.max(r.target, r.open - stepAmount)
+				end
+				r.inst:PivotTo(r.base * CFrame.new(r.axis * (r.lift * smooth(r.open))))
+			end
+		end
+		return rec
+	end
 	rec.update = function(r, t)
 		local p = phaseOf(t, r.period)
 		local open
@@ -453,6 +792,38 @@ end
 
 -- Leuchtreklame: Neon-Teile pulsieren (Farbe oder Transparenz), Lichter dimmen mit
 function Kinds.neon(inst)
+	local chase, step = inst:GetAttribute("Chase"), inst:GetAttribute("Step")
+	if type(chase) == "number" and type(step) == "number" and step > 0.02 then
+		-- Lauflicht: Gruppe Chase leuchtet in ihrem Schritt (Serverzeit), sonst ColorB bzw. gedimmt
+		local parts = neonParts(inst)
+		if #parts == 0 then
+			parts = baseParts(inst)
+		end
+		local colorB = inst:GetAttribute("ColorB")
+		local list = {}
+		for _, part in ipairs(parts) do
+			table.insert(list, { part = part, color = part.Color, tr = part.Transparency })
+		end
+		local n = math.max(1, math.floor(num(inst, "Period", step * 4) / step + 0.5))
+		local rec = { inst = inst, base = inst:GetPivot(), parts = list, step = step, n = n, slot = (math.floor(chase) - 1) % n, colorB = colorB, shown = nil }
+		rec.update = function(r, t)
+			local on = math.floor(t / r.step) % r.n == r.slot
+			if on == r.shown then
+				return
+			end
+			r.shown = on
+			for _, e in ipairs(r.parts) do
+				if e.part.Parent then
+					if typeof(r.colorB) == "Color3" then
+						e.part.Color = on and e.color or r.colorB
+					else
+						e.part.Transparency = on and e.tr or math.min(1, e.tr + 0.6)
+					end
+				end
+			end
+		end
+		return rec
+	end
 	pulse(inst, num(inst, "Period", 1.6), inst:GetAttribute("ColorB"))
 	return nil
 end
@@ -463,31 +834,79 @@ function Kinds.beacon(inst)
 	return nil
 end
 
--- Hausnummer-Pylon: pulsiert nur, solange ein Besitzer eingetragen ist (Attribut Owner, vom Server gesetzt)
+-- Hausnummer-Pylon: pulsiert nur, solange ein Besitzer eingetragen ist (Attribut Owner, vom Server gesetzt).
+-- Die Neon-Kappe (Kind mit Attributen FreeColor/OwnedColor) wechselt von Amber (frei) auf Türkis (belegt); beim
+-- Wechsel auf einen Besitzer blinkt sie 3× (Ankunft, CITY_SPEC §4.3).
 function Kinds.pylon(inst)
 	local period = num(inst, "Period", 2.4)
 	local tweens = nil
 	local originals = {}
+	local caps = {}
 	for _, part in ipairs(neonParts(inst)) do
 		originals[part] = part.Transparency
 	end
-	local function apply()
-		local owner = inst:GetAttribute("Owner")
-		local on = type(owner) == "string" and owner ~= ""
-		if on and not tweens then
-			tweens = pulse(inst, period)
-		elseif not on and tweens then
+	for _, d in ipairs(inst:GetDescendants()) do
+		if d:IsA("BasePart") and (typeof(d:GetAttribute("FreeColor")) == "Color3" or typeof(d:GetAttribute("OwnedColor")) == "Color3") then
+			table.insert(caps, d)
+		end
+	end
+	local lastOn = false
+	local generation = 0
+	local flashes = {}
+	local function stopPulse()
+		for _, tw in ipairs(flashes) do
+			tw:Cancel()
+		end
+		flashes = {}
+		if tweens then
 			for _, tw in ipairs(tweens) do
 				tw:Cancel()
 			end
 			tweens = nil
-			for part, tr in pairs(originals) do
-				part.Transparency = tr
-			end
+		end
+		for part, tr in pairs(originals) do
+			part.Transparency = tr
 		end
 	end
-	apply()
-	inst:GetAttributeChangedSignal("Owner"):Connect(apply)
+	local function apply(initial)
+		local owner = inst:GetAttribute("Owner")
+		local on = type(owner) == "string" and owner ~= ""
+		generation += 1
+		local gen = generation
+		for _, cap in ipairs(caps) do
+			local c = cap:GetAttribute(on and "OwnedColor" or "FreeColor")
+			if typeof(c) == "Color3" then
+				cap.Color = c
+			end
+		end
+		if on and not lastOn and not initial and #caps > 0 then
+			-- Einzug: 3 kurze Blitze der Kappe (1,1 s), danach das ruhige Pulsieren
+			stopPulse()
+			for _, cap in ipairs(caps) do
+				local tr = originals[cap] or cap.Transparency
+				local tw = TweenService:Create(cap, TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 2, true, 0), { Transparency = math.min(1, tr + 0.7) })
+				tw:Play()
+				table.insert(flashes, tw)
+			end
+			lastOn = on
+			task.delay(1.2, function()
+				if gen == generation and inst.Parent and not tweens then
+					tweens = pulse(inst, period)
+				end
+			end)
+			return
+		end
+		lastOn = on
+		if on and not tweens then
+			tweens = pulse(inst, period)
+		elseif not on then
+			stopPulse()
+		end
+	end
+	apply(true)
+	inst:GetAttributeChangedSignal("Owner"):Connect(function()
+		apply(false)
+	end)
 	return nil
 end
 
@@ -513,6 +932,31 @@ function Kinds.dyno(inst)
 		end
 	end
 	local rec = { inst = inst, base = inst:GetPivot(), speed = math.rad(num(inst, "Speed", 720)), period = num(inst, "Period", 12), angle = 0, shaken = false }
+	-- Räder des Autos (Vorlage: WheelFLTire, WheelFLRim, WheelFLSpoke …) drehen um die Achse durch die Reifenmitte
+	local wheels = {}
+	if body and body.inst:IsA("Model") then
+		local groups = {}
+		for _, part in ipairs(baseParts(body.inst)) do
+			local key = string.match(part.Name, "^Wheel(%u%u)")
+			if key then
+				groups[key] = groups[key] or { parts = {} }
+				table.insert(groups[key].parts, { part = part, base = part.CFrame })
+				if string.find(part.Name, "Tire", 1, true) then
+					groups[key].center, groups[key].axis = part.Position, part.CFrame.XVector
+				end
+			end
+		end
+		for _, g in pairs(groups) do
+			if g.center then
+				table.insert(wheels, g)
+			end
+		end
+	end
+	local flame = inst:IsA("Model") and inst:FindFirstChild("Auspuffflamme") or nil
+	if flame and flame:IsA("BasePart") then
+		rec.flame = { part = flame, tr = flame.Transparency, size = flame.Size, lit = false }
+	end
+	rec.wheels = wheels
 	rec.update = function(r, t, dt)
 		local p = phaseOf(t, r.period)
 		local factor
@@ -525,21 +969,51 @@ function Kinds.dyno(inst)
 		else
 			factor = 0
 		end
-		r.angle = (r.angle + r.speed * factor * dt) % (2 * math.pi)
+		r.angle = (r.angle + r.speed * factor * (dt or 0)) % (2 * math.pi)
 		for _, roller in ipairs(rollers) do
 			if roller.part.Parent then
 				roller.part.CFrame = roller.base * CFrame.Angles(r.angle, 0, 0)
 			end
 		end
+		local near = (r.camDist or math.huge) < SHAKE_NEAR
+		local shakeCf = CFrame.identity
 		if body and body.inst.Parent then
-			if factor > 0 and (r.camDist or math.huge) < SHAKE_NEAR then
+			if factor > 0 and near then
 				local shake = factor * 0.04
-				body.inst:PivotTo(body.base * CFrame.new((math.random() - 0.5) * shake, (math.random() - 0.5) * shake, 0))
+				shakeCf = CFrame.new((math.random() - 0.5) * shake, (math.random() - 0.5) * shake, 0)
+				body.inst:PivotTo(body.base * shakeCf)
 				r.shaken = true
 			elseif r.shaken then
 				body.inst:PivotTo(body.base)
 				r.shaken = false
 			end
+		end
+		if #r.wheels > 0 and near and (factor > 0 or r.wheelsTurned) then
+			-- Reifen r 1,3 auf Rollen r 1,2: gegenläufig, etwas langsamer
+			r.wheelAngle = ((r.wheelAngle or 0) - r.speed * factor * (dt or 0) * 1.2 / 1.3) % (2 * math.pi)
+			r.wheelsTurned = factor > 0
+			local world = body and body.base * shakeCf * body.base:Inverse() or CFrame.identity
+			for _, g in ipairs(r.wheels) do
+				local spin = CFrame.new(g.center) * CFrame.fromAxisAngle(g.axis, r.wheelAngle) * CFrame.new(-g.center)
+				for _, e in ipairs(g.parts) do
+					if e.part.Parent then
+						e.part.CFrame = world * spin * e.base
+					end
+				end
+			end
+		end
+		local fl = r.flame
+		if fl and fl.part.Parent then
+			local lit = factor > 0.85 and near
+			if lit then
+				local k = 0.7 + math.random() * 0.6
+				fl.part.Size = fl.size * k
+				fl.part.Transparency = 0.15 + math.random() * 0.35
+			elseif fl.lit then
+				fl.part.Size = fl.size
+				fl.part.Transparency = fl.tr
+			end
+			fl.lit = lit
 		end
 	end
 	return rec
@@ -801,6 +1275,11 @@ function Kinds.parkgrid()
 	return nil
 end
 
+-- Hochhaus-Fenster: schaltet die Nachtschaltung (NightNeon/NightColor an den Fenstern bzw. am Model)
+function Kinds.nightwindows()
+	return nil
+end
+
 -- Fahne: Drehung um die Mastkante (Part) bzw. den Pivot (Model), als endloser Tween je Part
 function Kinds.flag(inst)
 	local swing = math.rad(num(inst, "Swing", 12))
@@ -989,8 +1468,21 @@ function Kinds.traffic(inst)
 	end
 	local speed = math.max(0.1, num(inst, "Speed", 14))
 	local span = loop and path.total or 2 * path.total
+	-- Haltestellen (Bus): DwellAt "x,z;x,z" und Dwell (s) - dort hält das Fahrzeug einmal pro Runde
+	local dwellPts = {}
+	local dwellAt = inst:GetAttribute("DwellAt")
+	if loop and type(dwellAt) == "string" then
+		local y = points[1].Y
+		for entry in string.gmatch(dwellAt, "[^;]+") do
+			local x, z = string.match(entry, "^%s*(%-?[%d%.]+)%s*,%s*(%-?[%d%.]+)%s*$")
+			if x then
+				table.insert(dwellPts, project(path, Vector3.new(tonumber(x), y, tonumber(z))))
+			end
+		end
+	end
 	local rec = {
-		inst = inst, path = path, speed = speed,
+		inst = inst, path = path, speed = speed, len = num(inst, "Length", 16),
+		dwell = num(inst, "Dwell", 0), dwellPts = dwellPts, dwellUntil = nil, dwellDone = nil,
 		u = (offset + speed * now()) % span, -- Strecke (Rundkurs 0..L, hin und zurück 0..2L)
 		height = num(inst, "HeightOffset", pivot.Position.Y - points[1].Y),
 		facing = CFrame.Angles(0, math.rad(num(inst, "FacingOffset", 0)), 0),
@@ -1001,6 +1493,12 @@ function Kinds.traffic(inst)
 	rec.advance = function(r, t, dt)
 		local want = r.speed * dt
 		local L = r.path.total
+		if r.dwellUntil then
+			if t < r.dwellUntil then
+				return
+			end
+			r.dwellUntil = nil
+		end
 		if r.path.loop then
 			local limit = want
 			for _, st in ipairs(r.path.stops) do
@@ -1012,8 +1510,23 @@ function Kinds.traffic(inst)
 			for _, o in ipairs(r.path.cars) do
 				if o ~= r and o.inst.Parent then
 					local gap = (o.u - r.u) % L
-					if gap > 0 and gap < FOLLOW_GAP + want then
-						limit = math.min(limit, math.max(0, gap - FOLLOW_GAP))
+					-- Abstand Mitte zu Mitte: mindestens FOLLOW_GAP, bei langen Fahrzeugen (Bus) halbe Längen + 3
+					local need = math.max(FOLLOW_GAP, ((r.len or 16) + (o.len or 16)) / 2 + 3)
+					if gap > 0 and gap < need + want then
+						limit = math.min(limit, math.max(0, gap - need))
+					end
+				end
+			end
+			if r.dwell > 0 then
+				for i, dp in ipairs(r.dwellPts) do
+					local gap = (dp - r.u) % L
+					if r.dwellDone == i and gap > 1 then
+						r.dwellDone = nil -- Haltestelle verlassen: nächste Runde wieder halten
+					end
+					if r.dwellDone ~= i and gap <= limit then
+						limit = gap
+						r.dwellUntil = t + r.dwell
+						r.dwellDone = i
 					end
 				end
 			end
@@ -1026,26 +1539,33 @@ function Kinds.traffic(inst)
 			r.moved = true
 		end
 	end
+	-- Lage auf dem Pfad: Position = Mitte zweier Punkte je ROUND Studs vor und hinter d (Ecken werden weich
+	-- abgerundet, auf Geraden exakt), Richtung = Sehne über ±look (Auto dreht schon vor der Ecke ein)
+	local ROUND = 3
 	rec.cframe = function(r, extra)
 		local L = r.path.total
 		local u = r.u + (extra or 0)
-		local d, ahead
+		local d, sign
 		local look = math.min(4, L / 4)
+		local round = math.min(ROUND, L / 8)
+		local function at(x)
+			if r.path.loop then
+				return sample(r.path, x % L)
+			end
+			return sample(r.path, math.clamp(x, 0, L))
+		end
 		if r.path.loop then
-			d = u % L
-			ahead = sample(r.path, (d + look) % L)
+			d, sign = u % L, 1
 		else
 			u = u % (2 * L)
 			if u <= L then
-				d = u
-				ahead = sample(r.path, math.min(L, d + look))
+				d, sign = u, 1
 			else
-				d = 2 * L - u
-				ahead = sample(r.path, math.max(0, d - look))
+				d, sign = 2 * L - u, -1
 			end
 		end
-		local p = sample(r.path, d)
-		local dir = ahead - p
+		local p = (at(d - round) + at(d + round)) / 2
+		local dir = (at(d + look) - at(d - look)) * sign
 		dir = Vector3.new(dir.X, 0, dir.Z)
 		if dir.Magnitude > 1e-3 then
 			r.lastDir = dir
@@ -1055,6 +1575,119 @@ function Kinds.traffic(inst)
 	end
 	table.insert(trafficRecs, rec)
 	return nil -- eigener Takt, nicht in frameRecs
+end
+
+---------------------------------------------------------------- Nachtschaltung (CITY_SPEC §9.3)
+local Night = { parts = {}, lights = {}, seen = {}, isNight = nil, checkAt = -math.huge }
+local LIGHT_LOD = 300
+
+local function isNightTime()
+	local ct = Lighting.ClockTime % 24
+	return ct < 6.5 or ct > 17.5
+end
+
+local function nightAttr(part, name)
+	local v = part:GetAttribute(name)
+	if v == nil and part.Parent and part.Parent:IsA("Model") then
+		v = part.Parent:GetAttribute(name)
+	end
+	return v
+end
+
+local function nightRegister(inst, lightsFolder)
+	if Night.seen[inst] then
+		return
+	end
+	if inst:IsA("BasePart") then
+		local neon = inst:GetAttribute("NightNeon") == true
+		local strip = inst:GetAttribute("NeonStrip") == true
+		if neon or strip then
+			Night.seen[inst] = true
+			local nc, nt = nightAttr(inst, "NightColor"), nightAttr(inst, "NightTransparency")
+			table.insert(Night.parts, {
+				part = inst, neon = neon, strip = strip, mat = inst.Material, color = inst.Color, tr = inst.Transparency,
+				ncolor = typeof(nc) == "Color3" and nc or nil, ntr = type(nt) == "number" and nt or nil,
+			})
+		end
+	elseif inst:IsA("Light") then
+		Night.seen[inst] = true
+		table.insert(Night.lights, { light = inst, street = lightsFolder ~= nil and inst:IsDescendantOf(lightsFolder), on = inst.Enabled })
+	end
+end
+
+local function nightApply(night)
+	for _, e in ipairs(Night.parts) do
+		local part = e.part
+		if part.Parent then
+			if night then
+				if e.neon then
+					part.Material = Enum.Material.Neon
+					if e.ncolor then
+						part.Color = e.ncolor
+					end
+					if e.ntr then
+						part.Transparency = e.ntr
+					end
+				end
+				if e.strip then
+					part.Transparency = 0
+				end
+			else
+				part.Material = e.mat
+				part.Color = e.color
+				part.Transparency = e.tr
+			end
+		end
+	end
+end
+
+-- 1×/s: Tag/Nacht wechseln, Stadtlichter nach Nacht (Straßenlaternen) und Entfernung (LOD) schalten
+local function nightTick()
+	local c = os.clock()
+	if c < Night.checkAt then
+		return
+	end
+	Night.checkAt = c + 1
+	local night = isNightTime()
+	if night ~= Night.isNight then
+		Night.isNight = night
+		nightApply(night)
+	end
+	local cam = camPos()
+	for i = #Night.lights, 1, -1 do
+		local e = Night.lights[i]
+		local light = e.light
+		if not light.Parent then
+			table.remove(Night.lights, i)
+		else
+			local host = light.Parent
+			local pos = host:IsA("BasePart") and host.Position or (host:IsA("Attachment") and host.WorldPosition) or nil
+			local want = e.on and (not e.street or night)
+			if want and cam and pos and (pos - cam).Magnitude > LIGHT_LOD then
+				want = false
+			end
+			if light.Enabled ~= want then
+				light.Enabled = want
+			end
+		end
+	end
+end
+
+local function attachNight(city)
+	local lightsFolder = city:FindFirstChild("Lights")
+	for _, d in ipairs(city:GetDescendants()) do
+		nightRegister(d, lightsFolder)
+	end
+	city.DescendantAdded:Connect(function(d)
+		task.defer(function()
+			if d.Parent then
+				local ok = pcall(nightRegister, d, city:FindFirstChild("Lights"))
+				if ok and Night.isNight and d:IsA("BasePart") then
+					nightApply(true)
+				end
+			end
+		end)
+	end)
 end
 
 ---------------------------------------------------------------- Verwaltung
@@ -1103,7 +1736,7 @@ local function consider(inst, root)
 		rec.pos = rec.base and rec.base.Position or inst:GetPivot().Position
 		rec.active = false
 		rec.fast = false
-		rec.pendingDt = 0
+		rec.pendingDt = math.random() * SLOW_INTERVAL -- Versatz: Ferntakt-Objekte laufen nicht alle im selben Frame
 		records[inst] = rec
 		table.insert(frameRecs, rec)
 	end
@@ -1199,17 +1832,30 @@ local function step(dt)
 		slowTimer = 0
 	end
 	for _, r in ipairs(frameRecs) do
-		if r.active and r.inst.Parent then
+		if r.active and not r.dead and r.inst.Parent then
+			local runDt
 			if r.fast then
-				r.update(r, t, dt)
+				runDt = dt
 			else
 				r.pendingDt += dt
-				if slowTick then
-					r.update(r, t, r.pendingDt)
+				if r.pendingDt >= SLOW_INTERVAL then
+					runDt = r.pendingDt
 					r.pendingDt = 0
 				end
 			end
+			if runDt then
+				local ok, err = pcall(r.update, r, t, runDt)
+				if not ok then
+					-- ein kaputtes Objekt (z. B. fehlende Teile) stoppt nur sich selbst
+					r.dead = true
+					warnOnce("update_" .. tostring(r.inst), "Animation gestoppt (" .. tostring(r.kind) .. "): " .. tostring(err))
+				end
+			end
 		end
+	end
+	local okNight, errNight = pcall(nightTick)
+	if not okNight then
+		warnOnce("night", "Nachtschaltung: " .. tostring(errNight))
 	end
 	for _, r in ipairs(trafficRecs) do
 		if r.inst.Parent and r.active then
@@ -1240,9 +1886,17 @@ function CityClient.Start()
 	end
 	started = true
 	whenChild(workspace, "City", function(city)
+		local ok, err = pcall(attachNight, city)
+		if not ok then
+			warnOnce("night_attach", "Nachtschaltung: " .. tostring(err))
+		end
 		whenChild(city, "Animated", function(animated)
 			attach(animated)
 			refreshActivity()
+		end)
+		-- Hausnummer-Pylonen (Anim=pylon) liegen laut Vertrag unter City.PlotSlots.Slot_N (MERGE_CONTRACT §4)
+		whenChild(city, "PlotSlots", function(slots)
+			attach(slots)
 		end)
 	end)
 	local failures = 0

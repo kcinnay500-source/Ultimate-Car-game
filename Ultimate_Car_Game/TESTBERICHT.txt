@@ -1,57 +1,36 @@
-TESTBERICHT – Ultimate Car Game 3.0.0
-=====================================
+TESTBERICHT – Ultimate Car Game 3.0.0 (Werkstattmeile)
+=====================================================
 
-Datum: 2026-09-28
+Datum: 2026-09-29
 Befehle:
   python tools/build_place.py Ultimate_Car_Game.rbxlx
+  python tools/export_fixture.py
   python tools/validate.py Ultimate_Car_Game.rbxlx
 
-Ergebnis: 493 Validierungsprüfungen + 724 Testprüfungen, 0 Fehler, 0 Warnungen
+Ergebnis: 818 Validierungsprüfungen + 46.468 Testprüfungen, 0 Fehler, 0 Warnungen
 
-[1] Place-Struktur
-    38 Skripte (11 Shared-Module, 13 Server, 14 Client) an der richtigen Stelle,
-    Quelltext identisch mit src/.
+Basis
+  - Place = Original 2.4.0 + Skripte aus src/ + Stadt aus tools/worldgen.
+  - Roundtrip: gegenüber 2.4.0 nur Skripte geändert (9 Skripte, jede Änderung mit "-- 3.0:" markiert).
+  - Luau-Compiler: 63 Dateien, 0 Fehler.
+  - 22 Minispiel-Aktionen, 22 Server-Handler, alle vom Client gesendet, 107 requires geprüft.
 
-[2] Luau-Compiler (echter Luau-Compiler über mlua, tools/luaurun)
-    49 Dateien (38 Skripte + 11 Testdateien), 0 Fehler
+Tests (Roblox-Mock führt den echten GarageServer und GarageClient aus)
+  - 2.4.0-Ablauf: Beitritt, Grundstück, Auftrag, Diagnose, Reparatur-QTE, Endkontrolle, Abrechnen, Speichern.
+  - Profil: echte Hülle {version=2,data,receipts,lock} inkl. games, Migration, NaN-Schutz, Sperre.
+  - Robux-Kauf während Minispiel-Aktion verliert kein Geld; Minispiele während "transacting" gesperrt.
+  - Schrottpresse, Bestenliste (nur mit schreibbarem Profil), Tuning, Schrottplatz, Quiz, Parkplatz, Ziele.
+  - Grundstücke: 8 Slots überlappen weder sich noch die Stadt; Drehung 180° für Ankunft, Rolltor, Bühne.
+  - Client: alle Bereiche rendern, Tasten senden nur Absichten, 10.000 Klicks ohne Instanzflut.
+  - Mehrspieler: 8 Spieler getrennt, 9. Spieler ohne Grundstück.
 
-[3] Statische Prüfungen
-    - jedes require zeigt auf ein vorhandenes Modul, Client lädt keine Server-Module
-    - jede Aktion in Net.Actions hat genau einen Server-Handler, der Client sendet nur definierte Aktionen
-    - der Client sendet keine Beträge, Preise oder Zeitstempel
-    - die Begriffe "Autopunkte"/"AP" kommen nicht vor, keine externen Asset-IDs
-    - Version 3.0.0, DataStore-Identität UltimateCarGame_v2
+Stadt (tools/worldgen/checks.py)
+  - 10.477 Parts (Budget 12.000), 105 Lichter (Budget 120), alles verankert.
+  - 0 Überlappungen, 0 Z-Fighting-Kandidaten, keine schwebenden Teile,
+    freie Fläche und Kamera-Raum an jeder Station geprüft.
 
-[4] Automatisierte Tests im Roblox-Mock (Server und Client laufen vollständig)
-    test_rules.lua         202  Migration 2.4.0-Profil, idempotentes Laden, NaN/negativ/nil, Zahlenformat, XP, UTC, Katalog
-    test_press.lua         106  Formeln, erstes Upgrade ≤ 15 s, Klick-Limit, gefälschte Werte, Doppelkauf,
-                                Server-Tick, Offline 1 h / 24 h / negativ, Umtausch, Rebirth, Game Pass
-    test_leaderboard.lua    87  Kodierung bis 1e300, Reihenfolge, eigene Platzierung (auch > Top 50),
-                                Drosselung 120 s / 60 s, DataStore-Fehler
-    test_tuning.lua         37  Projekte, Rejoin, kein Doppelabholen, Uhr rückwärts, passive Einnahmen
-    test_sidegames.lua      62  Schrottplatz, Quiz-Spam, Parkplatz-Prüfung, Deckel 35 % / 1,7, Werkstatt, Ausbau
-    test_goals.lua          42  Meilensteine einmalig, Tages-Reset UTC, Rejoin, Nächstes Ziel, Boni
-    test_transitions.lua    95  Sitzungssperre, Verlassen beim Laden, Autosave-Rennen, Studio ohne DataStore,
-                                Live-Ausfall, Herunterfahren nach letztem Verlassen, schneller Wiederbeitritt,
-                                Verbindungen konstant, Remote-Budget, Stationen mit Reichweite
-    test_multiplayer.lua    33  2 Spieler getrennt, Bestenlistenwerte getrennt, 8 Spieler
-    test_client.lua         60  UI baut und rendert alle Bereiche, Tasten senden nur Absichten,
-                                10.000 Klicks ohne Instanzflut, Touch ≥ 44 px, Querformat-Layout
-    Summe                  724  alle grün
+Reviews
+  - Adversariales Code-Review (4 Blickwinkel, jeder Befund 2× gegengeprüft): 14 bestätigt, alle behoben mit Regressionstest.
+  - Visuelle Prüfung anhand gerenderter Ansichten: 46 Befunde, 38 behoben, Rest begründet.
 
-Review
-    Unabhängiges Code-Review auf echte Roblox-API-Fehler: keine API-Fehler gefunden.
-    Behoben wurden die gefundenen Ablauf- und Layoutprobleme (jeweils mit Regressionstest):
-    - Speichern beim Verlassen des letzten Spielers wurde beim Herunterfahren abgebrochen
-    - Sperre konnte beim Verlassen während der Game-Pass-Prüfung hängen bleiben
-    - schneller Wiederbeitritt auf demselben Server konnte einen alten Stand laden (Sperre jetzt pro Sitzung)
-    - ein Fehler in einer Sitzung konnte Tick/Sync/Bestenliste für alle stoppen (jetzt pcall pro Sitzung)
-    - Studio-Hinweis ging verloren, wenn das Laden länger dauerte
-    - HUD und Ziel überlappten im Hochformat, Klickfläche im Querformat verdeckt, Menü ließ Touch durch
-    - Schilder teils von Dächern verdeckt, Tafel blieb ohne Store auf "wird geladen"
-    - Live-Server mit DataStore-Ausfall: jetzt Hinweis und erneut beitreten statt Ersatzprofil
-    - Snapshots höchstens 2× pro Sekunde
-
-Nicht automatisch prüfbar (siehe STUDIO_TESTS.md)
-    Rendering und Optik, echtes Netzwerk, Live-DataStore und OrderedDataStore,
-    Touch-Gefühl auf echten Geräten, Game-Pass-Kauf, Sound.
+Nur in Studio prüfbar: siehe STUDIO_TESTS.md (Rendering, Licht, echte Physik, Netzwerk, Touch).

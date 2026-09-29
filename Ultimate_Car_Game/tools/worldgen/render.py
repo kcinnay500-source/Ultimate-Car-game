@@ -7,6 +7,7 @@
   Farbe = Color3, von unten nach oben gezeichnet; Stationen/Ankunft als Marker)
 * mit --district/--rect: Draufsicht (<name>_top.png) und isometrische Ansicht von Südost (<name>_iso.png)
 * --plots: die getrimmte Werkstatt-Vorlage (4 Hallen) an allen 8 Slots mitzeichnen (ohne Vacant-Kits)
+* --cut Y: Schnitt bei Höhe Y (Dächer/Decken darüber entfallen) -> Innenansicht <name>_cut<Y>_iso.png
 """
 import math
 import sys
@@ -190,13 +191,30 @@ def _clip_rect(poly, rect):
     return poly
 
 
+def _clip_y(poly, ymax):
+    """3D-Polygon an der waagrechten Ebene y = ymax abschneiden (unteren Teil behalten)"""
+    out = []
+    for i in range(len(poly)):
+        p, q = poly[i], poly[(i + 1) % len(poly)]
+        pin, qin = p[1] <= ymax, q[1] <= ymax
+        if pin:
+            out.append(p)
+        if pin != qin:
+            t = (ymax - p[1]) / (q[1] - p[1])
+            out.append(tuple(p[j] + (q[j] - p[j]) * t for j in range(3)))
+    return out
+
+
 def iso_view(parts, rect, path, title="", ymax=None):
+    """Isometrische Ansicht von Südost; ymax schneidet alles oberhalb ab (Innenansicht ohne Dach)."""
     x0, x1, z0, z1 = rect
     f, r, u = _iso_axes()
     sel = []
     for p in parts:
         b = p.aabb()
         if b[1] < x0 or b[0] > x1 or b[5] < z0 or b[4] > z1:
+            continue
+        if ymax is not None and b[2] >= ymax:
             continue
         sel.append(p)
     light = (0.35, 0.85, 0.4)
@@ -238,11 +256,15 @@ def iso_view(parts, rect, path, title="", ymax=None):
             if sum(wn[i] * -f[i] for i in range(3)) <= 0.02:
                 continue
             wp = _clip_rect([p.cf.point(q) for q in pts], rect)
+            if ymax is not None and len(wp) >= 3:
+                wp = _clip_y(wp, ymax)
             if len(wp) < 3:
                 continue
             depth = sum(sum(q[i] for q in wp) / len(wp) * f[i] for i in range(3))
             shade = 0.55 + 0.45 * max(0.0, sum(wn[i] * light[i] for i in range(3)))
-            flat = p.top <= -0.4 or (p.top - p.aabb()[2]) < 0.3
+            height = p.top - p.aabb()[2]
+            # Böden (auch Hallenböden -1..0) zuerst zeichnen, sonst übermalen ihre Oberseiten die Einrichtung
+            flat = p.top <= -0.4 or height < 0.3 or (p.top <= 0.35 and height <= 1.2)
             key = (0, p.top, 0) if flat else (1, 0, -depth)
             faces.append((key, [proj(q) for q in wp], rgba(p, shade)))
     faces.sort(key=lambda t: t[0])
@@ -274,6 +296,7 @@ def main(argv):
     out = OUT
     with_plots = "--plots" in args
     rect = None
+    cut = None
     name = "city"
     i = 0
     while i < len(args):
@@ -287,6 +310,10 @@ def main(argv):
             rect = tuple(float(v) for v in args[i + 1:i + 5])
             name = "rect_%d_%d" % (rect[0], rect[2])
             i += 5
+            continue
+        if a == "--cut":
+            cut = float(args[i + 1])
+            i += 2
             continue
         if a == "--out":
             out = Path(args[i + 1])
@@ -308,8 +335,12 @@ def main(argv):
     else:
         p1 = out / ("%s_top%s.png" % (name, suffix))
         top_view(parts, rect, p1, marks, name, px_per_stud=max(4.0, 2400 / max(rect[1] - rect[0], rect[3] - rect[2])))
-        p2 = out / ("%s_iso%s.png" % (name, suffix))
-        iso_view(parts, rect, p2, name)
+        if cut is not None:
+            p2 = out / ("%s_cut%g_iso%s.png" % (name, cut, suffix))
+            iso_view(parts, rect, p2, "%s (Schnitt Y %g)" % (name, cut), ymax=cut)
+        else:
+            p2 = out / ("%s_iso%s.png" % (name, suffix))
+            iso_view(parts, rect, p2, name)
         print(p1)
         print(p2)
 

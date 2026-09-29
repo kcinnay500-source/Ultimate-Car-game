@@ -258,7 +258,7 @@ The outputs are in `verify_out.txt`, `walk_out.txt` and `map.txt`. Every number 
 |---|---|---|
 | Grass base slab (whole city) | −1.10 | 1 Part 1320 × 4 × 1010 at (0,−3.10,35); X −660..660, Z −470..540; Grass (73,91,64) |
 | Outdoor ground plates: district yards, lots, plot yards, forecourts for vehicles, park paths | −1.00 | 0.3 thick (−1.30..−1.00) |
-| Kreisel disc | −0.98 | Cylinder Ø76 |
+| Kreisel disc | −1.00 | Cylinder Ø77.6 (as built: 0.05 below the carriageway that ends over it; −0.98 was only 0.03 apart) |
 | Carriageway asphalt, curb cuts, Teststrecke | −0.95 | 0.30 thick (−1.25..−0.95) |
 | Road markings, zebra bars, grid lines on lots | −0.90 | 0.05-thick plates |
 | Sidewalks, plaza and pedestrian paving, Kreisel island curb | −0.50 | −1.25..−0.50 (curb step 0.45, walkable) |
@@ -497,6 +497,8 @@ Interpolate linearly between waypoints; the arcs are already sampled every 15°.
 
 **Bus.** 1 bus of about 36 parts rides loop A. It dwells 6 s at the stop "Markt" (bus bays: north X 74..86, Z −22..−18; south X −86..−74, Z 18..22).
 
+*As built:* NPC traffic is written into the place as ~35-part lite cars (CarTemplates minus engine bay, wheel details, interior, probe points) under `City.Animated.Verkehr`, 6 / 3 / 3 / 2 cars with evenly spaced `Phase`, plus `Bus_Linie_A` (~32 parts, `Dwell` 6, `DwellAt` "80,-6.5;-80,6.5" = in front of the two "Markt" shelters). They count toward the 12,000 part budget. CityClient keeps `Length`-based following distances.
+
 ---
 
 ## 4. Workshop plots
@@ -560,7 +562,7 @@ Local → world points:
   - board "FREIES GRUNDSTÜCK · Werkstatt Nr. N";
   - 6 cones.
   - Server: set `Parent = nil` **before** `W.Create` pivots the plot and restore it on `W.Destroy`. The grass (−1.10) remains as a safety floor.
-- **Street tree** (lite, 11 parts) on the curb at local X −44: (218,−16), (−218,16), (−278,−16), (278,16), (368,−16), (−368,16), (−428,−16), (428,16). These are outside the driveways.
+- **Street tree** (lite, 11 parts) on the curb at local X **+37** (as built; local X −44 lies inside the roller-door curb cut −53..−33): (299,−16), (−299,16), (−197,−16), (197,16), (449,−16), (−449,16), (−347,−16), (347,16). Base disc on the sidewalk (−0.50..−0.45).
 - **Street lamps.** Two per plot, at local X −76 and +44 on the curb (Z ∓14.5). See §9.
 
 ### 4.4 Rotation-safe code (required; tech recipe + flow rules)
@@ -1051,7 +1053,7 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 - `scrapyard` (−262,3,−191); player side N.
 
 **Arrivals**
-- `scrapyard_gate` (−168,−0.5,−201), looking W.
+- `scrapyard_gate` (−168,−0.95,−201), looking W (it lies in the gate curb cut, asphalt −0.95).
 - `press` (−300,−1,−211), looking W.
 - `scrapyard` (−262,−1,−200), looking S.
 - `scrap_trader` (−220,−1,−205), looking N.
@@ -1149,14 +1151,14 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 | overview | overview | (−26,3,−208) | S | hub (0,0,−192) → S |
 | map | map | (26,3,−208.5) | S | hub |
 | goals | goals | (40,3,−214) | W | hub |
-| meile_map | map | (−16,2.5,−31.5) | S | plaza |
+| meile_map | map | (−14,2.5,−31.5) | S | plaza |
 | goals_platz | goals | (30,2.5,−145) | S | plaza (0,−0.5,−165) → S |
 | leaderboard | leaderboard | (−30,2.5,−145) | S | plaza |
 | arcade | arcade (Soon) | (−80,3,−97) | S | arcade (−63,−0.5,−72) → W |
 | arcade_1..8 | arcade (Soon) + Game | see D3 | E / S | arcade |
 | quiz | quiz | (−116,3,−148) | E | quiz (−63,−0.5,−148) → W |
-| auction | auction (Soon) | (81,3,−101) | S | auction (63,−0.5,−76) → E |
-| auction_consign | auction (Soon) | (81,3,−51) | N | auction |
+| auction | auction (Soon) | (84.5,3,−101) | S | auction (63,−0.5,−76) → E |
+| auction_consign | auction (Soon) | (84.5,3,−51) | N | auction |
 | shop | shop | (114,3,−152) | W | shop (63,−0.5,−152) → E |
 | parking | parking | (−65,2.5,−236.5) | S | parking (−65,−1,−230) → N |
 | dealer | dealer (Soon) | (−20,3,100) | N | dealer (0,−0.5,31) → S |
@@ -1166,10 +1168,11 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 | press | press | (−321,3,−220) | E | press (−300,−1,−211) → W |
 | scrap_trader | press | (−220,3,−213) | S | scrap_trader (−220,−1,−205) → N |
 | scrapyard | scrapyard | (−262,3,−191) | N | scrapyard (−262,−1,−200) → S |
-| carwash | carwash (Soon) | (304,3,209) | N | carwash (186,−1,190) → E |
+| carwash | carwash (Soon) | (304,3,218) | N | carwash (186,−1,190) → E |
 | track | track (Soon) | (0,3,224) | N | track (0,−0.5,218) → S |
 
-- Extra arrivals: `scrapyard_gate` (−168,−0.5,−201) → W; `park` (−186,−1,165) → W.
+- Extra arrivals: `scrapyard_gate` (−168,−0.95,−201) → W; `park` (−186,−1,165) → W.
+- *As built (10 × 10 free player side, §1.3):* meile_map X −14 (directory pylon moved to X −14), auction/auction_consign X 84.5 (desks X 79.5..89.5, tribunes 3 risers X 91..106), carwash Z 218 (pay column Z 220.4..221.8), arcade_7/8 Z −43.5 (sims 2.5 north). Floors: scrap_trader −1.00 (Betonzufahrt), scrapyard −0.85 (on the vehicle scale; arrival `scrapyard` floor −0.85).
 - Workshop: the plot's own `Stations.home`, gaining an `Arrival` attachment (§4.4).
 - Every station also gets its child `Arrival` Attachment: 6 studs out on the player side, 3.5 above that floor.
 
@@ -1210,13 +1213,13 @@ The server never PivotTo's city parts.
 
 | Group | Count | Positions |
 |---|---|---|
-| Meile | 20 | (306,−14.5) (−306,14.5) (−310,−14.5) (310,14.5) (336,−14.5) (456,−14.5) (−336,14.5) (−456,14.5) (−460,−14.5) (−340,−14.5) (460,14.5) (340,14.5) (−100,−14.5) (−100,14.5) (−20,14.5) (−20,−14.5) (20,−14.5) (20,14.5) (100,14.5) (100,−14.5) |
+| Meile | 20 | (306,−14.5) (−306,14.5) (−310,−14.5) (310,14.5) (336,−14.5) (456,−14.5) (−336,14.5) (−456,14.5) (−460,−14.5) (−340,−14.5) (460,14.5) (340,14.5) (−100,−14.5) (−100,14.5) (−20,14.5) (−20,−14.5) (20,−14.5) (20,14.5) (**110**,14.5) (100,−14.5) — (100,14.5) lay in the Übergabe-Halle curb cut X 92..108 |
 | Arch heads | 4 | (±186,±18) |
 | Kreisel | 4 | (±545,±32.2) |
 | Marktstraße W | 8 | (−137.5,−305) (−166.5,−265) (−137.5,−215) (−166.5,−145) (−137.5,−80) (−166.5,45) (−137.5,105) (−166.5,175) |
 | Marktstraße O | 8 | mirror of W with X positive |
 | Nordring | 4 | X −100, −35, 35, 100 at Z −327.5 |
-| Südring | 4 | same X at Z 185.5 |
+| Südring | 4 | X −100, −35, 35, **110** at Z 185.5 (100 lay in the "Autohaus hinten" cut); Nordring −100 → −112 (Parkplatz entry) |
 
 ### 9.2 District lights (53)
 
@@ -1285,6 +1288,8 @@ The server never PivotTo's city parts.
 | D12 Stadtpark | 371 | 0 | 371 | 3 |
 | D13 Teststrecke | 131 | 0 | 131 | 4 |
 | **Total** | **4,500** | **24** | **≈ 7,740** | **105** |
+
+*As built (checks.py `DISTRICT_BUDGET`, one Model per district under `City.Districts`):* Stadtplatz 700, Platzgebaeude 580, Schrottplatz 540, Tuning 280, Autohaus 340, Teststrecke 160, Parkplatz 150, Tankstelle 260, Stadtpark 410, Meile 120, Stadtrand (groves) 640; Ground 250, Roads 610, Lights 220, PlotSlots 300, Animated 2,260 (incl. lite traffic). Total ≈ 10,500 of 12,000 including all cars and traffic.
 
 About 4,260 parts of headroom under 12,000. With 8 plots at 4 bays (about 1,100–2,200 each), clients receive about 17–25k parts with StreamingEnabled off.
 

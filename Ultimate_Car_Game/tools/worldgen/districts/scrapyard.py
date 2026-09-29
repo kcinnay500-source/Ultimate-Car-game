@@ -7,8 +7,9 @@ Stationen press / scrap_trader / scrapyard und die Ankunftspunkte baut contract.
 um die Anker (Steuerpult, Ankaufschalter, Zerlegeplatz).
 
 Höhen-Stapel im Hof (nie zwei überlappende Oberseiten auf gleicher Höhe):
-  Erde -1.00 | Haufen-Schotter -0.92 | Einfahrt -0.98 | Randlinien -0.96 | Waagenrahmen -0.94 | Waage -0.86
-  | Fußweg -0.50 | Bunkerboden -0.50 (getrennt) | Hallenboden / Zerlegeplatz 0 | Bodenlinien +0.02
+  Erde -1.00 (Betonzufahrt bündig -1.00 in einer Aussparung, ground_roads.GROUND_INSETS) | Haufen-Schotter -0.92
+  | Randlinien -0.95 | Waagenrahmen -0.90 | Waage -0.85 | Fußweg -0.50 | Bunkerboden -0.50 (getrennt),
+  Warnstreifen -0.45 | Hallenboden / Zerlegeplatz 0 | Bodenlinien +0.05
 
 Wracks: "Lite"-Wracks werden aus ServerStorage.CarTemplates abgeleitet (nur die tragenden Teile: Chassis,
 Karosserie-Paint, Hood, einzelne Reifen/Säulen; 9-16 Parts statt 135), rostig umgefärbt, gekippt und gestapelt.
@@ -45,7 +46,8 @@ CUBE_COLORS = [(120, 60, 40), (90, 96, 104), (150, 120, 60), (70, 90, 110), (130
 
 Y_DIRT = -1.0
 Y_PAD = -0.92
-Y_ROAD = -0.98
+WAAGE_TOP = -0.85      # Fahrzeugwaage (Spielerseite der Station scrapyard, contract.py)
+Y_ROAD = -1.0          # Betonzufahrt (bündig mit der Erde, eigene Aussparung)
 
 # ---------------------------------------------------------------- Lage (§6 D10)
 YARD = (-468, -178, -364, -159)
@@ -267,9 +269,9 @@ def build_fence(dm, lib):
 def build_gate(dm, anim, lib):
     m = lib.model(dm, "Tor")
     for zc in (-212.5, -189.5):
-        lib.box(m, "Torpfeiler", -181, -178.02, -2, 16, zc - 1.5, zc + 1.5, YELLOW, "Metal")
+        lib.box(m, "Torpfeiler", -181, -177.95, -2, 16, zc - 1.5, zc + 1.5, YELLOW, "Metal")
         for y in (1.5, 6.5, 11.5):
-            lib.box(m, "Warnring", -181.05, -177.95, y, y + 2, zc - 1.55, zc + 1.55, BLACK, "Metal")
+            lib.box(m, "Warnring", -181.05, -177.9, y, y + 2, zc - 1.55, zc + 1.55, BLACK, "Metal")
     lib.box(m, "Torbalken", -181, -178, 16, 19, -214, -188, BLACK, "Metal")
     lib.box(m, "Torbalken_Neon", -180.8, -178.2, 15.8, 16, -211, -191, AMBER, "Neon", deco=True)
     lib.sign(m, "SCHROTTPLATZ", (24, 5), CF.at(-179.3, 21.5, -201, 90), (255, 232, 200), RUST, name="Torschild",
@@ -290,9 +292,9 @@ def build_entry(dm, lib):
     m = lib.model(dm, "Einfahrt")
     lib.box(m, "Betonzufahrt", -310, -178, -1.3, Y_ROAD, -209, -193, CONCRETE_DARK, "Concrete")
     for z0 in (-208.6, -193.8):
-        lib.box(m, "Randlinie", -306, -180, Y_ROAD, -0.96, z0, z0 + 0.4, YELLOW, "SmoothPlastic", deco=True)
-    lib.box(m, "Waagenrahmen", -271, -245, -1.05, -0.94, -209, -193, STEEL, "Metal")
-    lib.box(m, "Fahrzeugwaage", -270, -246, -1.06, -0.86, -208, -194, (122, 128, 132), "DiamondPlate")
+        lib.box(m, "Randlinie", -306, -180, Y_ROAD, Y_ROAD + 0.05, z0, z0 + 0.4, YELLOW, "SmoothPlastic", deco=True)
+    lib.box(m, "Waagenrahmen", -271, -245, -1.05, -0.90, -209, -193, STEEL, "Metal")
+    lib.box(m, "Fahrzeugwaage", -270, -246, -1.06, WAAGE_TOP, -208, -194, (122, 128, 132), "DiamondPlate")
     lib.box(m, "Waagenpylon_Fuss", -259.5, -256.5, Y_DIRT, 0.2, -213, -211, CONCRETE, "Concrete")
     lib.box(m, "Waagenpylon", -258.6, -257.4, 0.2, 8, -212.4, -211.6, SLATE, "Metal")
     lib.sign(m, "WAAGE  0,00 t", (6, 2.2), CF.at(-258, 9, -211.3, 0), (255, 80, 60), BLACK, name="Waagenanzeige",
@@ -303,7 +305,7 @@ def build_entry(dm, lib):
     lib.box(m, "Fussweg", -326, -304, Y_DIRT, -0.5, -178, -172, (128, 134, 138), "Concrete")
     lib.box(m, "Fussweg", -310, -304, Y_DIRT, -0.5, -193, -178, (128, 134, 138), "Concrete")
     # Rampe zur Hallenöffnung (von der Zufahrt -0.98 auf den Hallenboden 0)
-    lib.wedge(m, "Hallenrampe", (30, 0.98, 4), CF.at(-308, Y_ROAD + 0.49, -211, -90), (122, 128, 132), "DiamondPlate")
+    lib.wedge(m, "Hallenrampe", (30, -Y_ROAD, 4), CF.at(-308, Y_ROAD / 2, -211, -90), (122, 128, 132), "DiamondPlate")
 
 
 # ---------------------------------------------------------------- Schrotthändler-Kontor
@@ -409,8 +411,8 @@ def build_hall(dm, lib):
     # Boden: Sicherheitslinien um die Presse, Gehweg zum Steuerpult
     for (a0, a1, b0, b1) in ((-370, -334, -224.5, -224), (-370, -334, -198, -197.5),
                              (-370.5, -370, -224.5, -197.5), (-334, -333.5, -224.5, -197.5)):
-        lib.box(m, "Sicherheitslinie", a0, a1, 0, 0.02, b0, b1, YELLOW, "SmoothPlastic", deco=True)
-    lib.box(m, "Gehweglinie", -330, -311, 0, 0.02, -223.2, -222.8, WHITE, "SmoothPlastic", deco=True)
+        lib.box(m, "Sicherheitslinie", a0, a1, 0, 0.05, b0, b1, YELLOW, "SmoothPlastic", deco=True)
+    lib.box(m, "Gehweglinie", -330, -311, 0, 0.05, -223.2, -222.8, WHITE, "SmoothPlastic", deco=True)
     # Steuerpult (-324,0,-220): Sockel, geneigtes Pult, roter Not-Aus-Pilz
     lib.box(m, "Steuerpult", -325.2, -323, 0, 3.2, -221.6, -218.4, SLATE, "Metal")
     panel = lib.part(m, "Pultplatte", (2.6, 0.3, 3.4), CF(-323.9, 3.6, -220) * CF.angles(0, 0, math.radians(-25)),
@@ -420,15 +422,17 @@ def build_hall(dm, lib):
     lib.box(m, "Pultanzeige_Mast", -325.1, -324.7, 3.2, 6.2, -218.9, -218.5, STEEL, "Metal", deco=True)
     lib.sign(m, "320 bar", (2.6, 1.3), CF.at(-324.6, 6.6, -218.7, 90), (80, 255, 140), BLACK, name="Druckanzeige",
              font="RobotoMono", bolts=False)
-    # Ballenstapel (8 Presslinge 4x4x4) bei (-372,-236)
-    sup = Support(0.0)
+    # Ballenstapel (8 Presslinge 4x4x4) bei (-372,-236): stabile Pyramide - 2x2 auf dem Boden (Y 0..4), darüber
+    # 2 Ballen je mittig auf 2 unteren (4..8), oben 1 Ballen mittig auf beiden (8..12), 1 Ballen daneben am Boden
     k = 0
-    for layer, cells in ((0, [(-2.2, -2.2), (2.2, -2.2), (-2.2, 2.2), (2.2, 2.2)]),
-                         (1, [(-1.2, -2.2), (2.4, -1.4), (0.6, 2.2)]), (2, [(0.4, -0.2)])):
+    for y0, cells in ((0, [(-2.05, -2.05), (2.05, -2.05), (-2.05, 2.05), (2.05, 2.05)]),
+                      (4, [(0, -2.05), (0, 2.05)]), (8, [(0, 0)])):
         for dx, dz in cells:
-            pose = CF.at(-372 + dx, 2, -236 + dz, (k * 13) % 7 - 3)
-            place_block(lib, m, "Pressling", (4, 4, 4), pose, CUBE_COLORS[k % len(CUBE_COLORS)], "CorrodedMetal", sup)
+            lib.part(m, "Pressling", (4, 4, 4), CF(-372 + dx, y0 + 2, -236 + dz), CUBE_COLORS[k % len(CUBE_COLORS)],
+                     "CorrodedMetal")
             k += 1
+    lib.part(m, "Pressling", (4, 4, 4), CF.at(-372 + 6.6, 2, -236 + 1.0, 14), CUBE_COLORS[k % len(CUBE_COLORS)],
+             "CorrodedMetal")
     # Ölfässer, Feuerlöscher, Warnschilder
     for i, (x, z, col) in enumerate(((-376.2, -245.4, (40, 70, 130)), (-373.4, -245.6, (160, 50, 40)),
                                      (-375.0, -242.6, RUST))):
@@ -484,9 +488,9 @@ def build_conveyor_bunker(dm, lib, rng):
     lib.box(m, "Bunkerwand", bx0, bx0 + 1, -0.5, 1.5, bz0 + 1, bz1 - 1, CONCRETE_DARK, "Concrete")
     for k in range(5):
         col = YELLOW if k % 2 == 0 else BLACK
-        lib.box(m, "Warnstreifen", bx1 - 1.2, bx1, -0.5, -0.48, bz0 + 1 + k * 4, bz0 + 1 + (k + 1) * 4, col,
+        lib.box(m, "Warnstreifen", bx1 - 1.2, bx1, -0.5, -0.45, bz0 + 1 + k * 4, bz0 + 1 + (k + 1) * 4, col,
                 "SmoothPlastic", deco=True)
-    lib.cylinder(m, "Abwurfmarke", (BUNKER[0], -0.49, BUNKER[1]), 0.02, 5, "Y", YELLOW, "SmoothPlastic", deco=True)
+    lib.cylinder(m, "Abwurfmarke", (BUNKER[0], -0.475, BUNKER[1]), 0.05, 5, "Y", YELLOW, "SmoothPlastic", deco=True)
     sup = Support(-0.5)
     place_block(lib, m, "Pressling", (3.4, 3, 3.6), CF.at(-397, 0, -205, 17), CUBE_COLORS[0], "CorrodedMetal", sup)
     place_block(lib, m, "Pressling", (3.2, 3.2, 3.2), CF.at(-397.5, 0, -216.5, -9), CUBE_COLORS[3], "CorrodedMetal",
@@ -733,7 +737,7 @@ def build_zerlegeplatz(dm, lib):
     lib.box(m, "Werkbankplatte", -284.3, -267.7, 3, 3.3, -167.6, -164.95, (130, 90, 60), "Wood")
     # Bodenmarkierung Arbeitsplatz
     for z in (-182, -170):
-        lib.box(m, "Platzlinie", -275, -249, 0, 0.02, z - 0.2, z + 0.2, YELLOW, "SmoothPlastic", deco=True)
+        lib.box(m, "Platzlinie", -275, -249, 0, 0.05, z - 0.2, z + 0.2, YELLOW, "SmoothPlastic", deco=True)
     # Vorlagen-Kombi, verblasst, auf 4 Unterstellböcken, Haube offen, Rad vorn links fehlt
     root = (-262, 1.5, -176)
     car = lib.clone_car(m, "wagon", CF.at(root[0], root[1], root[2], 90), (120, 110, 95), name="Zerlegewagen",
@@ -750,7 +754,7 @@ def build_zerlegeplatz(dm, lib):
                     "Metal")
     # abgebautes Rad liegt flach neben dem Auto
     lib.cylinder(m, "Rad_ab", (-270, 0.5, -168.5), 1.0, 2.6, "Y", RUBBER, "SmoothPlastic")
-    lib.cylinder(m, "Felge_ab", (-270, 0.51, -168.5), 1.0, 1.9, "Y", (97, 112, 124), "Metal")
+    lib.cylinder(m, "Felge_ab", (-270, 0.55, -168.5), 1.1, 1.9, "Y", (97, 112, 124), "Metal")
     # Motorkran mit hängendem Motorblock
     hx, hz = -279.5, -176
     lib.box(m, "Motorkran_Fuss", hx - 0.3, hx + 7, 0, 0.5, hz - 2.6, hz - 2.1, (200, 60, 50), "Metal")

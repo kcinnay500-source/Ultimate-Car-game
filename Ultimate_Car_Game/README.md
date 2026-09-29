@@ -1,18 +1,15 @@
-# Ultimate Car Game 3.0 (Roblox)
+# Ultimate Car Game 3.0 – Werkstattmeile (Roblox)
 
-Eine Auto-Minispiel-Sammlung für Roblox mit einer gemeinsamen Karriere (Profil, Level/XP, Credits) und drei Belohnungsstufen:
+Aufbauend auf **Ultimate Car Game 2.4.0** (Schrauberwerkstatt mit 3D-Reparaturen) ist das Spiel jetzt eine **begehbare Stadt**:
 
-| Stufe | Spiele |
-|---|---|
-| **Kurz** (Sekunden) | **Schrottpresse**: Klicken, Combo, 100 Upgrades, Maschinen, Schrotthändler, Rebirth, globale Bestenliste |
-| **Mittel** (Minuten) | **Werkstatt** (Aufträge auf Hebebühnen, Ausbau), **Schrottplatz**, **Mechaniker-Quiz**, **Parkplatz-Chaos** |
-| **Lang** (Stunden/Tage) | **Idle Tuning Garage** (Echtzeit-Projekte bis 8 Std., passive Einnahmen), Tagesauftrag, Tagesziele, Meilensteine |
+- **Werkstattmeile**: Jeder Spieler hat seine eigene Schrauberwerkstatt aus 2.4.0 (Empfang, Bühnen, Anbauten, Geräte) – acht Grundstücke an der Hauptstraße, Hausnummer-Pylon mit „WILLKOMMEN, Name“.
+- **Ankunftshalle (Empfang)** mit Uhrturm am **Stadtplatz** (Zahnradbrunnen, Bestenliste, Farbleitsystem zu allen Zielen).
+- **Schrottplatz** mit animierter Presse-Halle, Magnetkran und Schrotthändler → Minispiele *Schrottpresse* und *Schrottplatz*.
+- **Tuning-Zentrum** mit hoher Halle und Leistungsprüfstand → *Idle Tuning Garage*.
+- **Meisterschule** → *Mechaniker-Quiz*; **Parkplatz/Parkhaus** → *Parkplatz-Chaos*.
+- **Autohaus** (Glasrotunde mit Drehteller), **Auktionshaus**, **Spielhalle**, **Credit-Center**, **Teststrecke**, Tankstelle, Waschstraße, Stadtpark – Autohaus, Auktion und Spielhalle zeigen in dieser Ausbaustufe „Eröffnet bald“.
+- Belebte Straßen: NPC-Verkehr, Ampeln, Kreisverkehre, Straßenlaternen für die Nacht.
 
-Die Spiele greifen ineinander: Presse-Upgrades erhöhen Werkstatt- und Tuning-Einnahmen, Diagnosepunkte aus dem Quiz verkürzen Reparaturen, Parkplatz-Serien verbessern die Aufträge, beim Zerlegen auf dem Schrottplatz fällt Schrott für die Presse ab.
+Alle Minispiele teilen Profil, Level und Credits mit der Werkstatt und verstärken sich gegenseitig (Querboni). Der Server rechnet alles; der Spielstand bleibt im 2.4.0-Profil (`UltimateCarGame_v2`, nichts geht verloren).
 
-- Version: **3.0.0**
-- Serverautoritativ: Der Client sendet nur Absichten, alle Werte rechnet der Server.
-- Nur native Parts, keine externen Assets. Oberfläche auf Deutsch, für Handy (hoch und quer) und Desktop.
-- Speichert im DataStore `UltimateCarGame_v2` mit Sitzungssperre und Autosave.
-
-**Loslegen:** siehe [START_HIER.md](START_HIER.md). Prüfliste für Studio: [STUDIO_TESTS.md](STUDIO_TESTS.md). Technische Details: [docs/PLAN_3.0.md](docs/PLAN_3.0.md). Testergebnisse: [TESTBERICHT.txt](TESTBERICHT.txt).
+**Loslegen:** [START_HIER.md](START_HIER.md) · **Studio-Prüfliste:** [STUDIO_TESTS.md](STUDIO_TESTS.md) · **Stadtplan:** [docs/CITY_SPEC.md](docs/CITY_SPEC.md) · **Schnittstellen:** [docs/MERGE_CONTRACT.md](docs/MERGE_CONTRACT.md) · **Ansichten:** [docs/renders](docs/renders)

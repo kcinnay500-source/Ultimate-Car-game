@@ -6,7 +6,11 @@
 Prüfungen:
   * alle BaseParts verankert; keine Parts unter Y -3 (außer Liste INTENDED_LOW)
   * Z-Fighting-Kandidaten: exakt koplanare, gleich orientierte Flächen, die sich überlappen
-    (Oberseiten und senkrechte Seiten; Vorlagen-Autos ausgenommen)
+    (Oberseiten und senkrechte Seiten; Vorlagen-Autos ausgenommen), und fast koplanare (0 < Abstand < 0.05)
+  * schwebende Geometrie: Berührungsgraph der AABBs (Toleranz 0.06) - jede Gruppe muss die Grasplatte erreichen
+  * Bordsteinabsenkungen frei von Laternen, Bäumen, Baken, Pylonen (§9.1)
+  * Spielerseite jeder Station 10 x 10 frei (§1.3), Kamera-Strahlen (Zoom 10/16/24, ±35°) hinter Stationen und
+    Ankunftspunkten
   * Parts und Lichter je Bereich gegen das Budget (CITY_SPEC §10)
   * Stationen / Ankunftspunkte / CitySpawn gemäß Vertrag (Prompt-Werte, Attachment Arrival, freier Boden)
   * Stadt-Parts in Plot-Grundflächen (außer PlotSlots.*.Vacant und Bodenplatte)
@@ -25,15 +29,23 @@ from worldgen.plots import KEEP_TOP, RECT, SLOTS, loc2world  # noqa: E402
 from worldgen.contract import STATIONS, ARRIVALS  # noqa: E402
 
 INTENDED_LOW = {"Grasplatte", "Teichbecken", "Teichboden"}
-# Budget je District-Model (Name unter City.Districts) - Parts ohne Vorlagen-Autos, Lichter (§10)
+# Budget je District-Model (Name unter City.Districts) - Parts ohne Autos, Lichter (CITY_SPEC §10, Stand des Baus)
 DISTRICT_BUDGET = {
-    "Stadtplatz": (360 + 140 + 82, 9), "Platzgebaeude": (250 + 90 + 161 + 77, 11),
-    "Parkplatz": (135 + 371 + 99 + 56 + 150, 10), "Autohaus": (203 + 131, 11), "Tuning": (263, 7),
-    "Schrottplatz": (532, 5),
+    "Stadtplatz": (700, 9),          # D1 + D2 (mit Ausbau der Ankunftshalle) + Wegeleitsystem
+    "Platzgebaeude": (580, 11),      # D3-D6
+    "Schrottplatz": (540, 5),        # D10
+    "Tuning": (280, 7),              # D9 inkl. Vorplatz-Deko
+    "Autohaus": (340, 7),            # D8 inkl. Hinterhof
+    "Teststrecke": (160, 4),         # D13
+    "Parkplatz": (150, 4),           # D7 + Parkhaus
+    "Tankstelle": (260, 3),          # D11 + Waschstraße + Kundenparkplatz + Baumreihe
+    "Stadtpark": (410, 3),           # D12
+    "Meile": (120, 0),               # Haltestellen, Gassen-Portale, Bänke, Eimer
+    "Stadtrand": (640, 0),           # Wäldchen in den leeren Ecken
 }
-FOLDER_BUDGET = {"Ground": (11 + 220, 0), "Roads": (275 + 128 + 24 + 60, 0), "Lights": (220, 52),
-                 "PlotSlots": (282 + 88, 0)}
-TOTAL_BUDGET = 7740
+FOLDER_BUDGET = {"Ground": (250, 0), "Roads": (610, 0), "Lights": (220, 52), "PlotSlots": (300, 0),
+                 "Animated": (2260, 0)}
+TOTAL_BUDGET = 12000   # Gesamtobergrenze aller Stadt-Parts inkl. Autos und Verkehr (Merge-Vorgabe)
 LIGHT_BUDGET = 120
 
 
@@ -192,6 +204,241 @@ def zfight(parts, min_area=0.02):
     return hits
 
 
+def near_coplanar(parts, max_d=0.049, min_area=0.5):
+    """Parallele, gleich orientierte Flächen mit 0 < Abstand < max_d, die sich überlappen (Z-Fighting auf Distanz).
+    Nur Oberseiten und Seiten; Vorlagen-Autos und (fast) unsichtbare Parts ausgenommen."""
+    groups = defaultdict(list)
+    for p in parts:
+        if p.car or p.transp >= 0.95 or p.path.startswith("City.Animated.Verkehr"):
+            continue
+        for n, off, pts in _faces(p):
+            if n[1] < -0.5:
+                continue
+            key = (round(n[0], 3) + 0.0, round(n[1], 3) + 0.0, round(n[2], 3) + 0.0)
+            groups[key].append((off, p, pts))
+    hits = []
+    for n, lst in groups.items():
+        if len(lst) < 2:
+            continue
+        u, v = _basis(n)
+        lst.sort(key=lambda t: t[0])
+        polys = []
+        for off, p, pts in lst:
+            poly = _hull([(sum(q[i] * u[i] for i in range(3)), sum(q[i] * v[i] for i in range(3))) for q in pts])
+            xs = [a for a, b in poly]
+            ys = [b for a, b in poly]
+            polys.append((off, p, poly, (min(xs), max(xs), min(ys), max(ys))))
+        for i in range(len(polys)):
+            oi, pi, qi, bi = polys[i]
+            for j in range(i + 1, len(polys)):
+                oj, pj, qj, bj = polys[j]
+                d = oj - oi
+                if d >= max_d:
+                    break
+                if d < 0.0005 or pi.item is pj.item:
+                    continue
+                if _same_wreck(pi, pj):
+                    continue       # Lite-Wracks übernehmen die Blechteile der Vorlagen (wie die Vorlagen-Autos)
+                if bj[0] >= bi[1] or bi[0] >= bj[1] or bj[2] >= bi[3] or bi[2] >= bj[3]:
+                    continue
+                if abs(n[1]) < 0.5 and pi.top <= -0.9 and pj.top <= -0.9:
+                    continue
+                a = _area(_clip(qi, qj))
+                if a > min_area:
+                    hits.append((pi, pj, a, d, n))
+    return hits
+
+
+def _same_wreck(a, b):
+    for p in (a, b):
+        if ".Wrack." not in p.path and ".Wreck." not in p.path:
+            return False
+    return a.path.rsplit(".", 1)[0] == b.path.rsplit(".", 1)[0]
+
+
+def _ov(a, b, e):
+    return (a[0] - e <= b[1] and b[0] - e <= a[1] and a[2] - e <= b[3] and b[2] - e <= a[3] and
+            a[4] - e <= b[5] and b[4] - e <= a[5])
+
+
+def islands(parts, eps=0.06, cell=16):
+    """Zusammenhang über sich berührende AABBs (Toleranz eps). Liefert die Komponenten (Listen von Parts), die
+    nicht mit der Grasplatte (dem Boden der Stadt) verbunden sind - schwebende Geometrie."""
+    # Vorlagen-Autos zählen als Verbindung (Schleifen, Dachlasten liegen auf ihnen), werden aber selbst nicht
+    # gemeldet (Motorraum-Teile der Vorlagen hängen frei im Auto)
+    sel = [p for p in parts if p.transp < 0.95 and not p.path.startswith("City.Animated.Verkehr")]
+    bb = [p.aabb() for p in sel]
+    grid = defaultdict(list)
+    big = []
+    for i, a in enumerate(bb):
+        if (a[1] - a[0]) * (a[5] - a[4]) > 40000:
+            big.append(i)          # Grasplatte o. Ä.: gegen alle prüfen statt in tausend Zellen
+            continue
+        for gx in range(int(a[0] // cell), int(a[1] // cell) + 1):
+            for gz in range(int(a[4] // cell), int(a[5] // cell) + 1):
+                grid[(gx, gz)].append(i)
+    par = list(range(len(sel)))
+
+    def find(i):
+        while par[i] != i:
+            par[i] = par[par[i]]
+            i = par[i]
+        return i
+
+    def union(i, j):
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            par[ri] = rj
+    for lst in grid.values():
+        for ii in range(len(lst)):
+            i = lst[ii]
+            for jj in range(ii + 1, len(lst)):
+                j = lst[jj]
+                if _ov(bb[i], bb[j], eps):
+                    union(i, j)
+    for i in big:
+        for j in range(len(sel)):
+            if j != i and _ov(bb[i], bb[j], eps):
+                union(i, j)
+    # Autos und Wracks sind je ein starres Objekt (die Dellen der Wracks lassen Karosserieteile minimal abstehen)
+    group = {}
+    for i, p in enumerate(sel):
+        segs = p.path.split(".")
+        for k in range(len(segs) - 1, 0, -1):
+            if segs[k] in ("Wreck", "Car", "Wrack") or segs[k].startswith(("Wrack_", "Wreck_")):
+                key = ".".join(segs[:k + 1])
+                if key in group:
+                    union(i, group[key])
+                else:
+                    group[key] = i
+                break
+    roots = {find(i) for i, p in enumerate(sel) if p.name == "Grasplatte"}
+    comps = defaultdict(list)
+    for i in range(len(sel)):
+        r = find(i)
+        if r not in roots:
+            comps[r].append(sel[i])
+    return sorted((c for c in comps.values() if not all(p.car for p in c)), key=lambda c: c[0].path)
+
+
+def curb_cut_blockers(parts):
+    """Stehende Stadt-Parts (Laternen, Bäume, Pylonen, Baken ...) auf einer Bordsteinabsenkung (§9.1: 0 Laternen
+    in Einfahrten). Erlaubt: Fahrbahn/Absenkung selbst und Markierungen (Unterseite <= -0.95)."""
+    from worldgen.ground_roads import CURB_CUTS, plot_cuts
+    rects = [(c[0], c[1], c[2], c[3], c[4]) for c in CURB_CUTS + plot_cuts()]
+    out = []
+    for p in parts:
+        if p.car or p.transp >= 0.95 or p.path.startswith("City.Animated.Verkehr"):
+            continue
+        b = p.aabb()
+        if b[2] <= -0.95 + 1e-3 or b[2] > 4:
+            continue
+        for nm, x0, x1, z0, z1 in rects:
+            if b[1] > x0 + 0.01 and b[0] < x1 - 0.01 and b[5] > z0 + 0.01 and b[4] < z1 - 0.01:
+                out.append((nm, p.path, [round(v, 2) for v in b]))
+    return out
+
+
+class _Occluders:
+    """Kamera-Verdecker wie Poppercam: CanCollide und Transparency < 0.25"""
+
+    def __init__(self, parts):
+        self.data = []
+        self.grid = defaultdict(list)
+        for p in parts:
+            if not p.collide or p.transp >= 0.25 or p.path.startswith(("City.Stations", "City.Arrivals")):
+                continue
+            if p.path.startswith("City.Animated.Verkehr"):
+                continue
+            k = len(self.data)
+            self.data.append((p, p.cf.inverse(), p.aabb()))
+            b = self.data[-1][2]
+            if (b[1] - b[0]) * (b[5] - b[4]) > 40000:
+                self.grid["big"].append(k)
+                continue
+            for gx in range(int(b[0] // 16), int(b[1] // 16) + 1):
+                for gz in range(int(b[4] // 16), int(b[5] // 16) + 1):
+                    self.grid[(gx, gz)].append(k)
+
+    def hit(self, a, b, step=0.25):
+        lo = [min(a[i], b[i]) for i in range(3)]
+        hi = [max(a[i], b[i]) for i in range(3)]
+        ks = set(self.grid["big"])
+        for gx in range(int(lo[0] // 16), int(hi[0] // 16) + 1):
+            for gz in range(int(lo[2] // 16), int(hi[2] // 16) + 1):
+                ks.update(self.grid.get((gx, gz), ()))
+        cands = []
+        for k in ks:
+            p, inv, bb = self.data[k]
+            if bb[0] <= hi[0] and bb[1] >= lo[0] and bb[2] <= hi[1] and bb[3] >= lo[1] and bb[4] <= hi[2] and \
+                    bb[5] >= lo[2]:
+                cands.append((p, inv))
+        dist = math.dist(a, b)
+        n = int(dist / step) + 1
+        for k in range(n + 1):
+            t = k / n
+            q = tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+            for p, inv in cands:
+                l = inv.point(q)
+                if p.cls == "Part" and p.shape == 0:
+                    inside = l[0] * l[0] + l[1] * l[1] + l[2] * l[2] < (p.size[0] / 2) ** 2
+                elif p.cls == "Part" and p.shape == 2:
+                    inside = abs(l[0]) < p.size[0] / 2 and l[1] * l[1] + l[2] * l[2] < (p.size[1] / 2) ** 2
+                else:
+                    inside = abs(l[0]) < p.size[0] / 2 and abs(l[1]) < p.size[1] / 2 and abs(l[2]) < p.size[2] / 2
+                if inside:
+                    return p, t * dist
+        return None
+
+
+CAM_ZOOMS = ((10, 5), (16, 8), (24, 12))     # Abstand hinter dem Kopf, Höhe über dem Kopf (Neigung ~27°)
+CAM_ANGLES = (0, 35, -35)
+
+
+def camera_snags(occ, px, fy, pz, bx, bz):
+    """Strahlen vom Kopf (Boden + 4.5) zur Kamera hinter dem Spieler (Richtung (bx,bz) = hinter dem Spieler).
+    Liefert [(Zoom, Winkel, Part, Abstand)] für verdeckte Strahlen."""
+    head = (px, fy + 4.5, pz)
+    res = []
+    for d, h in CAM_ZOOMS:
+        for ang in CAM_ANGLES:
+            r = math.radians(ang)
+            dx = bx * math.cos(r) - bz * math.sin(r)
+            dz = bx * math.sin(r) + bz * math.cos(r)
+            hh = occ.hit(head, (px + dx * d, fy + 4.5 + h, pz + dz * d))
+            if hh:
+                res.append((d, ang, hh[0], hh[1]))
+    return res
+
+
+def player_side_blockers(parts, cx, fy, cz, half=5.0, y_lo=0.7, y_hi=6.0):
+    """Kollidierende Parts in einem (2*half)² Quadrat um (cx,cz) zwischen Boden + y_lo und Boden + y_hi (§1.3)"""
+    out = []
+    for p in parts:
+        if not p.collide or p.transp >= 1 or p.path.startswith(("City.Stations", "City.Arrivals",
+                                                                "City.Animated.Verkehr")):
+            continue
+        a = p.aabb()
+        if a[3] <= fy + y_lo or a[2] >= fy + y_hi:
+            continue
+        if a[1] <= cx - half or a[0] >= cx + half or a[5] <= cz - half or a[4] >= cz + half:
+            continue
+        out.append(p.path)
+    return out
+
+
+def _cam_report(errors, warns, who, snags):
+    """Kamera klemmt: Treffer näher als 8 Studs am Kopf, oder der mittlere Strahl bei Zoom 10 ist verdeckt."""
+    bad = [(d, a, p, dist) for d, a, p, dist in snags if dist < 8 or (d == 10 and a == 0)]
+    soft = [s for s in snags if s not in bad]
+    if bad:
+        errors.append("%s: Kamera klemmt (%s)" % (who, ", ".join("Zoom %d/%+d° %s nach %.1f" % (d, a, p.path, dist)
+                                                                 for d, a, p, dist in bad[:3])))
+    if soft:
+        warns.append("%s: Kamera rückt näher (%s)" % (who, ", ".join("Zoom %d/%+d° %s nach %.1f" % (d, a, p.name, dist)
+                                                                     for d, a, p, dist in soft[:2])))
+
+
 # ---------------------------------------------------------------- Prüfungen
 def main(argv):
     place = next((a for a in argv if not a.startswith("--")), scan.DEFAULT_PLACE)
@@ -215,6 +462,24 @@ def main(argv):
         errors.append("%d Z-Fighting-Kandidaten (koplanar, überlappend)" % len(hits))
         for a, b, ar, key in hits[: (200 if verbose else 12)]:
             errors.append("   %s <-> %s  Fläche %.2f  Ebene n=(%g,%g,%g) d=%g" % (a.path, b.path, ar, *key))
+    # 2b) fast koplanare Flächen (0 < Abstand < 0.05, Spec §1.2: Stufen >= 0.05)
+    nc = near_coplanar(parts)
+    if nc:
+        errors.append("%d fast koplanare Flächenpaare (Abstand < 0.05, Z-Fighting auf Distanz)" % len(nc))
+        for a, b, ar, d, n in sorted(nc, key=lambda h: -h[2])[: (200 if verbose else 12)]:
+            errors.append("   %s <-> %s  Fläche %.1f  Abstand %.3f  n=(%g,%g,%g)" % (a.path, b.path, ar, d, *n))
+    # 2c) schwebende Geometrie: Teile ohne Berührung (0.06) zur Grasplatte
+    isl = islands(parts)
+    if isl:
+        errors.append("%d schwebende Gruppen (keine Verbindung zum Boden)" % len(isl))
+        for comp in isl[: (200 if verbose else 12)]:
+            y0 = min(p.aabb()[2] for p in comp)
+            errors.append("   %s (+%d) Unterkante %.2f bei (%.1f, %.1f)" % (comp[0].path, len(comp) - 1, y0,
+                                                                         comp[0].cf.p[0], comp[0].cf.p[2]))
+    # 2d) nichts Stehendes auf Bordsteinabsenkungen (Laternen, Bäume, Baken, Pylonen)
+    cc = curb_cut_blockers(parts)
+    if cc:
+        errors.append("%d Parts stehen auf Bordsteinabsenkungen: %s" % (len(cc), cc[:6]))
     # 3) Budget
     total = len(parts)
     cars_parts = sum(1 for p in parts if p.car)
@@ -222,10 +487,10 @@ def main(argv):
     def count_lights(item):
         return sum(1 for x in item.iter("Item") if x.get("class") in ("PointLight", "SpotLight", "SurfaceLight"))
     lights_total = count_lights(city)
-    info.append("Parts gesamt %d (davon Vorlagen-Autos %d, Verkehrsautos %d); ohne Verkehr %d / Budget %d"
-                % (total, cars_parts, traffic, total - traffic, TOTAL_BUDGET))
-    if total - traffic > TOTAL_BUDGET:
-        errors.append("Part-Budget überschritten: %d > %d" % (total - traffic, TOTAL_BUDGET))
+    info.append("Parts gesamt %d / Budget %d (davon Auto-Parts %d, darin Verkehr Lite-Autos + Bus %d)"
+                % (total, TOTAL_BUDGET, cars_parts, traffic))
+    if total > TOTAL_BUDGET:
+        errors.append("Part-Budget überschritten: %d > %d" % (total, TOTAL_BUDGET))
     info.append("Lichter gesamt %d / Budget %d" % (lights_total, LIGHT_BUDGET))
     if lights_total > LIGHT_BUDGET:
         errors.append("Licht-Budget überschritten")
@@ -318,6 +583,19 @@ def main(argv):
                              (k, fy, w.p[0], w.p[2]))
             if block:
                 warns.append("Station %s: Arrival blockiert durch %s" % (k, block[:3]))
+    # 4b) Spielerseite 10 x 10 frei (§1.3) und Kamera hinter dem Spieler (Poppercam: CanCollide, T < 0.25)
+    occ = _Occluders(parts)
+    from worldgen.contract import SIDE
+    for key, (tab, title, (x, y, z), side, floor, extra) in STATIONS.items():
+        sx, sz = SIDE[side]
+        blk = player_side_blockers(parts, x + sx * 6.5, floor, z + sz * 6.5)
+        if blk:
+            errors.append("Station %s: 10x10 auf der Spielerseite %s blockiert durch %s" % (key, side,
+                                                                                       sorted(set(blk))[:4]))
+        _cam_report(errors, warns, "Station " + key, camera_snags(occ, x + sx * 6, floor, z + sz * 6, sx, sz))
+    for key, (x, fy, z, look) in ARRIVALS.items():
+        sx, sz = SIDE[look]
+        _cam_report(errors, warns, "Arrival " + key, camera_snags(occ, x, fy, z, -sx, -sz))
     keys_ar = {name_of(c) for c in children(ar)} if ar is not None else set()
     if set(ARRIVALS) - keys_ar:
         errors.append("Arrivals fehlen: %s" % sorted(set(ARRIVALS) - keys_ar))

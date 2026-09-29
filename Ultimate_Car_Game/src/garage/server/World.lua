@@ -59,11 +59,26 @@ local function dressSlot(slot,player)
     elseif hiddenVacant[slot] then
         hiddenVacant[slot].Parent=sf;hiddenVacant[slot]=nil
     end
-    local pylon=sf:FindFirstChild("Pylon")
+    local pylon=sf:FindFirstChild("Pylon");local house=pylon and pylon:GetAttribute("House") or slot
+    local name=player and player.DisplayName or nil
     if pylon then
-        pylon:SetAttribute("Owner",player and player.DisplayName or "")
+        pylon:SetAttribute("Owner",name or "")
         for _,d in ipairs(pylon:GetDescendants()) do
-            if d:IsA("TextLabel") and d.Name=="Owner" then d.Text=player and ("WILLKOMMEN, "..player.DisplayName) or "FREI" end
+            if d:IsA("TextLabel") then
+                if d.Name=="Owner" then d.Text=name or "FREI"
+                elseif d.Name=="Welcome" then
+                    d.Text=name and ("WILLKOMMEN, "..name) or ("FREI – Werkstatt Nr. "..house)
+                    d.TextColor3=name and Color3.fromRGB(47,169,163) or Color3.fromRGB(247,176,63)
+                end
+            end
+        end
+    end
+    -- Meile-Verzeichnis am Stadtplatz: Zeile Owner_<Hausnummer>
+    local plaza=city:FindFirstChild("Districts") and city.Districts:FindFirstChild("Stadtplatz")
+    local directory=plaza and plaza:FindFirstChild("Meile-Verzeichnis",true)
+    if directory then
+        for _,d in ipairs(directory:GetDescendants()) do
+            if d:IsA("TextLabel") and d.Name=="Owner_"..house then d.Text=name or "FREI" end
         end
     end
 end

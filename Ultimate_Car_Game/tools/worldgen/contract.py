@@ -19,13 +19,14 @@ STATIONS = {
     "overview": ("overview", "Empfang · Übersicht", (-26, 3, -208), "S", 0, {}),
     "map": ("map", "Stadtplan · Schnellreise", (26, 3, -208.5), "S", 0, {}),
     "goals": ("goals", "Tagesziele", (40, 3, -214), "W", 0, {}),
-    "meile_map": ("map", "Meile-Verzeichnis", (-16, 2.5, -31.5), "S", -0.5, {}),
+    "meile_map": ("map", "Meile-Verzeichnis", (-14, 2.5, -31.5), "S", -0.5, {}),     # Spec X -16 (Pylon verschoben)
     "goals_platz": ("goals", "Infotafel · Tagesziele", (30, 2.5, -145), "S", -0.5, {}),
     "leaderboard": ("leaderboard", "Bestenliste", (-30, 2.5, -145), "S", -0.5, {}),
     "arcade": ("arcade", "Spielhalle · Punkte-Schalter", (-80, 3, -97), "S", 0, {"Soon": True}),
     "quiz": ("quiz", "Meisterschule · Mechaniker-Quiz", (-116, 3, -148), "E", 0, {}),
-    "auction": ("auction", "Auktionshaus · Bieterkasse", (81, 3, -101), "S", 0, {"Soon": True}),
-    "auction_consign": ("auction", "Auktionshaus · Einlieferung", (81, 3, -51), "N", 0, {"Soon": True}),
+    # Auktion: Spec X 81 -> 84.5, damit die Spielerseite neben der Portalwand 10 x 10 frei hat (plaza_buildings)
+    "auction": ("auction", "Auktionshaus · Bieterkasse", (84.5, 3, -101), "S", 0, {"Soon": True}),
+    "auction_consign": ("auction", "Auktionshaus · Einlieferung", (84.5, 3, -51), "N", 0, {"Soon": True}),
     "shop": ("shop", "Credit-Center", (114, 3, -152), "W", 0, {}),
     "parking": ("parking", "Parkplatz-Chaos", (-65, 2.5, -236.5), "S", -1.0, {}),
     "dealer": ("dealer", "Autohaus · Verkauf", (-20, 3, 100), "N", 0, {"Soon": True}),
@@ -33,9 +34,9 @@ STATIONS = {
     "tuning": ("tuning", "Tuning-Zentrum", (234, 3, -201), "W", 0, {}),
     "dyno": ("tuning", "Leistungsprüfstand", (310, 3, -206), "S", 0, {}),
     "press": ("press", "Schrottpresse", (-321, 3, -220), "E", 0, {}),
-    "scrap_trader": ("press", "Schrotthändler · Ankauf", (-220, 3, -213), "S", -0.98, {}),
-    "scrapyard": ("scrapyard", "Zerlegeplatz", (-262, 3, -191), "N", -0.98, {}),
-    "carwash": ("carwash", "Waschstraße", (304, 3, 209), "N", -1.0, {"Soon": True}),
+    "scrap_trader": ("press", "Schrotthändler · Ankauf", (-220, 3, -213), "S", -1.0, {}),     # Betonzufahrt
+    "scrapyard": ("scrapyard", "Zerlegeplatz", (-262, 3, -191), "N", -0.85, {}),        # auf der Fahrzeugwaage
+    "carwash": ("carwash", "Waschstraße", (304, 3, 218), "N", -1.0, {"Soon": True}),   # Spec 209: s. parking_misc
     "track": ("track", "Teststrecke", (0, 3, 224), "N", -0.5, {"Soon": True}),
 }
 ARCADE_GAMES = [
@@ -45,8 +46,8 @@ ARCADE_GAMES = [
     ("arcade_4", "DREHMOMENT", (-121, 3, -96), "E"),
     ("arcade_5", "MOTOR-OHR", (-112, 3, -104), "S"),
     ("arcade_6", "EINPARK-PROFI", (-98, 3, -104), "S"),
-    ("arcade_7", "RENNSIMULATOR 1", (-110, 3, -41), "S"),
-    ("arcade_8", "RENNSIMULATOR 2", (-90, 3, -41), "S"),
+    ("arcade_7", "RENNSIMULATOR 1", (-110, 3, -43.5), "S"),     # Spec Z -41: Simulatoren 2.5 nach Norden
+    ("arcade_8", "RENNSIMULATOR 2", (-90, 3, -43.5), "S"),
 ]
 for _k, _g, _p, _s in ARCADE_GAMES:
     STATIONS[_k] = ("arcade", "Spielhalle · " + _g.title(), _p, _s, 0, {"Soon": True, "Game": _g})
@@ -64,7 +65,7 @@ ARRIVALS = {
     "tuning": (204, -1, -201, "E"),
     "press": (-300, -1, -211, "W"),
     "scrap_trader": (-220, -1, -205, "N"),
-    "scrapyard": (-262, -1, -200, "S"),
+    "scrapyard": (-262, -0.85, -200, "S"),       # Fahrzeugwaage (Oberseite -0.85)
     "carwash": (186, -1, 190, "E"),
     "track": (0, -0.5, 218, "S"),
     "scrapyard_gate": (-168, -0.95, -201, "W"),   # liegt in der Schrott-Tor-Absenkung (-0.95)

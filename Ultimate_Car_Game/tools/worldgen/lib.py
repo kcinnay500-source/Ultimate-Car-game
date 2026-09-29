@@ -566,6 +566,54 @@ class Lib:
         cf = CF.from_axes((c[0], (y0 + y1) / 2, c[2]), ex, ey, ez)
         return self.part(parent, name, (abs(y1 - y0), sy, sz), cf, color, material, cls="WedgePart", **kw)
 
+    def convex_slab(self, parent, name, pts, y0, y1, color=SIDEWALK, material="Concrete", **kw):
+        """Liegende Platte mit konvexem Grundriss pts [(x,z), ...] von y0 bis y1: Fächer-Dreiecke, jedes an seiner
+        Höhe in 2 rechtwinklige Keile geteilt (2 * (n - 2) WedgeParts, lückenlos, ohne Überlappung)."""
+        out = []
+        for i in range(1, len(pts) - 1):
+            tri = [pts[0], pts[i], pts[i + 1]]
+            # Höhe von der Ecke gegenüber der längsten Seite fällen (Fußpunkt liegt dann auf dieser Seite)
+            k = max(range(3), key=lambda j: math.dist(tri[(j + 1) % 3], tri[(j + 2) % 3]))
+            p, q, r = tri[k], tri[(k + 1) % 3], tri[(k + 2) % 3]
+            qr = (r[0] - q[0], r[1] - q[1])
+            ln2 = qr[0] ** 2 + qr[1] ** 2
+            if ln2 < 1e-9:
+                continue
+            t = ((p[0] - q[0]) * qr[0] + (p[1] - q[1]) * qr[1]) / ln2
+            f = (q[0] + t * qr[0], q[1] + t * qr[1])
+            if math.dist(p, f) < 1e-4:
+                continue
+            for c in (q, r):
+                if math.dist(c, f) > 1e-4:
+                    out.append(self.flat_tri(parent, name, f, c, p, y0, y1, color, material, **kw))
+        return out
+
+    def ring_slab(self, parent, name, cx, cz, r_in, r_out, n, y0, y1, color=SIDEWALK, material="Concrete",
+                  phase=0.0, skip=(), **kw):
+        """Vieleck-Ring aus n Trapez-Sektoren (Apothemen r_in..r_out) ohne Überlappung: je Sektor ein Quader mit der
+        inneren Sehnenbreite + 2 Keile für die Aufweitung; alle Oberseiten auf y1. phase = Winkel der ersten
+        Sektormitte (Grad, 0 = +X, 90 = +Z); skip = Indizes ausgelassener Sektoren."""
+        out = []
+        half = math.pi / n
+        wi, wo = r_in * math.tan(half), r_out * math.tan(half)
+        for k in range(n):
+            if k in skip:
+                continue
+            a = math.radians(phase) + 2 * half * k
+            ux, uz = math.cos(a), math.sin(a)
+            tx, tz = -uz, ux
+
+            def w(rad, t):
+                return (cx + ux * rad + tx * t, cz + uz * rad + tz * t)
+            rm = (r_in + r_out) / 2
+            out.append(self.part(parent, name, (2 * wi, y1 - y0, r_out - r_in),
+                                 CF.at(cx + ux * rm, (y0 + y1) / 2, cz + uz * rm, yaw_towards(ux, uz)), color,
+                                 material, **kw))
+            for sgn in (-1, 1):
+                out.append(self.flat_tri(parent, name, w(r_out, sgn * wi), w(r_in, sgn * wi), w(r_out, sgn * wo),
+                                         y0, y1, color, material, **kw))
+        return out
+
     # ---------------------------------------------------- GUI / Licht / Prompt
     def surface_text(self, part, text, face="Back", canvas=None, text_color=AMBER, font="GothamBold",
                      name="SurfaceGui", label="Label", bg=None, size=(0.96, 0.88), pos=(0.02, 0.06),
@@ -722,6 +770,27 @@ class Lib:
         set_attrs(m, {"Body": template})
         parent.append(m)
         self._count(self.cars)
+        return m
+
+    LITE_KEEP = ("Root", "Chassis", "Paint", "Hood", "SideGlass", "FrontQuarterGlass", "RearQuarterGlass",
+                 "Windscreen", "RearGlass", "Bumper", "Headlamp", "TailLamp")
+
+    def lite_car(self, parent, template, cf, paint=TEAL, name=None, attrs=None):
+        """"Lite"-Auto (~35 Parts) aus ServerStorage.CarTemplates.<template>: nur Karosserie (Paint/Hood), Chassis,
+        Verglasung, Stoßfänger, Lampen und die 4 Reifen - ohne Motorraum, Felgendetails, Innenraum und Messpunkte.
+        Maße und Farben stammen 1:1 aus der Vorlage (umgefärbt wie clone_car)."""
+        m = self.clone_car(parent, template, cf, paint, name, attrs)
+        removed = 0
+        for it in list(children(m)):
+            if not is_basepart(it):
+                continue
+            nm = name_of(it)
+            if nm in self.LITE_KEEP or nm.endswith("Tire"):
+                continue
+            m.remove(it)
+            removed += 1
+        self._count(self.counts, -removed)
+        set_attrs(m, {"Lite": True})
         return m
 
     # ---------------------------------------------------- Deko-Rezepte

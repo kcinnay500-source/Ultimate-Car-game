@@ -15,9 +15,10 @@ Stationen tuning / dyno und die Ankunft tuning baut contract.py; hier steht die 
 (Tresen vor (234,3,-201), Prüfstand hinter (310,3,-206), je 10 x 10 freier Boden auf der Spielerseite).
 
 Höhen-Stapel (nie zwei überlappende Oberseiten auf gleicher Höhe):
-  Gelände -1.00 | Treff-Belag -0.97 | Dragstrip-Asphalt -0.95 | Vorplatz-/Treff-Markierungen -0.94/-0.92
-  | Dragstrip-Markierungen -0.90 | Fußweg / Eingangsstufe -0.50 | Hallenboden 0 | Teppich / Linien 0.02-0.03
-  | Prüfstand-Rahmen 0.03, Deck 0.08 | Drehscheibe 0.12 / 0.42 | Fahrschienen 0.5
+  Gelände -1.00 (Treff-Belag bündig -1.00 in einer Aussparung, ground_roads.GROUND_INSETS) | Dragstrip-Asphalt,
+  Vorplatz-Leitstreifen, Treff-Markierungen -0.95 | Vorplatz-Zufahrtslinien -0.94 | Dragstrip-Markierungen -0.90
+  | Fußweg / Eingangsstufe -0.50 | Hallenboden 0 | Teppich / Linien / Prüfstand-Rahmen +0.05 | Drehscheibe
+  0.12 / 0.42 | Fahrschienen 0.5
 
 Abweichungen von der Spec (begründet):
   * Showcar-Rampe bei (196,-276) statt (196,-250): (196,-250) liegt in der Rolltor-Zufahrt Z -258..-240 (§3.4),
@@ -72,7 +73,7 @@ def build(city, lib, tree):
         build_dyno(dm, anim, lib)
         build_showroom(dm, lib)
         build_bays(dm, anim, lib)
-        build_forecourt(dm, lib)
+        build_forecourt(dm, anim, lib)
         build_treff(dm, anim, lib)
         build_dragstrip(dm, anim, lib)
     return dm
@@ -198,21 +199,21 @@ def build_lounge(dm, lib):
     lib.sign(m, "TUNING-KATALOG", (2.6, 1.6), CF.at(238.6, 5.0, -202, -90), SCREEN_TXT, SCREEN_BG, name="Monitor",
              bolts=False)
     # Farbleitlinie innen: Tür -> Tresen
-    lib.box(m, "Leitlinie", 215.4, 232.5, 0, 0.03, -201.25, -200.75, TEAL, "SmoothPlastic", deco=True)
+    lib.box(m, "Leitlinie", 215.4, 232.5, 0, 0.05, -201.25, -200.75, TEAL, "SmoothPlastic", deco=True)
     # Trennwand hinter dem Tresen (10 hoch) mit Logo
     lib.box(m, "Trennwand", 243.6, 244, 0, 10, -211, -191, SLATE, "Metal")
     lib.box(m, "Trennwand_Neon", 243.6, 244, 10, 10.2, -211, -191, TEAL, "Neon", deco=True)
     lib.sign(m, "TUNING-ZENTRUM", (14, 4), CF.at(243.5, 6.4, -201, -90), TEAL, SLATE, name="Logo",
              sub="Leistung · Optik · Fahrwerk", sub_color=WHITE)
     # Sitzecke: Teppich, 2 Sofas, Couchtisch
-    lib.box(m, "Teppich", 221, 235, 0, 0.02, -190, -176, RUG, "Fabric", deco=True, collide=False)
+    lib.box(m, "Teppich", 221, 235, 0, 0.05, -190, -176, RUG, "Fabric", deco=True, collide=False)
     lib.box(m, "Sofa", 218, 232, 0, 1.5, -175, -172, LEATHER, "Fabric")
     lib.box(m, "Sofalehne", 218, 232, 0, 3.4, -172, IZ1, LEATHER, "Fabric")
     lib.box(m, "Sofakissen", 218.2, 231.8, 1.5, 1.8, -174.8, -172, TEAL, "Fabric", deco=True)
     lib.box(m, "Sofa", 216.4, 219.4, 0, 1.5, -190, -177, LEATHER, "Fabric")
     lib.box(m, "Sofalehne", 215.2, 216.4, 0, 3.4, -190, -177, LEATHER, "Fabric")
     lib.box(m, "Sofakissen", 216.4, 219.2, 1.5, 1.8, -189.8, -177.2, TEAL, "Fabric", deco=True)
-    lib.box(m, "Tischfuss", 225.5, 228.5, 0.02, 1.4, -184, -181, SLATE, "Metal")
+    lib.box(m, "Tischfuss", 225.5, 228.5, 0.05, 1.4, -184, -181, SLATE, "Metal")
     lib.box(m, "Tischplatte", 224, 230, 1.4, 1.6, -185.5, -179.5, (40, 50, 58), "Glass", reflectance=0.2)
     # Felgen-Vitrine: Sockel, stehende Felge, Neon-Nabe
     lib.box(m, "Vitrinensockel", 236.5, 239.5, 0, 2.4, -181.5, -178.5, SLATE, "Metal")
@@ -279,13 +280,14 @@ def _curve_screen(lib, part):
 def build_dyno(dm, anim, lib):
     dx, dz = DYNO
     s = lib.model(dm, "Pruefstand_Umfeld")
-    # Rahmen und Riffelblech-Deck über der Rollengrube 12 x 20
-    lib.box(s, "Grubenrahmen", dx - 6.3, dx + 6.3, 0, 0.03, dz - 10.3, dz + 10.3, AMBER, "Metal")
-    lib.box(s, "Grubendeck", dx - 6, dx + 6, 0.03, 0.08, dz - 10, dz + 10, (96, 104, 110), "DiamondPlate")
+    # Amber-Rahmen um die Rollengrube 12 x 20 (4 Leisten, +0.05); die Rollen ragen 0.37 aus dem Hallenboden
+    for a0, a1, b0, b1 in ((dx - 6.3, dx + 6.3, dz - 10.3, dz - 10), (dx - 6.3, dx + 6.3, dz + 10, dz + 10.3),
+                           (dx - 6.3, dx - 6, dz - 10, dz + 10), (dx + 6, dx + 6.3, dz - 10, dz + 10)):
+        lib.box(s, "Grubenrahmen", a0, a1, 0, 0.05, b0, b1, AMBER, "Metal")
     # Sicherheitsbereich (gelbe Linien)
     for x0, x1, z0, z1 in ((298, 322, -237.8, -237.4), (298, 322, -207.6, -207.2), (298, 298.4, -237.4, -207.6),
                            (321.6, 322, -237.4, -207.6)):
-        lib.box(s, "Sicherheitslinie", x0, x1, 0, 0.02, z0, z1, (240, 190, 40), "SmoothPlastic", deco=True)
+        lib.box(s, "Sicherheitslinie", x0, x1, 0, 0.05, z0, z1, (240, 190, 40), "SmoothPlastic", deco=True)
     # Spanngurte vorn und hinten
     for sx in (-1, 1):
         lib.beam(s, "Spanngurt", (dx + sx * 2.6, 1.4, dz + 7.2), (dx + sx * 3.4, 0.1, dz + 10.6), 0.12, AMBER,
@@ -312,11 +314,12 @@ def build_dyno(dm, anim, lib):
     fz = -234
     lib.box(m, "Luefterfuss", dx - 2.5, dx + 2.5, 0, 0.5, fz - 1.5, fz + 1.5, SLATE, "Metal")
     lib.cylinder(m, "Luefter", (dx, 3.7, fz), 1.2, 6.4, "Z", SLATE, "Metal")
-    blade_cf = CF.at(dx, 3.7, fz + 0.8, -90)
+    # Lüfterrad liegt an der Gehäusefront (Z fz + 0.6) an, die Nabe am Rad
+    blade_cf = CF.at(dx, 3.7, fz + 0.7, -90)
     lib.part(m, "Walzenluefter_Blatt", (0.2, 5.4, 0.9), blade_cf, (70, 76, 82), "Metal", deco=True)
-    lib.part(m, "Walzenluefter_Blatt", (0.18, 5.4, 0.9), CF.at(dx, 3.7, fz + 0.85, -90) * CF.angles(math.pi / 2, 0, 0),
+    lib.part(m, "Walzenluefter_Blatt", (0.1, 5.4, 0.9), blade_cf * CF.angles(math.pi / 2, 0, 0),
              (70, 76, 82), "Metal", deco=True)
-    lib.cylinder(m, "Luefternabe", (dx, 3.7, fz + 1.1), 0.3, 1.2, "Z", TEAL, "Neon", deco=True)
+    lib.cylinder(m, "Luefternabe", (dx, 3.7, fz + 0.95), 0.3, 1.2, "Z", TEAL, "Neon", deco=True)
     car = lib.clone_car(m, "sport", CF.at(dx, 0, dz, 0), (255, 125, 30), name="Car",
                         attrs={"Display": "Pruefstand"})
     lib.part(m, "Auspuffflamme", (0.8, 0.8, 0.8), CF(dx + 1.8, 1.2, dz + 7.9), (255, 140, 40), "Neon",
@@ -335,7 +338,7 @@ def build_showroom(dm, lib):
     x0, x1, z0, z1 = 250, 285, -239.5, -205
     for a0, a1, b0, b1 in ((x0, x1, z0, z0 + 0.5), (x0, x1, z1 - 0.5, z1), (x0, x0 + 0.5, z0 + 0.5, z1 - 0.5),
                            (x1 - 0.5, x1, z0 + 0.5, z1 - 0.5)):
-        lib.box(m, "Rahmenlinie", a0, a1, 0, 0.03, b0, b1, AMBER, "SmoothPlastic", deco=True)
+        lib.box(m, "Rahmenlinie", a0, a1, 0, 0.05, b0, b1, AMBER, "SmoothPlastic", deco=True)
     cx, cz = 266.5, -222.25
     lib.cylinder(m, "Drehteller_Neon", (cx, 0.06, cz), 0.12, 17, "Y", TEAL, "Neon")
     lib.cylinder(m, "Drehteller", (cx, 0.27, cz), 0.3, 16, "Y", SLATE, "Metal")
@@ -356,15 +359,15 @@ BAY_CARS = {
 def build_bays(dm, anim, lib):
     m = lib.model(dm, "Projektbuchten")
     # Fahrgasse Z -258..-240: türkise Fahrbahnlinien, weiße Rennstreifen
-    lib.box(m, "Fahrgasse_Linie", IX0 + 0.6, IX1, 0, 0.03, ROLL[0] - 0.2, ROLL[0] + 0.2, TEAL, "SmoothPlastic",
+    lib.box(m, "Fahrgasse_Linie", IX0 + 0.6, IX1, 0, 0.05, ROLL[0] - 0.2, ROLL[0] + 0.2, TEAL, "SmoothPlastic",
             deco=True)
-    lib.box(m, "Fahrgasse_Linie", IX0 + 0.6, IX1, 0, 0.03, ROLL[1] - 0.2, ROLL[1] + 0.2, TEAL, "SmoothPlastic",
+    lib.box(m, "Fahrgasse_Linie", IX0 + 0.6, IX1, 0, 0.05, ROLL[1] - 0.2, ROLL[1] + 0.2, TEAL, "SmoothPlastic",
             deco=True)
     for z0 in (-251.4, -247.8):
-        lib.box(m, "Rennstreifen", 222, 326, 0, 0.02, z0, z0 + 1.2, WHITE, "SmoothPlastic", deco=True)
+        lib.box(m, "Rennstreifen", 222, 326, 0, 0.05, z0, z0 + 1.2, WHITE, "SmoothPlastic", deco=True)
     # Buchtlinien (amber), Werkzeugwagen, Reifenstapel
     for x in (224, 250, 276, 302, 328):
-        lib.box(m, "Buchtlinie", x - 0.2, x + 0.2, 0, 0.03, -286.5, -259, AMBER, "SmoothPlastic", deco=True)
+        lib.box(m, "Buchtlinie", x - 0.2, x + 0.2, 0, 0.05, -286.5, -259, AMBER, "SmoothPlastic", deco=True)
     for x in (250, 276):
         lib.box(m, "Werkzeugwagen", x - 2, x + 2, 0, 3.6, IZ0, IZ0 + 2, PETROL, "Metal")
         lib.box(m, "Werkzeugwagen_Platte", x - 2.1, x + 2.1, 3.6, 3.8, IZ0, IZ0 + 2.1, STEEL, "Metal")
@@ -399,7 +402,7 @@ def build_bays(dm, anim, lib):
 
 
 # ---------------------------------------------------------------- Vorplatz: Showcar-Rampe, Pylon, Leuchte
-def build_forecourt(dm, lib):
+def build_forecourt(dm, anim, lib):
     m = lib.model(dm, "Vorplatz")
     # Rolltor-Zufahrt: Randlinien bis zur Rampe
     for z in ROLL:
@@ -428,13 +431,28 @@ def build_forecourt(dm, lib):
     lib.box(m, "Pylon_Neonkappe", px - 2.1, px + 2.1, 43, 43.6, pz - 2.1, pz + 2.1, TEAL, "Neon", deco=True)
     lib.box(m, "Pylon_Neonkante", px - 2.15, px - 1.85, 3, 40, pz + 1.85, pz + 2.15, TEAL, "Neon", deco=True)
     lib.box(m, "Pylon_Sockel", px - 2.6, px + 2.6, Y_G, 0.5, pz - 2.6, pz + 2.6, (70, 78, 86), "Concrete")
+    # Farbe auf dem dunklen Vorplatz: türkise Leitstreifen zur Eingangstür, Leuchtpoller, 2 Bäume, 2 Fahnen
+    for z0, z1 in ((DOOR[0] - 2.2, DOOR[0] - 1.6), (DOOR[1] + 1.6, DOOR[1] + 2.2)):
+        lib.box(m, "Leitstreifen", 178, 212.6, Y_G, Y_G + 0.05, z0, z1, TEAL, "Neon", deco=True)
+    for x in (183, 191, 199, 207):
+        for z in (DOOR[0] - 3.4, DOOR[1] + 3.4):
+            lib.cylinder(m, "Leuchtpoller", (x, Y_G + 0.6, z), 1.2, 0.6, "Y", SLATE, "Metal")
+            lib.cylinder(m, "Pollerlicht", (x, Y_G + 1.35, z), 0.3, 0.64, "Y", TEAL, "Neon", deco=True)
+    for z in (DOOR[0] - 7, DOOR[1] + 7):
+        lib.box(m, "Pflanzkasten", 205, 209, Y_G, -0.4, z - 2, z + 2, SLATE, "Metal")
+        lib.tree_lite(m, 207, -0.4, z, scale=1.2, seed=5 if z < -200 else 9, name="Vorplatzbaum")
+    from .dealer_track import flag_pole
+    for i, z in enumerate((-226, -182)):
+        flag_pole(lib, anim, "Tuningfahne_%d" % (i + 1), 181, Y_G, z, TEAL if i == 0 else (22, 26, 31),
+                  (22, 26, 31) if i == 0 else TEAL, text="TUNING")
 
 
 # ---------------------------------------------------------------- Tuning-Treff
 def build_treff(dm, anim, lib):
     m = lib.model(dm, "TuningTreff")
-    y_pad = -0.97
-    lib.box(m, "Treffbelag", 350, 450, Y_G - 0.02, y_pad, -300, -190, TREFF_PAD, "Asphalt")
+    # Belag bündig in der Aussparung des Tuning-Geländes (ground_roads.GROUND_INSETS)
+    y_pad = Y_G
+    lib.box(m, "Treffbelag", 350, 450, Y_G - 0.3, y_pad, -300, -190, TREFF_PAD, "Asphalt")
     # Fußweg von der Tuninggasse (X 320..326, Z -159) zum Treff-Bogen, Oberseite -0.5
     walk = (128, 134, 138)
     lib.box(m, "Treffweg", 320, 326, Y_G, -0.5, -168, -159, walk, "Concrete")

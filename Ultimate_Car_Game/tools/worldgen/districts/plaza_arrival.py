@@ -6,16 +6,21 @@ Animiertes (Anim-Attribut) liegt unter City.Animated.Stadtplatz: Schiebetüren (
 Zahnradbrunnen mit Fontänen und Zahnradkrone (fountain).
 
 Höhen (§1.2, keine koplanaren Oberseiten):
-  Platzpflaster -0.50 (ground_roads) | Bänder -0.47 | Brunnenring -0.46 / Amber-Inlay -0.45 / Innenscheibe -0.44
-  | Farbleitlinien draußen -0.40 (Ø3-Endscheiben -0.35) | Hallenboden 0 (Platte -0.5..0 auf dem Pflaster)
-  | Startring 0.03 / Medaillon 0.05 = Farbleitlinien innen 0.05 (ohne Überlappung).
+  Platzpflaster -0.50 (ground_roads) | Bänder -0.45 | Brunnenring Ø58 -0.45 (berührt die Bänder X ±29 nur) /
+  Amber-Inlay -0.40 / Brunnenplatz -0.35 | Farbleitlinien draußen -0.40 (Ø3-Endscheiben -0.35), Baumroste -0.35
+  | Hallenboden 0 (Platte -0.5..0 auf dem Pflaster) | Startring 0.05 = Farbleitlinien innen 0.05 (ohne
+  Überlappung) | Medaillon 0.10 | Starttext 0.12. Stufen überall >= 0.05 (§1.2).
 Abweichungen vom Spec (begründet):
-  * Bänke am Brunnen auf r 23.5 statt 21 (die Farbleitlinien Amber/Weiß bei x ±18.8 laufen daran vorbei).
+  * Bänke am Brunnen auf r 23.5 statt 21.
   * Farbleitlinien an der Südtür neu sortiert (Limette, Magenta, Amber | Weiß, Messing, Violett), damit sich keine
-    Linien kreuzen; Amber/Weiß bei x ±18.8 (Brunnenrand 17.6, Tafelstützen 19.6), Amber mit Versatz um den
-    Meile-Verzeichnis-Pylon (x -20.5 ab z -40).
-  * Oldtimer-Denkmal bei (-40,-100) statt (-40,-112) (dort steht ein Kandelaber).
-  * Girlandenmast (0,-168) -> (0,-170), damit die 6-Stud-Fläche um die Ankunft `plaza` (0,-165) frei bleibt.
+    Linien kreuzen. Amber/Weiß laufen bei x ±18.6 und weichen zwischen Z -135 und -65 auf x ±32 aus (neben den
+    grauen Bändern), damit sie das Brunnenrund (r ~30) nicht schneiden; der Meile-Verzeichnis-Pylon steht bei
+    x -14 (Spec -16), so bleibt die Amber-Linie gerade.
+  * Oldtimer-Denkmal bei (-41.4,-100) statt (-40,-112) (dort steht ein Kandelaber; Platz für die Amber-Linie).
+  * Girlandenmast (0,-168) -> zwei Masten (±8,-170): der Kamera-Ausleger hinter der Ankunft `plaza` (0,-165)
+    bleibt frei. Girlandenmast (0,-40) -> (0,-46), damit die Drähte die Pfeile des Platz-Wegweisers nicht kreuzen.
+  * Ankunftshalle: Glasband Ost/West in den Feldern Z -220..-206 erst ab Y 12 (die Tafeln Tagesziele/Stadtinfo
+    Y 4..12 lagen sonst vor dem Glas); Nordwand innen mit heller Verkleidung (224,214,190) Y 3..20.
   * Wegweiser (±132,-20) -> (±126,-18): (±132,-20) ist der Ampelmast an K-West/K-Ost.
   * Tafelstützen der Bestenliste/Infotafel bei x ±10 wie im Spec, aber hinter der Tafel (sonst stünden sie darin).
 """
@@ -47,7 +52,7 @@ FLOOR = (164, 164, 158)
 SKIN = (234, 192, 160)
 
 Y_PAVE = -0.50
-Y_BAND = -0.47
+Y_BAND = -0.45
 LINE_OUT = -0.40
 LINE_IN = 0.05
 LW = 1.2              # Linienbreite
@@ -59,6 +64,7 @@ CEIL = 24.0
 WALL_TOP = 28.0
 
 FOUNTAIN = (0.0, -100.0)
+DIRECTORY_X = -14.0   # Meile-Verzeichnis (Spec -16; die Station meile_map steht davor, contract.py)
 
 
 # ================================================================ Hilfen
@@ -215,8 +221,8 @@ def _bench(lib, parent, x, z, look_dx, look_dz, floor, length=5.0):
 def _hero_tree(lib, parent, x, z, seed=0, ground=Y_PAVE):
     """Platzbaum (18 Parts): Gitterrost, Stamm, 4 Äste, 3 Laubkronen-Ringe aus je 4 Keilen."""
     m = lib.model(parent, "Platzbaum")
-    _box(lib, m, "Baumrost", x - 1.8, x + 1.8, ground, ground + 0.06, z - 1.8, z + 1.8, BLACK, "DiamondPlate")
-    _cyl_y(lib, m, "Stamm", x, ground + 0.06, ground + 10.5, z, 1.3, TRUNK, "Wood")
+    _box(lib, m, "Baumrost", x - 1.8, x + 1.8, ground, ground + 0.15, z - 1.8, z + 1.8, BLACK, "DiamondPlate")
+    _cyl_y(lib, m, "Stamm", x, ground + 0.15, ground + 10.5, z, 1.3, TRUNK, "Wood")
     for k in range(4):
         a = math.radians(seed * 23 + 45 + k * 90)
         lib.beam(m, "Ast", (x, ground + 6.6 + 0.5 * k, z), (x + math.cos(a) * 2.6, ground + 10.2, z + math.sin(a) * 2.6),
@@ -284,7 +290,7 @@ def _signpost(lib, parent, x, z, blades, ground=Y_PAVE, name="Wegweiser"):
         dx, dz = dx / n, dz / n
         y = top - 0.55 - i * 0.85
         yaw = math.degrees(math.atan2(-dz, dx))
-        cf = CF.at(x + dx * 2.15, y, z + dz * 2.15, yaw)
+        cf = CF.at(x + dx * 2.07, y, z + dz * 2.07, yaw)
         blade = lib.part(m, "Pfeil", (3.8, 0.7, 0.12), cf, SLATE, "SmoothPlastic", deco=True)
         lib.surface_text(blade, text + "  ›", face="Back", name="Vorne")
         lib.surface_text(blade, "‹  " + text, face="Front", name="Hinten")
@@ -323,11 +329,11 @@ def build_hall(lib, dm, anim):
         gx0, gx1 = sorted((xo - s * 0.25, xo - s * 0.55))
         za, zb = HZ0 + WT, HZ1 - WT                       # -220.2 .. -181.8
         side = "West" if s < 0 else "Ost"
-        _box(lib, shell, side + "wand unten", wx0, wx1, 0, 9, za, -206, SLATE, "Metal")
+        _box(lib, shell, side + "wand unten", wx0, wx1, 0, 12, za, -206, SLATE, "Metal")
         _box(lib, shell, side + "wand unten", wx0, wx1, 0, 9, -196, zb, SLATE, "Metal")
         _box(lib, shell, side + "wand Sturz", wx0, wx1, 12, 16, -206, -196, SLATE, "Metal")
         _box(lib, shell, side + "wand oben", wx0, wx1, 20, WALL_TOP, za, zb, SLATE, "Metal")
-        _box(lib, shell, "Glasband", gx0, gx1, 9, 20, za, -206, GLASS, "Glass", transparency=0.3)
+        _box(lib, shell, "Glasband", gx0, gx1, 12, 20, za, -206, GLASS, "Glass", transparency=0.3)
         _box(lib, shell, "Glasband", gx0, gx1, 9, 20, -196, zb, GLASS, "Glass", transparency=0.3)
         _box(lib, shell, "Glasband", gx0, gx1, 16, 20, -206, -196, GLASS, "Glass", transparency=0.3)
         for z in (-214, -188):
@@ -386,7 +392,7 @@ def build_hall(lib, dm, anim):
              name="Innenschild", bolts=False, sub="Presse · Ankauf · Zerlegeplatz")
     lib.sign(shell, "TUNING-ZENTRUM", (9, 2.8), CF.at(HX1 - WT - 0.1, 14.0, -201, -90), TEAL, SLATE,
              name="Innenschild", bolts=False, sub="Prüfstand · Projekt-Buchten")
-    lib.sign(shell, "PARKPLATZ-CHAOS", (14, 2.8), CF.at(0, 14.0, HZ0 + WT + 0.1, 0), (90, 160, 240), SLATE,
+    lib.sign(shell, "PARKPLATZ-CHAOS", (14, 2.8), CF.at(0, 14.0, HZ0 + WT + 0.3, 0), (90, 160, 240), SLATE,
              name="Innenschild", bolts=False, sub="Rätsel-Raster · Parkhaus · Aussicht")
     s_in = lib.sign(shell, "STADTPLATZ · AUTOHAUS · WERKSTATTMEILE", (18, 2.4), CF.at(0, 13.6, zo - 1.0, 180), AMBER,
                     SLATE, name="Innenschild", bolts=False, sub="Brunnen · Bestenliste · Werkstätten Nr. 1–8")
@@ -408,16 +414,17 @@ def build_hall(lib, dm, anim):
         lib.set_primary(m, gl)
         if axis == "X":
             ex = cx + stile_side * (sx / 2 - 0.2)
-            lib.part(m, "Stiel", (0.4, sy, sz + 0.06), CF(ex, cy, cz), STEEL, "Metal", collide=False)
-            lib.part(m, "Sockelleiste", (sx - 0.4, 0.4, sz + 0.04), CF(cx - stile_side * 0.2, cy - sy / 2 + 0.2, cz),
+            # Rahmenteile je Seite >= 0.05 vor dem Glas (kein Flimmern)
+            lib.part(m, "Stiel", (0.4, sy, sz + 0.12), CF(ex, cy, cz), STEEL, "Metal", collide=False)
+            lib.part(m, "Sockelleiste", (sx - 0.4, 0.4, sz + 0.1), CF(cx - stile_side * 0.2, cy - sy / 2 + 0.2, cz),
                      STEEL, "Metal", collide=False)
-            lib.part(m, "Griff", (0.12, 2.6, sz + 0.1), CF(ex - stile_side * 0.5, cy, cz), BLACK, "Metal", deco=True)
+            lib.part(m, "Griff", (0.12, 2.6, sz + 0.24), CF(ex - stile_side * 0.5, cy, cz), BLACK, "Metal", deco=True)
         else:
             ez = cz + stile_side * (sz / 2 - 0.2)
-            lib.part(m, "Stiel", (sx + 0.06, sy, 0.4), CF(cx, cy, ez), STEEL, "Metal", collide=False)
-            lib.part(m, "Sockelleiste", (sx + 0.04, 0.4, sz - 0.4), CF(cx, cy - sy / 2 + 0.2, cz - stile_side * 0.2),
+            lib.part(m, "Stiel", (sx + 0.12, sy, 0.4), CF(cx, cy, ez), STEEL, "Metal", collide=False)
+            lib.part(m, "Sockelleiste", (sx + 0.1, 0.4, sz - 0.4), CF(cx, cy - sy / 2 + 0.2, cz - stile_side * 0.2),
                      STEEL, "Metal", collide=False)
-            lib.part(m, "Griff", (sx + 0.1, 2.6, 0.12), CF(cx, cy, ez - stile_side * 0.5), BLACK, "Metal", deco=True)
+            lib.part(m, "Griff", (sx + 0.24, 2.6, 0.12), CF(cx, cy, ez - stile_side * 0.5), BLACK, "Metal", deco=True)
         return m
 
     # Süd (innen, Z -182.1), 2 x 10 breit
@@ -434,8 +441,11 @@ def build_hall(lib, dm, anim):
 
     # --- Innenausbau
     inner = lib.model(h, "Innenraum")
-    # Holz-Sockelverkleidung Y 0..3
+    # Holz-Sockelverkleidung Y 0..3, darüber an der Nordwand eine helle Verkleidung (Y 3..20)
     wi = HZ0 + WT
+    for x0, x1, y0 in ((HX0 + 1.2, -8, 3), (8, HX1 - 1.2, 3), (-8, 8, 12)):
+        _box(lib, inner, "Wandverkleidung", x0, x1, y0, 20, wi, wi + 0.2, CREAM, "SmoothPlastic")
+    _box(lib, inner, "Verkleidung_Neon", HX0 + 1.2, HX1 - 1.2, 20, 20.3, wi, wi + 0.25, AMBER, "Neon", deco=True)
     _box(lib, inner, "Wandsockel", HX0 + 1.2, -8, 0, 3, wi, wi + 0.2, WOOD, "Wood")
     _box(lib, inner, "Wandsockel", 8, HX1 - 1.2, 0, 3, wi, wi + 0.2, WOOD, "Wood")
     for s in (-1, 1):
@@ -444,10 +454,10 @@ def build_hall(lib, dm, anim):
         _box(lib, inner, "Wandsockel", x0, x1, 0, 3, -196, HZ1 - 1.2, WOOD, "Wood")
 
     # Medaillon + Startring (CitySpawn liegt darüber, contract.py)
-    lib.cylinder(inner, "Startring", (0, 0.015, -201), 0.03, 17, "Y", AMBER, "Metal", deco=True)
-    med = lib.cylinder(inner, "Medaillon", (0, 0.025, -201), 0.05, 14, "Y", TEAL, "Neon", deco=True)
+    lib.cylinder(inner, "Startring", (0, 0.025, -201), 0.05, 17, "Y", AMBER, "Metal", deco=True)
+    med = lib.cylinder(inner, "Medaillon", (0, 0.05, -201), 0.1, 14, "Y", TEAL, "Neon", deco=True)
     set_attrs(med, {"Role": "SpawnMedallion"})
-    st = lib.part(inner, "Starttext", (7, 0.02, 2.4), CF.at(0, 0.07, -197.6, 180), WHITE, "SmoothPlastic",
+    st = lib.part(inner, "Starttext", (7, 0.02, 2.4), CF.at(0, 0.11, -197.6, 180), WHITE, "SmoothPlastic",
                   transparency=1, deco=True)
     lib.surface_text(st, "START", face="Top", text_color=(10, 40, 42), font="GothamBlack")
 
@@ -478,7 +488,7 @@ def build_hall(lib, dm, anim):
     px, pz = -26, -213.3
     _box(lib, fig, "Beine", px - 0.8, px + 0.8, 0, 2.8, pz - 0.4, pz + 0.4, (40, 45, 55), "SmoothPlastic")
     _box(lib, fig, "Hemd", px - 0.9, px + 0.9, 2.8, 4.8, pz - 0.45, pz + 0.45, WHITE, "SmoothPlastic")
-    _box(lib, fig, "Weste", px - 0.95, px + 0.95, 3.0, 4.6, pz - 0.475, pz + 0.475, AMBER, "SmoothPlastic",
+    _box(lib, fig, "Weste", px - 0.95, px + 0.95, 3.0, 4.6, pz - 0.5, pz + 0.5, AMBER, "SmoothPlastic",
          deco=True)
     for s in (-1, 1):
         _box(lib, fig, "Arm", px + s * 0.9, px + s * 1.4, 2.9, 4.8, pz - 0.3, pz + 0.3, WHITE, "SmoothPlastic",
@@ -488,7 +498,7 @@ def build_hall(lib, dm, anim):
          "SmoothPlastic", deco=True)
 
     # Info-Bildschirm hinter dem Empfang (N-Wand X -40..-18, Y 5..13): Türen und Linienfarben
-    scr = _box(lib, inner, "Infobildschirm", -40, -18, 5, 13, wi, wi + 0.2, BLACK, "SmoothPlastic")
+    scr = _box(lib, inner, "Infobildschirm", -40, -18, 5, 13, wi + 0.2, wi + 0.4, BLACK, "SmoothPlastic")
     g = _gui(lib, scr, "Back", 40)
     _frame(lib, g, "Grund", 0.01, 0.02, 0.98, 0.96, SCREEN, 0, 1)
     _label(lib, g, "Titel", "WILLKOMMEN IN DER WERKSTATTMEILE", 0.03, 0.05, 0.94, 0.14, AMBER, "GothamBlack",
@@ -507,7 +517,7 @@ def build_hall(lib, dm, anim):
            "center", 3)
 
     # Stadtplan-Wand (N-Wand X 12..40, Y 4..16) "DU BIST HIER"
-    sp = _box(lib, inner, "Stadtplan", 12, 40, 4, 16, wi, wi + 0.2, SLATE, "SmoothPlastic")
+    sp = _box(lib, inner, "Stadtplan", 12, 40, 4, 16, wi + 0.2, wi + 0.4, SLATE, "SmoothPlastic")
     g = _gui(lib, sp, "Back", 40)
     _frame(lib, g, "Rahmen", 0, 0, 1, 1, (18, 24, 30), 0, 1)
     _label(lib, g, "Titel", "STADTPLAN", 0.02, 0.05, 0.3, 0.14, AMBER, "GothamBlack", "left", 3)
@@ -557,6 +567,37 @@ def build_hall(lib, dm, anim):
         _bench(lib, inner, x, -184.2, 0, -1, 0)
     for x in (-42.5, -14, 14, 42.5):
         _topiary(lib, inner, x, -184.5, 0)
+
+    # Deckenstruktur: 4 hellgraue Unterzüge (Y 22.6..24, nicht kollidierend) und ein schwebender Ring
+    # "WILLKOMMEN" (Ø20, Y 18..20) über dem Medaillon an 4 Hängern
+    for x in (-38, -14, 14, 38):
+        _box(lib, inner, "Unterzug", x - 0.4, x + 0.4, CEIL - 1.4, CEIL, HZ0 + WT, HZ1 - WT, STEEL, "Metal",
+             collide=False)
+    ring = lib.model(inner, "Willkommensring")
+    rr = 10.0
+    pw = 2 * rr * math.tan(math.pi / 8)
+    for k in range(8):
+        a = math.pi / 8 * 2 * k
+        ux, uz = math.cos(a), math.sin(a)
+        pnl = lib.part(ring, "Ringtafel", (pw, 2, 0.2), CF.at(ux * rr, 19, -201 + uz * rr, math.degrees(math.atan2(ux, uz))),
+                       SLATE, "SmoothPlastic", collide=False, cast_shadow=False)
+        txt = "WILLKOMMEN" if k % 2 == 0 else "WERKSTATTMEILE"
+        lib.surface_text(pnl, txt, face="Back", text_color=AMBER, font="GothamBlack", name="Aussen")
+        lib.surface_text(pnl, txt, face="Front", text_color=AMBER, font="GothamBlack", name="Innen")
+    for k in range(4):
+        a = math.pi / 4 + math.pi / 2 * k
+        # Hänger in der Tafelmitte (Tafeln bei 0°, 45°, ...; Hänger über jeder zweiten)
+        a = math.pi / 2 * k
+        _cyl_y(lib, ring, "Haenger", math.cos(a) * rr, 20, CEIL, -201 + math.sin(a) * rr, 0.15, STEEL, "Metal",
+               deco=True)
+    # 2 Ausstellungsautos auf niedrigen Podesten (0.6) beidseits der Mittelachse, Nase zur Mitte
+    for s, body, col in ((-1, "hot_hatch", (200, 50, 50)), (1, "gt_coupe", AMBER)):
+        x = s * 30
+        _cyl_y(lib, inner, "Podestlicht", x, 0, 0.1, -191, 11.6, TEAL, "Neon", deco=True)
+        _cyl_y(lib, inner, "Podest", x, 0.1, 0.6, -191, 11, (224, 231, 230), "SmoothPlastic")
+        with lib.section("D2 Ankunftshalle (Autos)"):
+            lib.clone_car(inner, body, CF.at(x, 0.6, -191, 90 if s > 0 else -90), col, name="Empfangsauto_" + body,
+                          attrs={"Showcar": True})
 
     # --- Uhrturm (64)
     build_tower(lib, h, anim)
@@ -652,7 +693,8 @@ def build_plaza(lib, dm, anim):
 
     # Girlanden: 8 Masten, Drähte mit Durchhang, 40 Birnen
     gf = lib.model(p, "Girlanden")
-    masts = [(-50, -100), (50, -100), (0, -170), (-50, -60), (50, -60), (-50, -140), (50, -140), (0, -40)]
+    masts = [(-50, -100), (50, -100), (-8, -170), (8, -170), (-50, -60), (50, -60), (-50, -140), (50, -140),
+             (0, -46)]
     for (x, z) in masts:
         _cyl_y(lib, gf, "Girlandenmast", x, Y_PAVE, 8.5, z, 0.35, FRAME, "Metal")
         lib.ball(gf, "Mastkappe", (x, 8.75, z), 0.6, AMBER, "Metal", deco=True)
@@ -661,7 +703,7 @@ def build_plaza(lib, dm, anim):
         hs = heads[k]
         return min(hs, key=lambda q: (q[0] - m[0]) ** 2 + (q[2] - m[1]) ** 2)
     wires = []
-    for k, m in (((-12, -60), (0, -40)), ((12, -60), (0, -40)), ((-12, -140), (0, -170)), ((12, -140), (0, -170)),
+    for k, m in (((-12, -60), (0, -46)), ((12, -60), (0, -46)), ((-12, -140), (-8, -170)), ((12, -140), (8, -170)),
                  ((-40, -88), (-50, -100)), ((-40, -112), (-50, -100)), ((40, -88), (50, -100)),
                  ((40, -112), (50, -100))):
         wires.append((head_near(k, m), (m[0], 8.4, m[1])))
@@ -684,7 +726,8 @@ def build_plaza(lib, dm, anim):
             t = (i + 1) / (n + 1)
             x = a[0] + (b[0] - a[0]) * t
             z = a[2] + (b[2] - a[2]) * t
-            y = a[1] + (b[1] - a[1]) * t - sag * (1 - (2 * t - 1) ** 2) - 0.35
+            # Birne hängt direkt am (geknickten) Draht: Oberkante 0.02 im Draht
+            y = a[1] + (b[1] - a[1]) * t - sag * (1 - abs(2 * t - 1)) - 0.32
             bl = lib.ball(gf, "Birne", (x, y, z), 0.6, BULB, "SmoothPlastic", deco=True)
             set_attrs(bl, {"NightNeon": True})
 
@@ -696,17 +739,17 @@ def build_plaza(lib, dm, anim):
     for k in range(8):
         a = math.radians(22.5 + 45 * k)
         bx, bz = FOUNTAIN[0] + 23.5 * math.cos(a), FOUNTAIN[1] + 23.5 * math.sin(a)
-        _bench(lib, mf, bx, bz, -math.cos(a), -math.sin(a), -0.44)
+        _bench(lib, mf, bx, bz, -math.cos(a), -math.sin(a), -0.35)
     for x0, x1 in ((-52, -42), (-32, -22), (22, 32), (42, 52)):
         _planter_box(lib, mf, x0, x1, -28.5, -25.5, Y_PAVE)
-    for x in (-13, 13):
+    for x in (-7.5, 7.5):          # neben dem Zebra Z1 (X -6..6); die Station meile_map braucht 10 x 10 frei
         for z in (-24.5, -28.0):
             _cyl_y(lib, mf, "Poller", x, Y_PAVE, 2.7, z, 0.5, AMBER, "Metal")
             _cyl_y(lib, mf, "Pollerband", x, 1.9, 2.2, z, 0.54, BLACK, "Metal", deco=True)
 
     # 4 Platzbäume
     tf = lib.model(p, "Baeume")
-    for i, (x, z) in enumerate(((-50, -40), (50, -40), (-50, -165), (50, -165))):
+    for i, (x, z) in enumerate(((-50, -40), (50, -40), (-46, -165), (46, -165))):
         _hero_tree(lib, tf, x, z, seed=i)
 
     build_imbiss(lib, p)
@@ -717,12 +760,12 @@ def build_plaza(lib, dm, anim):
 def build_fountain(lib, p, anim):
     fx, fz = FOUNTAIN
     b = lib.model(p, "Zahnradbrunnen")
-    # Pflasterring Ø60 (-0.46) mit Amber-Inlay (r 26.5..27.5)
-    lib.cylinder(b, "Brunnenring", (fx, -0.48, fz), 0.04, 60, "Y", (138, 141, 138), "Slate")
-    lib.cylinder(b, "Inlay", (fx, -0.475, fz), 0.05, 55, "Y", AMBER, "Metal", deco=True)
-    lib.cylinder(b, "Brunnenplatz", (fx, -0.47, fz), 0.06, 53, "Y", (132, 135, 132), "Slate")
+    # Pflasterring Ø58 (-0.45) mit Amber-Inlay (r 26.5..27.5, -0.40) und Brunnenplatz Ø53 (-0.35)
+    lib.cylinder(b, "Brunnenring", (fx, -0.475, fz), 0.05, 58, "Y", (138, 141, 138), "Slate")
+    lib.cylinder(b, "Inlay", (fx, -0.45, fz), 0.1, 55, "Y", AMBER, "Metal", deco=True)
+    lib.cylinder(b, "Brunnenplatz", (fx, -0.425, fz), 0.15, 53, "Y", (132, 135, 132), "Slate")
     # Becken: Boden, Wasser, 12 Wandsegmente, 12 Stahlkanten (abwechselnd 1.80/1.78)
-    lib.cylinder(b, "Beckenboden", (fx, (-0.44 + 0.4) / 2, fz), 0.84, 33, "Y", (38, 70, 80), "Slate")
+    lib.cylinder(b, "Beckenboden", (fx, (-0.35 + 0.4) / 2, fz), 0.75, 33, "Y", (38, 70, 80), "Slate")
     lib.cylinder(b, "Wasser", (fx, 0.7, fz), 0.6, 32.6, "Y", (60, 150, 160), "Glass", transparency=0.3,
                  reflectance=0.2, collide=False, cast_shadow=False)
     for k in range(12):
@@ -852,10 +895,10 @@ def build_imbiss(lib, p):
     g = Y_PAVE
     x0, x1, z0, z1 = 43.0, 49.0, -114.0, -106.0
     _box(lib, m, "Wagen", x0, x1, g + 1.0, g + 4.2, z0, z1, SLATE, "Metal")
-    _box(lib, m, "Zierstreifen", x0 - 0.02, x1 + 0.02, g + 2.4, g + 2.8, z0 - 0.02, z1 + 0.02, AMBER, "Metal",
+    _box(lib, m, "Zierstreifen", x0 - 0.05, x1 + 0.05, g + 2.4, g + 2.8, z0 - 0.05, z1 + 0.05, AMBER, "Metal",
          deco=True)
     _box(lib, m, "Theke", x0 - 0.8, x0, g + 3.9, g + 4.1, z0 + 1, z1 - 1, WOOD, "Wood")
-    menu = lib.sign(m, "CURRYWURST · POMMES · LIMO", (6.4, 2.0), CF.at(x1 - 0.12, g + 5.6, (z0 + z1) / 2, -90),
+    menu = lib.sign(m, "CURRYWURST · POMMES · LIMO", (6.4, 2.0), CF.at(x1 - 0.12, g + 5.2, (z0 + z1) / 2, -90),
                     AMBER, SLATE, name="Speisekarte", bolts=False, sub="Currywurst 3 Cr · Pommes 2 Cr · Limo 1 Cr")
     for x in (x0 + 0.2, x1 - 0.2):
         for z in (z0 + 0.2, z1 - 0.2):
@@ -878,7 +921,7 @@ def build_imbiss(lib, p):
 
 def build_denkmal(lib, p):
     m = lib.model(p, "Oldtimer-Denkmal")
-    cx, cz = -40.0, -100.0
+    cx, cz = -41.4, -100.0
     _box(lib, m, "Sockel", cx - 8, cx + 8, Y_PAVE, 2.5, cz - 4, cz + 4, SLATE, "Metal")
     _box(lib, m, "Sockelplatte", cx - 8.3, cx + 8.3, 2.5, 2.8, cz - 4.3, cz + 4.3, FRAME, "Metal")
     lib.sign(m, "OLDTIMER-DENKMAL", (7, 1.8), CF.at(cx + 8.1, 1.2, cz, 90), (52, 36, 20), BRASS, name="Plakette",
@@ -912,8 +955,8 @@ def build_denkmal(lib, p):
     blk("Dach", (-2.2, 5.9, 0), (4.6, 0.25, 4.4))
     blk("Windschutz", (-0.1, 4.7, 0), (0.15, 2.0, 4.0), BRONZE_HI, transparency=0.4, deco=True)
     blk("Sitzbank", (-2.4, 3.9, 0), (2.0, 0.9, 3.8))
-    lib.cylinder(car, "Reserverad", P(-5.6, 3.0, 0), 0.6, 2.2, "X", BRONZE, "Metal", reflectance=0.08)
-    lib.cylinder(car, "Stossstange", P(5.9, 1.6, 0), 4.8, 0.35, "Z", BRONZE_HI, "Metal", deco=True)
+    lib.cylinder(car, "Reserverad", P(-5.5, 3.0, 0), 0.6, 2.2, "X", BRONZE, "Metal", reflectance=0.08)
+    lib.cylinder(car, "Stossstange", P(5.66, 1.6, 0), 4.8, 0.35, "Z", BRONZE_HI, "Metal", deco=True)
     lib.cylinder(car, "Stossstange", P(-5.1, 1.6, 0), 4.6, 0.35, "Z", BRONZE_HI, "Metal", deco=True)
     return m
 
@@ -932,7 +975,9 @@ def build_wayfinding(lib, dm):
         return m
 
     def ring_start(x):
-        return -201 + math.sqrt(8.5 ** 2 - x ** 2)
+        # die innere Linienkante (|x| - LW/2) beginnt knapp außerhalb des Startrings (r 8.5)
+        xi = max(0.0, abs(x) - LW / 2)
+        return -201 + math.sqrt(8.5 ** 2 - xi ** 2) + 0.02
 
     # Innen (Hallenboden 0..0.05), vom Startring zu den Türen
     inner = [("Spielhalle", MAGENTA, -5), ("Meisterschule", LIME, -7), ("Werkstattmeile", AMBER, -3),
@@ -953,15 +998,16 @@ def build_wayfinding(lib, dm):
     line("Credit-Center", PURPLE, [(7, HZ1), (7, -177), (54, -177), (54, -152), (66.5, -152)], LINE_OUT,
          [(68, -152, g)])
     # Amber: Werkstattmeile (um den Meile-Pylon herum), dann entlang des Nordgehwegs zu beiden Toren
-    am = line("Werkstattmeile", AMBER, [(-3, HZ1), (-3, -173), (-18.8, -173), (-18.8, -40), (-20.5, -40),
-                                         (-20.5, -22.4)], LINE_OUT)
+    am = line("Werkstattmeile", AMBER, [(-3, HZ1), (-3, -173), (-18.6, -173), (-18.6, -135), (-32, -135), (-32, -65),
+                                         (-18.6, -65), (-18.6, -22.4)], LINE_OUT)
     zl = -21.8
     for x0, x1 in ((-182.5, -165), (-139, 1.4), (2.6, 139), (165, 182.5)):
         _box(lib, am, "Linie", x0, x1, LINE_OUT - 0.1, LINE_OUT, zl - 0.6, zl + 0.6, AMBER, "SmoothPlastic", deco=True)
     for x in (-182.5, 182.5):
         lib.cylinder(am, "Zielscheibe", (x, g + 0.075, -21.5), 0.15, 3, "Y", AMBER, "SmoothPlastic", deco=True)
     # Weiß: Autohaus über Z1 zur Rotunde
-    wm = line("Autohaus", LWHITE, [(3, HZ1), (3, -173), (18.8, -173), (18.8, -30), (2, -30), (2, -13)], LINE_OUT)
+    wm = line("Autohaus", LWHITE, [(3, HZ1), (3, -173), (18.6, -173), (18.6, -135), (32, -135), (32, -65),
+                                   (18.6, -65), (18.6, -30), (2, -30), (2, -13)], LINE_OUT)
     _polyline(lib, wm, "Linie", [(2, 13), (2, 34.5)], LINE_OUT - 0.1, LINE_OUT, LWHITE)
     lib.cylinder(wm, "Zielscheibe", (2, g + 0.075, 36), 0.15, 3, "Y", LWHITE, "SmoothPlastic", deco=True)
     # Blau: Parkplatz-Chaos (Nordtür)
@@ -997,9 +1043,10 @@ def build_wayfinding(lib, dm):
                                   (0, -1, "TUNING-ZENTRUM 190 m"), (0, 1, "TANKSTELLE 180 m")],
               name="Wegweiser Meile Ost")
 
-    # Meile-Verzeichnis-Pylon (-16, 9.5, -34), 6 x 20 x 1.5, Amber-Neonkanten, Text N und S
+    # Meile-Verzeichnis-Pylon (-14, 9.5, -34), 6 x 20 x 1.5, Amber-Neonkanten, Text N und S. Die Zeilen heißen
+    # Owner_<Hausnummer> (der Server trägt dort Besitzer oder "FREI" ein, wie am Hausnummer-Pylon).
     pm = lib.model(w, "Meile-Verzeichnis", attrs={"Directory": "meile"})
-    px, pz = -16.0, -34.0
+    px, pz = DIRECTORY_X, -34.0
     body = _box(lib, pm, "Pylon", px - 3, px + 3, Y_PAVE, 19.5, pz - 0.75, pz + 0.75, SLATE, "Metal")
     for s in (-1, 1):
         x0, x1 = sorted((px + s * 3, px + s * 3.3))
@@ -1017,7 +1064,7 @@ def build_wayfinding(lib, dm):
             y = 0.2 + i * 0.095
             _frame(lib, g2, "Nummernfeld", 0.08, y, 0.2, 0.075, AMBER, 0, 2)
             _label(lib, g2, "Nummer", str(i + 1), 0.08, y + 0.005, 0.2, 0.065, SLATE, "GothamBlack", "center", 3)
-            _label(lib, g2, "Nr%d" % (i + 1), "FREI", 0.32, y + 0.01, 0.62, 0.055, WHITE, "GothamBold", "left", 3)
+            _label(lib, g2, "Owner_%d" % (i + 1), "FREI", 0.32, y + 0.01, 0.62, 0.055, WHITE, "GothamBold", "left", 3)
     return w
 
 

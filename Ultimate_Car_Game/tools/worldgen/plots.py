@@ -26,6 +26,7 @@ SLOTS = [
 ]
 RECT = (-84, 56, -44, 84)          # reservierte plotlokale Fläche (x0,x1,z0,z1)
 GRAVEL = (110, 104, 96)
+TREE_LX = 37                       # Straßenbaum (plotlokal X), außerhalb von Einfahrt und Rolltor-Zufahrt
 
 # Code-referenzierte Anker, die der Trimm nie entfernen darf
 KEEP_TOP = {"Root", "Architecture", "Details", "Bays", "ActiveCars", "Extensions", "EndWall", "ExpansionPoint",
@@ -186,14 +187,32 @@ def build_slots(city, lib):
             for k, (lx, lz) in enumerate(((-40, 72), (-20, 76), (0, 78), (20, 76), (40, 72), (-60, 70))):
                 wx, wz = loc2world(px, pz, rot, lx, lz)
                 lib.cone(vac, wx, -1.0, wz)
-        # Lot: Straßenbaum am Bordstein (lokal X -44)
+        # Lot: Straßenbaum am Bordstein. Spec §4.3 nennt lokal X -44, das liegt aber mitten in der Rolltor-Zufahrt
+        # (Absenkung lokal -53..-33, Asphalt -0.95). Daher lokal X +37: zwischen Einfahrt (bis +30) und Laterne (+44),
+        # Baumscheibe auf dem Gehweg (-0.50..-0.45).
         with lib.section("Plots: Straßenbäume"):
             lot = lib.model(sf, "Lot", attrs={"Slot": slot})
-            tx, _ = loc2world(px, pz, rot, -44, 0)
+            tx, _ = loc2world(px, pz, rot, TREE_LX, 0)
             lib.box(lot, "Baumscheibe", tx - 1.5, tx + 1.5, -0.5, -0.45, side * 16 - 1.5, side * 16 + 1.5, (70, 60, 50),
                     "Pebble", deco=True)
             lib.tree_lite(lot, tx, -0.45, side * 16, scale=1.1, seed=slot, name="Strassenbaum")
+        _assert_clear_of_cuts(sf)
     return root
+
+
+def _assert_clear_of_cuts(slot_model):
+    """Kein Lot-, Laternen- oder Pylon-Part eines Slots darf auf einer Bordsteinabsenkung stehen (Asphalt -0.95)."""
+    from .ground_roads import CURB_CUTS, plot_cuts
+    rects = [c[:5] for c in CURB_CUTS + plot_cuts()]
+    for it in slot_model.iter("Item"):
+        if not is_basepart(it) or name_of(it) in ("Schotter",):
+            continue
+        b = aabb(it)
+        if b[2] <= -0.95 + 1e-3 or b[2] > 4:
+            continue       # Bodenplatten / hoch oben
+        for nm, x0, x1, z0, z1 in rects:
+            if b[1] > x0 + 0.01 and b[0] < x1 - 0.01 and b[5] > z0 + 0.01 and b[4] < z1 - 0.01:
+                raise SystemExit("PlotSlots: %s steht in der Absenkung %s" % (name_of(it), nm))
 
 
 def _c3(rgb):

@@ -8,12 +8,18 @@ Was die automatischen Tests nicht abdecken können: Rendering, echtes Netzwerk, 
 2. Für echtes Speichern: Spiel veröffentlichen, dann **Game Settings → Security → Enable Studio Access to API Services** einschalten. Ohne diese Einstellung läuft das Spiel mit einem Sitzungsprofil und zeigt den Hinweis „Speichern nicht aktiv“.
 3. **Test → Play** (F5).
 
-## Grundlage
+## Stadt und Ankunft
 
-- [ ] Man erscheint auf dem blauen Startfeld in der Hofmitte. Acht Stationen stehen im Kreis, dazu die Bestenlisten-Tafel.
-- [ ] HUD oben links zeigt Credits, Schrott, Level und XP-Balken. Oben rechts steht „Ziel: …“ mit Balken.
-- [ ] Der Knopf „Minispiele“ unten öffnet das Menü mit 10 Bereichen; ✕ schließt es.
-- [ ] Bei jeder Station erscheint mit **E** (bzw. Antippen) „Öffnen“ und öffnet den passenden Bereich.
+- [ ] Beim Start erscheinst du in der Ankunftshalle (hohe Decke, Empfangstresen); danach landest du im Empfang deiner eigenen Werkstatt an der Werkstattmeile.
+- [ ] Der Hausnummer-Pylon vor deiner Werkstatt zeigt „WILLKOMMEN, <Name>“; im Meile-Verzeichnis am Stadtplatz steht dein Name.
+- [ ] Zu Fuß: vom Stadtplatz zu Schrottplatz, Tuning-Zentrum, Meisterschule, Parkplatz, Autohaus in unter 35 s erreichbar; farbige Bodenlinien führen hin.
+- [ ] Kamera in allen Innenräumen (Ankunftshalle, Presse-Halle, Tuning-Zentrum, Spielhalle, Auktionshaus, Meisterschule, Autohaus) ohne Clipping.
+- [ ] Animationen: Presse zerdrückt Autos, Magnetkran schwenkt, Drehteller im Autohaus, Brunnen, Ampeln, NPC-Verkehr fährt flüssig, Neon in der Spielhalle, Fenster leuchten nachts.
+- [ ] Nachts sind Straßen und Gebäude beleuchtet.
+- [ ] Die 2.4.0-Werkstatt funktioniert unverändert: Auftrag annehmen, OBD, Hebebühne (F), Motorhaube (H), Reparatur-QTE, Endkontrolle, Abrechnen, Hallenanbau, Rolltor.
+- [ ] Werkstätten auf der Südseite (gedreht): Ankunft, Rolltor und Bühnen funktionieren genauso.
+- [ ] Taste **M** öffnet die Minispiele; während einer Reparatur-QTE öffnet es nicht; Tablet (Tab) und Minispiele überlagern sich nicht.
+- [ ] Autohaus, Auktionshaus, Spielhalle zeigen „Eröffnet bald“.
 - [ ] Große Zahlen erscheinen als „1,2 Mio.“, „3,5 Mrd.“ usw.
 
 ## Schrottpresse
