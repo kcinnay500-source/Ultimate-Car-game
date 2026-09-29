@@ -218,8 +218,209 @@ GameConfig.XP = {
 	OwBuild = 30, -- je gebauter Gebäudestufe in der Open World (Platzhalter)
 }
 
----------------------------------------------------------------- Spätere Meilensteine (leer, nichts liest daraus)
-GameConfig.Tycoon = {} -- wird in Meilenstein 4 gefüllt (Slots, Gebäudetypen, Stufen, Upgrades, Items, Handel, Rebirth, Bonus-Tabelle)
+---------------------------------------------------------------- Schnelles Spiel / Tycoon (§8, Meilenstein 4)
+-- Alle Zahlen des Tycoon-Modus. Bargeld ist NIE Credits und verlässt den Durchlauf nie.
+-- Feste IDs (Teams arbeiten parallel): Gebäudetypen werkstatt|autohaus|produktion|schrottplatz, Stufen 1..5,
+-- Upgrade-Ids "<typ>_s<stufe>_u<k>" mit k=1 Produzent (+Bargeld/s), k=2 Tempo (×Rate), k=3 Lager (+Behälter,
+-- erzeugt Handelsware), k=4 Deko (kosmetisch + kleiner Bonus); Stufen-Pad "<typ>_stage<n>" (n = 2..5).
+-- Vorlagen: ServerStorage.TycoonTemplates.<typ>.Stage_<n>.
+-- Balance: Kosten = Rate zum Kaufzeitpunkt × Wartezeit (Tuning.Waits) × Tuning.Scale, auf runde Zahlen gerundet.
+-- Ziel: ein aufmerksamer Spieler braucht ≈ 5 Std. bis Stufe 5 komplett (tests/test_tycoon_rules.lua simuliert das
+-- gierig und prüft 4 h ≤ Zeit ≤ 6,5 h je Gebäudetyp). Nachregeln nur hier (Tuning), nie im Code.
+export type TycoonUpgrade = {
+	id: string, typ: string, stage: number, k: number, kind: string, name: string, desc: string, cost: number,
+	rate: number?, mult: number?, cap: number?, item: string?, perMin: number?, bonus: number?,
+}
+export type TycoonStage = {
+	stage: number, price: number, items: { [string]: number }, capacity: number, Upgrades: { TycoonUpgrade }, stageId: string?,
+}
+export type TycoonBuilding = {
+	typ: string, name: string, desc: string, baseRate: number, items: { string }, Stages: { TycoonStage },
+}
+
+GameConfig.Tycoon = {
+	Types = { "werkstatt", "autohaus", "produktion", "schrottplatz" },
+	MaxStage = 5,
+	UpgradesPerStage = 4,
+	UpgradeKinds = { "producer", "tempo", "lager", "deko" }, -- k = 1..4
+	TickSeconds = 0.5, -- Server-Tick (TycoonService)
+	MaxTickSeconds = 5, -- längster angerechneter Abstand zwischen zwei Ticks (Offline zählt nicht)
+	StartCash = 50, -- Bargeld beim Rundenstart
+	ItemCap = 999, -- Lagerdeckel je Ware
+	TradeTTL = 120, -- Angebot gültig (s)
+	TradeMaxOpen = 5, -- offene Angebote je Spieler
+	TradeMaxQty = 999,
+	TradeMinPrice = 1,
+	Rebirth = { boostPct = 15, capPct = 150, requiresStage = 5, requiresAllUpgrades = true },
+	-- Bonus-Tabelle Open World (§8): min(n, maxRuns) × step je abgeschlossenem Durchlauf des Typs
+	Bonus = {
+		werkstatt = { step = 0.02, maxRuns = 5, text = "Werkstatt-Vergütung" },
+		autohaus = { step = 0.015, maxRuns = 5, text = "Händlerrabatt" },
+		produktion = { step = 0.03, maxRuns = 5, text = "Tuning-Tempo" },
+		schrottplatz = { step = 0.03, maxRuns = 5, text = "Schrott" },
+	},
+	-- XP je Durchlauf/Stufe: der Regler liegt in GameConfig.XP (TycoonRun, TycoonStage), hier nur der Verweis
+	XP = { run = GameConfig.XP.TycoonRun, stage = GameConfig.XP.TycoonStage },
+	-- Grundstücke: Pivot x/z/rot wie tools/worldgen/tycoon.py SLOTS (Reihe A Z 760 Front Süd, Reihe B Z 940 Front Nord)
+	Slots = {
+		{ slot = 1, x = -45, z = 760, rot = 0 },
+		{ slot = 2, x = 45, z = 760, rot = 0 },
+		{ slot = 3, x = -45, z = 940, rot = 180 },
+		{ slot = 4, x = 45, z = 940, rot = 180 },
+		{ slot = 5, x = -135, z = 760, rot = 0 },
+		{ slot = 6, x = 135, z = 760, rot = 0 },
+		{ slot = 7, x = -135, z = 940, rot = 180 },
+		{ slot = 8, x = 135, z = 940, rot = 180 },
+	},
+	-- Handelsware (nur Tycoon, nur Bargeld). guide = Richtpreis je Stück für die Marktplatz-Anzeige
+	Items = {
+		bauteile = { name = "Bauteile", guide = 40 },
+		reifen = { name = "Reifen", guide = 60 },
+		lack = { name = "Lack", guide = 90 },
+		schrott = { name = "Schrott", guide = 25 },
+	},
+	ItemList = { "bauteile", "reifen", "lack", "schrott" },
+	-- Balance-Tuning (Erzeuger der Tabellen unten)
+	Tuning = {
+		Scale = 1.15,
+		CapSeconds = 240, -- Behälter der Stufe fasst so viele Sekunden Einkommen (Rate bei Stufenbeginn)
+		LagerCapSeconds = 300, -- Lager-Upgrade: zusätzlicher Behälter in Sekunden Einkommen
+		-- je Stufe: prod = Rate des Produzenten als Vielfaches der Grundrate, tempo = Faktor, deko = Bonus,
+		-- waits = Wartezeit (s) bei aktueller Rate für u1..u4, stageWait = Wartezeit für das Stufen-Pad,
+		-- perMin = Warenausstoß des Lagers je Minute, itemIndex = 1 (Hauptware) | 2 (Zweitware)
+		Stages = {
+			{ prod = 2, tempo = 1.5, deko = 0.05, waits = { 60, 120, 150, 150 }, stageWait = 300, perMin = 1.0, itemIndex = 1 },
+			{ prod = 6, tempo = 1.5, deko = 0.05, waits = { 240, 300, 300, 300 }, stageWait = 600, perMin = 1.5, itemIndex = 1 },
+			{ prod = 18, tempo = 1.5, deko = 0.05, waits = { 420, 480, 480, 480 }, stageWait = 900, perMin = 1.0, itemIndex = 2 },
+			{ prod = 54, tempo = 1.5, deko = 0.05, waits = { 600, 720, 720, 720 }, stageWait = 1500, perMin = 2.0, itemIndex = 2 },
+			{ prod = 160, tempo = 1.5, deko = 0.05, waits = { 1200, 1500, 1500, 1800 }, stageWait = 0, perMin = 2.0, itemIndex = 1 },
+		},
+		-- Warenbedarf für die Stufen-Pads ab Stufe 3: { Hauptware, Zweitware }
+		StageItems = { [3] = { 15, 0 }, [4] = { 40, 10 }, [5] = { 80, 30 } },
+	},
+	Buildings = {} :: { [string]: TycoonBuilding },
+	UpgradeById = {} :: { [string]: TycoonUpgrade },
+	StageById = {} :: { [string]: { typ: string, stage: number } },
+}
+
+do
+	local TY = GameConfig.Tycoon
+	local flavour = {
+		werkstatt = {
+			name = "Werkstatt", desc = "Von der Garage zur Meisterwerkstatt: Hebebühnen, Werkzeug und viele Kunden.",
+			baseRate = 2, items = { "bauteile", "reifen" },
+			producers = { "Hebebühne", "Zweite Bühne", "Motorenprüfstand", "Lackierkabine", "Meisterhalle" },
+			tempo = { "Akkuschrauber", "Werkzeugwagen", "Schnellheber", "Diagnose-Computer", "Roboterarm" },
+			lager = { "Regal", "Teilelager", "Reifenlager", "Hochregal", "Logistikhalle" },
+			deko = { "Firmenschild", "Blumenkübel", "Neonschrift", "Kundencafé", "Pokalvitrine" },
+		},
+		autohaus = {
+			name = "Autohaus", desc = "Vom Kiesplatz zum Glaspalast: mehr Ausstellungsfläche, mehr Verkäufe.",
+			baseRate = 2.5, items = { "lack", "reifen" },
+			producers = { "Verkaufsstand", "Showroom", "Glashalle", "Probefahrt-Strecke", "Luxus-Etage" },
+			tempo = { "Prospekte", "Verkaufstraining", "Online-Anzeigen", "Finanzierungsbüro", "Drehbühne" },
+			lager = { "Stellplätze", "Parkdeck", "Lackdepot", "Reifenhotel", "Auslieferungshalle" },
+			deko = { "Fahnenmast", "Ballonbogen", "Lichtband", "Kaffeebar", "Springbrunnen" },
+		},
+		produktion = {
+			name = "Produktion", desc = "Deine eigene Autofabrik: Band, Presse, Roboter – und Bauteile für alle.",
+			baseRate = 3, items = { "bauteile", "lack" },
+			producers = { "Montageband", "Karosseriepresse", "Schweißroboter", "Lackierstraße", "Endmontage" },
+			tempo = { "Schichtplan", "Förderband", "Roboterzelle", "Just-in-time", "Vollautomatik" },
+			lager = { "Kistenlager", "Bauteilelager", "Lackdepot", "Hochregallager", "Verladehof" },
+			deko = { "Werkslogo", "Schornstein", "Testparcours", "Kantine", "Aussichtsturm" },
+		},
+		schrottplatz = {
+			name = "Schrottplatz", desc = "Aus Altmetall wird Bargeld: Presse, Kran und Berge von Schrott.",
+			baseRate = 1.5, items = { "schrott", "bauteile" },
+			producers = { "Schrottpresse", "Greifkran", "Shredder", "Sortieranlage", "Schmelzofen" },
+			tempo = { "Brechstange", "Gabelstapler", "Magnetkran", "Förderschnecke", "Laserschneider" },
+			lager = { "Schrottberg", "Container", "Teilecontainer", "Lagerhalle", "Verladerampe" },
+			deko = { "Wachhund-Hütte", "Reifenstapel", "Autoturm", "Graffiti-Wand", "Leuchtreklame" },
+		},
+	}
+	local kindNames = { "producer", "tempo", "lager", "deko" }
+	local descs = {
+		producer = "Erzeugt mehr Bargeld je Sekunde.",
+		tempo = "Alle Produzenten arbeiten schneller.",
+		lager = "Größerer Sammelbehälter – und erzeugt Handelsware fürs Lager.",
+		deko = "Schmückt dein Grundstück und bringt einen kleinen Bonus.",
+	}
+	local function nice(x: number): number
+		if x < 100 then
+			return math.max(5, math.floor(x / 5 + 0.5) * 5)
+		end
+		local m = 10 ^ (math.floor(math.log10(x)) - 1)
+		return math.floor(x / m + 0.5) * m
+	end
+	for _, typ in ipairs(TY.Types) do
+		local f = flavour[typ]
+		local b: TycoonBuilding = { typ = typ, name = f.name, desc = f.desc, baseRate = f.baseRate, items = f.items, Stages = {} }
+		local prodSum, tempo, deko = f.baseRate, 1, 1
+		for s = 1, TY.MaxStage do
+			local t = TY.Tuning.Stages[s]
+			local startRate = prodSum * tempo * deko
+			local st: TycoonStage = {
+				stage = s, price = 0, items = {}, capacity = nice(startRate * TY.Tuning.CapSeconds), Upgrades = {},
+				stageId = s < TY.MaxStage and (typ .. "_stage" .. (s + 1)) or nil,
+			}
+			for k = 1, TY.UpgradesPerStage do
+				local rate = prodSum * tempo * deko
+				local kind = kindNames[k]
+				local u: TycoonUpgrade = {
+					id = typ .. "_s" .. s .. "_u" .. k, typ = typ, stage = s, k = k, kind = kind,
+					name = f[kind == "producer" and "producers" or kind][s], desc = descs[kind],
+					cost = nice(rate * t.waits[k] * TY.Tuning.Scale),
+				}
+				if kind == "producer" then
+					u.rate = f.baseRate * t.prod
+					prodSum += u.rate
+				elseif kind == "tempo" then
+					u.mult = t.tempo
+					tempo *= t.tempo
+				elseif kind == "lager" then
+					u.cap = nice(rate * TY.Tuning.LagerCapSeconds)
+					u.item = f.items[t.itemIndex]
+					u.perMin = t.perMin
+				else
+					u.bonus = t.deko
+					deko += t.deko
+				end
+				st.Upgrades[k] = u
+				TY.UpgradeById[u.id] = u
+			end
+			b.Stages[s] = st
+		end
+		-- Stufen-Pads: Preis und Warenbedarf der Stufe n stehen an Stages[n] (bezahlt aus Stufe n-1 mit der Rate
+		-- nach allen Upgrades der Vorstufe)
+		local ps, tm, dk = f.baseRate, 1, 1
+		for s = 2, TY.MaxStage do
+			local t = TY.Tuning.Stages[s - 1]
+			ps += f.baseRate * t.prod
+			tm *= t.tempo
+			dk += t.deko
+			b.Stages[s].price = nice(ps * tm * dk * t.stageWait * TY.Tuning.Scale)
+			local need = TY.Tuning.StageItems[s]
+			for idx = 1, 2 do
+				if need and need[idx] > 0 then
+					b.Stages[s].items[f.items[idx]] = need[idx]
+				end
+			end
+			TY.StageById[typ .. "_stage" .. s] = { typ = typ, stage = s }
+		end
+		TY.Buildings[typ] = b
+	end
+	TY.TypeSet = {}
+	for _, typ in ipairs(TY.Types) do
+		TY.TypeSet[typ] = true
+	end
+	TY.SlotByNumber = {}
+	for _, sl in ipairs(TY.Slots) do
+		TY.SlotByNumber[sl.slot] = sl
+	end
+end
+
+---------------------------------------------------------------- Spätere Meilensteine (leer, nichts liest daraus; Tycoon siehe oben)
 GameConfig.OW = {} -- wird in Meilenstein 6 gefüllt (Gebäude, Bauzeiten, Preise, Perks, Passiv-Modus)
 GameConfig.Story = {} -- wird in Meilenstein 7 gefüllt (Kapitel, Missionen, Nebenmissionen, Belohnungen)
 GameConfig.Shop = {} -- wird in Meilenstein 8 gefüllt (Produkte, DLC-Autos, Kosmetik, Game Passes)
