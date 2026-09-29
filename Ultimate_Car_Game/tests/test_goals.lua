@@ -4,7 +4,7 @@ local Flow
 
 return {
 	{ "Meilenstein nur einmal und nur bei erreichtem Wert", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local player = g:Join(501, { name = "Nora" })
 		g:Advance(1)
 		local d = g:D(player)
@@ -42,7 +42,7 @@ return {
 	end },
 
 	{ "Veteran: abgerechnete 2.4.0-Aufträge zählen für Meilensteine", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		g:Seed(505, { version = 2, data = { version = 2, money = 100, level = 3, completed = 12 }, receipts = {} })
 		local p = g:Join(505)
 		g:Advance(1)
@@ -55,7 +55,7 @@ return {
 	end },
 
 	{ "Tagesauftrag und Tagesziele: pro UTC-Tag, nicht doppelt nach Rejoin", function(T, H)
-		local g = H.Garage({ startTime = 1760000000 - (1760000000 % DAY) + 3600 }) -- 01:00 UTC
+		local g = H.Garage({ level = 12,  startTime = 1760000000 - (1760000000 % DAY) + 3600 }) -- 01:00 UTC
 		local MC, GR, MR = g:MiniShared("MiniConfig"), g:MiniShared("GoalRules"), g:MiniShared("MiniRules")
 		local player = g:Join(502, { name = "Olaf" })
 		g:Advance(1)
@@ -110,7 +110,7 @@ return {
 
 	{ "Werkstatt-Abrechnung zählt für Ziele und schaltet den Tagesauftrag frei", function(T, H)
 		Flow = Flow or H.Load("tests/lib/garage_flow.lua")
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local p = g:Join(506)
 		g:Advance(1)
 		local d = g:D(p)
@@ -158,7 +158,7 @@ return {
 	end },
 
 	{ "Nächstes Ziel aktualisiert sich nach jeder relevanten Aktion", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local player = g:Join(503, { name = "Paul" })
 		g:Advance(1)
 		local d = g:D(player)

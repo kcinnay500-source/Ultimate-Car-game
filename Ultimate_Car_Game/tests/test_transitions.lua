@@ -28,16 +28,17 @@ return {
 	end },
 
 	{ "Fremde Sitzungssperre: temporär spielbar, nichts überschrieben; abgelaufene Sperre wird übernommen", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local MiniRules = g:MiniShared("MiniRules")
 		local games = MiniRules.DefaultGames()
 		games.parts = 77
-		g:Seed(602, { version = 2, data = { version = 2, money = 99, level = 3, games = games }, receipts = {},
+		g:Seed(602, { version = 2, data = { version = 2, money = 99, level = 12, games = games }, receipts = {},
 			lock = { token = "anderer-server", expires = g:Now() + 170 } })
 		local player = g:Join(602, { name = "Rosa" })
 		g:Advance(1)
 		T.check(g:Session(player) ~= nil, "Sitzung trotz Sperre")
 		T.eq(g:Profile(player).writable, false, "nicht beschreibbar")
+		g:D(player).level = 12 -- Sitzung unter fremder Sperre spielt mit Ersatzdaten: Presse ab Level 2 (GameConfig.Unlocks)
 		T.eq(g:Act(player, "mini_press_click", { count = 3 }), "ok", "Minispiele spielbar")
 		g:Advance(100)
 		g:Leave(player)
@@ -96,11 +97,12 @@ return {
 	end },
 
 	{ "Studio ohne Speichern: spielbar, nichts geschrieben", function(T, H)
-		local g = H.Garage({ studio = true })
+		local g = H.Garage({ level = 12,  studio = true })
 		local ds = g:DataStoreMock()
 		local player = g:Join(607, { name = "Wim" })
 		g:Advance(1)
 		T.check(g:Session(player) ~= nil, "Sitzung geladen")
+		g:D(player).level = 12 -- Studio lädt keinen Datensatz: Presse ab Level 2 (GameConfig.Unlocks)
 		T.eq(g:Profile(player).writable, false, "nicht beschreibbar")
 		T.eq(g:State(player).saveStatus, "Nur diese Sitzung", "Status für den Client")
 		T.eq(g:Act(player, "mini_press_click", { count = 5 }), "ok", "Minispiele laufen")
@@ -305,7 +307,7 @@ return {
 	end },
 
 	{ "Remote-Budget verwirft Flut still", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local p = g:Join(614, { name = "Ede" })
 		g:Advance(3)
 		local dropped = 0
@@ -379,7 +381,7 @@ return {
 	end },
 
 	{ "Stationen der Stadt: Reichweite, Tab öffnen, eröffnet bald, eigene Werkstatt", function(T, H)
-		local g = H.Garage({ before = function(g)
+		local g = H.Garage({ level = 12, before = function(g)
 			g:BuildCity({ stations = {
 				{ key = "presse", tab = "press", pos = Vector3.new(0, 1, -350) },
 				{ key = "autohaus", tab = "dealer", pos = Vector3.new(40, 1, -350) },

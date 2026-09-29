@@ -1,6 +1,8 @@
 -- Schrottpresse im echten Server (GarageServer -> request -> MiniService): Klicks, Budget, Kauf, Offline,
 -- Umtausch, Rebirth, Game Passes.
 local function joined(H, opts)
+	opts = opts or {}
+	opts.level = opts.level or 12 -- Presse ab Level 2, Bestenliste/Boni unabhängig vom Level (GameConfig.Unlocks)
 	local g = H.Garage(opts)
 	local p = g:Join(101, { name = "Anna" })
 	g:Advance(1)
@@ -201,7 +203,7 @@ return {
 		T.eq(PR.OfflineSeconds(0 / 0, 1000), 0, "NaN")
 		T.eq(PR.OfflineSeconds(1000, math.huge), 0, "inf")
 
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local player = g:Join(202, { name = "Ben" })
 		g:Advance(1)
 		local d = g:D(player)
@@ -343,7 +345,7 @@ return {
 	end },
 
 	{ "Game Pass mit ID: Besitz beim Beitritt, Kauf-Aufforderung, Kauf in der Sitzung", function(T, H)
-		local g = H.Garage({
+		local g = H.Garage({ level = 12, 
 			before = function(g)
 				local MC = g:MiniShared("MiniConfig")
 				MC.GamePasses.DoubleScrap.id = 111

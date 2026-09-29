@@ -61,6 +61,8 @@ Hintergrund: `docs/analysis_2.4.0/*.md` (server, shared, client, world, merge, c
 | 0,5-s-Tick je Sitzung | `Mini.Tick(p, now)` (auch während `transacting`: Produktion wird angesammelt, Geld aber nicht verändert) |
 | `PlayerRemoving` vor `P.Save` | `Mini.OnLeave(p, wasWritable)` |
 | `BindToClose` je Sitzung | `Mini.OnLeave(p, wasWritable)` |
+| `character()` nach `moveTo(home)` (Ausbaustufe 4) | `Mini.OnCharacter(p)` – Lobby/Tycoon-Spieler werden zur Zonen-Ankunft versetzt (`LobbyService.OnCharacter`), Open World bleibt in der Werkstatt |
+| `W.Create`-Rückruf `station` und `act 'travel'` (Ausbaustufe 4) | `Mini.OnStation(p, key)` – Tutorial-Schritt `station:<key>` und Beginner-Hinweis (`TutorialService.OnStation`) |
 
 - `Mini.Handle` prüft Nutzlast gegen `MiniNet.Actions`, dedupliziert per `rid`, ruft den Handler in `pcall`. Ändert ein Handler `d.money`, ruft er `ctx.changed(p)`, sonst markiert er den Mini-Snapshot als geändert.
 - Geldänderungen durch Minispiele nur innerhalb von `request()` (also nie während `transacting`). Offline- und Tick-Erträge der Presse sind Schrott, nicht Geld.

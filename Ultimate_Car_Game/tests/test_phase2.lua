@@ -165,7 +165,7 @@ return {
 	{ "Ende-zu-Ende: Probefahrt an der Übergabe, endet nach 60 s", function(T, H)
 		local g = H.Garage({ startTime = NOW })
 		local pl, d = join(g, 7011, "Carla")
-		d.money, d.level = 0, 1
+		d.money, d.level = 0, 3 -- Autohaus ab Level 3; der Aureon (72) liegt weit darüber
 		T.eq(act(g, pl, "mini_car_testdrive", { model = "aureon" }), "ok", "mini_car_testdrive")
 		local m = car(g, pl, "Probe_")
 		T.check(m ~= nil, "Probefahrt ohne Geld und über dem eigenen Level")
@@ -199,7 +199,7 @@ return {
 		local CC = g:MiniShared("CarCatalog")
 		local CS = g:MiniServer("CarService")
 		local pl, d = join(g, 7021, "Dirk")
-		d.money, d.level = 100000, 1
+		d.money, d.level = 100000, 8 -- Teststrecke ab Level 8, Komet ab 3
 		local list = CS.TrackSequence()
 		T.check(list ~= nil and #list >= 2, "City.Track aus der Stadt: " .. tostring(list and #list))
 		T.eq(list and list[#list].Name, "Ziel", "Ziel ist der letzte Checkpoint")
@@ -228,7 +228,7 @@ return {
 		if fin then
 			T.check(math.abs(fin.time - 8 * #list) < 0.6, "Zeit aus der Serveruhr: " .. tostring(fin.time))
 			T.eq(fin.newBest, true, "erste Bestzeit")
-			T.eq(fin.reward, CC.Track.firstReward, "erste gültige Runde: firstReward")
+			T.eq(fin.reward, math.floor(CC.Track.firstReward * (1 + CC.Track.levelBonus * (d.level - 1)) + 0.5), "erste gültige Runde: firstReward × Level-Bonus")
 			T.eq(d.money, money + fin.reward, "Belohnung gutgeschrieben")
 			T.eq(d.games.track.best, fin.time, "Bestzeit gespeichert")
 			T.eq(d.games.track.runs, 1, "Läufe gezählt")
@@ -376,6 +376,7 @@ return {
 		local g = H.Garage({ startTime = NOW })
 		local A = g:MiniShared("ArcadeRules")
 		local pl, d = join(g, 7051, "Ida")
+		d.level = 10 -- Spielhalle ab Level 10
 		-- Station arcade_1 in der generierten Stadt öffnet den Tab mit dem Automaten
 		local station = cityPart(g, "Stations.arcade_1")
 		T.check(station ~= nil, "Station arcade_1")
@@ -437,7 +438,7 @@ return {
 
 	---------------------------------------------------------------- Stationen
 	{ "Credit-Center öffnet den 2.4.0-Credits-Shop mit Game Passes; neue Stationen öffnen ihre Tabs", function(T, H)
-		local g = H.Garage({ startTime = NOW })
+		local g = H.Garage({ startTime = NOW, level = 12 }) -- Auktionshaus ab Level 12 (GameConfig.Unlocks)
 		local p = g:Join(7061, { name = "Jana" })
 		g:Advance(0.5)
 		g:StartClient(p)
@@ -480,7 +481,7 @@ return {
 	end },
 
 	{ "Snapshot: Garage-Liste und Katalog nur bei Änderungen, der Client behält sie dazwischen", function(T, H)
-		local g = H.Garage({ startTime = NOW })
+		local g = H.Garage({ startTime = NOW, level = 3 })
 		local p = g:Join(7065, { name = "Lars" })
 		g:Advance(0.5)
 		g:StartClient(p)
@@ -521,7 +522,7 @@ return {
 	{ "Speichern/Laden: Autos, Teststrecke, Spielhalle, Auktion überleben den Neustart (locked wird frei)", function(T, H)
 		local g = H.Garage({ startTime = NOW })
 		local pl, d = join(g, 7071, "Kai")
-		d.money, d.level = 500000, 30
+		d.money, d.level = 500000, 50 -- Vektor RS ab Level 45
 		act(g, pl, "mini_car_buy", { model = "komet" })
 		g:Advance(1.1)
 		act(g, pl, "mini_car_buy", { model = "vektor" })

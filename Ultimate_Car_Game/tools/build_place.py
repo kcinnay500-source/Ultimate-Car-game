@@ -18,8 +18,14 @@ Zuordnung (wie in default.project.json):
   src/mini/server/*.lua            -> ServerScriptService.Garage.Mini
   src/mini/client/*.lua            -> StarterPlayer.StarterPlayerScripts.Mini
 
+Places (Ausbaustufe 4, docs/PHASE4_CONTRACT.md §1): ``--place all|lobby|openworld|tycoon`` (ohne Angabe ``all``).
+Der Builder setzt das Attribut ``PlaceKind`` auf ``ReplicatedStorage.GarageShared`` und reicht den Place an
+``worldgen.apply(tree, new_referent, place)`` weiter (all = Stadt + Lobby + Tycoon, sonst nur die eine Zone; die
+Plot-Vorlage Workspace.Werkstatt und alle Skripte sind in jedem Place enthalten).
+
 Aufrufe:
-  python tools/build_place.py Ultimate_Car_Game.rbxlx        Place bauen
+  python tools/build_place.py Ultimate_Car_Game.rbxlx        Place bauen (PlaceKind all)
+  python tools/build_place.py --place lobby Lobby.rbxlx      nur die Lobby-Halle (PlaceKind lobby)
   python tools/build_place.py --extract                      Skripte aus dem Basisplace nach src/garage schreiben
   python tools/build_place.py --roundtrip                    Prüfen: Basis + src/garage == Basis (bis auf Skript-Quelltexte)
 """
@@ -208,15 +214,52 @@ def apply_scripts(tree):
     return len(existing), added
 
 
-def apply_worldgen(tree):
+PLACES = ("all", "lobby", "openworld", "tycoon")
+
+
+def load_worldgen():
     gen = ROOT / "tools" / "worldgen" / "__init__.py"
     if not gen.exists():
         return None
+    mod = sys.modules.get("worldgen")
+    if mod is not None and getattr(mod, "__file__", None) == str(gen):
+        return mod
     spec = importlib.util.spec_from_file_location("worldgen", gen, submodule_search_locations=[str(gen.parent)])
     mod = importlib.util.module_from_spec(spec)
     sys.modules["worldgen"] = mod
     spec.loader.exec_module(mod)
-    return mod.apply(tree, new_referent)
+    return mod
+
+
+def apply_worldgen(tree, place="all"):
+    mod = load_worldgen()
+    if mod is None:
+        return None
+    return mod.apply(tree, new_referent, place)
+
+
+def apply_place_kind(tree, place="all"):
+    """Attribut PlaceKind (string) auf ReplicatedStorage.GarageShared (Vertrag §1); die Skripte lesen es mit
+    GarageShared:GetAttribute("PlaceKind"). Attribute liegen serialisiert in AttributesSerialize (worldgen.lib)."""
+    if place not in PLACES:
+        raise SystemExit(f"Unbekannter Place '{place}' (erlaubt: {', '.join(PLACES)})")
+    shared = find_path(tree.getroot(), ("ReplicatedStorage", "GarageShared"))
+    if shared is None:
+        raise SystemExit("ReplicatedStorage.GarageShared fehlt im Basisplace")
+    mod = load_worldgen()
+    if mod is None:
+        raise SystemExit("tools/worldgen fehlt (wird für das Attribut PlaceKind gebraucht)")
+    mod.lib.set_attrs(shared, {"PlaceKind": place})
+    return place
+
+
+def build_tree(place="all"):
+    """Basis + Skripte + Welt + PlaceKind - genau der Baum, den cmd_build schreibt (auch für validate.py)."""
+    tree = load_base()
+    replaced, added = apply_scripts(tree)
+    world = apply_worldgen(tree, place)
+    apply_place_kind(tree, place)
+    return tree, replaced, added, world
 
 
 def write(tree, out: Path):
@@ -310,12 +353,10 @@ def cmd_roundtrip():
     return False
 
 
-def cmd_build(out: Path):
-    tree = load_base()
-    replaced, added = apply_scripts(tree)
-    world = apply_worldgen(tree)
+def cmd_build(out: Path, place="all"):
+    tree, replaced, added, world = build_tree(place)
     write(tree, out)
-    print(f"Place gebaut: {out.name} ({replaced} Basisskripte aus src/, {added} neue Skripte)")
+    print(f"Place gebaut: {out.name} (PlaceKind {place}, {replaced} Basisskripte aus src/, {added} neue Skripte)")
     if world:
         print(f"Welt: {world}")
     csv_path, n = export_locale_csv()
@@ -330,10 +371,17 @@ def main():
         return
     if args and args[0] == "--roundtrip":
         sys.exit(0 if cmd_roundtrip() else 1)
+    place = "all"
+    if "--place" in args:
+        i = args.index("--place")
+        if i + 1 >= len(args) or args[i + 1] not in PLACES:
+            raise SystemExit(f"--place erwartet einen von: {', '.join(PLACES)}")
+        place = args[i + 1]
+        del args[i:i + 2]
     out = Path(args[0]) if args else ROOT / "Ultimate_Car_Game.rbxlx"
     if not out.is_absolute():
         out = Path.cwd() / out
-    cmd_build(out)
+    cmd_build(out, place)
 
 
 if __name__ == "__main__":

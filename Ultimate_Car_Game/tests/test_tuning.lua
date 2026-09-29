@@ -19,7 +19,7 @@ return {
 	end },
 
 	{ "Starten, Rejoin während der Laufzeit, Abholen erst nach Ablauf, nie doppelt", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local TR = g:MiniShared("TuningRules")
 		local player = g:Join(301, { name = "Hanna" })
 		g:Advance(1)
@@ -92,7 +92,7 @@ return {
 		T.check(d.money >= money + value, "gutgeschrieben")
 		T.eq((TR.CollectIdle(d, 1000 + 600)), false, "sofort erneut: nichts")
 
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local player = g:Join(302, { name = "Ida" })
 		g:Advance(0.1)
 		T.near(g:D(player).games.tuning.lastIdle, g:Now(), 1, "Sammeln beginnt beim ersten Beitritt")
@@ -128,7 +128,7 @@ return {
 	end },
 
 	{ "Minispiel-Ausbau (mini_upgrade): Preis, Doppelklick, Maximum", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local MC, MR = g:MiniShared("MiniConfig"), g:MiniShared("MiniRules")
 		local p = g:Join(303)
 		g:Advance(1)

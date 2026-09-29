@@ -90,6 +90,8 @@ def walk(item, path="", car=False, xf=None, out=None):
 def city_parts(tree):
     ws = workspace(tree)
     city = child(ws, "City")
+    if city is None:
+        return None, []
     return city, walk(city, "City")
 
 

@@ -3138,8 +3138,19 @@ end
 function PL.methods:HasAppearanceLoaded()
 	return true
 end
+-- Beitrittsdaten wie Roblox ({ SourceGameId, SourcePlaceId, TeleportData, LaunchData, Members }). Konfigurierbar je
+-- Spieler (Mock.SetJoinData(env, player, data) bzw. env.joinData[userId]) oder für alle (env.joinData.default).
 function PL.methods:GetJoinData()
-	return {}
+	local d = rawget(self, "__data")
+	local env = d._env
+	local data = d.joinData
+	if data == nil and type(env.joinData) == "table" then
+		data = env.joinData[d.UserId] or env.joinData.default
+	end
+	if type(data) ~= "table" then
+		return {}
+	end
+	return copyArg(data)
 end
 function PL.methods:GetFriendsOnline()
 	return {}
@@ -4034,6 +4045,166 @@ local function makeMarketplace(env)
 end
 signals("MarketplaceService", { "PromptGamePassPurchaseFinished", "PromptProductPurchaseFinished", "PromptPurchaseFinished", "PromptBundlePurchaseFinished" })
 
+-- TeleportOptions (Instance.new("TeleportOptions")): ReservedServerAccessCode, ServerInstanceId, ShouldReserveServer,
+-- SetTeleportData/GetTeleportData (Kopie, wie Roblox nur einfache Werte).
+local TO = spec("TeleportOptions")
+TO.defaults.ReservedServerAccessCode = ""
+TO.defaults.ServerInstanceId = ""
+TO.defaults.ShouldReserveServer = false
+function TO.methods:SetTeleportData(data)
+	local d = rawget(self, "__data")
+	if data ~= nil and type(data) ~= "table" then
+		error("Unable to cast value to Object", 2)
+	end
+	d.teleportData = data and copyValue(data) or nil
+end
+function TO.methods:GetTeleportData()
+	local d = rawget(self, "__data")
+	return d.teleportData and copyValue(d.teleportData) or nil
+end
+
+-- TeleportService: zeichnet alle Aufrufe in __calls auf ({ method, placeId, players, options, teleportData, code }).
+-- env.teleportFails = true | "error" -> TeleportAsync/ReserveServer werfen einen Fehler (wie ein fehlgeschlagener
+-- Aufruf); "signal" -> der Aufruf gelingt, danach feuert TeleportInitFailed je Spieler. Ein Teleport entfernt
+-- die Spieler nicht (der Mock kennt nur einen Place); env.teleportData liefert GetLocalPlayerTeleportData().
+local function makeTeleportService(env)
+	local svc = newInstance(env, "TeleportService", "TeleportService")
+	local d = rawget(svc, "__data")
+	d.__calls = {}
+	d.yield = 0
+	d.reserved = 0
+	local function failing()
+		local f = env.teleportFails
+		return f == true or f == "error"
+	end
+	local function record(entry)
+		table.insert(d.__calls, entry)
+		return entry
+	end
+	local function playersOf(list)
+		if isInstance(list) then
+			return { list }
+		end
+		local out = {}
+		for _, pl in ipairs(type(list) == "table" and list or {}) do
+			if not isInstance(pl) or not pl:IsA("Player") then
+				error("TeleportService: Spieler erwartet, erhalten " .. tostring(pl), 3)
+			end
+			table.insert(out, pl)
+		end
+		return out
+	end
+	local function checkPlace(placeId, method)
+		if type(placeId) ~= "number" or placeId ~= placeId or placeId <= 0 or placeId % 1 ~= 0 then
+			error("TeleportService:" .. method .. ": ungültige Place-Id " .. tostring(placeId), 3)
+		end
+	end
+	d.TeleportAsync = function(_, placeId, players, options)
+		checkPlace(placeId, "TeleportAsync")
+		local list = playersOf(players)
+		if #list == 0 then
+			error("TeleportService:TeleportAsync: keine Spieler", 2)
+		end
+		if options ~= nil and not (isInstance(options) and options:IsA("TeleportOptions")) then
+			error("TeleportService:TeleportAsync: TeleportOptions erwartet", 2)
+		end
+		if d.yield > 0 then
+			env.scheduler:wait(d.yield)
+		end
+		local entry = record({
+			method = "TeleportAsync", placeId = placeId, players = list, options = options,
+			teleportData = options and options:GetTeleportData() or nil,
+			code = options and options.ReservedServerAccessCode or "",
+			reserve = options and options.ShouldReserveServer == true or false,
+			t = env.clock.wall,
+		})
+		if failing() then
+			error("HTTP 400 (Bad Request): Teleport fehlgeschlagen (Mock)", 2)
+		end
+		for _, pl in ipairs(list) do
+			fireIf(rawget(pl, "__data"), "OnTeleport", Enum.TeleportState.Started, placeId, nil)
+		end
+		if env.teleportFails == "signal" then
+			for _, pl in ipairs(list) do
+				env.scheduler:spawnIn(env.serverCtx, function()
+					fireIf(d, "TeleportInitFailed", pl, Enum.TeleportResult.Failure, "Teleport fehlgeschlagen (Mock)", placeId, options)
+				end)
+			end
+		end
+		local result = plain("TeleportAsyncResult", {
+			PrivateServerId = entry.reserve and ("private-" .. tostring(#d.__calls)) or "",
+			ReservedServerAccessCode = entry.reserve and ("code-" .. tostring(#d.__calls)) or entry.code,
+		})
+		entry.result = result
+		return result
+	end
+	d.Teleport = function(_, placeId, player, teleportData)
+		checkPlace(placeId, "Teleport")
+		record({ method = "Teleport", placeId = placeId, players = playersOf(player), teleportData = teleportData and copyValue(teleportData) or nil, t = env.clock.wall })
+		if failing() then
+			error("HTTP 400 (Bad Request): Teleport fehlgeschlagen (Mock)", 2)
+		end
+	end
+	d.TeleportToPrivateServer = function(_, placeId, code, players, spawnName, teleportData)
+		checkPlace(placeId, "TeleportToPrivateServer")
+		record({ method = "TeleportToPrivateServer", placeId = placeId, code = code, players = playersOf(players), teleportData = teleportData and copyValue(teleportData) or nil, t = env.clock.wall })
+		if failing() then
+			error("HTTP 400 (Bad Request): Teleport fehlgeschlagen (Mock)", 2)
+		end
+	end
+	d.ReserveServer = function(_, placeId)
+		checkPlace(placeId, "ReserveServer")
+		if d.yield > 0 then
+			env.scheduler:wait(d.yield)
+		end
+		if failing() then
+			record({ method = "ReserveServer", placeId = placeId, failed = true, t = env.clock.wall })
+			error("HTTP 403 (Forbidden): ReserveServer fehlgeschlagen (Mock)", 2)
+		end
+		d.reserved += 1
+		local code = "reserved-" .. tostring(d.reserved)
+		local privateId = "private-" .. tostring(d.reserved)
+		record({ method = "ReserveServer", placeId = placeId, code = code, privateServerId = privateId, t = env.clock.wall })
+		return code, privateId
+	end
+	d.GetLocalPlayerTeleportData = function()
+		local ctx = currentCtx(env)
+		if ctx.side ~= "client" then
+			error("TeleportService:GetLocalPlayerTeleportData kann nur auf dem Client aufgerufen werden", 2)
+		end
+		return env.teleportData and copyValue(env.teleportData) or nil
+	end
+	d.GetPlayerPlaceInstanceAsync = function(_, userId)
+		if d.yield > 0 then
+			env.scheduler:wait(d.yield)
+		end
+		if type(userId) ~= "number" then
+			error("TeleportService:GetPlayerPlaceInstanceAsync: UserId erwartet", 2)
+		end
+		for _, pl in ipairs(env.players) do
+			if pl.UserId == userId and pl.Parent then
+				return true, "", env.game.PlaceId, rawget(env.game, "__data").JobId
+			end
+		end
+		return false, "Spieler nicht gefunden", 0, ""
+	end
+	d.SetTeleportGui = function() end
+	d.SetTeleportSetting = function(_, key, value)
+		d.settings = d.settings or {}
+		d.settings[key] = value
+	end
+	d.GetTeleportSetting = function(_, key)
+		return d.settings and d.settings[key] or nil
+	end
+	return svc
+end
+signals("TeleportService", { "TeleportInitFailed", "LocalPlayerArrivedFromTeleport" })
+
+-- Beitrittsdaten eines Spielers festlegen (Player:GetJoinData()), z. B. { TeleportData = { mode = "tycoon" } }
+function Mock.SetJoinData(env, player, data)
+	rawget(player, "__data").joinData = data
+end
+
 ---------------------------------------------------------------- Frames (RunService, Prompt-Sichtbarkeit)
 local function promptPart(prompt)
 	local p = prompt.Parent
@@ -4129,6 +4300,8 @@ function Mock.CreateService(env, name)
 		inst = makeDataStoreService(env)
 	elseif name == "MarketplaceService" then
 		inst = makeMarketplace(env)
+	elseif name == "TeleportService" then
+		inst = makeTeleportService(env)
 	else
 		inst = newInstance(env, name, name)
 	end
@@ -4162,6 +4335,9 @@ function Mock.NewEnv(opts)
 		guiInset = 36,
 		echoErrors = opts.echoErrors == true,
 		kickRemovesPlayer = opts.kickRemovesPlayer == true,
+		teleportFails = opts.teleportFails, -- true | "error" | "signal" | nil (TeleportService)
+		teleportData = opts.teleportData, -- GetLocalPlayerTeleportData() auf dem Client
+		joinData = opts.joinData or {}, -- [userId] = { TeleportData = ... } oder .default (Player:GetJoinData)
 	}
 	env.moduleCaches.server = env.modules
 	env.clock = Clock.new(opts.startTime)
@@ -4795,8 +4971,11 @@ function Mock.StartClient(env, player, opts)
 			end
 		end
 	end
-	runAll(ps)
-	runAll(gui)
+	if opts.run ~= false then
+		-- opts.run = false: nur Skripte/Guis kopieren, keine LocalScripts starten (UI-Bausteine einzeln testen)
+		runAll(ps)
+		runAll(gui)
+	end
 	Mock.Flush(env)
 	return client
 end

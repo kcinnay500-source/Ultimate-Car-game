@@ -192,7 +192,7 @@ local function act(p,action,a)
         if not C.StationNames[a.key] then return end
         if a.key=="shop" then resetInteraction(p);emit(p,"page","shop");return push(p) end
         resetInteraction(p);p.confirm=nil
-        moveTo(p,p.world.model.Stations[a.key]);emit(p,"page",a.key);return push(p)
+        moveTo(p,p.world.model.Stations[a.key]);emit(p,"page",a.key);Mini.OnStation(p,a.key);return push(p) -- 3.0: Tablet-Navigation zählt als Stationsbesuch
     end
     if action=="select" then
         if selected(p,a.id) then
@@ -413,7 +413,7 @@ local function join(player)
     local _,cycle=R.DayClock(now(),dayEpoch);p.dayCycle=cycle
     p.world=W.Create(player,function(kind,value,point)
         if sessions[player]~=p then return end
-        if kind=="station" then if station(p,value) then resetInteraction(p);emit(p,"page",value);push(p) end
+        if kind=="station" then if station(p,value) then resetInteraction(p);emit(p,"page",value);push(p);Mini.OnStation(p,value) end -- 3.0: Tutorial-Schritt/Hinweis zur Station
         elseif kind=="expand" then request(player,"confirm",{key="bays"})
         elseif kind=="lift" then for _,j in ipairs(p.profile.data.jobs) do if j.bay==value then request(player,"lift",{id=j.id});break end end
         else request(player,kind,{id=value,point=point}) end
@@ -435,6 +435,7 @@ local function join(player)
             for _,key in ipairs(profile.data.loadout) do if R.ToolUnlocked(profile.data,key) then p.tool=key;break end end
         end
         moveTo(p,p.world.model.Stations.home);F.Equip(player,p.tool);push(p)
+        Mini.OnCharacter(p) -- 3.0: Lobby/Tycoon-Spieler zur Zonen-Ankunft (Open World bleibt in der Werkstatt)
     end
     player.CharacterAdded:Connect(character)
     if player.Character then task.spawn(character,player.Character) end

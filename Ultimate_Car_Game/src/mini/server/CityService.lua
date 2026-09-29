@@ -1,4 +1,5 @@
--- CityService: bindet die globale Stadt (workspace.City) an die Minispiele.
+-- CityService: bindet die globale Stadt (workspace.City) an die Minispiele – und seit Ausbaustufe 4 mit demselben
+-- Vertrag die Zonen workspace.Lobby und workspace.Tycoon (Stations.<key> mit MiniTab/ProximityPrompt, Arrivals.<key>).
 -- * City.Stations.<key>: Part mit Attribut MiniTab und ProximityPrompt. Auslösen prüft die Reichweite
 --   auf dem Server und öffnet den Tab (Event "mini_open"); unbekannte Tabs melden "eröffnet bald".
 -- * City.Arrivals.<key>: Ankunftspunkte für mini_travel; "workshop" führt in die eigene Werkstatt.
@@ -23,6 +24,20 @@ local bound = setmetatable({}, { __mode = "k" })
 
 function CityService.City()
 	return workspace:FindFirstChild("City")
+end
+
+-- Zonen mit Stationen/Ankunftspunkten nach demselben Vertrag (PHASE4_CONTRACT §1): Stadt zuerst
+CityService.ZoneNames = { "City", "Lobby", "Tycoon" }
+
+function CityService.Zones()
+	local out = {}
+	for _, name in ipairs(CityService.ZoneNames) do
+		local m = workspace:FindFirstChild(name)
+		if m then
+			table.insert(out, m)
+		end
+	end
+	return out
 end
 
 local function promptOf(station)
@@ -114,17 +129,19 @@ end
 
 function CityService.Init(a)
 	api = a
-	task.spawn(function()
-		local ok, err = pcall(function()
-			local city = CityService.City() or workspace:WaitForChild("City", 10)
-			if city then
-				CityService.Bind(city)
+	for _, name in ipairs(CityService.ZoneNames) do
+		task.spawn(function()
+			local ok, err = pcall(function()
+				local zone = workspace:FindFirstChild(name) or workspace:WaitForChild(name, 10)
+				if zone then
+					CityService.Bind(zone)
+				end
+			end)
+			if not ok then
+				warn("[Stadt] Stationen (" .. name .. ") nicht gebunden: " .. tostring(err))
 			end
 		end)
-		if not ok then
-			warn("[Stadt] Stationen nicht gebunden: " .. tostring(err))
-		end
-	end)
+	end
 end
 
 -- Figur aus einem Sitz lösen, BEVOR sie per PivotTo versetzt wird. Humanoid.Sit = false ist auf einem
@@ -163,9 +180,15 @@ function CityService.Travel(p, key, moveTo)
 		moveTo(p, home)
 		return true
 	end
-	local city = CityService.City()
-	local arrivals = city and city:FindFirstChild("Arrivals")
-	local target = arrivals and arrivals:FindFirstChild(key)
+	-- Ankunftspunkte der Stadt, sonst der Lobby/des Tycoon-Geländes (gleicher Schlüssel: die Stadt hat Vorrang)
+	local target = nil
+	for _, zone in ipairs(CityService.Zones()) do
+		local arrivals = zone:FindFirstChild("Arrivals")
+		target = arrivals and arrivals:FindFirstChild(key)
+		if target then
+			break
+		end
+	end
 	local destination
 	if target and target:IsA("BasePart") then
 		destination = target.CFrame * CFrame.new(0, target.Size.Y / 2 + 3, 0)

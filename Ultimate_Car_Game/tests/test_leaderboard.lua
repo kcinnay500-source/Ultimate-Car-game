@@ -33,7 +33,7 @@ return {
 	end },
 
 	{ "Reihenfolge mit sehr großen Werten und eigene Platzierung", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local LB, PR = g:MiniServer("LeaderboardService"), g:MiniShared("PressRules")
 		local store = ordered(g)
 		for i = 1, 120 do
@@ -73,7 +73,7 @@ return {
 	end },
 
 	{ "Platzierung jenseits des gelesenen Bereichs", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local LB, PR = g:MiniServer("LeaderboardService"), g:MiniShared("PressRules")
 		local store = ordered(g)
 		for i = 1, 600 do
@@ -91,7 +91,7 @@ return {
 	end },
 
 	{ "Schreib- und Lese-Drosselung", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local calls = g:DataStoreMock().calls
 		local player = g:Join(90, { name = "Emil" })
 		g:Advance(1)
@@ -119,7 +119,7 @@ return {
 
 	{ "Schreiben nur mit beschreibbarem Profil, in Studio nie", function(T, H)
 		-- Fremde Sperre: temporäre Sitzung, kein Eintrag in der Bestenliste
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		g:Seed(95, { version = 2, data = { version = 2, money = 50, level = 1 }, receipts = {}, lock = { token = "anderer-server", expires = g:Now() + 170 } })
 		local p = g:Join(95)
 		g:Advance(1)
@@ -130,7 +130,7 @@ return {
 		g:Advance(5)
 		T.eq(ordered(g)["95"], nil, "kein Bestenlisten-Eintrag ohne writable")
 		-- Studio: nie schreiben
-		local gs = H.Garage({ studio = true })
+		local gs = H.Garage({ level = 12,  studio = true })
 		local ps = gs:Join(96)
 		gs:Advance(1)
 		gs:D(ps).games.press.upgrades = { pu1 = 5 }
@@ -139,7 +139,7 @@ return {
 		gs:Advance(5)
 		T.eq(ordered(gs)["96"], nil, "in Studio kein Bestenlisten-Eintrag")
 		-- Normalfall zum Vergleich
-		local gn = H.Garage()
+		local gn = H.Garage({ level = 12 })
 		local pn = gn:Join(97)
 		gn:Advance(1)
 		gn:D(pn).games.press.upgrades = { pu1 = 5 }
@@ -151,7 +151,7 @@ return {
 	end },
 
 	{ "Verspäteter Wiederholungsversuch überschreibt keinen neueren Wert (Verlassen, anderer Server)", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local LB, PR = g:MiniServer("LeaderboardService"), g:MiniShared("PressRules")
 		local ds = g:DataStoreMock()
 		local player = g:Join(98, { name = "Olga" })
@@ -192,7 +192,7 @@ return {
 
 	{ "Bestenliste beim Verlassen nur nach gelungenem Speichern (offener Robux-Beleg, verlorene Sperre)", function(T, H)
 		-- Fall 1: offener Robux-Beleg – P.Save verweigert, also kein Bestenlisten-Wert, den das Profil nicht hat
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local PR = g:MiniShared("PressRules")
 		local p1 = g:Join(99, { name = "Paul" })
 		g:Advance(1)
@@ -228,7 +228,7 @@ return {
 		T.eq(ordered(g)["101"], PR.EncodeScore(9e6), "nach gelungenem Speichern geschrieben")
 		T.eq(g:Record(101).data.games.press.lifetime, 9e6, "Profil enthält denselben Wert")
 		-- BindToClose: Speichern und danach Bestenliste, der Server wartet darauf
-		local gc = H.Garage()
+		local gc = H.Garage({ level = 12 })
 		local pc = gc:Join(102, { name = "Sara" })
 		gc:Advance(1)
 		local dc = gc:D(pc)
@@ -240,7 +240,7 @@ return {
 	end },
 
 	{ "DataStore-Fehler: Hinweis statt Absturz, Tafel zeigt Hinweis", function(T, H)
-		local g = H.Garage({ before = function(g)
+		local g = H.Garage({ level = 12,  before = function(g)
 			g:BuildCity({})
 		end })
 		local L = g:MiniShared("MiniLocale")
@@ -278,7 +278,7 @@ return {
 	end },
 
 	{ "Tafel zeigt Hinweis, wenn die Bestenliste fehlt (Studio ohne DataStore)", function(T, H)
-		local g = H.Garage({ studio = true, dataStore = { getFail = true }, before = function(g)
+		local g = H.Garage({ level = 12,  studio = true, dataStore = { getFail = true }, before = function(g)
 			g:BuildCity({})
 		end })
 		local L = g:MiniShared("MiniLocale")

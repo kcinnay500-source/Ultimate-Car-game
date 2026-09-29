@@ -1,0 +1,402 @@
+-- Ausbaustufe 4, Meilensteine 1–3 Ende-zu-Ende über die echte Verkabelung (H.Garage mit placeKind "all",
+-- Remotes.Command -> request -> Mini.Handle, echte Stationen aus tools/worldgen): Lobby -> Einstellungen ->
+-- Reise (Simulation) -> Tutorial bis zum Ende über echte Werkstatt-Ereignisse -> Level-Aufstieg mit
+-- Freischaltungs-Hinweis -> Prestige-Abholung unter Rang 1 abgelehnt -> Speichern/Laden; lobby_return; Party zu
+-- zweit; Veteran ohne meta; Freischaltungs-Sperren; Client (Lobby öffnet sich, Sperrhinweis).
+local HUB = { lobby = { 0, -668 }, openworld = { 0, -192 }, tycoon = { 0, 856 } }
+
+local function rootPos(g, pl)
+	local root = g:Root(pl)
+	return root and root.Position or nil
+end
+
+local function near(T, pos, x, z, tol, msg)
+	T.check(pos ~= nil, msg .. ": keine Figur")
+	if pos then
+		T.check(math.abs(pos.X - x) <= tol and math.abs(pos.Z - z) <= tol, string.format("%s – erwartet ≈(%g, %g), erhalten (%g, %g)", msg, x, z, pos.X, pos.Z))
+	end
+end
+
+local function join(g, userId, name)
+	local pl = g:Join(userId, { name = name })
+	g:Advance(1.1)
+	g:Send(pl, "hello")
+	g:Advance(1.1)
+	return pl, g:D(pl), g:Session(pl)
+end
+
+local function cityStation(g, key)
+	local city = g:Find("Workspace.City.Stations")
+	return city and city:FindFirstChild(key)
+end
+
+local function openCityStation(g, pl, key)
+	local st = cityStation(g, key)
+	assert(st, "Stadt-Station fehlt: " .. key)
+	local arrival = st:FindFirstChild("Arrival")
+	g:Teleport(pl, arrival and arrival.WorldPosition or st.Position, arrival and nil or Vector3.new(0, 3, 4))
+	g:Advance(0.2)
+	local m = g:Mark()
+	g:Trigger(pl, st:FindFirstChildOfClass("ProximityPrompt"), { force = true })
+	g:Advance(1.1)
+	return m
+end
+
+local function step(g, d)
+	return g:MiniShared("TutorialRules").StepIndex(d)
+end
+
+local function noErrors(T, g, what)
+	T.eq(#g:Errors(), 0, what .. ": keine Fehler: " .. g:ErrorText())
+end
+
+return {
+	{ "Neues Profil: Lobby → Einstellungen → lobby_go (Simulation) → Tutorial über echte Werkstatt-Ereignisse → Level-Aufstieg → Prestige → Speichern/Laden", function(T, H)
+		local g = H.Garage({ placeKind = "all" })
+		local Flow = H.Load("tests/lib/garage_flow.lua")
+		local MiniRules = g:MiniShared("MiniRules")
+		local pl, d, p = join(g, 4001, "Anna")
+		-- Erster Beitritt im all-Place: Lobby, Figur an der Lobby-Ankunft, Snapshot mit mode/meta/tutorial/prestige/unlocks
+		T.eq(p.mode, "lobby", "Anfangsmodus lobby")
+		near(T, rootPos(g, pl), HUB.lobby[1], HUB.lobby[2], 8, "Figur in der Lobby-Halle")
+		local snap = g:MiniSnapshot(pl)
+		T.check(snap ~= nil, "Minispiel-Snapshot")
+		T.eq(snap and snap.mode, "lobby", "snapshot.mode")
+		T.eq(snap and snap.placeKind, "all", "snapshot.placeKind")
+		T.eq(snap and snap.meta and snap.meta.beginner, true, "meta.beginner")
+		T.eq(snap and snap.meta and snap.meta.tutorialDone, false, "meta.tutorialDone")
+		T.eq(snap and snap.tutorial and snap.tutorial.step, 1, "tutorial.step 1")
+		T.eq(snap and snap.prestige and snap.prestige.rank, 0, "prestige.rank 0")
+		T.check(snap and snap.unlocks and type(snap.unlocks.list) == "table" and #snap.unlocks.list > 10, "unlocks.list im vollen Snapshot")
+		T.check(snap and snap.unlocks and snap.unlocks.next and snap.unlocks.next.level == 2, "nächste Freischaltung Level 2")
+		T.eq(snap and snap.party, false, "keine Party")
+		for _, n in ipairs(g:Notices(pl, "tutorial")) do
+			T.check(n.started ~= true, "in der Lobby startet das Tutorial nicht (started)")
+		end
+		-- Einstellungen (nur Booleans, sofort im Profil)
+		T.eq(g:Act(pl, "lobby_settings", { single = false, passive = true, beginner = true, rid = 1 }), "ok", "lobby_settings")
+		T.eq(d.games.meta.passive, true, "passive gespeichert")
+		T.eq(g:Act(pl, "lobby_settings", { single = "ja", passive = true, beginner = true, rid = 2 }), "invalid", "Typprüfung")
+		g:Advance(0.5)
+		T.eq(g:Act(pl, "lobby_settings", { single = false, passive = false, beginner = true, rid = 3 }), "ok", "zurück")
+		-- Reise in die Open World (Simulation: Place-Ids 0)
+		g:Advance(0.5)
+		T.eq(g:Act(pl, "lobby_mode", { mode = "mars", rid = 4 }), "ok", "lobby_mode unbekannt -> Toast")
+		T.check(g:HasToast(pl, "gibt es nicht"), "Toast unbekannter Modus")
+		g:Advance(0.5)
+		T.eq(g:Act(pl, "lobby_mode", { mode = "openworld", rid = 5 }), "ok", "lobby_mode openworld")
+		local m = g:Mark()
+		g:Advance(0.5)
+		T.eq(g:Act(pl, "lobby_go", { rid = 6 }), "ok", "lobby_go")
+		T.eq(p.mode, "openworld", "Modus openworld")
+		T.eq(d.games.meta.lastMode, "openworld", "lastMode gespeichert")
+		local modeNotice = g:Notices(pl, "mode", m)[1]
+		T.check(modeNotice ~= nil and modeNotice.simulated == true and modeNotice.mode == "openworld", "mini_notice mode (Simulation)")
+		near(T, rootPos(g, pl), HUB.openworld[1], HUB.openworld[2], 8, "Figur an der Stadt-Ankunft")
+		g:Advance(1.1)
+		T.eq(g:MiniSnapshot(pl).mode, "openworld", "Snapshot mode openworld")
+		-- Pflicht-Tutorial beim ersten Open-World-Beitritt
+		local started = g:Notices(pl, "tutorial", m)
+		T.check(#started >= 1 and started[1].started == true and started[1].step == 1, "Tutorial gestartet (Schritt 1)")
+		-- 1, 2: Lese-Schritte (Client sendet tutorial_next)
+		T.eq(g:Act(pl, "tutorial_next", { step = 1, rid = 10 }), "ok", "Weiter 1")
+		T.eq(step(g, d), 2, "Schritt 2")
+		g:Advance(0.3)
+		T.eq(g:Act(pl, "tutorial_next", { step = 2, rid = 11 }), "ok", "Weiter 2")
+		T.eq(step(g, d), 3, "Schritt 3 (Empfang)")
+		-- 3: Empfang der eigenen Werkstatt (2.4.0-Tablet-Navigation 'travel' -> Mini.OnStation)
+		m = g:Mark()
+		g:Send(pl, "travel", { key = "workshop" })
+		T.eq(step(g, d), 4, "Schritt 4 (Auftrag annehmen)")
+		local hints = g:Notices(pl, "hint", m)
+		T.check(#hints == 1 and hints[1].id == "h_workshop", "Beginner-Hinweis zum Empfang")
+		-- 4..6: echter Auftrag (Tick erkennt die Phasen)
+		local j = Flow.AcceptInspection(T, g, pl)
+		T.check(j ~= nil, "Auftrag angenommen")
+		g:Advance(1.1)
+		T.eq(step(g, d), 5, "Schritt 5 (OBD)")
+		local C = g:Config()
+		local def = C.JobById[j.kind]
+		local diag = Flow.Scan(T, g, pl, j.id)
+		T.check(diag ~= nil, "diagnose-Event")
+		g:Send(pl, "diagnose", { id = j.id, choice = def.cause })
+		g:Advance(1.1)
+		T.eq(step(g, d), 6, "Schritt 6 (Reparatur)")
+		for i = 1, #def.steps do
+			T.check(Flow.RepairStep(T, g, pl, j.id, i), "Reparaturschritt " .. i)
+		end
+		Flow.Scan(T, g, pl, j.id)
+		T.eq(Flow.Job(g, pl, j.id) and Flow.Job(g, pl, j.id).phase, "invoice", "Phase invoice")
+		g:Advance(1.1)
+		T.eq(step(g, d), 7, "Schritt 7 (Abrechnen)")
+		-- 7: Abrechnen (act 'settle' -> Mini.OnSettled)
+		g:Teleport(pl, g:Station(pl, "workshop"), Vector3.new(0, 0, 3))
+		g:Advance(0.3)
+		m = g:Mark()
+		g:Send(pl, "settle", { id = j.id })
+		T.check(g:Last(pl, "receipt", m) ~= nil, "Quittung")
+		T.eq(step(g, d), 8, "Schritt 8 (Stadtplan)")
+		T.eq(d.games.stats.jobsDone, 1, "jobsDone")
+		local firstJob = false
+		for _, h in ipairs(g:Notices(pl, "hint", m)) do
+			if h.id == "h_first_job" then
+				firstJob = true
+			end
+		end
+		T.check(firstJob, "Hinweis first:jobsDone")
+		-- 8: Schnellreise in die Stadt (nur eine gelungene Reise zählt)
+		g:Advance(3.1)
+		T.eq(g:Act(pl, "mini_travel", { key = "gibt_es_nicht", rid = 20 }), "ok", "mini_travel unbekannt -> Toast")
+		T.eq(step(g, d), 8, "fehlgeschlagene Reise zählt nicht")
+		g:Advance(3.1)
+		T.eq(g:Act(pl, "mini_travel", { key = "hub", rid = 21 }), "ok", "mini_travel hub")
+		T.eq(step(g, d), 9, "Schritt 9 (Autohaus)")
+		near(T, rootPos(g, pl), HUB.openworld[1], HUB.openworld[2], 8, "Figur an der Stadt-Ankunft (Schnellreise)")
+		-- 9, 10: Stadt-Stationen (ProximityPrompt -> MiniService.openStation)
+		m = openCityStation(g, pl, "goals")
+		T.eq(step(g, d), 9, "Infotafel zu früh")
+		T.check(g:Events(pl, "mini_open", m)[1] ~= nil and g:Events(pl, "mini_open", m)[1].tab == "goals", "Tab goals geöffnet")
+		m = openCityStation(g, pl, "dealer")
+		T.eq(step(g, d), 10, "Schritt 10 (Ziele)")
+		local money, xp, level = d.money, d.xp, d.level
+		m = openCityStation(g, pl, "goals")
+		T.check(d.games.meta.tutorialDone and not d.games.meta.tutorialSkipped, "Tutorial beendet")
+		local fin = g:Notices(pl, "tutorial", m)
+		T.check(#fin >= 1 and fin[#fin].finished == true and fin[#fin].done == true, "tutorial-Hinweis finished")
+		T.check(d.money - money >= 500, "500 Credits Belohnung (" .. tostring(d.money - money) .. ")")
+		T.check(d.level > level or d.xp == xp + 60, "60 XP")
+		T.check(g:HasToast(pl, "Tutorial geschafft", m), "Toast Tutorial geschafft")
+		g:Advance(1.1)
+		local st = g:State(pl)
+		T.check(st and st.data.money == d.money, "2.4.0-state trägt das neue Guthaben")
+		-- Level-Aufstieg: Freischaltungs-Hinweise (Presse ab 2, Schrottplatz/Autohaus/Komet ab 3)
+		m = g:Mark()
+		local before = d.level
+		MiniRules.GainXP(d, 100000)
+		T.check(d.level >= 3, "Level gestiegen (" .. tostring(d.level) .. ")")
+		g:Advance(1.1)
+		local unlocks = g:Notices(pl, "unlock", m)
+		local keys = {}
+		for _, u in ipairs(unlocks) do
+			keys[u.key] = u
+		end
+		T.check(keys["feature:press"] ~= nil and keys["feature:press"].level == 2, "unlock feature:press")
+		T.check(keys["feature:press"] and keys["feature:press"].hint ~= nil, "Beginner-Hinweis reist im unlock-Hinweis mit")
+		T.eq(d.games.meta.hintsSeen.h_press, true, "h_press gemerkt")
+		T.check(keys["car:komet"] ~= nil, "unlock car:komet")
+		snap = g:MiniSnapshot(pl)
+		T.check(snap and snap.unlocks and snap.unlocks.unseen and snap.unlocks.unseen >= 2, "unlocks.unseen > 0")
+		T.eq(g:Act(pl, "unlocks_seen", { rid = 30 }), "ok", "unlocks_seen")
+		g:Advance(1.1)
+		T.eq(g:MiniSnapshot(pl).unlocks.unseen, 0, "gesehen")
+		-- Prestige: Rang 1 erst ab Level 100
+		m = g:Mark()
+		T.eq(g:Act(pl, "prestige_claim", { rank = 1, rid = 31 }), "ok", "prestige_claim unter Rang 1 -> Toast")
+		T.check(g:HasToast(pl, "Rang 1 gibt es ab Level 100", m), "Toast Rang 1 ab Level 100")
+		T.eq(#d.games.prestige.claimed, 0, "nichts abgeholt")
+		T.eq(g:Act(pl, "prestige_claim", { rank = "1", rid = 32 }), "invalid", "rank muss number sein")
+		-- Speichern/Laden: meta bleibt (Tutorial erledigt, Hinweise gesehen, lastMode openworld)
+		g:Leave(pl)
+		local rec = g:Record(4001)
+		T.check(rec ~= nil and rec.data and rec.data.games and rec.data.games.meta, "Datensatz mit meta")
+		T.eq(rec.data.games.meta.tutorialDone, true, "gespeichert tutorialDone")
+		T.eq(rec.data.games.meta.lastMode, "openworld", "gespeichert lastMode")
+		T.eq(rec.data.games.meta.hintsSeen.h_workshop, true, "gespeichert hintsSeen")
+		T.eq(rec.data.games.prestige and #rec.data.games.prestige.claimed, 0, "gespeichert prestige")
+		local pl2, d2, p2 = join(g, 4001, "Anna")
+		T.eq(p2.mode, "openworld", "Wiederbeitritt im letzten Modus")
+		T.eq(d2.games.meta.tutorialDone, true, "meta geladen")
+		T.eq(d2.games.meta.hintsSeen.h_press, true, "hintsSeen geladen")
+		local home = g:Station(pl2, "home")
+		T.check(home and (rootPos(g, pl2) - home.Position).Magnitude < 12, "Open World: Figur wie bisher in der Werkstatt")
+		T.eq(#g:Notices(pl2, "tutorial"), 0, "Tutorial startet nicht erneut")
+		local snap2 = g:MiniSnapshot(pl2)
+		T.check(snap2 and snap2.tutorial and snap2.tutorial.done == true, "Snapshot tutorial.done")
+		noErrors(T, g, "Ablauf")
+	end },
+
+	{ "lobby_return und Party zu zweit: Leiter reist, Mitglied kommt mit; Mitglied darf nicht allein starten", function(T, H)
+		local g = H.Garage({ placeKind = "all" })
+		local LS = g:MiniServer("LobbyService")
+		local a, _, pa = join(g, 4101, "Anna")
+		local b, _, pb = join(g, 4102, "Ben")
+		T.eq(pa.mode, "lobby", "Anna in der Lobby")
+		T.eq(g:Act(a, "party_create", { rid = 1 }), "ok", "party_create")
+		local party = LS.PartyOf(a)
+		T.check(party ~= nil, "Party angelegt")
+		local code = party and party.code or "????"
+		g:Advance(0.5)
+		T.eq(g:Act(b, "party_join", { code = string.lower(code), rid = 2 }), "ok", "party_join (Kleinschreibung)")
+		T.eq(LS.PartyOf(b), party, "Ben in der Party")
+		g:Advance(1.1)
+		local snap = g:MiniSnapshot(b)
+		T.check(snap and snap.party and snap.party.code == code and #snap.party.members == 2 and snap.party.isLeader == false, "Snapshot party")
+		-- Mitglied darf nicht allein reisen
+		g:Advance(0.5)
+		T.eq(g:Act(b, "lobby_mode", { mode = "tycoon", rid = 3 }), "ok", "Ben wählt")
+		local m = g:Mark()
+		g:Advance(3.1)
+		T.eq(g:Act(b, "lobby_go", { rid = 4 }), "ok", "lobby_go Ben")
+		T.eq(pb.mode, "lobby", "Ben bleibt")
+		T.check(g:HasToast(b, "Party-Leiter", m), "Toast nur der Leiter")
+		-- Leiter reist: beide im Tycoon
+		g:Advance(0.5)
+		T.eq(g:Act(a, "lobby_mode", { mode = "tycoon", rid = 5 }), "ok", "Anna wählt")
+		m = g:Mark()
+		g:Advance(3.1)
+		T.eq(g:Act(a, "lobby_go", { rid = 6 }), "ok", "lobby_go Anna")
+		T.eq(pa.mode, "tycoon", "Anna im Tycoon")
+		T.eq(pb.mode, "tycoon", "Ben mitgereist")
+		near(T, rootPos(g, a), HUB.tycoon[1], HUB.tycoon[2], 8, "Anna an der Tycoon-Ankunft")
+		near(T, rootPos(g, b), HUB.tycoon[1], HUB.tycoon[2], 8, "Ben an der Tycoon-Ankunft")
+		local travel = g:Notices(b, "party", m)
+		T.check(#travel >= 1 and travel[#travel].event == "travel" and travel[#travel].mode == "tycoon", "Ben erhält travel")
+		g:Advance(1.1)
+		T.eq(g:MiniSnapshot(b).mode, "tycoon", "Snapshot Ben tycoon")
+		-- Respawn im Tycoon: Figur landet an der Zonen-Ankunft, nicht in der Werkstatt (Mini.OnCharacter)
+		g:Respawn(a)
+		g:Advance(1.1)
+		near(T, rootPos(g, a), HUB.tycoon[1], HUB.tycoon[2], 8, "Anna nach Respawn an der Tycoon-Ankunft")
+		-- zurück in die Lobby (Leiter nimmt die Party mit)
+		g:Advance(3.1)
+		T.eq(g:Act(a, "lobby_return", { rid = 7 }), "ok", "lobby_return")
+		T.eq(pa.mode, "lobby", "Anna in der Lobby")
+		T.eq(pb.mode, "lobby", "Ben mitgereist")
+		near(T, rootPos(g, a), HUB.lobby[1], HUB.lobby[2], 8, "Anna an der Lobby-Ankunft")
+		g:Advance(3.1)
+		m = g:Mark()
+		T.eq(g:Act(a, "lobby_return", { rid = 8 }), "ok", "lobby_return in der Lobby")
+		T.check(g:HasToast(a, "schon in der Lobby", m), "Toast schon in der Lobby")
+		-- Lobby-Station (Portal) wählt den Modus vor und öffnet den Lobby-Tab mit der Aktion
+		local st = g:Find("Workspace.Lobby.Stations.mode_tycoon")
+		T.check(st ~= nil, "Lobby-Station mode_tycoon")
+		if st then
+			g:Teleport(a, st.Arrival.WorldPosition)
+			g:Advance(0.2)
+			m = g:Mark()
+			g:Trigger(a, st:FindFirstChildOfClass("ProximityPrompt"), { force = true })
+			local open = g:Events(a, "mini_open", m)[1]
+			T.check(open ~= nil and open.tab == "lobby" and open.action == "mode_tycoon", "mini_open lobby mit LobbyAction")
+			local lobbyNotice = g:Notices(a, "lobby", m)[1]
+			T.check(lobbyNotice ~= nil and lobbyNotice.action == "mode_tycoon" and lobbyNotice.hint ~= nil, "lobby-Hinweis mit Beginner-Hinweis (h_tycoon)")
+			g:Advance(1.1)
+			T.eq(g:MiniState(a).lobbyChoice, "tycoon", "Sitzung: Vorauswahl tycoon")
+			T.eq(g:MiniSnapshot(a).choice, "tycoon", "Snapshot choice tycoon")
+		end
+		-- Leiter verlässt den Server: Ben wird Leiter
+		g:Leave(a)
+		T.eq(party.leader, b, "Ben ist Leiter")
+		g:Advance(0.5)
+		T.eq(g:Act(b, "party_leave", { rid = 9 }), "ok", "party_leave")
+		T.eq(LS.Parties[code], nil, "Party aufgelöst")
+		noErrors(T, g, "Party")
+	end },
+
+	{ "Veteran ohne meta lädt mit Standardwerten, Tutorial gilt als erledigt, Start in der Open World", function(T, H)
+		local g = H.Garage({ placeKind = "all" })
+		local R = g:Rules()
+		local data = R.NewData(g:Now())
+		data.completed = 12
+		data.level = 7
+		data.money = 4321
+		data.games = nil -- 2.4.0-Profil ohne Minispiel-Daten
+		g:Seed(4201, { version = 2, data = data, receipts = {} })
+		local pl, d, p = join(g, 4201, "Veteran")
+		T.eq(p.mode, "openworld", "Veteran startet in der Open World")
+		T.eq(d.games.meta.tutorialDone, true, "Tutorial erledigt")
+		T.eq(d.games.meta.tutorialSkipped, false, "nicht übersprungen")
+		T.eq(d.games.meta.lastMode, "openworld", "lastMode openworld")
+		T.eq(d.games.meta.beginner, true, "Standard: Beginner-Hinweise an")
+		T.eq(d.games.stats.jobsDone, 12, "jobsDone aus completed")
+		T.eq(d.games.prestige.titleRank, 0, "Prestige-Standard")
+		T.eq(d.money, 4321, "Geld bleibt")
+		T.eq(#g:Notices(pl, "tutorial"), 0, "kein Tutorial-Hinweis")
+		local home = g:Station(pl, "home")
+		T.check(home and (rootPos(g, pl) - home.Position).Magnitude < 12, "Figur in der Werkstatt")
+		local snap = g:MiniSnapshot(pl)
+		T.check(snap and snap.tutorial and snap.tutorial.done == true and snap.mode == "openworld", "Snapshot")
+		-- Profil mit meta und gespeichertem Modus tycoon
+		local data2 = R.NewData(g:Now())
+		data2.games.meta.lastMode = "tycoon"
+		data2.games.meta.tutorialDone = true
+		g:Seed(4202, { version = 2, data = data2, receipts = {} })
+		local pl2, _, p2 = join(g, 4202, "Tycoonist")
+		T.eq(p2.mode, "tycoon", "gespeicherter Modus tycoon")
+		near(T, rootPos(g, pl2), HUB.tycoon[1], HUB.tycoon[2], 8, "Figur am Tycoon-Gelände")
+		noErrors(T, g, "Veteran")
+	end },
+
+	{ "Freischaltungen: gesperrte Aktionen antworten mit einem Toast, Stationen mit Level-Voraussetzung öffnen nicht", function(T, H)
+		local g = H.Garage()
+		local pl, d = join(g, 4301, "Neu")
+		T.eq(d.level, 1, "Level 1")
+		local m = g:Mark()
+		T.eq(g:Act(pl, "mini_press_click", { count = 3 }), "locked", "Presse ab Level 2 gesperrt")
+		T.check(g:HasToast(pl, "Ab Level 2: Schrottpresse", m), "Toast Ab Level 2")
+		T.eq(d.games.press.clicks, 0, "keine Klicks gezählt")
+		m = g:Mark()
+		T.eq(g:Act(pl, "mini_press_click", { count = 3 }), "locked", "weiter gesperrt")
+		T.eq(#g:Toasts(pl, m), 0, "Toast gedrosselt")
+		T.eq(g:Act(pl, "mini_arcade_start", { game = "arcade_1", rid = 1 }), "locked", "Spielhalle ab Level 10")
+		T.eq(g:Act(pl, "mini_car_buy", { model = "komet", rid = 2 }), "locked", "Komet ab Level 3")
+		T.eq(g:Act(pl, "mini_car_buy", { model = "gibt_es_nicht", rid = 3 }), "ok", "unbekanntes Modell meldet CarRules")
+		T.eq(g:Act(pl, "mini_auction_consign", { id = 1, start = 100, duration = 120, rid = 4 }), "locked", "Spieler-Auktionen ab Level 20")
+		T.eq(g:Act(pl, "mini_quiz_new", { rid = 5 }), "locked", "Quiz ab Level 4")
+		T.eq(g:Act(pl, "mini_daily_claim", { rid = 6 }), "ok", "Aktion ohne Voraussetzung läuft")
+		-- Stadt-Station mit Level-Voraussetzung: Toast statt mini_open
+		m = openCityStation(g, pl, "arcade")
+		T.eq(#g:Events(pl, "mini_open", m), 0, "Spielhalle öffnet nicht")
+		T.check(g:HasToast(pl, "Ab Level 10: Spielhalle", m), "Toast Spielhalle")
+		m = openCityStation(g, pl, "map")
+		T.check(g:Events(pl, "mini_open", m)[1] ~= nil and g:Events(pl, "mini_open", m)[1].tab == "map", "Stadtplan (ohne Voraussetzung) öffnet")
+		-- Level 10: alles offen
+		d.level = 10
+		g:Advance(1.1)
+		T.eq(g:Act(pl, "mini_press_click", { count = 3 }), "ok", "Presse ab Level 2")
+		T.eq(d.games.press.clicks, 3, "Klicks gezählt")
+		m = openCityStation(g, pl, "arcade")
+		T.check(g:Events(pl, "mini_open", m)[1] ~= nil and g:Events(pl, "mini_open", m)[1].tab == "arcade", "Spielhalle öffnet ab Level 10")
+		T.eq(g:Act(pl, "mini_arcade_start", { game = "arcade_1", rid = 7 }), "ok", "Spielhalle spielbar")
+		noErrors(T, g, "Sperren")
+	end },
+
+	{ "Client: im all-Place öffnet sich der Lobby-Tab einmal, Tabs lobby/unlocks/prestige vorhanden, Sperrhinweis am gesperrten Bereich", function(T, H)
+		local g = H.Garage({ placeKind = "all" })
+		local pl = g:Join(4401, { name = "Tester" })
+		g:Advance(0.5)
+		g:StartClient(pl)
+		g:Advance(2)
+		local MiniUI = g:ClientModule(pl, "Mini.MiniUI")
+		T.check(MiniUI.Pages.lobby ~= nil and MiniUI.Pages.unlocks ~= nil and MiniUI.Pages.prestige ~= nil, "Tabs lobby/unlocks/prestige")
+		T.eq(MiniUI.Tabs[1].key, "lobby", "Lobby ist der erste Tab")
+		T.eq(MiniUI.IsOpen, true, "Panel offen (Lobby)")
+		T.eq(MiniUI.CurrentTab, "lobby", "Lobby-Tab")
+		local gui = pl.PlayerGui
+		T.check(gui:FindFirstChild("Tutorial") ~= nil, "TutorialUI gestartet")
+		T.check(gui:FindFirstChild("ProgressHUD") ~= nil, "Prestige-Abzeichen gebaut")
+		-- Sperrhinweis am Bereich Schrottpresse (Level 1 < 2)
+		MiniUI.Show("press")
+		g:Advance(0.3)
+		local note = MiniUI.Pages.press:FindFirstChild("LockNote")
+		T.check(note ~= nil and note.Visible == true and note.Text:find("Ab Level 2", 1, true) ~= nil, "Sperrhinweis Presse")
+		local goals = MiniUI.Pages.goals:FindFirstChild("LockNote")
+		T.check(goals == nil, "Ziele ohne Sperrhinweis")
+		-- Panel schließen: kein erneutes Öffnen ohne Moduswechsel
+		MiniUI.Close()
+		g:Advance(1.2)
+		T.eq(MiniUI.IsOpen, false, "bleibt zu")
+		-- Reise (Simulation): mode-Hinweis, Panel bleibt zu; zurück in die Lobby -> öffnet erneut
+		g:Advance(0.5)
+		T.eq(g:Act(pl, "lobby_mode", { mode = "openworld", rid = 1 }), "ok", "lobby_mode")
+		g:Advance(3.1)
+		T.eq(g:Act(pl, "lobby_go", { rid = 2 }), "ok", "lobby_go")
+		g:Advance(1.2)
+		T.eq(MiniUI.IsOpen, false, "in der Open World zu")
+		g:Advance(3.1)
+		T.eq(g:Act(pl, "lobby_return", { rid = 3 }), "ok", "lobby_return")
+		g:Advance(1.2)
+		T.eq(MiniUI.IsOpen, true, "Lobby öffnet sich wieder")
+		T.eq(MiniUI.CurrentTab, "lobby", "Lobby-Tab")
+		noErrors(T, g, "Client")
+	end },
+}

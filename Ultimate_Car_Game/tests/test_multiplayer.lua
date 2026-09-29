@@ -10,7 +10,7 @@ end
 
 return {
 	{ "Zwei Spieler: getrennte Zustände", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local a = g:Join(701, { name = "Alma" })
 		local b = g:Join(702, { name = "Bodo" })
 		g:Advance(1)
@@ -58,7 +58,7 @@ return {
 	end },
 
 	{ "Bestenlistenwerte getrennt", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local MC, PR = g:MiniShared("MiniConfig"), g:MiniShared("PressRules")
 		local a = g:Join(703, { name = "Carmen" })
 		local b = g:Join(704, { name = "Dirk" })
@@ -78,7 +78,7 @@ return {
 	end },
 
 	{ "8 Spieler gleichzeitig: eigene Grundstücke, eigene Klicks, Snapshots", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local ps = {}
 		for i = 1, 8 do
 			ps[i] = g:Join(800 + i, { name = "P" .. i })

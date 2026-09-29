@@ -9,6 +9,8 @@ local CarRules = require(script.Parent:WaitForChild("CarRules"))
 local TrackRules = require(script.Parent:WaitForChild("TrackRules"))
 local AuctionRules = require(script.Parent:WaitForChild("AuctionRules"))
 local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
+-- Ausbaustufe 4: Einstellungen/Tutorial (games.meta) und Prestige (games.prestige); MetaRules braucht nur GameConfig
+local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
 
 local MiniRules = {}
 
@@ -83,13 +85,15 @@ end
 MiniRules.STAT_KEYS = {
 	"clicks", "pressed", "pressUpgrades", "rebirths", "jobsDone", "quizCorrect", "parkingSolved",
 	"dismantled", "tuningStarted", "tuningCollected", "longTuning", "idleCollected",
+	"missionsDone", "tycoonRuns", "prestigeClaims", -- Ausbaustufe 4 (PHASE4_CONTRACT §2)
 }
 local STAT_SET = {}
 for _, key in ipairs(MiniRules.STAT_KEYS) do
 	STAT_SET[key] = true
 end
 
--- Tiefe höchstens 3 unter games (games.press.upgrades.pu1, games.cars[1].paint, games.arcade.best.arcade_1);
+-- Tiefe höchstens 3 unter games (games.press.upgrades.pu1, games.cars[1].paint, games.arcade.best.arcade_1,
+-- games.meta.hintsSeen.h_map, games.prestige.claimed[n]);
 -- R.Snapshot erlaubt 12.
 function MiniRules.DefaultGames()
 	local stats = {}
@@ -124,6 +128,7 @@ function MiniRules.DefaultGames()
 		arcade = ArcadeRules.Default(),
 	}
 	CarRules.ApplyDefault(g) -- cars = {}, carSerial = 0, activeCar = 0
+	MetaRules.ApplyDefault(g) -- meta, prestige (Ausbaustufe 4)
 	return g
 end
 
@@ -161,12 +166,14 @@ function MiniRules.LoadGames(raw, d, now)
 	if type(raw) ~= "table" then
 		local completed = type(d) == "table" and d.completed or 0
 		g.stats.jobsDone = loadInt(completed, 0, 0, MAX_SAFE)
+		g.meta = MetaRules.Load(nil, d, now) -- 2.4.0-Veteranen: Tutorial gilt als erledigt
 		return g
 	end
 	g.auction = AuctionRules.Load(raw.auction, d, now)
 	g.track = TrackRules.Load(raw.track)
 	g.arcade = ArcadeRules.Load(raw.arcade, d, now)
 	CarRules.ApplyLoad(g, raw, d, now)
+	MetaRules.ApplyLoad(g, raw, d, now)
 	g.parts = loadInt(raw.parts, g.parts, 0, MAX_SAFE)
 	for _, u in ipairs(MiniConfig.Upgrades) do
 		g[u.key] = loadInt(raw[u.key], u.start, u.start, u.max)

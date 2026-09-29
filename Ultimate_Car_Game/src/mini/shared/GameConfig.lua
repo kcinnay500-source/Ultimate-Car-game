@@ -39,7 +39,7 @@ GameConfig.Zones = {
 		stations = { "mode_tycoon", "mode_openworld", "settings", "party", "tutorial" },
 	},
 	openworld = { model = "City", arrival = "hub", spawn = "CitySpawn", tab = "map", stations = {} },
-	tycoon = { model = "Tycoon", arrival = "hub", spawn = "TycoonSpawn", tab = "tycoon", stations = { "market" } },
+	tycoon = { model = "Tycoon", arrival = "hub", spawn = "TycoonSpawn", tab = "tycoon", stations = { "tycoon_market", "tycoon" } },
 }
 
 ---------------------------------------------------------------- Freischaltungen (§3)

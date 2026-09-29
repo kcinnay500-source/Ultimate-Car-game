@@ -2,7 +2,10 @@
 """Prüft den gebauten Place und das Projekt (3.0 = 2.4.0-Basisplace + src/garage + src/mini + Welt).
 
 1. Place: exakt so gebaut wie tools/build_place.py (Basisplace + src/** + tools/worldgen); jedes Skript
-   im Place stammt aus src/, genau die erwarteten Skripte, Klassen und Quelltexte stimmen, Skriptnamen eindeutig
+   im Place stammt aus src/, genau die erwarteten Skripte, Klassen und Quelltexte stimmen, Skriptnamen eindeutig;
+   Attribut PlaceKind = "all" auf ReplicatedStorage.GarageShared, Zonen City/Lobby/Tycoon vorhanden
+   (PHASE4_CONTRACT §1); die Varianten lobby/openworld/tycoon werden in ein Arbeitsverzeichnis gebaut und geprüft
+   (nur die eigene Zone, Werkstatt-Vorlage mit CarSpawn, dieselben Skripte, passendes PlaceKind)
 2. Basis: außer Skript-Quelltexten ist der Basisplace unverändert ("nur Skripte geändert"); jede Änderung an
    src/garage gegenüber 2.4.0 ist mit "-- 3.0:" kommentiert; src/garage enthält genau die 2.4.0-Skripte
 3. Luau-Compiler: alle Skripte in src/ und alle Test-Dateien
@@ -39,8 +42,15 @@ STUDIO_STORE = "UltimateCarGame_Studio_v2"
 LEADERBOARD_STORE = "UltimateCarGame_ScrapLeaderboard_v1"
 # Nutzlast-Felder, die ein Client nie senden darf (Serverautorität)
 FORBIDDEN_FIELDS = {"amount", "price", "cost", "credits", "money", "scrap", "reward", "gain", "xp", "time", "now", "timestamp", "result", "correct"}
-# Ausnahmen laut PHASE2_CONTRACT §4: ein Gebot ist eine Absicht (Server prüft Mindestgebot, Deckel und Guthaben)
-INTENT_FIELDS = {("mini_auction_bid", "amount")}
+# Ausnahmen laut PHASE2_CONTRACT §4: ein Gebot ist eine Absicht (Server prüft Mindestgebot, Deckel und Guthaben).
+# PHASE4_CONTRACT §10: tycoon_trade_offer {to, item, qty, price} (price = gewählter Bargeld-Preis, qty 1..999; Server
+# prüft Lager und Bargeld) und story_sell {offer, price} (price = Preisstufe 1..3) sind ebenfalls Absichten.
+INTENT_FIELDS = {("mini_auction_bid", "amount"),
+                 ("mini_tycoon_trade_offer", "price"), ("mini_tycoon_trade_offer", "qty"),
+                 ("mini_story_sell", "price"),
+                 ("tycoon_trade_offer", "price"), ("tycoon_trade_offer", "qty"), ("story_sell", "price")}
+PLACES = ("all", "lobby", "openworld", "tycoon")
+ZONE_MODELS = {"lobby": "Lobby", "openworld": "City", "tycoon": "Tycoon"}
 
 errors = []
 warnings = []
@@ -101,16 +111,15 @@ def validate_place(place: Path, builder):
     print(f"[1] Place: {place.name}")
     if not check(place.exists(), f"Place fehlt: {place} (python3 tools/build_place.py {place.name})"):
         return
-    # a) exakt wie build_place.py: Basis + Skripte + Welt, in einem frischen Builder gebaut
+    # a) exakt wie build_place.py: Basis + Skripte + Welt + PlaceKind, in einem frischen Builder gebaut
     fresh = load_builder()
-    tree = fresh.load_base()
-    fresh.apply_scripts(tree)
-    world = fresh.apply_worldgen(tree)
+    tree, _, _, world = fresh.build_tree("all")
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "expected.rbxlx"
         fresh.write(tree, out)
         same = out.read_bytes() == place.read_bytes()
     check(same, f"{place.name} entspricht nicht Basisplace + src/**" + (" + tools/worldgen" if world else "") + " – neu bauen: python3 tools/build_place.py " + place.name)
+    del tree
     # b) Skripte im Place: genau die aus src/, gleiche Klasse, gleicher Quelltext
     root = ET.parse(place).getroot()
     in_place = builder.place_scripts(root)
@@ -134,7 +143,92 @@ def validate_place(place: Path, builder):
     # d) keine externen Assets im ganzen Place
     text = place.read_text(encoding="utf-8")
     check("rbxassetid://" not in text and "roblox.com/asset" not in text, f"{place.name}: externe Asset-ID (rbxassetid) gefunden")
+    del text
+    # e) PlaceKind "all" und alle drei Zonen (PHASE4_CONTRACT §1)
+    validate_zones(root, "all", place.name, builder, set(in_place))
     print(f"    {len(in_place)} Skripte, Welt: {world or 'ohne tools/worldgen'}")
+    del root
+    # f) Varianten lobby/openworld/tycoon: gebaut wie build_place.py --place, je nur die eigene Zone
+    validate_variants(builder, set(in_place))
+
+
+def place_kind_of(root, builder):
+    shared = builder.find_path(root, ("ReplicatedStorage", "GarageShared"))
+    if shared is None:
+        return None
+    wg = builder.load_worldgen()
+    return wg.lib.get_attrs(shared).get("PlaceKind") if wg is not None else None
+
+
+def validate_zones(root, place, label, builder, script_keys=None):
+    """Zonen-Modelle im Workspace passend zur PlaceKind; Werkstatt-Vorlage mit CarSpawn in jedem Place."""
+    kind = place_kind_of(root, builder)
+    check(kind == place, f"{label}: Attribut PlaceKind auf GarageShared ist {kind!r} statt {place!r}")
+    ws = builder.find_path(root, ("Workspace",))
+    wanted = set(ZONE_MODELS.values()) if place == "all" else {ZONE_MODELS[place]}
+    for kind_key, model in ZONE_MODELS.items():
+        item = builder.child(ws, model)
+        if model in wanted:
+            check(item is not None and item.get("class") == "Model", f"{label}: Workspace.{model} (Model) fehlt")
+        else:
+            check(item is None, f"{label}: Workspace.{model} gehört nicht in den Place {place}")
+    wk = builder.child(ws, "Werkstatt")
+    if check(wk is not None, f"{label}: Plot-Vorlage Workspace.Werkstatt fehlt"):
+        check(builder.child(wk, "CarSpawn") is not None, f"{label}: Werkstatt.CarSpawn fehlt (vehicles.build_plot_spawn)")
+        check(builder.child(builder.child(wk, "Architecture"), "Boundary") is None, f"{label}: Plot-Vorlage nicht getrimmt (Boundary vorhanden)")
+    # Zonen-Inhalt: Stationen/Ankunft/Spawn (die Geometrie prüft tools/worldgen/checks.py)
+    for model, spawn, stations in (("Lobby", "LobbySpawn", ("mode_tycoon", "mode_openworld", "settings", "party", "tutorial")),
+                                   ("Tycoon", "TycoonSpawn", ("tycoon_market", "tycoon")),
+                                   ("City", "CitySpawn", ("overview", "map"))):
+        if model not in wanted:
+            continue
+        item = builder.child(ws, model)
+        if item is None:
+            continue
+        sp = builder.child(item, spawn)
+        if check(sp is not None and sp.get("class") == "SpawnLocation", f"{label}: {model}.{spawn} fehlt"):
+            en = builder.prop(sp, "Enabled")
+            want = "true" if model == "City" else "false"
+            check(en is not None and en.text == want, f"{label}: {model}.{spawn}.Enabled soll {want} sein")
+        st = builder.child(item, "Stations")
+        names = {builder.name_of(c) for c in st.findall("Item")} if st is not None else set()
+        check(set(stations) <= names, f"{label}: {model}.Stations unvollständig ({sorted(set(stations) - names)})")
+        ar = builder.child(item, "Arrivals")
+        check(ar is not None and builder.child(ar, "hub") is not None, f"{label}: {model}.Arrivals.hub fehlt")
+        if model == "Tycoon":
+            plots = builder.child(item, "Plots")
+            slots = {builder.name_of(c) for c in plots.findall("Item")} if plots is not None else set()
+            check(slots == {f"Slot_{i}" for i in range(1, 9)}, f"{label}: Tycoon.Plots.Slot_1..8 erwartet, gefunden {sorted(slots)}")
+    if script_keys is not None:
+        keys = set(builder.place_scripts(root))
+        check(keys == script_keys, f"{label}: Skripte weichen vom all-Place ab ({sorted(keys ^ script_keys)[:5]})")
+
+
+def scratch_dir():
+    """Arbeitsverzeichnis für die Varianten: die Sitzungs-Scratchpad (Umgebung) oder ein temporäres Verzeichnis."""
+    env = os.environ.get("CLAUDE_SCRATCHPAD") or os.environ.get("SCRATCHPAD")
+    if env and Path(env).is_dir():
+        d = Path(env) / "validate_places"
+        d.mkdir(parents=True, exist_ok=True)
+        return d, None
+    tmp = tempfile.TemporaryDirectory(prefix="ucg_places_")
+    return Path(tmp.name), tmp
+
+
+def validate_variants(builder, script_keys):
+    out_dir, keep = scratch_dir()
+    fresh = load_builder()
+    for place in ("lobby", "openworld", "tycoon"):
+        tree, replaced, added, world = fresh.build_tree(place)
+        out = out_dir / f"Ultimate_Car_Game_{place}.rbxlx"
+        fresh.write(tree, out)
+        root = tree.getroot()
+        validate_zones(root, place, out.name, builder, script_keys)
+        first = (world or "").split("\n")
+        print(f"    Variante {place}: {out.name} ({replaced + added} Skripte; {'; '.join(l.strip() for l in first[1:3])})")
+        del tree, root
+    if keep is not None:
+        keep.cleanup()
 
 
 # ---------------------------------------------------------------- 2. Basis und 2.4.0-Änderungen
@@ -235,7 +329,8 @@ def validate_static():
     # Aktionen: MiniNet.Actions <-> genau ein Handler; Client sendet nur definierte Aktionen ohne Beträge
     net = texts[SRC / "mini" / "shared" / "MiniNet.lua"]
     actions = {}
-    for name, fields in re.findall(r"^\t(mini_[a-z_]+) = \{([^}]*)\}", block(net, "MiniNet.Actions = {"), re.M):
+    # PHASE4_CONTRACT §10: Lobby/Tutorial/Prestige-Aktionen tragen kein mini_-Präfix (lobby_mode, party_join, …)
+    for name, fields in re.findall(r"^\t([a-z_]+) = \{([^}]*)\}", block(net, "MiniNet.Actions = {"), re.M):
         actions[name] = set(re.findall(r"([a-zA-Z_]+)\s*=", fields))
     check(len(actions) >= 20, f"MiniNet.Actions unvollständig ({len(actions)})")
     for name, fields in actions.items():
@@ -270,7 +365,8 @@ def validate_static():
     for a in set(re.findall(r'\bsend\("([A-Za-z]+)"', client)):
         check(a in handled, f"GarageClient sendet {a}, GarageServer behandelt es nicht")
     check("Mini.Handles(action)" in server and "Mini.Handle(p,action,a)" in server, "GarageServer.request leitet Minispiel-Aktionen nicht an MiniService weiter")
-    for hook in ("Mini.Init(", "Mini.Hello(p)", "Mini.OnJoin(p)", "Mini.Tick(p,", "Mini.OnSettled(p)", "Mini.OnActivity(p)", "Mini.OnLeave(p,", "Mini.Pending()"):
+    for hook in ("Mini.Init(", "Mini.Hello(p)", "Mini.OnJoin(p)", "Mini.Tick(p,", "Mini.OnSettled(p)", "Mini.OnActivity(p)", "Mini.OnLeave(p,", "Mini.Pending()",
+                 "Mini.OnCharacter(p)", "Mini.OnStation(p,"):
         check(hook in server, f"GarageServer: Anbindung {hook} fehlt (Vertrag §3)")
     remotes = set(re.findall(r'Instance\.new\("(Remote(?:Event|Function)|UnreliableRemoteEvent)"', "\n".join(texts.values())))
     check(not remotes, "src/ legt eigene Remotes an (Vertrag: keine neuen Remotes)")

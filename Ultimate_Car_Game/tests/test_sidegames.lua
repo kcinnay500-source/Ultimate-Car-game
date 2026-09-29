@@ -9,7 +9,7 @@ end
 
 return {
 	{ "Schrottplatz: Kauf, Zerlegen, Altteile, seltene Funde ins 2.4.0-Lager, Schrott gutgeschrieben", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local MC = g:MiniShared("MiniConfig")
 		local C = g:Config()
 		local player = g:Join(401, { name = "Jan" })
@@ -84,7 +84,7 @@ return {
 	end },
 
 	{ "Schrottplatz: kein Endlos-Gewinn – Vorbereitungszeit und Tageslimit, auch nach Rejoin", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local MC, SG = g:MiniShared("MiniConfig"), g:MiniShared("SideGameRules")
 		local player = g:Join(404, { name = "Max" })
 		g:Advance(1)
@@ -145,7 +145,7 @@ return {
 	end },
 
 	{ "Quiz: Auswertung auf dem Server, Frage nie im Profil, Spam wirkungslos, Bonus ≤ 35 %", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local CB = g:MiniShared("CrossBonus")
 		local player = g:Join(402, { name = "Kai" })
 		g:Advance(1)
@@ -239,7 +239,7 @@ return {
 	end },
 
 	{ "Parkplatz: Lösung serverseitig geprüft, Serienbonus gedeckelt", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local SG, MC, CB = g:MiniShared("SideGameRules"), g:MiniShared("MiniConfig"), g:MiniShared("CrossBonus")
 		local player = g:Join(403, { name = "Lea" })
 		g:Advance(1)
@@ -325,7 +325,7 @@ return {
 	end },
 
 	{ "Parkplatz: risikofreies Skript-Lösen bringt begrenzt Credits (Serien- und Tageslimit)", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local SG, MC = g:MiniShared("SideGameRules"), g:MiniShared("MiniConfig")
 		local player = g:Join(405, { name = "Nora" })
 		g:Advance(1)

@@ -39,6 +39,7 @@ UI.FontBold = Enum.Font.GothamBold
 UI.FontBig = Enum.Font.GothamBlack
 
 UI.Tabs = {
+	{ key = "lobby", label = "Lobby" },
 	{ key = "overview", label = "Übersicht" },
 	{ key = "press", label = "Schrottpresse" },
 	{ key = "tuning", label = "Tuning" },
@@ -51,11 +52,16 @@ UI.Tabs = {
 	{ key = "quiz", label = "Quiz" },
 	{ key = "parking", label = "Parkplatz" },
 	{ key = "goals", label = "Ziele" },
+	{ key = "unlocks", label = "Freischaltungen" },
+	{ key = "prestige", label = "Prestige" },
 	{ key = "leaderboard", label = "Bestenliste" },
 	{ key = "map", label = "Schnellreise" },
 	{ key = "shop", label = "Game Passes" },
 }
 UI.TabTitles = {
+	lobby = "Lobby",
+	unlocks = "Freischaltungen",
+	prestige = "Level & Prestige",
 	overview = "Minispiele · Übersicht",
 	press = "Schrottpresse",
 	tuning = "Tuning-Zentrum",

@@ -1,5 +1,6 @@
 -- CityClient: rein optische Animationen der Stadt, nur auf dem Client (nichts wird repliziert, nichts ist spielrelevant).
--- Animiert werden Parts oder Models unter Workspace.City.Animated (und City.PlotSlots) mit dem Attribut Anim (CITY_SPEC §8):
+-- Animiert werden Parts oder Models unter Workspace.City.Animated (und City.PlotSlots) mit dem Attribut Anim (CITY_SPEC §8),
+-- seit Ausbaustufe 4 ebenso Workspace.Lobby.Animated, Workspace.Tycoon.Animated und Tycoon.Plots (PHASE4_CONTRACT §1, §5):
 --   press      Presse: die Pressplatte fährt periodisch herunter (1,2 s runter, 0,4 s halten, 2 s hoch); eigene Klicks
 --              in der PressUI lösen einen zusätzlichen Stoß aus. Bewegt wird das direkte Kind mit Attribut Mover=true,
 --              sonst das Kind mit genau einem dieser Namen: Platen, Ram, Stempel, Kolben, Pressplatte, Platte
@@ -1899,6 +1900,21 @@ function CityClient.Start()
 			attach(slots)
 		end)
 	end)
+	-- Ausbaustufe 4: Lobby-Halle und Tycoon-Gelände tragen dieselben Anim-Attribute (Neon, Türen, Drehteller,
+	-- Fahnen; Tycoon-Schilder mit Anim=pylon unter Tycoon.Plots.Slot_N)
+	for _, zoneName in ipairs({ "Lobby", "Tycoon" }) do
+		whenChild(workspace, zoneName, function(zone)
+			whenChild(zone, "Animated", function(animated)
+				attach(animated)
+				refreshActivity()
+			end)
+			if zoneName == "Tycoon" then
+				whenChild(zone, "Plots", function(plots)
+					attach(plots)
+				end)
+			end
+		end)
+	end
 	local failures = 0
 	RunService.Heartbeat:Connect(function(dt)
 		local ok, err = pcall(step, dt)

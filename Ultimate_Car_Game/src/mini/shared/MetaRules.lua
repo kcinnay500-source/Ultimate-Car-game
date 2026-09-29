@@ -65,6 +65,9 @@ function MetaRules.Load(raw: any, d: any, now: any): Meta
 	m.passive = r.passive == true
 	m.single = r.single == true
 	m.lastMode = (type(r.lastMode) == "string" and GameConfig.ModeSet[r.lastMode]) and r.lastMode or GameConfig.DefaultMode
+	if veteran then
+		m.lastMode = "openworld" -- 2.4.0-Veteranen landen wie bisher in ihrer Werkstatt (Open World), nicht in der Lobby
+	end
 	m.firstSeen = loadInt(r.firstSeen, 0, 0, MAX_SAFE)
 	if finite(now) and now > 0 and (m.firstSeen == 0 or m.firstSeen > now) then
 		m.firstSeen = math.floor(now)

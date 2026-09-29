@@ -259,7 +259,15 @@ Garage.__index = Garage
 
 -- opts: scripts = "src" | "base", srcRoot, mini = false, studio, startTime, seed, frameStep, viewport,
 --       shareDataStoresWith = <anderes Garage-Objekt> (gleiche "Cloud"), dataStore = {updateYield, strict, ...},
---       before = function(g) (vor dem Serverstart, z. B. Profile anlegen), noServer = true
+--       before = function(g) (vor dem Serverstart, z. B. Profile anlegen), noServer = true,
+--       placeKind = "all" | "lobby" | "openworld" | "tycoon" (Attribut PlaceKind an GarageShared, PHASE4_CONTRACT §1).
+--       Standard "openworld": die Werkstatt-/Minispiel-Tests laufen wie im Open-World-Place (Beitritt direkt in der
+--       Werkstatt); die Lobby/den Modus-Wechsel im all-Place prüfen test_lobby/test_phase4 mit placeKind = "all".
+--       Der Basisbaum enthält immer alle drei Zonen (all-Export).
+--       level = n: jeder Spieler ohne gespeicherten Datensatz betritt das Spiel mit einem echten Profil auf Level n
+--       (g:Join legt vorher {version=2, data=R.NewData()+level, receipts={}} in den DataStore-Mock). Seit Ausbaustufe 4
+--       sind Presse (2), Schrottplatz/Autohaus (3), Quiz (4), Parkplatz (5), Tuning (6), Teststrecke/Waschstraße (8),
+--       Spielhalle (10), Auktion (12) und Spieler-Auktionen (20) levelgebunden (GameConfig.Unlocks).
 function H.Garage(opts)
 	opts = opts or {}
 	local fixture = loadFixture("base_tree")
@@ -275,6 +283,10 @@ function H.Garage(opts)
 	Mock.Activate(env)
 	math.randomseed(opts.seed or 24)
 	Mock.LoadTree(env, fixture)
+	local shared = env.services.ReplicatedStorage and env.services.ReplicatedStorage:FindFirstChild("GarageShared")
+	if shared then
+		shared:SetAttribute("PlaceKind", opts.placeKind or "openworld")
+	end
 	local g = setmetatable({ env = env, opts = opts, fixture = fixture, players = {} }, Garage)
 	g.scripts = insertScripts(env, opts)
 	local ds = env.services.DataStoreService.__data
@@ -383,6 +395,10 @@ end
 function Garage:Join(userId, opts)
 	opts = opts or {}
 	self:Activate()
+	local level = opts.level or self.opts.level
+	if level and not self:Record(userId) then
+		self:SeedLevel(userId, level)
+	end
 	local p = Mock.NewPlayer(self.env, userId, opts.name)
 	table.insert(self.players, p)
 	Mock.Join(self.env, p)
@@ -520,6 +536,19 @@ function Garage:Seed(userId, record)
 	self:Store()["Player_" .. userId] = Mock.JSONDecode(Mock.JSONEncode(record))
 end
 
+-- Frisches 2.4.0-Profil (R.NewData) auf Level n als gespeicherten Datensatz anlegen (vor dem Beitritt);
+-- mutate(data) darf den Datensatz vorher anpassen. Liefert data.
+function Garage:SeedLevel(userId, level, mutate)
+	local R = self:Rules()
+	local data = R.NewData(self:Now())
+	data.level = level
+	if mutate then
+		mutate(data)
+	end
+	self:Seed(userId, { version = 2, data = data, receipts = {} })
+	return data
+end
+
 -- BindToClose-Rückrufe ausführen und bis zu 30 s warten
 function Garage:Close()
 	self:Activate()
@@ -541,10 +570,11 @@ function Garage:ErrorText()
 	return table.concat(self.env.scheduler.errors, "\n---\n")
 end
 
--- Client (LocalScripts aus StarterPlayerScripts) für den Spieler starten
-function Garage:StartClient(player)
+-- Client (LocalScripts aus StarterPlayerScripts) für den Spieler starten; opts.run = false kopiert nur die Skripte
+-- (Module per g:ClientModule ladbar), ohne GarageClient/MiniClient zu starten – für UI-Bausteine mit eigenem Kontext
+function Garage:StartClient(player, opts)
 	self:Activate()
-	return Mock.StartClient(self.env, player)
+	return Mock.StartClient(self.env, player, opts)
 end
 
 function Garage:Key(player, key, state)

@@ -11,6 +11,12 @@
 --   OnLeave(p, wasWritable)  PlayerRemoving / BindToClose, vor P.Save; blockiert nicht
 --   OnSaved(p, saved)  nach P.Save(release): Bestenliste nur, wenn dieses letzte Speichern gelang
 --   Pending()          laufende Bestenlisten-Schreibvorgänge (für BindToClose)
+--   OnCharacter(p)     Ausbaustufe 4: nach dem Erscheinen der Figur (GarageServer.character, nach moveTo(home)):
+--                      außerhalb der Open World zur Zonen-Ankunft (Lobby/Tycoon) versetzen
+--   OnStation(p, key)  Ausbaustufe 4: 2.4.0-Plot-Station geöffnet (Tutorial-Schritt, Beginner-Hinweis)
+-- Ausbaustufe 4 (PHASE4_CONTRACT §10–§12): Lobby/Party/Reise (LobbyService, PlaceRouter), Tutorial und
+-- Beginner-Hinweise (TutorialService), Level & Prestige, Freischaltungen (PrestigeService). Jede Aktion, die
+-- etwas Freischaltbares nutzt, prüft Mini.Handle zentral über Unlocks (ACTION_UNLOCK); Stationen über Unlocks.TabAllowed.
 -- Geld (d.money) ändern Minispiele nur in Handle (also innerhalb von request()); danach ruft
 -- MiniService ctx.changed(p) (höchstens 2×/s, dazwischen ctx.push und ein nachgeholtes changed im Tick).
 -- Sonst wird nur der Minispiel-Snapshot als geändert markiert.
@@ -23,6 +29,7 @@ local MiniRules = require(MiniShared:WaitForChild("MiniRules"))
 local MiniSnapshot = require(MiniShared:WaitForChild("MiniSnapshot"))
 local PressRules = require(MiniShared:WaitForChild("PressRules"))
 local SideGameRules = require(MiniShared:WaitForChild("SideGameRules"))
+local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
 
 local Server = script.Parent
 local PressService = require(Server:WaitForChild("PressService"))
@@ -36,6 +43,9 @@ local AuctionService = require(Server:WaitForChild("AuctionService"))
 local AuctionLedger = require(Server:WaitForChild("AuctionLedger"))
 local CarService = require(Server:WaitForChild("CarService"))
 local ArcadeService = require(Server:WaitForChild("ArcadeService"))
+local PrestigeService = require(Server:WaitForChild("PrestigeService"))
+local LobbyService = require(Server:WaitForChild("LobbyService"))
+local TutorialService = require(Server:WaitForChild("TutorialService"))
 local Profiles = require(Server.Parent:WaitForChild("Profiles"))
 
 local Mini = {}
@@ -120,6 +130,12 @@ end
 -- Große, selten geänderte Felder (Garage-Liste, Händlerkatalog) nur bei Änderungen (dirty), nach hello und
 -- spätestens alle SnapshotFullInterval Sekunden; reine Produktions-Snapshots (Presse, 1×/s) lassen sie weg.
 -- MiniClient übernimmt fehlende Felder aus dem vorigen Snapshot (MiniSnapshot.StickyKeys).
+local SNAPSHOT_EXTRAS = {
+	{ "Lobby", LobbyService.SnapshotFields },
+	{ "Prestige", PrestigeService.SnapshotFields },
+	{ "Tutorial", TutorialService.SnapshotFields },
+}
+
 local function sendSnapshot(ms, t)
 	local full = ms.dirty or t - (ms.fullSentAt or -math.huge) + EPSILON >= MiniConfig.SnapshotFullInterval
 	ms.dirty = false
@@ -143,6 +159,17 @@ local function sendSnapshot(ms, t)
 		end
 	elseif not okCars then
 		warn("[Minispiele] Auto-Snapshot: " .. tostring(fields))
+	end
+	-- Ausbaustufe 4 (PHASE4_CONTRACT §11): mode/placeKind/meta/party, prestige/unlocks (unlocks.list nur bei full), tutorial
+	for _, entry in ipairs(SNAPSHOT_EXTRAS) do
+		local okX, extra = pcall(entry[2], ms, ms.p.profile.data, t, full)
+		if okX and type(extra) == "table" then
+			for k, v in pairs(extra) do
+				snap[k] = v
+			end
+		elseif not okX then
+			warn("[Minispiele] " .. entry[1] .. "-Snapshot: " .. tostring(extra))
+		end
 	end
 	emit(ms, MiniNet.Events.Snapshot, snap)
 end
@@ -183,6 +210,9 @@ local function flushNotices(ms)
 	for _, n in ipairs(list) do
 		notice(ms, n.kind, n.data)
 	end
+	-- Hinweise, die Dienste vor 'hello' eingereiht haben (Freischaltungen, Tutorial-Schritt)
+	pcall(PrestigeService.Flush, ms)
+	pcall(TutorialService.Flush, ms)
 end
 
 local function pushBoard(ms)
@@ -296,6 +326,76 @@ local function seen(ms, rid)
 	return false
 end
 
+---------------------------------------------------------------- Freischaltungen (PHASE4_CONTRACT §3, §12)
+-- Aktion -> Schlüssel in GameConfig.Unlocks (oder Funktion der geprüften Nutzlast). Eine Prüfung je Aktion:
+-- fehlt die Freischaltung, antwortet der Server mit einem freundlichen Toast (höchstens alle LOCK_TOAST_SECONDS
+-- je Aktion, damit Klickpakete der Presse nicht zweimal je Sekunde mahnen) und führt nichts aus.
+local ACTION_UNLOCK = {
+	mini_press_click = "feature:press",
+	mini_scrapyard_buy = "feature:scrapyard",
+	mini_quiz_new = "feature:quiz",
+	mini_parking_new = "feature:parking",
+	mini_tuning_start = "feature:tuning",
+	mini_track_start = "feature:track",
+	mini_carwash = "feature:carwash",
+	mini_arcade_start = "feature:arcade",
+	mini_auction_bid = "feature:auction",
+	mini_auction_consign = "auction:player",
+	mini_car_testdrive = "feature:dealer",
+	mini_car_buy = function(clean)
+		local key = "car:" .. tostring(clean.model)
+		return Unlocks.Known(key) and key or nil -- unbekannte Modelle meldet CarRules.Buy selbst
+	end,
+}
+local LOCK_TOAST_SECONDS = 3
+
+local function lockedText(entry)
+	return "Ab Level " .. tostring(entry.level) .. ": " .. tostring(entry.title) .. ". Bis dahin: Aufträge in der Werkstatt bringen XP!"
+end
+
+-- Rückgabe: true, wenn die Aktion erlaubt ist; sonst Toast (gedrosselt) und false
+local function unlocked(ms, action, clean, d, t)
+	local key = ACTION_UNLOCK[action]
+	if type(key) == "function" then
+		key = key(clean)
+	end
+	if not key then
+		return true
+	end
+	local entry = Unlocks.Entry(key)
+	if not entry then
+		warn("[Minispiele] Unbekannte Freischaltung für " .. action .. ": " .. tostring(key))
+		return false
+	end
+	if Unlocks.Has(d, key) then
+		return true
+	end
+	ms.lockToastAt = ms.lockToastAt or {}
+	local last = ms.lockToastAt[action]
+	if not last or t - last >= LOCK_TOAST_SECONDS then
+		ms.lockToastAt[action] = t
+		if ctx then
+			ctx.toast(ms.p, lockedText(entry))
+		end
+	end
+	return false
+end
+
+-- Moduswechsel der Sitzung (PlaceRouter setzt p.mode): beim ersten Betreten der Open World startet das Tutorial
+local function checkMode(ms, d)
+	local mode = ms.p.mode
+	if mode == ms.modeSeen then
+		return
+	end
+	ms.modeSeen = mode
+	if mode == "openworld" then
+		local ok, err = pcall(TutorialService.Start, ms, d, mode)
+		if not ok then
+			warn("[Minispiele] Tutorial-Start: " .. tostring(err))
+		end
+	end
+end
+
 -- Abklingzeit je Aktion und Ziel (z. B. je Parkplatz-Feld), statt 0,12 s je Aktionsname
 local function cooledDown(ms, action, clean, t)
 	local cd = MiniNet.Cooldowns[action] or MiniNet.DefaultCooldown
@@ -341,7 +441,7 @@ function Mini.Handles(action)
 	return MiniNet.IsAction(action)
 end
 
--- Rückgabe (für Tests): "ok" | "invalid" | "cooldown" | "duplicate" | "error" | "dropped"
+-- Rückgabe (für Tests): "ok" | "invalid" | "cooldown" | "duplicate" | "error" | "dropped" | "locked"
 function Mini.Handle(p, action, args)
 	local schema, handler = MiniNet.Actions[action], Mini.Handlers[action]
 	if not ctx or not schema or not handler then
@@ -356,6 +456,9 @@ function Mini.Handle(p, action, args)
 		return "invalid"
 	end
 	local t = now()
+	if not unlocked(ms, action, clean, p.profile.data, t) then
+		return "locked" -- Freischaltung fehlt (Toast gedrosselt), nichts ausgeführt
+	end
 	if not cooledDown(ms, action, clean, t) then
 		return "cooldown"
 	end
@@ -374,6 +477,21 @@ function Mini.Handle(p, action, args)
 	local ok, err = pcall(handler, ms, clean, d, t)
 	if not ok then
 		warn("[Minispiele] " .. action .. ": " .. tostring(err))
+	else
+		-- Tutorial-Schritte "action:<name>" (mini_travel meldet sich selbst, nur bei gelungener Reise) und der
+		-- Beginner-Hinweis "first:dismantled"; danach ein eventueller Moduswechsel (lobby_go/lobby_return)
+		local okT, errT = pcall(function()
+			if action ~= "mini_travel" then
+				TutorialService.OnEvent(ms, d, "action:" .. action)
+			end
+			if action == "mini_scrapyard_dismantle" then
+				TutorialService.OnStat(ms, d, "dismantled")
+			end
+			checkMode(ms, d)
+		end)
+		if not okT then
+			warn("[Minispiele] Tutorial nach " .. action .. ": " .. tostring(errT))
+		end
 	end
 	ms.dirty = true
 	if d.money ~= money or ms.worldChanged then
@@ -422,6 +540,12 @@ function Mini.OnJoin(p)
 		CarService.OnJoin(ms, d, t)
 		ArcadeService.OnJoin(ms, d, t)
 		AuctionService.OnJoin(ms)
+		-- Ausbaustufe 4: Level/Rang merken, Tutorial-Stand, Anfangsmodus (PlaceKind, lastMode, TeleportData)
+		PrestigeService.OnJoin(ms, d, t)
+		TutorialService.OnJoin(ms, d, t)
+		local mode = LobbyService.OnJoin(ms, d, t)
+		ms.modeSeen = nil
+		checkMode(ms, d) -- Open World: Pflicht-Tutorial beim ersten Beitritt (TutorialRules.ShouldStart)
 		-- Game Passes (kann warten), danach den Offline-Ertrag gutschreiben: nur Schrott, nie Geld.
 		task.spawn(function()
 			local passes = MiniPasses.Check(ms.userId)
@@ -468,6 +592,25 @@ function Mini.Tick(p, t)
 		if GoalsService.Tick(ms, d, t) then
 			ms.dirty = true
 		end
+		-- Ausbaustufe 4: Level-Aufstiege (Freischaltungen, Prestige-Rang), Tutorial-Auftragsschritte, Spielzeit
+		local okP, resP = pcall(PrestigeService.Tick, ms, d, t)
+		if okP then
+			if resP then
+				ms.dirty = true
+			end
+		else
+			warn("[Minispiele] Prestige: " .. tostring(resP))
+		end
+		local okT, resT = pcall(TutorialService.Tick, ms, d, t)
+		if okT then
+			if resT then
+				ms.dirty = true
+			end
+		else
+			warn("[Minispiele] Tutorial: " .. tostring(resT))
+		end
+		pcall(LobbyService.Tick, ms, d, t)
+		checkMode(ms, d)
 		-- Schrottplatz: sobald das Fahrzeug zerlegt werden darf, einmal neuen Snapshot senden
 		local sy = d.games.scrapyard
 		if sy.vehicle and ms.scrapReadySent ~= sy.readyAt and SideGameRules.DismantleIn(d, t) <= 0 then
@@ -490,7 +633,12 @@ end
 function Mini.OnSettled(p)
 	local ms = stateFor(p)
 	local ok, err = pcall(function()
-		MiniRules.AddStat(p.profile.data, "jobsDone", 1, now())
+		local d = p.profile.data
+		MiniRules.AddStat(d, "jobsDone", 1, now())
+		if ms then
+			TutorialService.OnEvent(ms, d, "settled") -- Tutorial-Schritt „Abrechnen“
+			TutorialService.OnStat(ms, d, "jobsDone") -- Beginner-Hinweis zum ersten Auftrag
+		end
 	end)
 	if not ok then
 		warn("[Minispiele] Abrechnung: " .. tostring(err))
@@ -527,6 +675,8 @@ function Mini.OnLeave(p, wasWritable)
 		return
 	end
 	Mini.Sessions[p.player] = nil
+	pcall(TutorialService.OnLeave, ms, p.profile.data) -- zurückgehaltene Tutorial-Belohnung vor P.Save
+	pcall(LobbyService.OnLeave, ms) -- Party verlassen (Leiterwechsel)
 	local okAuction, errAuction = pcall(AuctionService.OnLeave, ms) -- vor P.Save: Verkäufer-Lose abbrechen
 	if not okAuction then
 		warn("[Minispiele] Auktion verlassen: " .. tostring(errAuction))
@@ -563,15 +713,58 @@ function Mini.Pending()
 	return LeaderboardService.Pending
 end
 
+-- Figur erschienen (GarageServer.character nach moveTo(home)): Lobby/Tycoon-Spieler zur Zonen-Ankunft.
+function Mini.OnCharacter(p)
+	local ms = Mini.Sessions[p.player]
+	if not ms or ms.p ~= p or p.closing then
+		return
+	end
+	local ok, err = pcall(LobbyService.OnCharacter, ms)
+	if not ok then
+		warn("[Minispiele] Figur: " .. tostring(err))
+	end
+end
+
+-- 2.4.0-Plot-Station geöffnet (World.Create-Rückruf "station" bzw. act 'travel'): Tutorial-Schritt
+-- "station:<key>" (Empfang) und Beginner-Hinweis (z. B. h_workshop). Kein Geld, nur Hinweise.
+function Mini.OnStation(p, key)
+	local ms = stateFor(p)
+	if not ms or p.closing or type(key) ~= "string" then
+		return
+	end
+	local ok, err = pcall(TutorialService.OnStation, ms, p.profile.data, key, nil)
+	if not ok then
+		warn("[Minispiele] Station " .. key .. ": " .. tostring(err))
+	end
+	flush(ms, now())
+end
+
 ---------------------------------------------------------------- Stationen, Reisen, Ausbau
 local function openStation(p, tab, station)
 	local ms = stateFor(p)
 	if not ms or p.closing then
 		return
 	end
+	local d = p.profile.data
+	local key = station and station.Name or tab
+	if tab == "lobby" then
+		-- Lobby-Station (Attribut LobbyAction = mode_tycoon | mode_openworld | settings | party | tutorial):
+		-- LobbyService wählt den Modus vor und schickt mini_notice { kind = "lobby", action, hint? }; der Tab öffnet
+		-- mit der gedrückten Aktion (LobbyUI springt zum Abschnitt).
+		local action = station and station:GetAttribute("LobbyAction")
+		pcall(LobbyService.OnStation, ms, station or tab)
+		pcall(TutorialService.OnEvent, ms, d, "tab:lobby")
+		emit(ms, MiniNet.Events.Open, { tab = tab, action = type(action) == "string" and action or nil })
+		flush(ms, now())
+		return
+	end
+	-- Tutorial-Schritte "tab:<tab>" (Autohaus, Infotafel) und Beginner-Hinweise "station:<key>" (Stadtplan, Credit-Center)
+	pcall(TutorialService.OnStation, ms, d, key, tab)
 	if tab == "shop" then
 		-- Credit-Center: 2.4.0-Credits-Shop (Tablet-Seite "shop", zeigt auch die Game Passes); ohne Tablet der Tab "shop"
 		emit(ms, MiniNet.Events.Open, { tab = tab, page = "credits" })
+	elseif MiniNet.TabSet[tab] and not Unlocks.TabAllowed(d, tab) then
+		api.toast(ms, lockedText(Unlocks.ForTab(tab)))
 	elseif MiniNet.TabSet[tab] then
 		-- Spielhalle: der Automat (Attribut GameKey/Game bzw. Stationsname arcade_N) wird gleich ausgewählt
 		local game = nil
@@ -587,6 +780,7 @@ local function openStation(p, tab, station)
 	else
 		api.toast(ms, MiniLocale.T("coming_soon", CityService.Title(station, tab)))
 	end
+	flush(ms, now())
 end
 
 Actions.Register("mini_upgrade", function(ms, data, d)
@@ -594,10 +788,12 @@ Actions.Register("mini_upgrade", function(ms, data, d)
 	api.toast(ms, ok and (res.name .. " verbessert.") or res)
 end)
 
-Actions.Register("mini_travel", function(ms, data)
+Actions.Register("mini_travel", function(ms, data, d)
 	local ok, msg = CityService.Travel(ms.p, data.key, ctx.moveTo)
 	if not ok then
 		api.toast(ms, msg)
+	else
+		TutorialService.OnEvent(ms, d, "action:mini_travel") -- Tutorial-Schritt „Stadtplan“ nur bei gelungener Reise
 	end
 end)
 
@@ -622,6 +818,9 @@ LeaderboardService.Register(Actions, api)
 AuctionService.Register(Actions, api)
 CarService.Register(Actions, api)
 ArcadeService.Register(Actions, api)
+PrestigeService.Register(Actions, api)
+LobbyService.Register(Actions, api)
+TutorialService.Register(Actions, api)
 
 for name in pairs(MiniNet.Actions) do
 	assert(Mini.Handlers[name], "Kein Handler für " .. name)
@@ -652,6 +851,7 @@ function Mini.Init(c)
 	end)
 	CityService.Init({ getSession = c.getSession, onStation = openStation })
 	CarService.Init(c)
+	LobbyService.Init(c) -- PlaceRouter (Teleport/Simulation) bekommt emit/toast/moveTo/now
 end
 
 return Mini

@@ -19,6 +19,12 @@ Prüfungen:
     (unsichtbare) Hindernisse; CarSpawns (Stellfläche inkl. Ausweichplätze, Ausfahrt bis zur Schleife); Plot-CarSpawn
     und Einfahrt an allen 8 Slots (Vorlage mit Vollausbau); Checkpoints der Teststrecke; Auktions- und
     Automaten-Bildschirme; kein Soon an den Stationen der Ausbaustufe 2/3
+  * Zonen der Ausbaustufe 4 (PHASE4_CONTRACT §1; Workspace.Lobby, Workspace.Tycoon, falls vorhanden): verankert,
+    Z-Fighting / fast koplanar / schwebend wie die Stadt, ganz außerhalb der Stadtgrenzen X ±450 / Z ±320 und ohne
+    AABB-Überschneidung mit Stadt-Parts, Budget (Lobby 1500/12, Tycoon 2500/20), Stationen/Ankünfte/Spawn nach
+    Vertrag (Spawn Enabled=false), Lobby.Stations mit MiniTab=lobby + LobbyAction, Tycoon.Plots.Slot_1..8 mit
+    Base/Sign/StartPad(TycoonSlot)/Anchor/CollectPad(TycoonPad)/ButtonsRoot, Anim nur unter <Zone>.Animated (+ Plots)
+  Ohne Workspace.City (Place lobby/tycoon) laufen nur die Zonen-Prüfungen.
 Exit-Code 1 bei Fehlern (Warnungen nicht).
 """
 import math
@@ -451,8 +457,9 @@ def main(argv):
     city, parts = scan.city_parts(tree)
     errors, warns, info = [], [], []
     if city is None:
-        print("FEHLER: Workspace.City fehlt")
-        return 1
+        info.append("Workspace.City fehlt (Place lobby/tycoon?) - nur Zonen-Prüfungen")
+        zone_checks(tree, [], errors, warns, info, verbose)
+        return _report(errors, warns, info)
     # 1) verankert / zu tief
     unanch = [p.path for p in parts if not p.anchored]
     if unanch:
@@ -668,7 +675,12 @@ def main(argv):
         warns.append("Anim-Attribut außerhalb City.Animated: %s" % bad_anim[:8])
     # 8) Fahrzeuge, Strecke, Bildschirme
     vehicle_checks(tree, city, parts, errors, warns, info, verbose)
-    # Ausgabe
+    # 9) Zonen der Ausbaustufe 4
+    zone_checks(tree, parts, errors, warns, info, verbose)
+    return _report(errors, warns, info)
+
+
+def _report(errors, warns, info):
     for line in info:
         print(line)
     for w in warns:
@@ -677,6 +689,298 @@ def main(argv):
         print("FEHLER:" if not e.startswith("   ") else "      ", e.strip() if e.startswith("   ") else e)
     print("OK" if not errors else "%d Fehler" % sum(1 for e in errors if not e.startswith("   ")))
     return 0 if not errors else 1
+
+
+# ---------------------------------------------------------------- Zonen (PHASE4_CONTRACT §1, §5, §8)
+CITY_BOUNDS = (-450, 450, -320, 320)     # X, Z: dort liegt die Stadt; Zonen müssen ganz außerhalb liegen
+PROMPT_WANT = {"ActionText": "Öffnen", "KeyboardKeyCode": "101", "HoldDuration": "0.25",
+               "MaxActivationDistance": "10.0", "RequiresLineOfSight": "false"}
+
+
+def _prompt_props(item):
+    pr = [c for c in children(item) if c.get("class") == "ProximityPrompt"]
+    if len(pr) != 1:
+        return None
+
+    def v(n):
+        e = get_prop(pr[0], n)
+        return e.text if e is not None else None
+    return {n: v(n) for n in ("ActionText", "ObjectText", "KeyboardKeyCode", "HoldDuration", "MaxActivationDistance",
+                              "RequiresLineOfSight")}
+
+
+def _station_checks(zone_name, root, parts, stations, tab, errors, warns, extra_attr=None):
+    """Stationen einer Zone: Vertrag wie City.Stations (Prompt, Attachment Arrival, unsichtbar), Spielerseite frei,
+    Kamera frei, MiniTab = tab (+ extra_attr gesetzt)."""
+    from worldgen.contract import SIDE
+    from worldgen.lib import read_cf
+    st = child(root, "Stations")
+    keys = {name_of(c) for c in children(st)} if st is not None else set()
+    missing = sorted(set(stations) - keys)
+    if missing:
+        errors.append("%s: Stationen fehlen: %s" % (zone_name, missing))
+    occ = _Occluders(parts)
+    for s in children(st) if st is not None else []:
+        k = name_of(s)
+        a = get_attrs(s)
+        if a.get("MiniTab") != tab:
+            errors.append("%s.Stations.%s: MiniTab=%r (soll %r)" % (zone_name, k, a.get("MiniTab"), tab))
+        if not isinstance(a.get("MiniTitle"), str):
+            errors.append("%s.Stations.%s ohne MiniTitle" % (zone_name, k))
+        if extra_attr and a.get(extra_attr) != k:
+            errors.append("%s.Stations.%s: %s=%r (soll %r)" % (zone_name, k, extra_attr, a.get(extra_attr), k))
+        pp = _prompt_props(s)
+        if pp is None:
+            errors.append("%s.Stations.%s: genau ein ProximityPrompt erwartet" % (zone_name, k))
+        else:
+            for n, w in PROMPT_WANT.items():
+                if pp[n] != w:
+                    errors.append("%s.Stations.%s: Prompt %s=%s (soll %s)" % (zone_name, k, n, pp[n], w))
+        att = [c for c in children(s) if c.get("class") == "Attachment" and name_of(c) == "Arrival"]
+        rec = scan.record(s, "%s.Stations.%s" % (zone_name, k))
+        if rec.collide or rec.transp < 1 or not rec.anchored:
+            errors.append("%s.Stations.%s: muss unsichtbar, verankert, CanCollide false sein" % (zone_name, k))
+        if len(att) != 1:
+            errors.append("%s.Stations.%s ohne Attachment Arrival" % (zone_name, k))
+            continue
+        w = rec.cf * read_cf(att[0])
+        fy = w.p[1] - 3.5
+        side = a.get("PlayerSide")
+        if side not in SIDE:
+            errors.append("%s.Stations.%s: PlayerSide fehlt" % (zone_name, k))
+            continue
+        sx, sz = SIDE[side]
+        blk = player_side_blockers(parts, w.p[0] + sx * 0.5, fy, w.p[2] + sz * 0.5)
+        if blk:
+            errors.append("%s.Stations.%s: 10x10 auf der Spielerseite blockiert durch %s" %
+                          (zone_name, k, sorted(set(blk))[:4]))
+        floor = _floor_at(parts, w.p[0], w.p[2], fy)
+        if floor is None:
+            warns.append("%s.Stations.%s: kein Boden auf Höhe %.2f unter Arrival (%.1f,%.1f)" %
+                         (zone_name, k, fy, w.p[0], w.p[2]))
+        _cam_report(errors, warns, "%s.Stations.%s" % (zone_name, k), camera_snags(occ, w.p[0], fy, w.p[2], sx, sz))
+
+
+def _floor_at(parts, x, z, fy, tol=0.12):
+    for p in parts:
+        if not p.collide or p.transp >= 1:
+            continue
+        b = p.aabb()
+        if b[0] <= x <= b[1] and b[4] <= z <= b[5] and abs(b[3] - fy) <= tol:
+            return p
+    return None
+
+
+def _arrival_checks(zone_name, root, parts, arrivals, errors, warns):
+    from worldgen.contract import SIDE
+    ar = child(root, "Arrivals")
+    keys = {name_of(c) for c in children(ar)} if ar is not None else set()
+    if set(arrivals) - keys:
+        errors.append("%s: Arrivals fehlen: %s" % (zone_name, sorted(set(arrivals) - keys)))
+    occ = _Occluders(parts)
+    for a in children(ar) if ar is not None else []:
+        rec = scan.record(a, "%s.Arrivals.%s" % (zone_name, name_of(a)))
+        if rec.collide or rec.transp < 1 or not rec.anchored:
+            errors.append("%s.Arrivals.%s sichtbar oder kollidierend" % (zone_name, rec.name))
+        x, fy, z = rec.cf.p
+        if _floor_at(parts, x, z, fy) is None:
+            warns.append("%s.Arrivals.%s: kein Boden auf Höhe %.2f bei (%.1f,%.1f)" % (zone_name, rec.name, fy, x, z))
+        blk = player_side_blockers(parts, x, fy, z, half=3.0)
+        if blk:
+            errors.append("%s.Arrivals.%s: 6-Stud-Fläche blockiert durch %s" % (zone_name, rec.name, blk[:3]))
+        look = rec.attrs.get("Look")
+        if look in SIDE:
+            sx, sz = SIDE[look]
+            _cam_report(errors, warns, "%s.Arrivals.%s" % (zone_name, rec.name), camera_snags(occ, x, fy, z, -sx, -sz))
+        else:
+            errors.append("%s.Arrivals.%s: Attribut Look fehlt" % (zone_name, rec.name))
+
+
+def _spawn_checks(zone_name, root, parts, spawn, errors):
+    sp = child(root, spawn)
+    if sp is None or sp.get("class") != "SpawnLocation":
+        errors.append("%s.%s fehlt (SpawnLocation)" % (zone_name, spawn))
+        return
+    if _bool_prop(sp, "Enabled", True):
+        errors.append("%s.%s muss Enabled=false sein (der Server entscheidet)" % (zone_name, spawn))
+    rec = scan.record(sp, "%s.%s" % (zone_name, spawn))
+    if rec.collide or rec.transp < 1:
+        errors.append("%s.%s sichtbar oder kollidierend" % (zone_name, spawn))
+    x, y, z = rec.cf.p
+    if _floor_at(parts, x, z, rec.aabb()[2], 0.15) is None:
+        errors.append("%s.%s: kein Boden unter dem Spawn (%.1f, %.2f, %.1f)" % (zone_name, spawn, x, rec.aabb()[2], z))
+
+
+def _geometry_checks(zone_name, parts, city_parts, budget, errors, warns, info, verbose):
+    unanch = [p.path for p in parts if not p.anchored]
+    if unanch:
+        errors.append("%s: %d Parts nicht verankert: %s" % (zone_name, len(unanch), unanch[:5]))
+    low = [(p.path, round(p.aabb()[2], 2)) for p in parts if p.aabb()[2] < -6]
+    if low:
+        errors.append("%s: %d Parts unter Y -6: %s" % (zone_name, len(low), low[:5]))
+    hits = zfight(parts)
+    if hits:
+        errors.append("%s: %d Z-Fighting-Kandidaten (koplanar, überlappend)" % (zone_name, len(hits)))
+        for a, b, ar, key in hits[: (200 if verbose else 12)]:
+            errors.append("   %s <-> %s  Fläche %.2f  Ebene n=(%g,%g,%g) d=%g" % (a.path, b.path, ar, *key))
+    nc = near_coplanar(parts)
+    if nc:
+        errors.append("%s: %d fast koplanare Flächenpaare (Abstand < 0.05)" % (zone_name, len(nc)))
+        for a, b, ar, d, n in sorted(nc, key=lambda h: -h[2])[: (200 if verbose else 12)]:
+            errors.append("   %s <-> %s  Fläche %.1f  Abstand %.3f  n=(%g,%g,%g)" % (a.path, b.path, ar, d, *n))
+    isl = islands(parts)
+    if isl:
+        errors.append("%s: %d schwebende Gruppen (keine Verbindung zur Grasplatte der Zone)" % (zone_name, len(isl)))
+        for comp in isl[: (200 if verbose else 12)]:
+            y0 = min(p.aabb()[2] for p in comp)
+            errors.append("   %s (+%d) Unterkante %.2f bei (%.1f, %.1f)" % (comp[0].path, len(comp) - 1, y0,
+                                                                         comp[0].cf.p[0], comp[0].cf.p[2]))
+    # ganz außerhalb der Stadtgrenzen und ohne Überschneidung mit Stadt-Parts
+    x0, x1, z0, z1 = CITY_BOUNDS
+    inside = [p.path for p in parts if not (p.aabb()[1] < x0 or p.aabb()[0] > x1 or p.aabb()[5] < z0 or
+                                            p.aabb()[4] > z1)]
+    if inside:
+        errors.append("%s: %d Parts innerhalb der Stadtgrenzen X ±450 / Z ±320: %s" % (zone_name, len(inside),
+                                                                                      inside[:5]))
+    if city_parts:
+        grid = defaultdict(list)
+        for p in city_parts:
+            b = p.aabb()
+            for gx in range(int(b[0] // 32), int(b[1] // 32) + 1):
+                for gz in range(int(b[4] // 32), int(b[5] // 32) + 1):
+                    grid[(gx, gz)].append((p, b))
+        ov = []
+        for p in parts:
+            a = p.aabb()
+            seen = set()
+            for gx in range(int(a[0] // 32), int(a[1] // 32) + 1):
+                for gz in range(int(a[4] // 32), int(a[5] // 32) + 1):
+                    for q, b in grid.get((gx, gz), ()):
+                        if id(q) in seen:
+                            continue
+                        seen.add(id(q))
+                        if _ov(a, b, -0.01):
+                            ov.append((p.path, q.path))
+        if ov:
+            errors.append("%s: %d Überschneidungen mit Stadt-Parts: %s" % (zone_name, len(ov), ov[:4]))
+    # Budget
+    n = len(parts)
+    nl = sum(1 for p in parts for x in p.item.iter("Item") if x.get("class") in ("PointLight", "SpotLight",
+                                                                                "SurfaceLight"))
+    info.append("%s: %d Parts / Budget %d, %d Lichter / Budget %d" % (zone_name, n, budget[0], nl, budget[1]))
+    if n > budget[0]:
+        errors.append("%s: Part-Budget überschritten: %d > %d" % (zone_name, n, budget[0]))
+    if nl > budget[1]:
+        errors.append("%s: Licht-Budget überschritten: %d > %d" % (zone_name, nl, budget[1]))
+    # Stufen-Regel: keine begehbaren Oberseiten (kollidierend, Höhe < 4 über der nächsten) mit Stufe 0 < d < 0.05
+    # deckt near_coplanar ab; hier zusätzlich: Oberseiten aller kollidierenden Bodenplatten paarweise verschieden
+    tops = defaultdict(list)
+    for p in parts:
+        if p.collide and p.transp < 1 and p.size[0] * p.size[2] > 400 and p.top <= 1:
+            tops[round(p.top, 3)].append(p)
+    for top, lst in tops.items():
+        for i in range(len(lst)):
+            for j in range(i + 1, len(lst)):
+                a, b = lst[i].aabb(), lst[j].aabb()
+                if a[0] < b[1] - 0.05 and b[0] < a[1] - 0.05 and a[4] < b[5] - 0.05 and b[4] < a[5] - 0.05:
+                    errors.append("%s: zwei Bodenplatten mit derselben Oberseite %.2f überlappen: %s / %s" %
+                                  (zone_name, top, lst[i].path, lst[j].path))
+
+
+def _anim_checks(zone_name, root, warns, extra_roots=()):
+    anim_root = child(root, "Animated")
+    inside = set(id(x) for x in anim_root.iter("Item")) if anim_root is not None else set()
+    for nm in extra_roots:
+        f = child(root, nm)
+        if f is not None:
+            inside |= set(id(x) for x in f.iter("Item"))
+    bad = [name_of(it) for it in root.iter("Item") if "Anim" in get_attrs(it) and id(it) not in inside]
+    if bad:
+        warns.append("%s: Anim-Attribut außerhalb %s.Animated: %s" % (zone_name, zone_name, bad[:8]))
+
+
+def _tycoon_plot_checks(root, parts, errors):
+    from worldgen.tycoon import SLOTS as TSLOTS
+    plots = child(root, "Plots")
+    if plots is None:
+        errors.append("Tycoon.Plots fehlt")
+        return
+    for slot, px, pz, rot in TSLOTS:
+        m = child(plots, "Slot_%d" % slot)
+        if m is None or m.get("class") != "Model":
+            errors.append("Tycoon.Plots.Slot_%d fehlt" % slot)
+            continue
+        a = get_attrs(m)
+        for key, want in (("Slot", slot), ("X", px), ("Z", pz), ("Rot", rot)):
+            if a.get(key) != want:
+                errors.append("Tycoon.Plots.Slot_%d: Attribut %s=%r (soll %r)" % (slot, key, a.get(key), want))
+        for nm, cls in (("Base", "Part"), ("Sign", "Model"), ("StartPad", "Part"), ("Anchor", "Part"),
+                        ("CollectPad", "Part"), ("ButtonsRoot", "Folder")):
+            c = child(m, nm)
+            if c is None or c.get("class") != cls:
+                errors.append("Tycoon.Plots.Slot_%d.%s fehlt oder ist kein %s" % (slot, nm, cls))
+        base = child(m, "Base")
+        if base is not None:
+            rec = scan.record(base, "Tycoon.Plots.Slot_%d.Base" % slot)
+            if abs(rec.top) > 1e-6 or tuple(round(v, 3) for v in rec.size) != (70.0, 1.0, 70.0):
+                errors.append("Tycoon.Plots.Slot_%d.Base: 70 x 1 x 70 mit Oberseite Y 0 erwartet" % slot)
+            if abs(rec.cf.p[0] - px) > 1e-6 or abs(rec.cf.p[2] - pz) > 1e-6:
+                errors.append("Tycoon.Plots.Slot_%d.Base liegt nicht auf dem Pivot" % slot)
+        sp = child(m, "StartPad")
+        if sp is not None:
+            if get_attrs(sp).get("TycoonSlot") != slot:
+                errors.append("Tycoon.Plots.Slot_%d.StartPad: TycoonSlot=%r" % (slot, get_attrs(sp).get("TycoonSlot")))
+            pp = _prompt_props(sp)
+            if pp is None or pp["ActionText"] != "Durchlauf starten":
+                errors.append("Tycoon.Plots.Slot_%d.StartPad: ProximityPrompt 'Durchlauf starten' fehlt" % slot)
+        cp = child(m, "CollectPad")
+        if cp is not None and get_attrs(cp).get("TycoonPad") != "collect":
+            errors.append("Tycoon.Plots.Slot_%d.CollectPad: TycoonPad='collect' fehlt" % slot)
+        an = child(m, "Anchor")
+        if an is not None:
+            rec = scan.record(an, "Tycoon.Plots.Slot_%d.Anchor" % slot)
+            if rec.collide or rec.transp < 1 or abs(rec.cf.p[0] - px) > 1e-6 or abs(rec.cf.p[2] - pz) > 1e-6:
+                errors.append("Tycoon.Plots.Slot_%d.Anchor: unsichtbar, CanCollide false, auf dem Pivot erwartet" % slot)
+            want = -math.sin(math.radians(rot)), -math.cos(math.radians(rot))
+            look = rec.cf.look
+            if abs(look[0] - want[0]) > 1e-6 or abs(look[2] - want[1]) > 1e-6:
+                errors.append("Tycoon.Plots.Slot_%d.Anchor: LookVector passt nicht zu Rot %d" % (slot, rot))
+        sign = child(m, "Sign")
+        if sign is not None:
+            labels = {name_of(x) for x in sign.iter("Item") if x.get("class") == "TextLabel"}
+            if {"Number", "Owner", "Street", "Welcome"} - labels:
+                errors.append("Tycoon.Plots.Slot_%d.Sign: Labels fehlen %s" %
+                              (slot, sorted({"Number", "Owner", "Street", "Welcome"} - labels)))
+
+
+def zone_checks(tree, city_parts, errors, warns, info, verbose=False):
+    from worldgen import lobby as lobby_mod, tycoon as tycoon_mod
+    for nm in scan.ZONES:
+        root, parts = scan.zone_parts(tree, nm)
+        if root is None:
+            info.append("Zone %s nicht im Place" % nm)
+            continue
+        if root.get("class") != "Model":
+            errors.append("Workspace.%s muss ein Model sein" % nm)
+        if nm == "Lobby":
+            _geometry_checks(nm, parts, city_parts, lobby_mod.LOBBY_BUDGET, errors, warns, info, verbose)
+            _station_checks(nm, root, parts, lobby_mod.STATIONS, "lobby", errors, warns, extra_attr="LobbyAction")
+            _arrival_checks(nm, root, parts, lobby_mod.ARRIVALS, errors, warns)
+            _spawn_checks(nm, root, parts, "LobbySpawn", errors)
+            _anim_checks(nm, root, warns)
+            kinds = {get_attrs(it).get("Anim") for it in child(root, "Animated").iter("Item")} - {None}
+            if {"neon", "door", "turntable"} - kinds:
+                errors.append("Lobby.Animated: Anim-Arten fehlen %s" % sorted({"neon", "door", "turntable"} - kinds))
+        else:
+            _geometry_checks(nm, parts, city_parts, tycoon_mod.TYCOON_BUDGET, errors, warns, info, verbose)
+            _station_checks(nm, root, parts, tycoon_mod.STATIONS, "tycoon", errors, warns)
+            _arrival_checks(nm, root, parts, tycoon_mod.ARRIVALS, errors, warns)
+            _spawn_checks(nm, root, parts, "TycoonSpawn", errors)
+            _anim_checks(nm, root, warns, extra_roots=("Plots",))
+            _tycoon_plot_checks(root, parts, errors)
+        walls = [p.path for p in parts if p.collide and p.transp >= 0.95]
+        if walls:
+            errors.append("%s: unsichtbare kollidierende Parts: %s" % (nm, walls[:5]))
 
 
 # ---------------------------------------------------------------- Fahrzeuge (PHASE2_CONTRACT §3)

@@ -164,7 +164,7 @@ end
 
 -- Client mit eigener ScreenGui für ArcadeUI; Server-Runden entstehen mit ArcadeRules (Server-Instanz)
 local function uiSetup(T, H)
-	local g = H.Garage()
+	local g = H.Garage({ level = 12 })
 	local pl = g:Join(1101, { name = "Tester" })
 	g:Advance(0.5)
 	g:StartClient(pl)
@@ -874,7 +874,7 @@ return {
 
 	---------------------------------------------------------------- Server (ArcadeService im Mock)
 	{ "Dienst: Start, Eingaben, Abrechnung, Wiederholung, ungültige Tokens, Limit, Ablauf", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local AS = g:MiniServer("ArcadeService")
 		local A = g:MiniShared("ArcadeRules")
 		local log = { notices = {}, toasts = {} }
@@ -1125,7 +1125,7 @@ return {
 	end },
 
 	{ "Dienst: Rennen mit Takt-Meldungen, Abgleich bei Ablehnung, MOTOR-OHR-Rückmeldung", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local AS = g:MiniServer("ArcadeService")
 		local log = {}
 		local handlers = {}
@@ -1187,7 +1187,7 @@ return {
 	end },
 
 	{ "Verkabelung (sobald MiniNet die Spielhallen-Aktionen kennt): Runde über Remotes.Command", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		local MiniNet = g:MiniShared("MiniNet")
 		if not MiniNet.Actions.mini_arcade_start then
 			T.check(true, "noch nicht verkabelt")
@@ -1485,7 +1485,7 @@ return {
 		T.eq(#S.errors(), 0, "keine Fehler: " .. table.concat(S.errors(), "\n"))
 	end },
 	{ "Verkabelung Client (sobald Tab arcade existiert): Station → Anleitung → Runde → Ergebnis im echten Panel", function(T, H)
-		local g = H.Garage()
+		local g = H.Garage({ level = 12 })
 		if not g:MiniShared("MiniNet").Actions.mini_arcade_start then
 			T.check(true, "noch nicht verkabelt")
 			return

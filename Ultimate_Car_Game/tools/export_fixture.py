@@ -11,7 +11,8 @@ Erzeugt
 Quelle des Baums
 ----------------
 * ohne Argument: ``base/Ultimate_Car_Game_2.4.0.rbxlx`` + ``tools/worldgen`` (falls vorhanden), genau so,
-  wie ``tools/build_place.py`` den Place baut (Skripte spielen für den Baum keine Rolle).
+  wie ``tools/build_place.py`` den ``all``-Place baut (Stadt + Lobby + Tycoon, Attribut PlaceKind = "all";
+  Skripte spielen für den Baum keine Rolle).
 * mit Argument: ein beliebiger (gebauter) Place, z. B. ``Ultimate_Car_Game.rbxlx``.
 
 Aktualität
@@ -532,7 +533,8 @@ def tree_from_sources(place_arg):
         return ET.parse(path).getroot(), [source_entry(path)], None, path
     builder = load_builder()
     tree = builder.load_base()
-    world = builder.apply_worldgen(tree)
+    world = builder.apply_worldgen(tree, "all")
+    builder.apply_place_kind(tree, "all")       # Attribut PlaceKind = "all" wie im gebauten Place (PHASE4 §1)
     sources = [source_entry(BASE), source_entry(BUILDER)] + [source_entry(p) for p in worldgen_files()]
     wg = [p.relative_to(WORLDGEN).as_posix() for p in worldgen_files() if p.parent == WORLDGEN]
     return tree.getroot(), sources, wg if WORLDGEN.exists() else None, world

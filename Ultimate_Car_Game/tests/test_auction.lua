@@ -293,8 +293,9 @@ return {
 		T.check(not AR.CheckBid(lot, { userId = 9, level = 99, money = 1e12, cars = 0, writable = true }, AR.MinBid(lot), lot.endsAt), "nach Ablauf kein Gebot")
 		-- NPC-Lose: auch ohne schreibbares Profil, aber mit Level
 		local npcLot = AR.NewNpcLot(2, "komet_rally", 7, NOW)
-		T.check(AR.CheckBid(npcLot, { userId = 5, level = 5, money = 1e6, cars = 0, writable = false }, AR.MinBid(npcLot), NOW), "NPC-Los ohne Speicherprofil")
-		T.check(not AR.CheckBid(npcLot, { userId = 5, level = 4, money = 1e6, cars = 0, writable = true }, AR.MinBid(npcLot), NOW), "Level-Voraussetzung")
+		T.eq(npcLot.level, 10, "Rallye-Sondermodell ab Level 10 (GameConfig.Unlocks)")
+		T.check(AR.CheckBid(npcLot, { userId = 5, level = 10, money = 1e6, cars = 0, writable = false }, AR.MinBid(npcLot), NOW), "NPC-Los ohne Speicherprofil")
+		T.check(not AR.CheckBid(npcLot, { userId = 5, level = 9, money = 1e6, cars = 0, writable = true }, AR.MinBid(npcLot), NOW), "Level-Voraussetzung")
 		-- Bieter verlässt: seine Gebote fallen weg, Liste bleibt steigend
 		local l2 = AR.NewNpcLot(3, "komet_rally", 7, NOW)
 		AR.PlaceBid(l2, 10, "A", AR.MinBid(l2), NOW)
@@ -382,8 +383,8 @@ return {
 		local g = H.Garage({ noServer = true })
 		local AR = g:MiniShared("AuctionRules")
 		local CR = g:MiniShared("CarRules")
-		local sd = newData(g, 1000, 20)
-		local bd = newData(g, 100000, 20) -- Vektor RS: ab Level 18
+		local sd = newData(g, 1000, 45)
+		local bd = newData(g, 100000, 45) -- Vektor RS: ab Level 45 (GameConfig.Unlocks)
 		local car = giveCar(g, sd, "vektor", { engine = 2, paint = 3 })
 		giveCar(g, sd, "komet")
 		local carId = car.id
@@ -613,10 +614,10 @@ return {
 
 	{ "Zuschlag: Guthaben beim Zuschlag nicht gedeckt -> nächsthöheres gültiges Gebot", function(T, H)
 		local W = world(H)
-		local s, sd = W.join(1, "Sina", 0, 10)
-		local a, ad = W.join(2, "Anna", 100000, 10)
-		local b, bd = W.join(3, "Ben", 100000, 10)
-		local car = giveCar(W.g, sd, "nord")
+		local s, sd = W.join(1, "Sina", 0, 14)
+		local a, ad = W.join(2, "Anna", 100000, 14)
+		local b, bd = W.join(3, "Ben", 100000, 14)
+		local car = giveCar(W.g, sd, "nord") -- Nord R4 ab Level 14
 		local lot = W.consign(s, car, 1, 120)
 		W.bid(b, lot)
 		local benBid = W.AR.Top(lot).amount
@@ -1001,7 +1002,7 @@ return {
 		local sd, bd = g:D(seller), g:D(buyer)
 		T.check(g:Profile(seller).writable and g:Profile(buyer).writable, "Profile schreibbar (Mock-DataStore)")
 		T.eq(type(sd.games.auction), "table", "games.auction angelegt")
-		sd.level, bd.level = 10, 10
+		sd.level, bd.level = 20, 20 -- Spieler-Auktionen ab Level 20 (auction:player)
 		bd.money = 100000
 		local car = CR.AddCar(sd, CR.NewCar("komet", g:Now()))
 		local start = AR.StartOptions(car)[1]
@@ -1343,9 +1344,9 @@ return {
 
 	{ "Freies Guthaben: eigene Höchstgebote auf anderen Losen sind verplant", function(T, H)
 		local W = world(H)
-		local s1, sd1 = W.join(1, "Sina", 0, 10)
-		local s2, sd2 = W.join(5, "Sven", 0, 10)
-		local a, ad = W.join(2, "Anna", 30000, 10)
+		local s1, sd1 = W.join(1, "Sina", 0, 14)
+		local s2, sd2 = W.join(5, "Sven", 0, 14)
+		local a, ad = W.join(2, "Anna", 30000, 14) -- Nord R4 ab Level 14
 		local l1 = W.consign(s1, giveCar(W.g, sd1, "nord"), 2, 300)
 		local l2 = W.consign(s2, giveCar(W.g, sd2, "nord"), 2, 300)
 		T.check(l1 and l2, "zwei Lose")
@@ -1357,7 +1358,7 @@ return {
 		T.eq(#l2.bids, 0, "zweites Gebot abgelehnt")
 		T.check(W.toasted(a, "verplant"), "Hinweis: Guthaben verplant")
 		-- überboten: das Guthaben ist wieder frei
-		local x, xd = W.join(6, "Xaver", 1000000, 10)
+		local x, xd = W.join(6, "Xaver", 1000000, 14)
 		W.bid(x, l1)
 		W.bid(a, l2, l2.start)
 		T.eq(W.AR.Top(l2) and W.AR.Top(l2).userId, 2, "nach dem Überbieten wieder frei")

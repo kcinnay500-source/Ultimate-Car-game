@@ -4,6 +4,8 @@
 local FORBIDDEN = { amount = true, price = true, cost = true, credits = true, scrap = true, reward = true, time = true, now = true, timestamp = true, gain = true }
 
 local function start(H, opts)
+	opts = opts or {}
+	opts.level = opts.level or 12 -- Presse/Schrottplatz/Quiz/Parkplatz/Tuning/Teststrecke/Spielhalle sind levelgebunden
 	local g = H.Garage(opts)
 	local p = g:Join(1001, { name = "Tester" })
 	g:Advance(0.5)

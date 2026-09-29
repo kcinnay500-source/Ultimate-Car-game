@@ -6,6 +6,8 @@ local MiniNet = {}
 MiniNet.Prefix = "mini_"
 
 -- Aktion -> Felder der Nutzlast (Typprüfung auf dem Server). Zusätzlich optional rid (number).
+-- Ausbaustufe 4: Aktionen der Lobby/Tutorial/Prestige tragen kein mini_-Präfix (Vertragsnamen); Mini.Handles
+-- prüft nur die Mitgliedschaft in dieser Tabelle.
 MiniNet.Actions = {
 	mini_press_click = { count = "number" },
 	mini_press_buy = { id = "string", level = "number" },
@@ -45,6 +47,19 @@ MiniNet.Actions = {
 	mini_arcade_start = { game = "string" },
 	mini_arcade_input = { token = "number", at = "number", value = "number" },
 	mini_arcade_finish = { token = "number" },
+	-- Ausbaustufe 4 (PHASE4_CONTRACT §10): Lobby, Party, Tutorial, Prestige, Freischaltungen (keine Beträge)
+	lobby_mode = { mode = "string" },
+	lobby_settings = { single = "boolean", passive = "boolean", beginner = "boolean" },
+	lobby_go = {},
+	lobby_return = {},
+	party_create = {},
+	party_join = { code = "string" },
+	party_leave = {},
+	party_kick = { userId = "number" },
+	tutorial_next = { step = "number" },
+	tutorial_skip = {},
+	prestige_claim = { rank = "number" },
+	unlocks_seen = {},
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -69,6 +84,13 @@ MiniNet.Cooldowns = {
 	mini_carwash = 2,
 	mini_track_start = 3,
 	mini_arcade_input = 0, -- eigenes Budget in ArcadeService (25/s); 0,12 s verwürfe schnelle Eingaben
+	lobby_go = 3,
+	lobby_return = 3,
+	party_create = 3, -- = GameConfig.Party.CreateCooldown (LobbyService prüft zusätzlich selbst)
+	party_join = 2, -- = GameConfig.Party.JoinCooldown
+	party_kick = 1,
+	tutorial_skip = 1,
+	prestige_claim = 0.5,
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",
@@ -85,6 +107,8 @@ MiniNet.Targets = {
 	mini_car_sell = "id",
 	mini_car_tune = "part",
 	mini_car_style = "id",
+	party_kick = "userId",
+	prestige_claim = "rank",
 }
 
 -- Ereignisse Server -> Client
@@ -95,7 +119,7 @@ MiniNet.Events = {
 }
 
 -- Tabs der Minispiel-Oberfläche (auch Werte des Attributs MiniTab an City.Stations.<key>)
-MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade" }
+MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade", "lobby", "unlocks", "prestige" }
 MiniNet.TabSet = {}
 for _, tab in ipairs(MiniNet.Tabs) do
 	MiniNet.TabSet[tab] = true

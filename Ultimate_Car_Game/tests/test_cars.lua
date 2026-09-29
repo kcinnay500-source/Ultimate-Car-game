@@ -163,7 +163,9 @@ return {
 			T.eq(m.id, car.id, "Id " .. i)
 			T.eq(m.name, car.name, "Name " .. car.id)
 			T.eq(m.body, car.body, "Karosserie " .. car.id)
-			T.eq(m.level, car.level, "Level " .. car.id)
+			-- Ausbaustufe 4: das Händler-Level kommt aus GameConfig.Unlocks (Unlocks.CarLevel), C.Cars[].level bleibt Kundenauto
+			T.eq(m.level, g:MiniShared("Unlocks").CarLevel(car.id), "Level " .. car.id)
+			T.check(m.level >= car.level, "Händler-Level nie unter dem 2.4.0-Kundenlevel: " .. car.id)
 			T.check(m.price > prev, "Preis steigt: " .. car.id)
 			prev = m.price
 			T.check(templates and templates:FindFirstChild(m.body) ~= nil, "Vorlage vorhanden: " .. m.body)
@@ -244,7 +246,9 @@ return {
 		T.eq(ok, false, "ohne Geld kein Kauf")
 		T.check(type(msg) == "string", "Meldung")
 		d.money = price + 10
-		T.eq((CR.Buy(d, "vektor", NOW)), false, "Level 18 nötig")
+		T.eq((CR.Buy(d, "komet", NOW)), false, "Komet ab Level 3 (Ausbaustufe 4)")
+		d.level = 3
+		T.eq((CR.Buy(d, "vektor", NOW)), false, "Level 45 nötig")
 		T.eq((CR.Buy(d, "vektor_gold", NOW)), false, "Sondermodell nicht beim Händler")
 		local ok2, car = CR.Buy(d, "komet", NOW)
 		T.eq(ok2, true, "Kauf klappt")
@@ -311,9 +315,11 @@ return {
 		-- Level-Voraussetzung
 		local d2 = freshData(g)
 		d2.money = 1e9
+		d2.level = 3 -- Komet ab Level 3 (Ausbaustufe 4)
 		local _, c2 = CR.Buy(d2, "komet", NOW)
 		local okLvl, msgLvl = CR.Tune(d2, c2.id, "engine", 0)
 		T.eq(okLvl, true, "Motor 1 ab Level 1")
+		d2.level = 1
 		okLvl, msgLvl = CR.Tune(d2, c2.id, "engine", 1)
 		T.eq(okLvl, false, "Motor 2 braucht Level 3")
 		T.check(type(msgLvl) == "string" and msgLvl:find("Level", 1, true) ~= nil, "Meldung nennt das Level")
@@ -335,6 +341,7 @@ return {
 		local CC, CR = modules(g)
 		local d = freshData(g)
 		d.money = 100000
+		d.level = 3 -- Komet ab Level 3
 		local _, car = CR.Buy(d, "komet", NOW)
 		local money = d.money
 		local ok, cost, changes = CR.Style(d, car.id, car.paint, car.rims, car.glow, car.spoiler)
@@ -921,6 +928,7 @@ return {
 		T.eq(#S.CS.TrackSequence(), 4, "CP1..CP3 + Ziel")
 		S.act(pl, "mini_track_start")
 		T.check(S.hasToast(pl, "eigenes Auto"), "Zeitfahren braucht ein eigenes Auto")
+		d.level = 8 -- Komet ab 3, Teststrecke ab 8 (GameConfig.Unlocks)
 		S.act(pl, "mini_car_buy", { model = "komet" })
 		g:Advance(0.1)
 		S.act(pl, "mini_track_start")
@@ -979,8 +987,10 @@ return {
 		T.eq(#fin, 1, "track_finish")
 		T.near(fin[1].time, 8, 1e-6, "Rundenzeit aus der Serverzeit")
 		local c = g:MiniShared("CarCatalog").Track
-		T.eq(fin[1].reward, c.firstReward, "erste Runde belohnt")
-		T.eq(d.money, money + c.firstReward, "gutgeschrieben")
+		local bonus = 1 + c.levelBonus * (d.level - 1) -- Level-Bonus der Teststrecke (Level 8 wegen der Freischaltung)
+		local first = math.floor(c.firstReward * bonus + 0.5)
+		T.eq(fin[1].reward, first, "erste Runde belohnt")
+		T.eq(d.money, money + first, "gutgeschrieben")
 		T.check(S.log.changed > changed, "ctx.changed nach der Gutschrift")
 		T.near(d.games.track.best, 8, 1e-6, "Bestzeit gespeichert")
 		T.eq(d.games.track.runs, 1, "ein Lauf")
@@ -1017,7 +1027,7 @@ return {
 		g:AdvanceTo(startAt + 7)
 		drive(4)
 		local reward = S.notices(pl, "track_finish")[3].reward
-		T.eq(reward, math.floor(c.perSecond * 1 + 0.5), "1 s schneller")
+		T.eq(reward, math.floor(c.perSecond * 1 * bonus + 0.5), "1 s schneller")
 		T.eq(d.money, money, "während transacting kein Geld")
 		S.tick(pl)
 		T.eq(d.money, money, "auch im Tick nicht")
@@ -1051,6 +1061,7 @@ return {
 		local pl = S.join(641, "Finn")
 		local d = g:D(pl)
 		d.money = 100000
+		d.level = 3
 		S.act(pl, "mini_car_buy", { model = "komet" })
 		local id = d.games.cars[1].id
 		S.act(pl, "mini_car_spawn", { id = id, at = "workshop" })
@@ -1097,6 +1108,9 @@ return {
 		g:Advance(0.5)
 		local d = g:D(pl)
 		d.money = 100000
+		T.eq(g:Act(pl, "mini_car_buy", { model = "komet", rid = 0 }), "locked", "Komet erst ab Level 3 (Unlocks)")
+		d.level = 3
+		g:Advance(1.1)
 		T.eq(g:Act(pl, "mini_car_buy", { model = "komet", rid = 1 }), "ok", "mini_car_buy")
 		T.eq(#d.games.cars, 1, "gekauft")
 		g:Advance(0.2)
@@ -1244,6 +1258,7 @@ return {
 		local pl = S.join(651, "Gerd")
 		local d = g:D(pl)
 		d.money = 100000
+		d.level = 8
 		S.act(pl, "mini_car_buy", { model = "komet" })
 		g:Advance(0.1)
 		S.act(pl, "mini_track_start")

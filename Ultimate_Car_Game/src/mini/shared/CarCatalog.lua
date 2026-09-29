@@ -3,7 +3,12 @@
 -- ergänzt um Händlerpreis und Fahrwerte; dazu Sondermodelle für NPC-Auktionen, Tuning-Stufen und -Preise,
 -- Farbpaletten, Waschstraße, Probefahrt, Zeitfahren und die Physik-Grundwerte der VehicleFactory.
 -- Rein (keine Instanzen), auf Server und Client nutzbar (ReplicatedStorage.GarageShared.Mini.CarCatalog).
+-- Ausbaustufe 4 (docs/PHASE4_CONTRACT.md §3): das Händler-/Auktions-Level jedes Modells kommt aus der
+-- Freischalt-Tabelle GameConfig.Unlocks ("car:<id>", Unlocks.CarLevel), nicht mehr aus C.Cars[].level – das
+-- 2.4.0-Feld gilt weiter für die Kundenautos der Werkstatt und bleibt unverändert. Die Level in Specials und
+-- C.Cars sind nur noch Rückfall für Modelle ohne Eintrag in GameConfig.Unlocks.
 local C = require(script.Parent.Parent:WaitForChild("Config"))
+local Unlocks = require(script.Parent:WaitForChild("Unlocks"))
 
 local CarCatalog = {}
 
@@ -37,7 +42,8 @@ CarCatalog.Dealer = {
 CarCatalog.DealerFallback = { power = 120, top = 85, weight = 1300, grip = 0.95, steer = 32, drive = "RWD", paint = 1 }
 
 -- Sondermodelle: nicht beim Händler, nur über NPC-Auktionen (AuctionService: CarRules.GrantModel).
--- value: Richtwert (Startgebot/Verkaufswert); rims/glow/spoiler: Auslieferungszustand
+-- value: Richtwert (Startgebot/Verkaufswert); rims/glow/spoiler: Auslieferungszustand.
+-- level: nur Rückfall – maßgeblich ist GameConfig.Unlocks "car:<id>" (Rallye 10, Classic 18, Goldstück 50, Nero 78, Prototyp 95).
 CarCatalog.Specials = {
 	{ id = "komet_rally", name = "Komet C1 Rallye", brand = "Komet", body = "compact", level = 5, value = 24000,
 		power = 160, top = 92, weight = 980, grip = 1.05, steer = 35, drive = "AWD", paint = 2, rims = 2, glow = 0, spoiler = true },
@@ -203,7 +209,8 @@ end
 for _, car in ipairs(C.Cars) do
 	local d = CarCatalog.Dealer[car.id] or CarCatalog.DealerFallback
 	add({
-		id = car.id, name = car.name, brand = car.brand, body = car.body, level = car.level,
+		id = car.id, name = car.name, brand = car.brand, body = car.body,
+		level = Unlocks.CarLevel(car.id) or car.level, -- Händler-Level aus GameConfig.Unlocks (Elys 90)
 		price = d.price or car.value, value = d.price or car.value,
 		power = d.power, top = d.top, weight = d.weight, grip = d.grip, steer = d.steer, drive = d.drive,
 		paint = d.paint, rims = 1, glow = 0, spoiler = CarCatalog.BodySpoiler[car.body] == true,
@@ -213,7 +220,8 @@ end
 for _, s in ipairs(CarCatalog.Specials) do
 	if not CarCatalog.ModelById[s.id] then
 		add({
-			id = s.id, name = s.name, brand = s.brand, body = s.body, level = s.level,
+			id = s.id, name = s.name, brand = s.brand, body = s.body,
+			level = Unlocks.CarLevel(s.id) or s.level, -- Auktions-Level aus GameConfig.Unlocks ("car:<id>")
 			price = s.value, value = s.value,
 			power = s.power, top = s.top, weight = s.weight, grip = s.grip, steer = s.steer, drive = s.drive,
 			paint = s.paint, rims = s.rims or 1, glow = s.glow or 0, spoiler = s.spoiler == true,

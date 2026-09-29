@@ -8,6 +8,8 @@
 * mit --district/--rect: Draufsicht (<name>_top.png) und isometrische Ansicht von Südost (<name>_iso.png)
 * --plots: die getrimmte Werkstatt-Vorlage (4 Hallen) an allen 8 Slots mitzeichnen (ohne Vacant-Kits)
 * --cut Y: Schnitt bei Höhe Y (Dächer/Decken darüber entfallen) -> Innenansicht <name>_cut<Y>_iso.png
+* --zones: die Zonen der Ausbaustufe 4 (Workspace.Lobby, Workspace.Tycoon; PHASE4_CONTRACT §1) -> lobby_top.png,
+  lobby_iso.png, lobby_cut23_iso.png (Innenansicht ohne Dach), tycoon_top.png, tycoon_iso.png
 """
 import math
 import sys
@@ -126,16 +128,42 @@ def overlays(tree, city, with_plots=False):
     return out
 
 
-def markers(city):
+def markers(city, spawn="CitySpawn"):
     out = []
     for folder, col in (("Stations", "#ff2d95"), ("Arrivals", "#00e5ff")):
         f = child(city, folder)
         for it in children(f) if f is not None else []:
             out.append((name_of(it), read_cf(it).p, col))
-    sp = child(city, "CitySpawn")
+    sp = child(city, spawn)
     if sp is not None:
-        out.append(("CitySpawn", read_cf(sp).p, "#ffffff"))
+        out.append((spawn, read_cf(sp).p, "#ffffff"))
     return out
+
+
+# Zone -> (Ausschnitt x0 x1 z0 z1, SpawnLocation, Schnitthöhe für die Innenansicht oder None)
+ZONES = {"Lobby": ((-125, 125, -805, -605), "LobbySpawn", 23.0), "Tycoon": ((-225, 225, 695, 1005), "TycoonSpawn", None)}
+
+
+def render_zones(tree, out):
+    paths = []
+    for nm, (rect, spawn, cut) in ZONES.items():
+        zone, parts = scan.zone_parts(tree, nm)
+        if zone is None:
+            print("Zone %s fehlt im Place" % nm)
+            continue
+        parts = [p for p in parts if p.transp < 0.97]
+        marks = markers(zone, spawn)
+        key = nm.lower()
+        p1 = out / ("%s_top.png" % key)
+        top_view(parts, rect, p1, marks, nm, px_per_stud=max(4.0, 2400 / max(rect[1] - rect[0], rect[3] - rect[2])))
+        p2 = out / ("%s_iso.png" % key)
+        iso_view(parts, rect, p2, nm)
+        paths += [p1, p2]
+        if cut is not None:
+            p3 = out / ("%s_cut%g_iso.png" % (key, cut))
+            iso_view(parts, rect, p3, "%s (Schnitt Y %g)" % (nm, cut), ymax=cut)
+            paths.append(p3)
+    return paths
 
 
 def top_view(parts, rect, path, marks=(), title="", px_per_stud=3.0, labels=True, overlays=()):
@@ -331,6 +359,7 @@ def main(argv):
     place = scan.DEFAULT_PLACE
     out = OUT
     with_plots = "--plots" in args
+    zones = "--zones" in args
     rect = None
     cut = None
     name = "city"
@@ -360,6 +389,10 @@ def main(argv):
         i += 1
     out.mkdir(parents=True, exist_ok=True)
     tree = scan.load(place)
+    if zones:
+        for p in render_zones(tree, out):
+            print(p)
+        return
     city, parts = gather(tree, with_plots)
     marks = markers(city)
     ovl = overlays(tree, city, with_plots)

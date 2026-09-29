@@ -31,6 +31,9 @@ end
 MiniClient.Number = MiniLocale and MiniLocale.Number or nil
 
 local PAGES = {
+	lobby = "LobbyUI",
+	unlocks = "UnlocksUI",
+	prestige = "PrestigeUI",
 	overview = "OverviewUI",
 	press = "PressUI",
 	tuning = "TuningUI",
@@ -52,8 +55,12 @@ local opts = {}
 local started, starting = false, false
 local UI, Remote, Effects, City
 local Drive -- DriveClient (Fahren: Tacho, Fahrregler, Nitro)
+local Tutorial -- TutorialUI (Ausbaustufe 4: Tutorial-Karte, Beginner-Hinweise; kein Tab)
+local Unlocks -- GarageShared.Mini.Unlocks (repliziert): Sperrhinweis je Tab
 local Modules = {}
+local LockNotes = {} -- [tab] = TextLabel „Ab Level n: …“ über dem Bereich (Bereiche bleiben sichtbar, nur markiert)
 local latest, latestAt = nil, 0
+local lastMode = nil -- Snapshot-Feld mode des vorigen Snapshots (Lobby öffnet sich einmal je Moduswechsel)
 local warned = {}
 
 local function warnOnce(key, msg)
@@ -165,8 +172,24 @@ local function renderHeader()
 	UI.HeaderInfo.Text = MiniLocale.Credits(latest.credits or 0) .. " · " .. MiniLocale.Scrap(scrap) .. " · Level " .. tostring(latest.level or 1)
 end
 
--- Vom Server weggelassene große Felder (MiniSnapshot.StickyKeys: cars, catalog) aus dem vorigen Snapshot übernehmen
+-- Vom Server weggelassene große Felder (MiniSnapshot.StickyKeys: cars, catalog) aus dem vorigen Snapshot übernehmen;
+-- unlocks.list (PHASE4_CONTRACT §11, nur bei vollen Snapshots) ebenso
 local STICKY = { "cars", "catalog" }
+
+-- Sperrhinweis über einem Bereich, dessen Freischaltung noch fehlt (der Bereich bleibt sichtbar)
+local function renderLockNotes(s)
+	if not Unlocks then
+		return
+	end
+	for tab, label in pairs(LockNotes) do
+		local entry = Unlocks.ForTab(tab)
+		local locked = entry ~= nil and not Unlocks.TabAllowed({ level = s.level }, tab)
+		if locked then
+			label.Text = "Ab Level " .. tostring(entry.level) .. ": " .. tostring(entry.title) .. ". Bis dahin bringen Aufträge in der Werkstatt XP."
+		end
+		label.Visible = locked
+	end
+end
 
 local function onSnapshot(s)
 	if type(s) ~= "table" then
@@ -178,6 +201,9 @@ local function onSnapshot(s)
 				s[key] = latest[key]
 			end
 		end
+		if type(s.unlocks) == "table" and s.unlocks.list == nil and type(latest.unlocks) == "table" then
+			s.unlocks.list = latest.unlocks.list
+		end
 	end
 	latest, latestAt = s, os.clock()
 	if Modules.press and Modules.press.OnSnapshot then
@@ -186,8 +212,21 @@ local function onSnapshot(s)
 	if Drive then
 		call(Drive.OnSnapshot, s)
 	end
+	call(Modules.prestige and Modules.prestige.OnSnapshot, s) -- Abzeichen (Rang/Level/nächste Freischaltung) auch bei geschlossenem Panel
+	if Tutorial then
+		call(Tutorial.OnSnapshot, s)
+	end
+	renderLockNotes(s)
 	renderHeader()
 	renderVisible()
+	-- Lobby: beim Ankommen (erster Snapshot oder Moduswechsel) öffnet sich der Lobby-Tab einmal von selbst
+	local mode = s.mode
+	if mode ~= lastMode then
+		lastMode = mode
+		if mode == "lobby" and UI and UI.Pages.lobby and not MiniClient.IsBlocked() then
+			MiniClient.Open("lobby")
+		end
+	end
 end
 
 -- mini_notice {kind=..., ...}
@@ -230,6 +269,24 @@ local function onNotice(data)
 		call(Modules.arcade and Modules.arcade.OnNotice, data)
 	elseif kind == "leaderboard" then
 		call(Modules.leaderboard and Modules.leaderboard.OnData, type(data.view) == "table" and data.view or data)
+	elseif kind == "unlock" then
+		-- Freischaltung erreicht: Karte (UnlocksUI, Hinweistext im Feld hint), Abzeichen blinkt, Tabelle neu
+		call(Modules.unlocks and Modules.unlocks.OnNotice, data)
+		call(Modules.prestige and Modules.prestige.Flash)
+		if Tutorial then
+			call(Tutorial.OnNotice, data) -- zeigt die Karte nur, wenn UnlocksUI keine hat
+		end
+	elseif kind == "prestige" then
+		call(Modules.prestige and Modules.prestige.OnNotice, data)
+	elseif kind == "mode" or kind == "party" or kind == "lobby" then
+		call(Modules.lobby and Modules.lobby.OnNotice, data)
+		if kind == "lobby" and Tutorial and type(data.hint) == "string" then
+			call(Tutorial.ShowHint, data.hint, data.hintId) -- Beginner-Hinweis der Lobby-Station als Karte
+		end
+	elseif kind == "tutorial" or kind == "hint" then
+		if Tutorial then
+			call(Tutorial.OnNotice, data)
+		end
 	end
 end
 
@@ -266,9 +323,20 @@ function MiniClient.Start(o)
 			call(opts.openTablet, key)
 		end or nil,
 	}
+	pcall(function()
+		Unlocks = require(ReplicatedStorage.GarageShared.Mini:WaitForChild("Unlocks", 10))
+	end)
 	-- Jeder Bereich für sich: ein defekter Bereich darf die anderen nicht mitreißen
 	for _, tab in ipairs(UI.Tabs) do
 		local page = UI.Pages[tab.key]
+		if Unlocks and Unlocks.ForTab(tab.key) then
+			-- Bereich mit Level-Voraussetzung: Sperrhinweis oben (sichtbar, sobald der Snapshot das Level kennt)
+			local note = UI.Small(page, "", 0)
+			note.Name = "LockNote"
+			note.TextColor3 = UI.Theme.yellow
+			note.Visible = false
+			LockNotes[tab.key] = note
+		end
 		local ok, err = pcall(function()
 			local m = require(folder:WaitForChild(PAGES[tab.key], 10))
 			m.Build(page, ctx)
@@ -278,6 +346,16 @@ function MiniClient.Start(o)
 			warnOnce("build_" .. tab.key, "Bereich " .. tab.key .. " nicht geladen: " .. tostring(err))
 			UI.Small(page, "Dieser Bereich konnte nicht geladen werden.", 1)
 		end
+	end
+
+	-- Tutorial-Karte, Marker und Hinweis-Karten (eigene ScreenGui "Tutorial", läuft unabhängig vom Panel)
+	local okTut, errTut = pcall(function()
+		Tutorial = require(folder:WaitForChild("TutorialUI", 10))
+		Tutorial.Start(ctx)
+	end)
+	if not okTut then
+		Tutorial = nil
+		warnOnce("tutorial", "Tutorial nicht geladen: " .. tostring(errTut))
 	end
 
 	-- Fahren (eigene ScreenGui "Fahren", läuft unabhängig vom Panel)
@@ -321,6 +399,9 @@ function MiniClient.Start(o)
 				MiniClient.Open(tab)
 				if tab == "arcade" and type(value) == "table" and type(value.game) == "string" then
 					call(Modules.arcade and Modules.arcade.Select, value.game)
+				elseif tab == "lobby" and type(value) == "table" and type(value.action) == "string" then
+					-- Lobby-Station: die gedrückte Aktion (Portal, Einstellungen, Party, Tutorial) ist vorgewählt
+					call(Modules.lobby and Modules.lobby.OnNotice, { kind = "lobby", action = value.action })
 				end
 			end
 		elseif kind == "mini_notice" then
@@ -352,6 +433,9 @@ function MiniClient.Start(o)
 	-- Pro Frame: nur leichte Anzeige-Updates des sichtbaren Bereichs und der gegenseitige Ausschluss
 	local headerTimer = 0
 	RunService.Heartbeat:Connect(function(dt)
+		if Tutorial then
+			call(Tutorial.Step, dt) -- auch bei geschlossenem Panel (Marker, Sichtbarkeit; drosselt selbst auf 0,2 s)
+		end
 		if not UI.IsOpen then
 			return
 		end
