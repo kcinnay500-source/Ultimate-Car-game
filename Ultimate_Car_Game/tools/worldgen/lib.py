@@ -718,12 +718,13 @@ class Lib:
         _cf_el(props(at), "CFrame", to_cf(local_cf))
         return at
 
-    def spawn(self, parent, name, size, cf, color=TEAL):
+    def spawn(self, parent, name, size, cf, color=TEAL, enabled=True):
+        """SpawnLocation (unsichtbar). enabled=False: der Server entscheidet (Zonen-Spawns, PHASE4_CONTRACT §5)."""
         it = self.part(parent, name, size, cf, color, "SmoothPlastic", transparency=1, collide=False,
                        touch=False, query=False, cast_shadow=False, cls="SpawnLocation")
         p = props(it)
         _sub_el(p, "bool", "Neutral", "true")
-        _sub_el(p, "bool", "Enabled", "true")
+        _sub_el(p, "bool", "Enabled", "true" if enabled else "false")
         _sub_el(p, "int", "Duration", "0")
         _sub_el(p, "bool", "AllowTeamChangeOnTouch", "false")
         return it

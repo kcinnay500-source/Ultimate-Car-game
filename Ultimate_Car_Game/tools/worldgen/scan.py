@@ -1,5 +1,5 @@
-"""Liest einen gebauten Place (rbxlx) und liefert die BaseParts der Stadt als flache Datensätze.
-Gemeinsame Grundlage für checks.py und render.py (ohne Roblox)."""
+"""Liest einen gebauten Place (rbxlx) und liefert die BaseParts der Stadt (und der Zonen Lobby/Tycoon) als
+flache Datensätze. Gemeinsame Grundlage für checks.py und render.py (ohne Roblox)."""
 import math
 import sys
 import xml.etree.ElementTree as ET
@@ -91,6 +91,18 @@ def city_parts(tree):
     ws = workspace(tree)
     city = child(ws, "City")
     return city, walk(city, "City")
+
+
+ZONES = ("Lobby", "Tycoon")
+
+
+def zone_parts(tree, name):
+    """Eine Zone (Workspace.Lobby / Workspace.Tycoon, PHASE4_CONTRACT §1) als (Model, Parts) - wie city_parts."""
+    ws = workspace(tree)
+    zone = child(ws, name)
+    if zone is None:
+        return None, []
+    return zone, walk(zone, name)
 
 
 def plot_parts(tree, slots=None):

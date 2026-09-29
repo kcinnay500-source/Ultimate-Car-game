@@ -8,6 +8,8 @@ Station: City.Stations.<key>, unsichtbares verankertes Part 1x1x1, CanCollide fa
 Kind-Attachment "Arrival" 6 Studs auf der Spielerseite, 3,5 über dem Boden, Blick zum Anker.
 Arrival: City.Arrivals.<key>, unsichtbares Part 2x1x2 mit Mittelpunkt auf Bodenhöhe (CityService
 teleportiert nach CFrame * (0, Size.Y/2 + 3, 0) = Boden + 3,5), LookVector = Blickrichtung.
+build_station / build_arrival sind die eine Umsetzung des Vertrags; lobby.py und tycoon.py nutzen sie für
+Lobby.Stations / Tycoon.Stations bzw. Lobby.Arrivals / Tycoon.Arrivals (PHASE4_CONTRACT §1, §5, §8).
 """
 from .lib import CF, TEAL, yaw_towards
 
@@ -74,24 +76,38 @@ ARRIVALS = {
 CITY_SPAWN = (0, 0.1, -201)
 
 
+def build_station(lib, parent, key, tab, title, pos, side, floor, extra=None):
+    """Stationspart nach Vertrag (auch für die Zonen Lobby/Tycoon, lobby.py / tycoon.py): unsichtbar, verankert,
+    CanCollide false, Attribute MiniTab/MiniTitle/PlayerSide (+ extra), ProximityPrompt "Öffnen", Attachment
+    Arrival 6 Studs auf der Spielerseite in 3,5 über dem Boden (floor) mit Blick zum Anker."""
+    x, y, z = pos
+    part = lib.part(parent, key, (1, 1, 1), CF(x, y, z), TEAL, "SmoothPlastic", transparency=1, collide=False,
+                    touch=False, query=True, cast_shadow=False)
+    attrs = {"MiniTab": tab, "MiniTitle": title, "PlayerSide": side}
+    attrs.update(extra or {})
+    lib.attrs(part, **attrs)
+    lib.prompt(part, "Öffnen", title)
+    dx, dz = SIDE[side]
+    ax, az = dx * 6, dz * 6
+    ay = floor + 3.5 - y
+    look = CF.at(ax, ay, az, yaw_towards(-ax, -az))
+    lib.attachment(part, "Arrival", look)
+    return part
+
+
+def build_arrival(lib, parent, key, x, fy, z, look):
+    """Ankunftspunkt nach Vertrag: unsichtbares Part 2x1x2, Mitte auf Bodenhöhe fy, LookVector = look (N/S/E/W)."""
+    return lib.part(parent, key, (2, 1, 2), CF.at(x, fy, z, LOOK_YAW[look]), TEAL, "SmoothPlastic", transparency=1,
+                    collide=False, touch=False, query=False, cast_shadow=False, attrs={"Look": look})
+
+
 def build(city, lib, tree):
     st = lib.folder(city, "Stations")
     ar = lib.folder(city, "Arrivals")
     with lib.section("Stationen & Ankunft (unsichtbar)"):
-        for key, (tab, title, (x, y, z), side, floor, extra) in STATIONS.items():
-            part = lib.part(st, key, (1, 1, 1), CF(x, y, z), TEAL, "SmoothPlastic", transparency=1, collide=False,
-                            touch=False, query=True, cast_shadow=False)
-            attrs = {"MiniTab": tab, "MiniTitle": title, "PlayerSide": side}
-            attrs.update(extra)
-            lib.attrs(part, **attrs)
-            lib.prompt(part, "Öffnen", title)
-            dx, dz = SIDE[side]
-            ax, az = dx * 6, dz * 6
-            ay = floor + 3.5 - y
-            look = CF.at(ax, ay, az, yaw_towards(-ax, -az))
-            lib.attachment(part, "Arrival", look)
+        for key, (tab, title, pos, side, floor, extra) in STATIONS.items():
+            build_station(lib, st, key, tab, title, pos, side, floor, extra)
         for key, (x, fy, z, look) in ARRIVALS.items():
-            lib.part(ar, key, (2, 1, 2), CF.at(x, fy, z, LOOK_YAW[look]), TEAL, "SmoothPlastic", transparency=1,
-                     collide=False, touch=False, query=False, cast_shadow=False, attrs={"Look": look})
+            build_arrival(lib, ar, key, x, fy, z, look)
         sp = lib.spawn(city, "CitySpawn", (10, 0.2, 10), CF.at(CITY_SPAWN[0], CITY_SPAWN[1], CITY_SPAWN[2], 180))
     return sp
