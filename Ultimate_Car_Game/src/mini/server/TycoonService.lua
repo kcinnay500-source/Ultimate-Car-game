@@ -13,7 +13,7 @@
 --                                       anderer Modus -> Grundstück frei, eigene Angebote weg. Tick erkennt den Wechsel auch selbst.
 --   Tick(ms, d, now) -> changed         alle 0,5 s: TycoonRules.Tick, Anzeigen (höchstens 1×/s), Angebote ablaufen lassen
 --   OnLeave(ms)                         Grundstück frei, Angebote weg (der Durchlauf bleibt im Profil: Fortsetzen)
---   SnapshotFields(ms, d, now, full)    { tycoon = { active, run, slot, offers, bonus, runsDone, rebirths, boost, plots } }
+--   SnapshotFields(ms, d, now, full)    { tycoon = { active, run, slot, offers, bonus, runsDone, rebirths, boost, plots, players } }
 --   Buy(ms, d, id, now, source)         Kaufweg der Pads und Aktionen (Upgrade-Id oder Stufen-Pad-Id)
 --   Collect(ms, d, now)                 Sammel-Pad / tycoon_collect
 -- Welt: workspace.Tycoon.Plots.Slot_1..8 (Base, Sign, StartPad TycoonSlot=n, CollectPad TycoonPad="collect", Anchor, ButtonsRoot).
@@ -33,16 +33,23 @@ local TycoonService = {}
 local TY = GameConfig.Tycoon
 -- Zeiten (Sekunden); GameConfig.Tycoon darf sie überschreiben (PadDebounce, LabelInterval, SnapshotInterval, PlotRetry)
 local PAD_DEBOUNCE = TY.PadDebounce or 0.5
+local PAD_GRACE = TY.PadGrace or 1.5
+local PROMPT_DEBOUNCE = TY.PromptDebounce or 0.5
+local PROMPT_SLACK = TY.PromptRangeSlack or 4
 local LABEL_INTERVAL = TY.LabelInterval or 1
 local SNAPSHOT_INTERVAL = TY.SnapshotInterval or 1
 local PLOT_RETRY = TY.PlotRetry or 2
 local TOAST_THROTTLE = TY.PadToastSeconds or 2
 local OFFER_SWEEP = 1
+local TRADE_OFFER_INTERVAL = TY.TradeOfferInterval or 15
+local TRADE_DECLINE_BLOCK = TY.TradeDeclineBlock or 300
+local MARKET_INTERVAL = TY.MarketBroadcastInterval or 1
+local MAX_TRADE_PLAYERS = 8
 
 export type Plot = {
 	slot: number, ms: any, player: Player, model: Instance?, anchor: Instance?, root: Instance?,
 	stages: { Instance }, buttons: { [Instance]: string }, conns: { RBXScriptConnection }, padAt: { [Instance]: number },
-	toastAt: { [string]: number }, labelAt: number, noTemplates: boolean?,
+	toastAt: { [string]: number }, labelAt: number, noTemplates: boolean?, hidden: Instance?, builtAt: number?,
 }
 export type Offer = {
 	id: number, from: number, fromName: string, to: number, toName: string, item: string, qty: number, price: number,
@@ -55,16 +62,29 @@ TycoonService.Sessions = setmetatable({}, { __mode = "k" }) -- [Player] = ms
 TycoonService.Offers = {} :: { [number]: Offer } -- [id] = Angebot (serverlokal, nur Bargeld/Waren)
 local offerSerial = 0
 local lastSweep = -math.huge
+local lastMarketAt = -math.huge
+local marketPending = false
+local offerAt = {} :: { [string]: number } -- ["from:to"] = Zeit des letzten Angebots (Spam-Bremse je Paar)
+local declinedAt = {} :: { [string]: number } -- ["from:to"] = Zeit der Ablehnung durch den Empfänger
 
 local api -- MiniService-api: now, toast, notice, dirty, alive, changed
 local ctx -- GarageServer-Kontext (getSession, emit, now)
 local padConns = {} :: { RBXScriptConnection }
 local padsBound = false
 
+local function padColor(state: string, r: number, g: number, b: number): Color3
+	local c = type(TY.PadColors) == "table" and TY.PadColors[state] or nil
+	if type(c) == "table" and #c == 3 then
+		return Color3.fromRGB(c[1], c[2], c[3])
+	end
+	return Color3.fromRGB(r, g, b)
+end
+
+-- Pad-/Preisfarben je Zustand aus GameConfig.Tycoon.PadColors (der Client blitzt auf dieselben Farben zurück)
 local COLORS = {
-	owned = Color3.fromRGB(62, 217, 166),
-	ready = Color3.fromRGB(247, 176, 63),
-	locked = Color3.fromRGB(156, 170, 177),
+	owned = padColor("owned", 62, 217, 166),
+	ready = padColor("ready", 247, 176, 63),
+	locked = padColor("locked", 156, 170, 177),
 	free = Color3.fromRGB(247, 176, 63),
 	taken = Color3.fromRGB(47, 169, 163),
 }
@@ -89,6 +109,7 @@ local TEXT = {
 	maxStage = "Stufe 5 ist die höchste Stufe. Kauf alle Upgrades – dann Rebirth!",
 	abandoned = "Durchlauf abgebrochen. Am Start-Pad kannst du neu beginnen.",
 	noRunToAbandon = "Es läuft kein Durchlauf.",
+	transacting = "Dein Kauf wird gerade gespeichert – gleich geht's weiter.",
 	reason = {
 		no_run = "Starte erst einen Durchlauf am Start-Pad.",
 		unknown = "Diesen Kauf gibt es nicht.",
@@ -102,7 +123,11 @@ local TEXT = {
 	trade = {
 		item = "Diese Ware gibt es nicht.",
 		qty = "Menge: 1 bis " .. tostring(TY.TradeMaxQty) .. " Stück.",
-		price = "Der Preis muss mindestens " .. tostring(TY.TradeMinPrice) .. " Bargeld sein.",
+		price = "Der Preis muss mindestens " .. tostring(TY.TradeMinPrice) .. " und höchstens " .. tostring(TY.TradeMaxPrice or 999999999) .. " Bargeld sein.",
+		notWritable = "Dein Profil wird gerade nicht gespeichert – Handel nicht möglich.",
+		partnerNotWritable = "Das Profil deines Handelspartners wird gerade nicht gespeichert – Handel nicht möglich.",
+		wait = "Warte kurz, bevor du %s wieder ein Angebot schickst.",
+		blocked = "%s hat dein Angebot abgelehnt – versuch es später noch einmal.",
 		storage = "So viel hast du nicht im Lager.",
 		no_run = "Dafür brauchst du einen laufenden Durchlauf.",
 		partnerMissing = "Diesen Spieler gibt es hier nicht.",
@@ -164,6 +189,22 @@ local function alive(ms: any): boolean
 		return api.alive(ms) == true
 	end
 	return ms.player.Parent ~= nil
+end
+
+local function writable(ms: any): boolean
+	if not ms or not ms.p or not ms.p.profile then
+		return false
+	end
+	if api and type(api.writable) == "function" then
+		return api.writable(ms) == true
+	end
+	return ms.p.profile.writable == true
+end
+
+-- Robux-Kauf wird gerade gespeichert (Profiles.GrantCredits): keine Credits-Änderung außerhalb von request()
+local function transacting(ms: any): boolean
+	local prof = ms and ms.p and ms.p.profile
+	return prof ~= nil and prof.transacting == true
 end
 
 local function playerName(player: any): string
@@ -317,6 +358,12 @@ local function clearModels(plot: Plot)
 		end)
 	end
 	plot.stages = {}
+	if plot.hidden then
+		pcall(function()
+			plot.hidden:Destroy()
+		end)
+		plot.hidden = nil
+	end
 	if plot.root then
 		for _, c in ipairs(plot.root:GetChildren()) do
 			pcall(function()
@@ -326,11 +373,12 @@ local function clearModels(plot: Plot)
 	end
 end
 
--- Produzenten der gekauften Upgrades aus "Hidden" ins Modell holen (bleiben sonst unsichtbar in der Vorlage)
+-- Produzenten der gekauften Upgrades aus dem abgetrennten Ordner "Hidden" (plot.hidden, Parent nil: nicht repliziert,
+-- nicht gerendert, keine Physik) ins Stufenmodell hängen. Ein Ordner im Workspace würde nichts verbergen.
 local function revealProducers(plot: Plot, run: any)
 	for _, model in ipairs(plot.stages) do
 		local stage = model:GetAttribute("TycoonStage")
-		local hidden = model:FindFirstChild("Hidden")
+		local hidden = plot.hidden
 		if hidden and finite(stage) then
 			for k = 1, TY.UpgradesPerStage do
 				local id = run.building .. "_s" .. tostring(stage) .. "_u" .. tostring(k)
@@ -407,6 +455,10 @@ local function bindButtons(plot: Plot, model: Instance)
 			local id = part:GetAttribute("TycoonButton")
 			if type(id) == "string" and id ~= "" then
 				plot.buttons[part] = id
+				-- Name aus der Konfiguration (die Vorlage trägt nur einen Platzhalter; Umbenennungen in GameConfig greifen so)
+				local u = TY.UpgradeById[id]
+				local sid = TY.StageById[id]
+				setLabel(part:FindFirstChild("Label"), "Name", u and u.name or (sid and ("Stufe " .. tostring(sid.stage))) or nil)
 				local conn = part.Touched:Connect(function(hit)
 					onPadTouched(plot, part, hit)
 				end)
@@ -441,6 +493,12 @@ local function rebuild(plot: Plot, run: any?)
 				clone.Name = "Stage_" .. tostring(s)
 				clone:SetAttribute("TycoonStage", s)
 				clone:SetAttribute("TycoonSlot", plot.slot)
+				-- Ungekaufte Produzenten dürfen nicht ins Workspace: Ordner Hidden aus dem Klon lösen (Parent nil)
+				local hidden = clone:FindFirstChild("Hidden")
+				if hidden then
+					hidden.Parent = nil
+					plot.hidden = hidden
+				end
 				clone:PivotTo(pivot)
 				clone.Parent = plot.root or plot.model
 				table.insert(plot.stages, clone)
@@ -450,6 +508,13 @@ local function rebuild(plot: Plot, run: any?)
 	end)
 	if not ok then
 		warn("[Tycoon] Aufbau: " .. tostring(err))
+	end
+	-- Schonfrist: die Figur steht nach einem Stufenaufstieg schon auf dem nächsten Pad (gleiche Lage in jeder Stufe);
+	-- die erste Berührung darf erst nach PadGrace zählen, sonst folgt sofort „Kauf erst alle Upgrades …“
+	local t = now()
+	plot.builtAt = t
+	for part in pairs(plot.buttons) do
+		plot.padAt[part] = t + PAD_GRACE - PAD_DEBOUNCE
 	end
 	refreshVisuals(plot, run)
 end
@@ -567,8 +632,21 @@ local function updateBoard(list: { Offer })
 	setLabel(market, "Offers", #lines > 0 and table.concat(lines, "\n") or "Angebote der Spieler (Bargeld): noch keine")
 end
 
--- mini_notice { kind = "tycoon_market", offers } an alle Tycoon-Spieler, dazu die Tafel
+-- mini_notice { kind = "tycoon_market", offers } an alle Tycoon-Spieler, dazu die Tafel. Höchstens 1× je
+-- MarketBroadcastInterval: weitere Änderungen werden gemerkt und im nächsten Tick gebündelt gesendet.
+local sendMarket
 local function broadcastMarket()
+	local t = now()
+	if t - lastMarketAt < MARKET_INTERVAL then
+		marketPending = true
+		return
+	end
+	sendMarket(t)
+end
+
+sendMarket = function(t: number)
+	lastMarketAt = t
+	marketPending = false
 	local list = sortedOffers()
 	local views = marketViews(list)
 	for _, ms in pairs(TycoonService.Sessions) do
@@ -578,6 +656,42 @@ local function broadcastMarket()
 		end
 	end
 	pcall(updateBoard, list)
+end
+
+local function flushMarket(t: number)
+	if marketPending and t - lastMarketAt >= MARKET_INTERVAL then
+		sendMarket(t)
+	end
+end
+
+local function pairKey(from: number, to: number): string
+	return tostring(from) .. ":" .. tostring(to)
+end
+
+-- Spam-Bremse je Absender→Empfänger: Wartezeit nach dem letzten Angebot, Sperre nach einer Ablehnung.
+-- Rückgabe: ok, Grund ("wait" | "blocked")
+local function offerAllowed(from: number, to: number, t: number): (boolean, string)
+	local key = pairKey(from, to)
+	local declined = declinedAt[key]
+	if declined and t - declined < TRADE_DECLINE_BLOCK then
+		return false, "blocked"
+	end
+	local last = offerAt[key]
+	if last and t - last < TRADE_OFFER_INTERVAL then
+		return false, "wait"
+	end
+	return true, ""
+end
+
+local function forgetPair(userId: number)
+	for _, tbl in ipairs({ offerAt, declinedAt }) do
+		for key in pairs(tbl) do
+			local a, b = string.match(key, "^(%d+):(%d+)$")
+			if tonumber(a) == userId or tonumber(b) == userId then
+				tbl[key] = nil
+			end
+		end
+	end
 end
 
 local function tradeNotice(userId: number, event: string, o: Offer, extra: { [string]: any }?)
@@ -712,12 +826,14 @@ function TycoonService.Buy(ms: any, d: any, id: any, t: number?, source: string?
 		end
 		notice(ms, "tycoon_stage", { event = "upgrade", id = id, name = u.name, stage = run.stage, building = run.building, cost = cost })
 	else
-		local xp = MiniRules.GainXP(d, TycoonRules.XPForStage())
+		-- Stufen-XP nur einmal je Stufe seit dem letzten Rebirth (Abbruch+Neustart farmt sonst Level-Credits)
+		local stageXP = TycoonRules.ClaimStageXP(d)
+		local xp = stageXP > 0 and MiniRules.GainXP(d, stageXP) or { levels = 0 }
 		toast(ms, string.format(TEXT.stageUp, run.stage))
 		if plot then
 			rebuild(plot, run)
 		end
-		notice(ms, "tycoon_stage", { event = "stage", stage = run.stage, building = run.building, cost = cost, xp = TycoonRules.XPForStage(), levels = xp.levels })
+		notice(ms, "tycoon_stage", { event = "stage", stage = run.stage, building = run.building, cost = cost, xp = stageXP, levels = xp.levels })
 	end
 	if source == "pad" and d.money ~= money and api and type(api.changed) == "function" then
 		api.changed(ms) -- Level-Bonus außerhalb von request(): Revision + Push
@@ -772,6 +888,11 @@ onPadTouched = function(plot: Plot, part: Instance, hit: any, padId: string?)
 			return
 		end
 		local t = now()
+		if transacting(ms) then
+			-- wie Mini.Handle: während GrantCredits speichert, darf hier kein Level-Bonus entstehen (Snapshot würde ihn löschen)
+			throttledToast(ms, plot, "transacting", TEXT.transacting, t)
+			return
+		end
 		local last = plot.padAt[part]
 		if last and t - last < PAD_DEBOUNCE then
 			return
@@ -802,9 +923,35 @@ local function sessionOf(player: Player): any
 	return nil
 end
 
-local function onStartPrompt(slot: number, player: Player)
+-- Prompt-Auslösungen kommen ohne request()-Budget: je Spieler höchstens alle PromptDebounce s, nur in Reichweite
+-- (der Server erzwingt MaxActivationDistance nicht selbst) und nie während eines Robux-Kaufs
+local function promptAllowed(ms: any, prompt: Instance?, pad: Instance?): boolean
+	if not ms or transacting(ms) then
+		return false
+	end
+	local t = now()
+	if t - (ms.tycoonPromptAt or -math.huge) < PROMPT_DEBOUNCE then
+		return false
+	end
+	ms.tycoonPromptAt = t
+	if pad and pad:IsA("BasePart") then
+		local ch = ms.player.Character
+		local root = ch and ch:FindFirstChild("HumanoidRootPart")
+		local humanoid = ch and ch:FindFirstChildOfClass("Humanoid")
+		if not root or not humanoid or humanoid.Health <= 0 then
+			return false
+		end
+		local reach = (prompt and prompt:IsA("ProximityPrompt") and prompt.MaxActivationDistance or 10) + PROMPT_SLACK
+		if (root.Position - pad.Position).Magnitude > reach then
+			return false
+		end
+	end
+	return true
+end
+
+local function onStartPrompt(slot: number, player: Player, prompt: Instance?, pad: Instance?)
 	local ms = sessionOf(player)
-	if not ms then
+	if not ms or not promptAllowed(ms, prompt, pad) then
 		return
 	end
 	local d = dataOf(ms)
@@ -837,9 +984,9 @@ local function onStartPrompt(slot: number, player: Player)
 	dirty(ms)
 end
 
-local function onCollectPrompt(slot: number, player: Player)
+local function onCollectPrompt(slot: number, player: Player, prompt: Instance?, pad: Instance?)
 	local ms = sessionOf(player)
-	if not ms or not inTycoon(ms) then
+	if not ms or not inTycoon(ms) or not promptAllowed(ms, prompt, pad) then
 		return
 	end
 	if TycoonService.SlotOf[player] ~= slot then
@@ -866,7 +1013,7 @@ local function bindPads()
 			local prompt = start and start:FindFirstChildOfClass("ProximityPrompt")
 			if prompt then
 				table.insert(padConns, prompt.Triggered:Connect(function(player)
-					local ok, err = pcall(onStartPrompt, slot, player)
+					local ok, err = pcall(onStartPrompt, slot, player, prompt, start)
 					if not ok then
 						warn("[Tycoon] Start-Pad: " .. tostring(err))
 					end
@@ -876,7 +1023,7 @@ local function bindPads()
 			local cprompt = collect and collect:FindFirstChildOfClass("ProximityPrompt")
 			if cprompt then
 				table.insert(padConns, cprompt.Triggered:Connect(function(player)
-					local ok, err = pcall(onCollectPrompt, slot, player)
+					local ok, err = pcall(onCollectPrompt, slot, player, cprompt, collect)
 					if not ok then
 						warn("[Tycoon] Sammel-Pad: " .. tostring(err))
 					end
@@ -1018,6 +1165,10 @@ local function tradeOffer(ms: any, data: any, d: any, t: number)
 		toast(ms, TEXT.trade.no_run)
 		return
 	end
+	if not writable(ms) then
+		toast(ms, TEXT.trade.notWritable)
+		return
+	end
 	local qty = finite(data.qty) and math.floor(data.qty) or 0
 	local price = finite(data.price) and math.floor(data.price) or 0
 	local ok, reason = TycoonRules.TradeValid(run, data.item, qty, price)
@@ -1040,10 +1191,21 @@ local function tradeOffer(ms: any, data: any, d: any, t: number)
 		toast(ms, TEXT.trade.partnerNotTycoon)
 		return
 	end
+	if not writable(other) then
+		toast(ms, TEXT.trade.partnerNotWritable)
+		return
+	end
 	if openCount(ms.player.UserId) >= TY.TradeMaxOpen then
 		toast(ms, TEXT.trade.tooMany)
 		return
 	end
+	local allowed, why = offerAllowed(ms.player.UserId, to, t)
+	if not allowed then
+		-- kein Toast an den Empfänger, kein Marktplatz-Hinweis: der Absender wartet
+		toast(ms, string.format(why == "blocked" and TEXT.trade.blocked or TEXT.trade.wait, playerName(other.player)))
+		return
+	end
+	offerAt[pairKey(ms.player.UserId, to)] = t
 	offerSerial += 1
 	local offer: Offer = {
 		id = offerSerial, from = ms.player.UserId, fromName = playerName(ms.player), to = to, toName = playerName(other.player),
@@ -1092,6 +1254,20 @@ local function tradeAccept(ms: any, data: any, d: any, t: number)
 		toast(ms, TEXT.trade.no_run)
 		return
 	end
+	-- Beide Profile müssen speicherbar sein, sonst würde Bargeld/Ware nur auf einer Seite gesichert (Verdopplung)
+	if not writable(ms) then
+		toast(ms, TEXT.trade.notWritable)
+		return
+	end
+	if not writable(seller) then
+		removeOffer(offer, "cancelled")
+		toast(ms, TEXT.trade.partnerNotWritable)
+		toast(seller, TEXT.trade.notWritable)
+		broadcastMarket()
+		return
+	end
+	-- der Empfänger hat gehandelt: die Paar-Wartezeit ist damit erledigt
+	offerAt[pairKey(offer.from, offer.to)] = nil
 	-- Übergabe in einem Schritt (Lager und Bargeld werden jetzt erneut geprüft)
 	local ok, reason = TycoonRules.ApplyTrade(sellerRun, buyerRun, offer.item, offer.qty, offer.price)
 	if not ok then
@@ -1127,8 +1303,13 @@ local function tradeCancel(ms: any, data: any)
 		toast(ms, TEXT.trade.notForYou)
 		return
 	end
-	removeOffer(offer, offer.from == me and "cancelled" or "declined")
-	toast(ms, offer.from == me and TEXT.trade.cancelled or TEXT.trade.declined)
+	local mine = offer.from == me
+	removeOffer(offer, mine and "cancelled" or "declined")
+	if not mine then
+		-- Ablehnung: der Absender darf diesem Empfänger erst nach TradeDeclineBlock wieder anbieten
+		declinedAt[pairKey(offer.from, offer.to)] = now()
+	end
+	toast(ms, mine and TEXT.trade.cancelled or TEXT.trade.declined)
 	broadcastMarket()
 end
 
@@ -1177,6 +1358,7 @@ end
 function TycoonService.Tick(ms: any, d: any, t: number?): boolean
 	t = finite(t) and t or now()
 	sweepOffers(t)
+	flushMarket(t)
 	local active = inTycoon(ms)
 	if active ~= (ms.tycoonActive == true) then
 		if active then
@@ -1203,6 +1385,9 @@ function TycoonService.Tick(ms: any, d: any, t: number?): boolean
 	if not run then
 		return false
 	end
+	if ms.player and not writable(ms) and next(TycoonService.Offers) ~= nil then
+		dropOffersOf(ms.player.UserId, "cancelled") -- Profil nicht mehr speicherbar: offene Angebote weg
+	end
 	TycoonRules.Tick(run, t)
 	local changed = false
 	if plot and t - plot.labelAt >= LABEL_INTERVAL then
@@ -1223,6 +1408,7 @@ function TycoonService.OnLeave(ms: any)
 	leave(ms)
 	if ms.player then
 		TycoonService.Sessions[ms.player] = nil
+		forgetPair(ms.player.UserId)
 	end
 end
 
@@ -1235,6 +1421,20 @@ function TycoonService.SnapshotFields(ms: any, d: any, t: number?, full: boolean
 		local plot = TycoonService.Plots[s.slot]
 		plots[s.slot] = plot and playerName(plot.player) or false
 	end
+	-- Handelspartner: nur Spieler im Modus tycoon mit laufendem Durchlauf (ohne mich), damit die Spielerwahl passt
+	local players = {}
+	local me = ms and ms.player or nil
+	for player, other in pairs(TycoonService.Sessions) do
+		if player ~= me and alive(other) and inTycoon(other) and runOf(dataOf(other)) then
+			table.insert(players, { userId = player.UserId, name = playerName(player) })
+		end
+	end
+	table.sort(players, function(a, b)
+		return a.name < b.name or (a.name == b.name and a.userId < b.userId)
+	end)
+	while #players > MAX_TRADE_PLAYERS do
+		table.remove(players)
+	end
 	return {
 		tycoon = {
 			active = inTycoon(ms),
@@ -1246,6 +1446,7 @@ function TycoonService.SnapshotFields(ms: any, d: any, t: number?, full: boolean
 			rebirths = summary.rebirths,
 			boost = summary.boost,
 			plots = plots,
+			players = players,
 			tradeTTL = TY.TradeTTL,
 		},
 	}

@@ -36,7 +36,7 @@ return {
 		{path="tools/worldgen/scan.py",size=4429,hash="40a46d932ba1b9e3"},
 		{path="tools/worldgen/test_vehicles.py",size=8633,hash="1a630b652a5b5e19"},
 		{path="tools/worldgen/tycoon.py",size=17618,hash="5078507e234b706b"},
-		{path="tools/worldgen/tycoon_templates.py",size=80579,hash="489744123b47242d"},
+		{path="tools/worldgen/tycoon_templates.py",size=80781,hash="3d526ac90c068aba"},
 		{path="tools/worldgen/vehicles.py",size=6908,hash="06a17ef73aeac52f"}
 	},
 	worldgen = {"__init__.py","checks.py","contract.py","drive.py","ground_roads.py","lib.py","lobby.py","plot_slots.json","plots.py","render.py","scan.py","test_vehicles.py","tycoon.py","tycoon_templates.py","vehicles.py"},

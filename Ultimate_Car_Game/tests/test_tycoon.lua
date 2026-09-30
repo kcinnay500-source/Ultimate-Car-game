@@ -157,8 +157,8 @@ local function setup(H, opts)
 			ms.dirty = true
 		end,
 		worldChanged = function() end,
-		writable = function()
-			return false
+		writable = function(ms)
+			return ms.p.profile.writable == true
 		end,
 		alive = function(ms)
 			return ms ~= nil and ms.player.Parent ~= nil
@@ -390,7 +390,19 @@ return {
 		end
 		T.eq(nButtons, GC.Tycoon.UpgradesPerStage + 1, "4 Upgrade-Pads + Stufen-Pad gebunden")
 		T.check(stage1 and stage1:FindFirstChild("Producer_1") == nil, "Produzent noch versteckt")
-		T.check(stage1 and stage1.Hidden:FindFirstChild("Producer_1") ~= nil, "Produzent in Hidden")
+		-- Ein Ordner verbirgt im Workspace nichts: Hidden ist aus dem Klon gelöst (Parent nil) und hängt am Grundstück
+		T.check(stage1 and stage1:FindFirstChild("Hidden") == nil, "kein Ordner Hidden im Stufenmodell")
+		T.check(plot.hidden ~= nil and plot.hidden.Parent == nil and plot.hidden:FindFirstChild("Producer_1") ~= nil, "Produzent im abgetrennten Hidden (Parent nil)")
+		local leaked = false
+		for _, x in ipairs(g:Find("Workspace.Tycoon.Plots"):GetDescendants()) do
+			if x.Name == "Hidden" or (x.Name:sub(1, 9) == "Producer_" and x.Name ~= "Producer_0") then
+				leaked = true
+			end
+		end
+		T.check(not leaked, "kein Hidden/Producer_k unter Workspace.Tycoon.Plots vor dem Kauf")
+		-- Beschriftung „Name“ kommt aus GameConfig (die Vorlage trägt nur einen Platzhalter)
+		local stagePad = S.pad(a, "werkstatt_stage2")
+		T.eq(stagePad and S.labelText(stagePad, "Name"), "Stufe 2", "Stufen-Pad Name-Label")
 		local cashLabel = stage1 and stage1.CashDisplay.CashGui.Bargeld
 		T.check(cashLabel and cashLabel.Text:find("Bargeld " .. GC.Tycoon.StartCash, 1, true) ~= nil, "CashDisplay zeigt Bargeld: " .. tostring(cashLabel and cashLabel.Text))
 		-- Beschriftung: u1 (Produzent, 60 s Wartezeit) ist mit 50 Bargeld nicht bezahlbar -> Preis grau
@@ -458,8 +470,14 @@ return {
 		local run = S.run(a)
 		local u1 = GC.Tycoon.Buildings.produktion.Stages[1].Upgrades[1]
 		local pad = S.pad(a, u1.id)
-		-- ohne Bargeld: Touched -> Toast (gedrosselt), kein Kauf
+		T.eq(S.labelText(pad, "Name"), u1.name, "Name-Label aus GameConfig")
+		-- Schonfrist nach dem Aufbau (PadGrace): die erste Berührung direkt nach dem Bau zählt nicht
 		local mark = g:Mark()
+		S.touch(a, pad)
+		T.eq(#g:Toasts(a, mark), 0, "innerhalb PadGrace keine Reaktion")
+		g:Advance(GC.Tycoon.PadGrace)
+		-- ohne Bargeld: Touched -> Toast (gedrosselt), kein Kauf
+		mark = g:Mark()
 		S.touch(a, pad)
 		T.eq(run.upgrades[u1.id], nil, "zu wenig Bargeld: kein Kauf")
 		T.check(g:HasToast(a, "Nicht genug Bargeld", mark), "Toast zu wenig Bargeld")
@@ -487,7 +505,7 @@ return {
 		T.eq(pad:GetAttribute("TycoonState"), "owned", "Pad-Zustand owned")
 		local stage1 = S.plot(a).stages[1]
 		T.check(stage1:FindFirstChild("Producer_1") ~= nil, "Produzent sichtbar (aus Hidden geholt)")
-		T.check(stage1.Hidden:FindFirstChild("Producer_1") == nil, "Produzent nicht mehr in Hidden")
+		T.check(S.plot(a).hidden:FindFirstChild("Producer_1") == nil, "Produzent nicht mehr in Hidden")
 		local ev = g:Notices(a, "tycoon_stage", mark)[1]
 		T.check(ev ~= nil and ev.event == "upgrade" and ev.id == u1.id, "Hinweis upgrade")
 		-- Entprellung: zweite Berührung sofort danach (schon gekauft) -> Toast „schon gekauft“ erst nach 0,5 s
@@ -520,6 +538,17 @@ return {
 		-- Stufe-1-Pads (auch das alte Stufen-Pad) sind mit dem Modell der Stufe 1 abgebaut; das neue Stufen-Pad zeigt Stufe 3
 		T.eq(S.pad(a, "produktion_stage2"), nil, "altes Stufen-Pad abgebaut")
 		T.check(S.pad(a, "produktion_stage3") ~= nil, "Stufen-Pad zu Stufe 3 gebunden")
+		-- Die Figur steht nach dem Stufenaufstieg auf dem neuen Stufen-Pad (gleiche Lage): innerhalb PadGrace kein
+		-- „Kauf erst alle Upgrades …“, danach schon
+		local hidden2 = S.plot(a).hidden
+		T.check(hidden2 ~= nil and hidden2.Parent == nil and hidden2:FindFirstChild("Producer_1") ~= nil, "Hidden der Stufe 2 abgetrennt")
+		mark = g:Mark()
+		S.touch(a, S.pad(a, "produktion_stage3"))
+		T.eq(#g:Toasts(a, mark), 0, "neues Stufen-Pad direkt nach dem Aufbau: kein Toast")
+		g:Advance(GC.Tycoon.PadGrace)
+		S.touch(a, S.pad(a, "produktion_stage3"))
+		T.check(g:HasToast(a, "alle Upgrades", mark), "nach PadGrace: Toast Stufe unvollständig")
+		g:Advance(GC.Tycoon.PadToastSeconds + 0.1)
 		-- Stufen-Pad zu früh: Stufe 3 erst mit allen Upgrades der Stufe 2
 		run.cash = 1e9
 		mark = g:Mark()
@@ -686,6 +715,7 @@ return {
 		local sumItems = (runA.storage.reifen or 0) + (runB.storage.reifen or 0)
 		mark = g:Mark()
 		S.act(b, "tycoon_trade_accept", { id = id })
+		S.tick(GC.Tycoon.MarketBroadcastInterval) -- Marktplatz-Hinweise werden gebündelt (höchstens 1×/s)
 		T.eq(TS.Offers[id], nil, "Angebot nach Annahme weg")
 		T.eq(runA.storage.reifen, 15, "Anna 15 Reifen")
 		T.eq(runB.storage.reifen, 5, "Ben 5 Reifen")
@@ -721,7 +751,7 @@ return {
 		S.act(a, "tycoon_trade_cancel", { id = id })
 		T.eq(TS.Offers[id], nil, "zurückgezogen")
 		T.check(g:HasToast(a, "zurückgezogen"), "Toast zurückgezogen")
-		g:Advance(0.5)
+		g:Advance(GC.Tycoon.TradeOfferInterval) -- je Paar erst nach TradeOfferInterval wieder
 		S.act(a, "tycoon_trade_offer", { to = 5202, item = "reifen", qty = 2, price = 50 })
 		for k in pairs(TS.Offers) do
 			id = k
@@ -731,9 +761,10 @@ return {
 		T.check(g:HasToast(b, "abgelehnt"), "Toast abgelehnt")
 		S.act(c, "tycoon_trade_cancel", { id = 12345 })
 		T.check(g:HasToast(c, "nicht mehr"), "unbekannte Id")
-		-- Höchstens TradeMaxOpen offene Angebote
+		-- Höchstens TradeMaxOpen offene Angebote (nach der Ablehnung erst nach TradeDeclineBlock, je Angebot TradeOfferInterval)
+		g:Advance(GC.Tycoon.TradeDeclineBlock)
 		for i = 1, GC.Tycoon.TradeMaxOpen + 1 do
-			g:Advance(0.5)
+			g:Advance(GC.Tycoon.TradeOfferInterval)
 			S.act(a, "tycoon_trade_offer", { to = 5202, item = "reifen", qty = 1, price = 5 })
 		end
 		local n = 0
@@ -764,6 +795,205 @@ return {
 		S.act(d2, "tycoon_trade_accept", { id = id })
 		T.check(g:HasToast(d2, "nicht mehr"), "Dana: Angebot weg")
 		noErrors(T, g, "Handel")
+	end },
+
+	{ "Handel: Spam-Bremse je Paar (Angebot/Rücknahme-Schleife: ein Toast), Sperre nach Ablehnung, Marktplatz-Hinweis gebündelt, nicht speicherbare Profile handeln nicht, Spielerliste im Snapshot", function(T, H)
+		local S = setup(H)
+		local g, GC, TS = S.g, S.GC, S.TS
+		local a, msA = S.join(5301, "Anna")
+		local b, msB = S.join(5302, "Ben")
+		local c, msC = S.join(5303, "Cem")
+		S.act(a, "tycoon_choose", { building = "werkstatt" })
+		S.act(b, "tycoon_choose", { building = "autohaus" })
+		local runA, runB = S.run(a), S.run(b)
+		runA.storage.schrott = 10
+		runB.cash = 1000
+		-- Spielerliste: nur Tycoon-Spieler mit Durchlauf, ohne mich (Cem hat keinen Durchlauf)
+		local players = S.snapshot(a).players
+		T.eq(#players, 1, "ein Handelspartner im Snapshot")
+		T.check(players[1] and players[1].userId == 5302 and players[1].name == "Ben", "Ben in der Spielerliste")
+		T.eq(#S.snapshot(b).players, 1, "Ben sieht Anna")
+		T.eq(#S.snapshot(c).players, 2, "Cem sieht beide")
+		-- Angebot/Rücknahme dreimal in 3 s: Ben bekommt genau einen Toast, kein Marktplatz-Spam
+		local mark = g:Mark()
+		local lastId = nil
+		for i = 1, 3 do
+			S.act(a, "tycoon_trade_offer", { to = 5302, item = "schrott", qty = 1, price = 1 })
+			for k in pairs(TS.Offers) do
+				lastId = k
+			end
+			if next(TS.Offers) then
+				S.act(a, "tycoon_trade_cancel", { id = lastId })
+			end
+			g:Advance(1)
+		end
+		local toastsB = 0
+		for _, t in ipairs(g:Toasts(b, mark)) do
+			if type(t) == "string" and t:find("bietet dir", 1, true) then
+				toastsB += 1
+			end
+		end
+		T.eq(toastsB, 1, "Ben: genau ein Angebots-Toast")
+		T.check(g:HasToast(a, "Warte kurz", mark), "Anna: Warte kurz")
+		T.check(#g:Notices(c, "tycoon_market", mark) <= 3, "Marktplatz-Hinweise gebündelt (≤ 1/s): " .. tostring(#g:Notices(c, "tycoon_market", mark)))
+		-- nach TradeOfferInterval wieder ein Angebot; Ben lehnt ab -> Sperre für TradeDeclineBlock
+		g:Advance(GC.Tycoon.TradeOfferInterval)
+		mark = g:Mark()
+		S.act(a, "tycoon_trade_offer", { to = 5302, item = "schrott", qty = 1, price = 1 })
+		T.check(next(TS.Offers) ~= nil, "Angebot nach der Wartezeit")
+		for k in pairs(TS.Offers) do
+			lastId = k
+		end
+		S.act(b, "tycoon_trade_cancel", { id = lastId })
+		T.check(g:HasToast(b, "abgelehnt", mark), "Ben lehnt ab")
+		g:Advance(GC.Tycoon.TradeOfferInterval + 1)
+		mark = g:Mark()
+		S.act(a, "tycoon_trade_offer", { to = 5302, item = "schrott", qty = 1, price = 1 })
+		T.eq(next(TS.Offers), nil, "nach Ablehnung gesperrt")
+		T.check(g:HasToast(a, "abgelehnt", mark), "Anna: Hinweis auf die Ablehnung")
+		T.eq(#g:Toasts(b, mark), 0, "Ben bekommt nichts")
+		g:Advance(GC.Tycoon.TradeDeclineBlock)
+		S.act(a, "tycoon_trade_offer", { to = 5302, item = "schrott", qty = 1, price = 1 })
+		T.check(next(TS.Offers) ~= nil, "nach TradeDeclineBlock wieder erlaubt")
+		for k in pairs(TS.Offers) do
+			lastId = k
+		end
+		-- Käufer nicht speicherbar: Annahme verweigert, Angebot bleibt; Verkäufer nicht speicherbar: Angebot weg
+		msB.p.profile.writable = false
+		mark = g:Mark()
+		S.act(b, "tycoon_trade_accept", { id = lastId })
+		T.check(g:HasToast(b, "nicht gespeichert", mark), "Käufer nicht speicherbar")
+		T.check(TS.Offers[lastId] ~= nil, "Angebot bleibt")
+		T.eq(runB.storage.schrott, nil, "nichts übergeben")
+		-- im Tick verliert Ben (nicht speicherbar) seine Angebote als Empfänger
+		S.tick(1)
+		T.eq(TS.Offers[lastId], nil, "Angebote eines nicht speicherbaren Spielers im Tick entfernt")
+		msB.p.profile.writable = true
+		S.act(b, "tycoon_trade_offer", { to = 5301, item = "lack", qty = 1, price = 1 })
+		T.check(g:HasToast(b, "nicht im Lager"), "Ben wieder speicherbar (normale Prüfung)")
+		msA.p.profile.writable = false
+		mark = g:Mark()
+		g:Advance(GC.Tycoon.TradeOfferInterval)
+		S.act(a, "tycoon_trade_offer", { to = 5302, item = "schrott", qty = 1, price = 1 })
+		T.check(g:HasToast(a, "nicht gespeichert", mark), "nicht speicherbarer Verkäufer bietet nicht an")
+		T.eq(next(TS.Offers), nil, "kein Angebot")
+		msA.p.profile.writable = true
+		-- Preisdeckel TradeMaxPrice
+		g:Advance(GC.Tycoon.TradeOfferInterval)
+		mark = g:Mark()
+		S.act(a, "tycoon_trade_offer", { to = 5302, item = "schrott", qty = 1, price = GC.Tycoon.TradeMaxPrice + 1 })
+		T.eq(next(TS.Offers), nil, "über TradeMaxPrice kein Angebot")
+		T.check(g:HasToast(a, "höchstens", mark), "Toast Preisdeckel")
+		noErrors(T, g, "Handel-Spam")
+	end },
+
+	{ "Stufen-XP nur einmal je Stufe seit dem letzten Rebirth (Abbruch + Neustart farmt keine Level-Credits); Rebirth setzt zurück", function(T, H)
+		local S = setup(H)
+		local g, GC, TR = S.g, S.GC, S.TR
+		local a, _, dA = S.join(5401, "Anna")
+		S.act(a, "tycoon_choose", { building = "werkstatt" })
+		local xp0 = dA.xp
+		buyStage(S, T, a, false)
+		T.eq(S.run(a).stage, 2, "Stufe 2")
+		T.eq(dA.games.tycoon.xpStage, 2, "xpStage 2")
+		local gained = dA.xp - xp0
+		T.check(gained > 0 or dA.level > 1, "Stufen-XP beim ersten Aufstieg")
+		-- Abbruch + Neustart + Stufe 2: keine XP mehr
+		g:Advance(2.1)
+		S.act(a, "tycoon_abandon")
+		T.eq(dA.games.tycoon.xpStage, 2, "Abbruch setzt xpStage nicht zurück")
+		g:Advance(1.1)
+		S.act(a, "tycoon_choose", { building = "autohaus" })
+		local xp1, lvl1 = dA.xp, dA.level
+		local mark = g:Mark()
+		buyStage(S, T, a, false)
+		T.eq(S.run(a).stage, 2, "wieder Stufe 2")
+		T.check(dA.xp == xp1 and dA.level == lvl1, "keine zweiten Stufen-XP nach Abbruch")
+		local ev = nil
+		for _, n in ipairs(g:Notices(a, "tycoon_stage", mark)) do
+			if n.event == "stage" then
+				ev = n
+			end
+		end
+		T.check(ev ~= nil and ev.xp == 0, "Hinweis stage mit xp 0")
+		-- Stufe 3 bringt wieder XP (höher als bisher)
+		local xp2, lvl2 = dA.xp, dA.level
+		buyStage(S, T, a, false)
+		T.eq(S.run(a).stage, 3, "Stufe 3")
+		T.check(dA.xp > xp2 or dA.level > lvl2, "Stufe 3: XP")
+		T.eq(dA.games.tycoon.xpStage, 3, "xpStage 3")
+		-- bis 5, Rebirth -> xpStage 0, neuer Durchlauf bringt wieder Stufen-XP
+		while S.run(a).stage < GC.Tycoon.MaxStage do
+			buyStage(S, T, a, false)
+		end
+		buyStage(S, T, a, false)
+		g:Advance(2.1)
+		S.act(a, "tycoon_rebirth")
+		T.eq(S.run(a), nil, "Rebirth")
+		T.eq(dA.games.tycoon.xpStage, 0, "Rebirth setzt xpStage zurück")
+		g:Advance(1.1)
+		S.act(a, "tycoon_choose", { building = "werkstatt" })
+		local xp3, lvl3 = dA.xp, dA.level
+		buyStage(S, T, a, false)
+		T.check(dA.xp > xp3 or dA.level > lvl3, "nach Rebirth wieder Stufen-XP")
+		-- Laden: xpStage aus dem Datensatz (Whitelist 0..MaxStage)
+		local t = TR.Load({ runsDone = {}, rebirths = 0, xpStage = 99 }, dA, g:Now())
+		T.eq(t.xpStage, GC.Tycoon.MaxStage, "xpStage beim Laden gedeckelt")
+		T.eq(TR.Load(nil, dA, g:Now()).xpStage, 0, "xpStage Standard 0")
+		noErrors(T, g, "XP je Stufe")
+	end },
+
+	{ "Pads und Prompts während eines Robux-Kaufs (transacting): keine Änderung; Prompt-Drossel je Spieler und Reichweite", function(T, H)
+		local S = setup(H)
+		local g, GC = S.g, S.GC
+		local a, msA = S.join(5501, "Anna")
+		S.act(a, "tycoon_choose", { building = "werkstatt" })
+		local run = S.run(a)
+		local u1 = GC.Tycoon.Buildings.werkstatt.Stages[1].Upgrades[1]
+		local pad = S.pad(a, u1.id)
+		run.cash = u1.cost + 5
+		g:Advance(GC.Tycoon.PadGrace)
+		-- transacting: Pad ohne Wirkung (Toast), Sammel-/Start-Prompt ohne Wirkung
+		msA.p.profile.transacting = true
+		local mark = g:Mark()
+		S.touch(a, pad)
+		T.eq(run.upgrades[u1.id], nil, "transacting: kein Kauf über das Pad")
+		T.check(g:HasToast(a, "gespeichert", mark), "Toast: Kauf wird gespeichert")
+		run.container = 40
+		local collect = S.slotModel(1):FindFirstChild("CollectPad")
+		S.prompt(a, collect)
+		T.eq(run.container, 40, "transacting: Sammel-Prompt ohne Wirkung")
+		local start = S.slotModel(1):FindFirstChild("StartPad")
+		mark = g:Mark()
+		S.prompt(a, start)
+		T.eq(#g:Notices(a, "tycoon_choose", mark), 0, "transacting: Start-Prompt ohne Hinweis")
+		msA.p.profile.transacting = false
+		-- Prompt-Drossel: zwei Auslösungen kurz nacheinander -> ein Hinweis
+		g:Advance(GC.Tycoon.PromptDebounce + 0.1)
+		mark = g:Mark()
+		S.prompt(a, start)
+		S.prompt(a, start)
+		T.eq(#g:Notices(a, "tycoon_choose", mark), 1, "Prompt-Drossel: ein Hinweis")
+		g:Advance(GC.Tycoon.PromptDebounce + 0.1)
+		S.prompt(a, start)
+		T.eq(#g:Notices(a, "tycoon_choose", mark), 2, "nach PromptDebounce wieder")
+		-- Reichweite: Prompt aus der Ferne (Exploit) ohne Wirkung
+		g:Advance(GC.Tycoon.PromptDebounce + 0.1)
+		local root = g:Root(a)
+		root.CFrame = collect.CFrame * CFrame.new(0, 3, 200)
+		local cashBefore = run.cash
+		g:Trigger(a, collect:FindFirstChildOfClass("ProximityPrompt"))
+		g:Flush()
+		T.eq(run.cash, cashBefore, "Sammel-Prompt aus 200 Studs: nichts gesammelt")
+		T.check(run.container >= 40, "Behälter bleibt gefüllt")
+		g:Advance(GC.Tycoon.PromptDebounce + 0.1)
+		S.prompt(a, collect)
+		T.check(run.cash > cashBefore and run.container < 1, "in Reichweite: gesammelt")
+		-- danach kauft das Pad normal
+		g:Advance(1)
+		S.touch(a, pad)
+		T.eq(run.upgrades[u1.id], 1, "ohne transacting: Kauf")
+		noErrors(T, g, "transacting/Prompts")
 	end },
 
 	{ "Speichern und Fortsetzen: Verlassen mitten im Durchlauf, Wiederkommen baut Stufen und Produzenten wieder auf (Offline zählt nicht), Slot wird neu vergeben", function(T, H)

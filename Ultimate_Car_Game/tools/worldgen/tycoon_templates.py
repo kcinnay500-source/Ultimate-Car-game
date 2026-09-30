@@ -52,7 +52,9 @@ ANIM_KINDS = {"press", "turntable", "door", "neon", "flag", "beacon", "pylon"}
 TYCOON_ANIM_KINDS = {"conveyor", "stamp"}
 MOVING = {"press", "turntable", "door", "flag", "conveyor", "stamp"}
 
-# Kopie der Upgrade-Namen aus GameConfig.Tycoon (flavour) - Platzhalter für Label "Name"
+# Kopie der Upgrade-Namen aus GameConfig.Tycoon (flavour) - nur Platzhalter für Label "Name": TycoonService.bindButtons
+# schreibt den Namen zur Laufzeit aus GameConfig.Tycoon.UpgradeById/StageById; tests/test_tycoon_rules.lua prüft die Fixture
+# (Ids, Namen, TycoonKind) gegen GameConfig.
 NAMES = {
     "werkstatt": {
         "producer": ["Hebebühne", "Zweite Bühne", "Motorenprüfstand", "Lackierkabine", "Meisterhalle"],

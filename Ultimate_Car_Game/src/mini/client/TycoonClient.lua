@@ -39,10 +39,23 @@ TycoonClient.Cull = 300
 TycoonClient.PadDebounce = 0.5
 TycoonClient.Kinds = { conveyor = true, stamp = true }
 
-local MiniLocale
+local MiniLocale, GameConfig
 pcall(function()
-	MiniLocale = require(ReplicatedStorage:WaitForChild("GarageShared", 10):WaitForChild("Mini", 10):WaitForChild("MiniLocale", 10))
+	local Mini = ReplicatedStorage:WaitForChild("GarageShared", 10):WaitForChild("Mini", 10)
+	MiniLocale = require(Mini:WaitForChild("MiniLocale", 10))
+	GameConfig = require(Mini:WaitForChild("GameConfig", 10))
 end)
+
+-- Pad-/Preisfarben je Server-Zustand (Attribut TycoonState: locked | ready | owned), dieselbe Tabelle wie TycoonService
+local STATE_COLORS = {}
+do
+	local cfg = GameConfig and GameConfig.Tycoon and GameConfig.Tycoon.PadColors or nil
+	local fallback = { owned = { 62, 217, 166 }, ready = { 247, 176, 63 }, locked = { 156, 170, 177 } }
+	for state, rgb in pairs(fallback) do
+		local c = type(cfg) == "table" and cfg[state] or rgb
+		STATE_COLORS[state] = Color3.fromRGB(c[1], c[2], c[3])
+	end
+end
 
 local ctx, UI
 local hud = {} -- gui, frame, line1, line2, scale
@@ -51,15 +64,30 @@ local started = false
 local heartbeat = nil
 local hudTimer = 0
 local flashSerial = 0
-local records = {} -- [inst] = Datensatz (Produzenten)
+-- Schwach verkettet: Stufenmodelle werden bei Stufenaufstieg/Rebirth zerstört und neu geklont; die Datensätze der
+-- alten Pads/Produzenten dürfen die Instanzen nicht im Speicher halten (Destroying räumt zusätzlich sofort auf)
+local records = setmetatable({}, { __mode = "k" }) -- [inst] = Datensatz (Produzenten)
 local recList = {}
-local pads = {} -- [part] = { last = clock }
+local pads = setmetatable({}, { __mode = "k" }) -- [part] = { last = clock, flashes, busy, color }
 local warned = {}
+local warnedInst = setmetatable({}, { __mode = "k" }) -- [inst] = { [key] = true }
 local cullTimer = 0
 
 local function warnOnce(key: string, text: string)
 	if not warned[key] then
 		warned[key] = true
+		warn("[Tycoon] " .. text)
+	end
+end
+
+local function warnOnceInst(inst: Instance, key: string, text: string)
+	local set = warnedInst[inst]
+	if not set then
+		set = {}
+		warnedInst[inst] = set
+	end
+	if not set[key] then
+		set[key] = true
 		warn("[Tycoon] " .. text)
 	end
 end
@@ -217,6 +245,36 @@ function TycoonClient.HudVisible(): boolean
 	return hud.gui ~= nil and hud.gui.Enabled == true
 end
 
+-- Hinweis- und Freischaltungskarten (TutorialUI/UnlocksUI) rechnen über PrestigeUI.OverlayTop mit der Unterkante des
+-- Bargeld-Abzeichens: beim Ein-/Ausblenden nachrücken lassen
+local function nudgeCards()
+	pcall(function()
+		local node = script.Parent:FindFirstChild("TutorialUI")
+		if node then
+			require(node).PlaceHintCard()
+		end
+	end)
+	pcall(function()
+		local node = script.Parent:FindFirstChild("UnlocksUI")
+		if node then
+			require(node).PlaceCard()
+		end
+	end)
+end
+
+local function setHudEnabled(show: boolean)
+	if not hud.gui then
+		return
+	end
+	if show and not hud.gui.Enabled then
+		layoutHud()
+	end
+	if hud.gui.Enabled ~= show then
+		hud.gui.Enabled = show
+		nudgeCards()
+	end
+end
+
 -- Unterkante des Bargeld-Abzeichens (0, wenn unsichtbar): Karten oben rechts können sich darunter legen
 function TycoonClient.HudBottom(): number
 	if not TycoonClient.HudVisible() or not hud.frame then
@@ -247,7 +305,27 @@ local function localCharacterHit(hit: Instance?): boolean
 	return hit ~= nil and char ~= nil and (hit == char or hit:IsDescendantOf(char))
 end
 
--- Blitz am Pad: Farbe kurz heller, Schild (SurfaceGui) stößt (UIScale) und die Schrift wird kurz gelb
+-- Zielfarbe eines Pads/Preisschilds aus dem Server-Zustand (Attribut TycoonState), sonst nil
+local function stateColor(part: Instance): Color3?
+	local state = part:GetAttribute("TycoonState")
+	return type(state) == "string" and STATE_COLORS[state] or nil
+end
+
+local function cancelFlash(rec)
+	for _, tw in ipairs(rec.tweens or {}) do
+		pcall(function()
+			tw:Cancel()
+		end)
+	end
+	rec.tweens = nil
+	rec.busy = nil
+	rec.color = nil
+	rec.labelBase = nil
+end
+
+-- Blitz am Pad: Farbe kurz heller, Schild (SurfaceGui) stößt (UIScale) und die Schrift wird kurz gelb.
+-- Zurückgeblitzt wird auf die Farbe des Server-Zustands (TycoonState → STATE_COLORS; Preisschild ebenso); ohne Zustand
+-- auf die Farbe vor dem Blitz. Nichts wird dauerhaft gecacht: ein neuer Zustand (gekauft, bezahlbar) gilt sofort.
 function TycoonClient.PadFlash(part: Instance)
 	if not (part and part:IsA("BasePart")) then
 		return
@@ -260,12 +338,26 @@ function TycoonClient.PadFlash(part: Instance)
 	end
 	rec.last = now
 	rec.flashes = (rec.flashes or 0) + 1
-	if not rec.color then
-		rec.color = part.Color
-	end
-	local bright = Color3.new(math.min(1, rec.color.R + 0.35), math.min(1, rec.color.G + 0.35), math.min(1, rec.color.B + 0.25))
+	local wasBusy = rec.busy == true
+	local base = stateColor(part) or (not wasBusy and part.Color) or rec.color or part.Color
+	cancelFlash(rec)
+	rec.color = base
+	rec.busy = true
+	rec.tweens = {}
+	rec.labelBase = {}
+	local bright = Color3.new(math.min(1, base.R + 0.35), math.min(1, base.G + 0.35), math.min(1, base.B + 0.25))
 	part.Color = bright
-	TweenService:Create(part, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Color = rec.color }):Play()
+	local tween = TweenService:Create(part, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Color = base })
+	table.insert(rec.tweens, tween)
+	tween.Completed:Connect(function()
+		if rec.tweens and rec.tweens[1] == tween then
+			rec.tweens = nil
+			rec.busy = nil
+			rec.color = nil
+			rec.labelBase = nil
+		end
+	end)
+	tween:Play()
 	for _, gui in ipairs(part:GetChildren()) do
 		if gui:IsA("SurfaceGui") then
 			local scale = gui:FindFirstChild("PadFlashScale")
@@ -278,13 +370,38 @@ function TycoonClient.PadFlash(part: Instance)
 			TweenService:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 			for _, label in ipairs(gui:GetDescendants()) do
 				if label:IsA("TextLabel") then
-					local base = label:GetAttribute("BaseColor")
-					if typeof(base) ~= "Color3" then
-						base = label.TextColor3
-						label:SetAttribute("BaseColor", base)
+					local target = (label.Name == "Price" and stateColor(part)) or (not wasBusy and label.TextColor3) or nil
+					if not target then
+						target = label.TextColor3
 					end
+					rec.labelBase[label] = target
 					label.TextColor3 = UI and UI.Theme.yellow or Color3.fromRGB(235, 184, 72)
-					TweenService:Create(label, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextColor3 = base }):Play()
+					local lt = TweenService:Create(label, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { TextColor3 = target })
+					table.insert(rec.tweens, lt)
+					lt:Play()
+				end
+			end
+		end
+	end
+end
+
+-- Server-Zustand wechselt mitten im Blitz (Kauf, „bezahlbar“): laufende Tweens abbrechen und die Zustandsfarbe setzen,
+-- sonst endet der Tween auf der alten Farbe und das gekaufte Pad sieht gesperrt aus
+local function onPadStateChanged(part: Instance)
+	local rec = pads[part]
+	if not rec or not rec.busy then
+		return
+	end
+	cancelFlash(rec)
+	local color = stateColor(part)
+	if color then
+		part.Color = color
+		for _, gui in ipairs(part:GetChildren()) do
+			if gui:IsA("SurfaceGui") then
+				for _, label in ipairs(gui:GetDescendants()) do
+					if label:IsA("TextLabel") and label.Name == "Price" then
+						label.TextColor3 = color
+					end
 				end
 			end
 		end
@@ -304,6 +421,18 @@ local function watchPad(part: Instance)
 		if localCharacterHit(hit) then
 			pcall(TycoonClient.PadFlash, part)
 		end
+	end)
+	part:GetAttributeChangedSignal("TycoonState"):Connect(function()
+		pcall(onPadStateChanged, part)
+	end)
+	part.Destroying:Connect(function()
+		local rec = pads[part]
+		if rec then
+			cancelFlash(rec)
+		end
+		pads[part] = nil
+		records[part] = nil
+		warnedInst[part] = nil
 	end)
 end
 
@@ -450,13 +579,18 @@ local function consider(inst: Instance)
 	records[inst] = kind
 	local ok, rec = pcall(SETUP[kind], inst)
 	if not ok then
-		warnOnce("setup_" .. tostring(inst), inst:GetFullName() .. ": " .. tostring(rec))
+		warnOnceInst(inst, "setup", inst:GetFullName() .. ": " .. tostring(rec))
 		return
 	end
 	rec.kind = kind
 	rec.active = true
 	records[inst] = rec
 	table.insert(recList, rec)
+	inst.Destroying:Connect(function()
+		records[inst] = nil
+		warnedInst[inst] = nil
+		rec.dead = true
+	end)
 end
 
 local function attachPlots(plots: Instance)
@@ -497,10 +631,16 @@ end
 
 local function refreshActivity()
 	local cam = camPos()
+	for part in pairs(pads) do
+		if not part.Parent then
+			pads[part] = nil -- zerstörte/abgehängte Pads (Stufenwechsel) nicht festhalten
+		end
+	end
 	for i = #recList, 1, -1 do
 		local r = recList[i]
 		if not r.inst.Parent then
 			records[r.inst] = nil
+			warnedInst[r.inst] = nil
 			table.remove(recList, i)
 		elseif cam then
 			local pos = r.inst:IsA("Model") and r.inst:GetPivot().Position or (r.inst :: BasePart).Position
@@ -521,7 +661,7 @@ local function stepAnimations(dt: number)
 			local ok, err = pcall(r.update, r, t, dt)
 			if not ok then
 				r.dead = true
-				warnOnce("update_" .. tostring(r.inst), "Animation gestoppt (" .. tostring(r.kind) .. "): " .. tostring(err))
+				warnOnceInst(r.inst, "update", "Animation gestoppt (" .. tostring(r.kind) .. "): " .. tostring(err))
 			end
 		end
 	end
@@ -535,11 +675,7 @@ function TycoonClient.Step(dt: number?)
 		hudTimer += d
 		if hudTimer >= 0.2 then
 			hudTimer = 0
-			local show = hudShouldShow()
-			if show and not hud.gui.Enabled then
-				layoutHud()
-			end
-			hud.gui.Enabled = show
+			setHudEnabled(hudShouldShow())
 		end
 	end
 	stepAnimations(d)
@@ -553,11 +689,7 @@ function TycoonClient.OnSnapshot(s)
 	latest = s
 	TycoonClient.UpdateHud()
 	if hud.gui then
-		local show = hudShouldShow()
-		if show and not hud.gui.Enabled then
-			layoutHud()
-		end
-		hud.gui.Enabled = show
+		setHudEnabled(hudShouldShow())
 		hudTimer = 0
 	end
 	local r = type(s.tycoon) == "table" and type(s.tycoon.run) == "table" and s.tycoon.run or nil

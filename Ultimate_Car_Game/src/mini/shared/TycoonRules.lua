@@ -1,7 +1,7 @@
 -- TycoonRules: Schnelles Spiel (Tycoon) als reine Funktionen (docs/PHASE4_CONTRACT.md §2, §8).
 -- Kein Geld (Credits), keine Instanzen, keine Dienste: alles rechnet auf d.games.tycoon und dem Durchlauf run.
 -- Bargeld (run.cash, run.container) ist NIE Credits und verlässt den Durchlauf nie (Rebirth/Abbruch löschen es).
---   d.games.tycoon = { runsDone = { [typ] = int }, rebirths = int,
+--   d.games.tycoon = { runsDone = { [typ] = int }, rebirths = int, xpStage = 0..5 (Stufen-XP schon vergeben),
 --                      run = false | { building, stage 1..5, cash, container, upgrades = { [id] = 1 }, startedAt,
 --                                      lastTick, produced, rebirthBoost, storage = { [item] = int },
 --                                      itemAcc = { [item] = 0..1 } } }
@@ -24,7 +24,7 @@ export type Run = {
 	startedAt: number, lastTick: number, produced: number, rebirthBoost: number,
 	storage: { [string]: number }, itemAcc: { [string]: number },
 }
-export type Tycoon = { runsDone: { [string]: number }, rebirths: number, run: Run | boolean }
+export type Tycoon = { runsDone: { [string]: number }, rebirths: number, run: Run | boolean, xpStage: number }
 
 local function finite(v: any): boolean
 	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
@@ -60,7 +60,7 @@ function TycoonRules.Default(): Tycoon
 	for _, typ in ipairs(TY.Types) do
 		runsDone[typ] = 0
 	end
-	return { runsDone = runsDone, rebirths = 0, run = false }
+	return { runsDone = runsDone, rebirths = 0, run = false, xpStage = 0 }
 end
 
 -- Whitelist eines gespeicherten Durchlaufs: unbekannter Gebäudetyp -> kein Durchlauf. Upgrades nur mit gültiger Id
@@ -128,6 +128,8 @@ function TycoonRules.Load(raw: any, d: any, now: any): Tycoon
 		t.runsDone[typ] = loadInt(n, 0, 0, MAX_SAFE)
 	end
 	t.rebirths = loadInt(raw.rebirths, 0, 0, MAX_SAFE)
+	-- höchste Stufe, für die seit dem letzten Rebirth schon Stufen-XP vergeben wurden (Abbruch setzt sie NICHT zurück)
+	t.xpStage = loadInt(raw.xpStage, 0, 0, TY.MaxStage)
 	t.run = loadRun(raw.run, now)
 	return t
 end
@@ -378,7 +380,7 @@ function TycoonRules.CanBuy(run: any, id: any): (boolean, string, number)
 	if sid.stage ~= run.stage + 1 then
 		return false, "wrong_stage", st.price
 	end
-	if TY.Rebirth.requiresAllUpgrades and not TycoonRules.StageComplete(run, run.stage) then
+	if TY.StageRequiresAllUpgrades ~= false and not TycoonRules.StageComplete(run, run.stage) then
 		return false, "stage_incomplete", st.price
 	end
 	if next(TycoonRules.MissingItems(run, sid.stage)) ~= nil then
@@ -465,6 +467,7 @@ function TycoonRules.Rebirth(d: any, now: any): (boolean, string, string?)
 	t.runsDone[typ] = math.min(MAX_SAFE, (t.runsDone[typ] or 0) + 1)
 	t.rebirths = math.min(MAX_SAFE, t.rebirths + 1)
 	t.run = false
+	t.xpStage = 0 -- Stufen-XP gibt es im nächsten Durchlauf wieder
 	return true, "", typ
 end
 
@@ -479,7 +482,7 @@ function TycoonRules.Abandon(d: any): boolean
 end
 
 ---------------------------------------------------------------- Handel (nur Bargeld, nur Waren)
--- Angebot des Verkäufers: Ware bekannt, qty ganzzahlig 1..TradeMaxQty, price ganzzahlig TradeMinPrice..NumberCap,
+-- Angebot des Verkäufers: Ware bekannt, qty ganzzahlig 1..TradeMaxQty, price ganzzahlig TradeMinPrice..TradeMaxPrice,
 -- Lager reicht. Rückgabe: ok, Grund (item | qty | price | storage | no_run)
 function TycoonRules.TradeValid(run: any, item: any, qty: any, price: any): (boolean, string)
 	if type(run) ~= "table" or not building(run.building) then
@@ -491,7 +494,7 @@ function TycoonRules.TradeValid(run: any, item: any, qty: any, price: any): (boo
 	if not finite(qty) or qty ~= math.floor(qty) or qty < 1 or qty > TY.TradeMaxQty then
 		return false, "qty"
 	end
-	if not finite(price) or price ~= math.floor(price) or price < TY.TradeMinPrice or price > NUMBER_CAP then
+	if not finite(price) or price ~= math.floor(price) or price < TY.TradeMinPrice or price > (TY.TradeMaxPrice or NUMBER_CAP) then
 		return false, "price"
 	end
 	local have = type(run.storage) == "table" and run.storage[item] or 0
@@ -627,6 +630,23 @@ end
 
 function TycoonRules.XPForStage(): number
 	return TY.XP.stage
+end
+
+-- Stufen-XP nur einmal je Stufe seit dem letzten Rebirth: Abbruch + Neustart (tycoon_abandon/tycoon_choose) wiederholt
+-- die frühen Stufen sonst beliebig oft und wandelt so Bargeld schneller in Level-Credits um als ein ganzer Durchlauf.
+-- Rückgabe: XP, die für das Erreichen von run.stage jetzt fällig sind (0, wenn schon vergeben); merkt sich die Stufe.
+function TycoonRules.ClaimStageXP(d: any): number
+	local t = tycoonOf(d)
+	local run = TycoonRules.RunOf(d)
+	if not t or not run then
+		return 0
+	end
+	local done = math.max(1, finite(t.xpStage) and t.xpStage or 0) -- Stufe 1 ist der Start, keine „erreichte“ Stufe
+	if run.stage <= done then
+		return 0
+	end
+	t.xpStage = run.stage
+	return TycoonRules.XPForStage()
 end
 
 return TycoonRules

@@ -533,11 +533,20 @@ return {
 		s.tycoonPlayers = { { userId = 3003, name = "Cleo" } }
 		render(g, p, mod, s)
 		T.check(not enabled(offerBtn) and byName(page, "PlayerPick").Text:find("wählen", 1, true), "Ben weg: Auswahl zurückgesetzt")
-		-- ohne Snapshot-Liste: Players:GetPlayers() (Ben ist im Server)
+		-- ohne Snapshot-Liste: KEIN Rückfall auf Players:GetPlayers() (Ben ist im Server, aber ohne Durchlauf nicht handelbar)
 		s.tycoonPlayers = nil
 		render(g, p, mod, s)
 		press(g, byName(page, "PlayerPick"))
-		T.check(byName(page, "Player_1") and byName(page, "Player_1").Text == "Ben", "Spielerliste aus Players: " .. tostring(byName(page, "Player_1") and byName(page, "Player_1").Text))
+		local row1 = byName(page, "Player_1")
+		T.check(row1 == nil or not row1.Visible, "ohne Liste kein Spieler aus Players:GetPlayers()")
+		T.check(byName(page, "PlayersEmpty") and byName(page, "PlayersEmpty").Visible, "Hinweis „Niemand da“")
+		-- Serverliste tycoon.players (Tycoon-Spieler mit Durchlauf)
+		s.tycoon.players = { { userId = 2002, name = "Ben" } }
+		render(g, p, mod, s)
+		press(g, byName(page, "PlayerPick"))
+		row1 = byName(page, "Player_1")
+		T.check(row1 and row1.Visible and row1.Text == "Ben", "Spielerliste aus tycoon.players: " .. tostring(row1 and row1.Text))
+		s.tycoon.players = nil
 		-- Marktplatz-Tafel (nur Client): Text aus mini_notice tycoon_market
 		local label = g:Find("Workspace.Tycoon.Markt.Tafel.MarketScreen.Offers")
 		T.check(label ~= nil, "Tafel-Label in der Fixture")
@@ -908,6 +917,148 @@ return {
 		end)
 		g:Advance(0.2)
 		T.eq(mod.Counts().kinds.stamp, 2, "später Stempel erkannt")
+		T.eq(g:ErrorText(), "", "keine Fehler")
+	end },
+
+	{ "TycoonClient: Pad-Blitz kehrt auf die Server-Zustandsfarbe zurück (TycoonState), auch wenn der Zustand mitten im Blitz wechselt; Datensätze zerstörter Pads werden freigegeben", function(T, H)
+		local g, p = startClient(H)
+		local rec = recorder(T)
+		local _, _, _, _, _, ctx = build(g, p, "PrestigeUI", rec)
+		local mod = g:ClientModule(p, "Mini.TycoonClient")
+		local GC = g:MiniShared("GameConfig")
+		local PC = GC.Tycoon.PadColors
+		local locked = Color3.fromRGB(PC.locked[1], PC.locked[2], PC.locked[3])
+		local owned = Color3.fromRGB(PC.owned[1], PC.owned[2], PC.owned[3])
+		local ready = Color3.fromRGB(PC.ready[1], PC.ready[2], PC.ready[3])
+		local slot = g:Find("Workspace.Tycoon.Plots.Slot_1")
+		local pad, price
+		g:InClient(p, function()
+			pad = Instance.new("Part")
+			pad.Name = "Button_1"
+			pad.Size = Vector3.new(5, 0.5, 5)
+			pad.Anchored = true
+			pad.Color = locked
+			pad.CFrame = CFrame.new(-45, 0.25, 772)
+			pad:SetAttribute("TycoonButton", "werkstatt_s1_u1")
+			pad:SetAttribute("TycoonState", "locked")
+			local gui = Instance.new("SurfaceGui")
+			gui.Name = "Label"
+			gui.Parent = pad
+			price = Instance.new("TextLabel")
+			price.Name = "Price"
+			price.Text = "140 Bargeld"
+			price.TextColor3 = locked
+			price.Parent = gui
+			pad.Parent = slot:FindFirstChild("ButtonsRoot") or slot
+			workspace.CurrentCamera.CFrame = CFrame.new(-45, 12, 775)
+			mod.Start(ctx)
+		end)
+		g:Advance(0.1)
+		-- Blitz auf gesperrtem Pad, dann (wie der Server nach dem Kauf) Zustand + Farben auf „owned“ mitten im Tween
+		g:InClient(p, function()
+			mod.PadFlash(pad)
+		end)
+		T.check(pad.Color ~= locked, "Pad heller")
+		g:Advance(0.1)
+		pad:SetAttribute("TycoonState", "owned")
+		pad.Color = owned
+		price.TextColor3 = owned
+		g:Advance(0.1)
+		T.check(pad.Color == owned, "Zustandswechsel im Blitz: Pad sofort grün")
+		g:Advance(0.8)
+		T.check(pad.Color == owned, "nach dem Tween: Pad bleibt grün (nicht auf Grau zurück)")
+		T.check(price.TextColor3 == owned, "Preisschild bleibt grün")
+		-- späterer Blitz (Laufanimation) auf dem gekauften Pad: zurück auf die Zustandsfarbe, nicht auf die alte Sperrfarbe
+		g:InClient(p, function()
+			mod.PadFlash(pad)
+		end)
+		T.check(pad.Color ~= owned, "Blitz auf gekauftem Pad")
+		g:Advance(0.8)
+		T.check(pad.Color == owned, "zurück auf Grün")
+		T.check(price.TextColor3 == owned, "Preisschild wieder grün")
+		-- locked -> ready außerhalb eines Blitzes: der nächste Blitz endet auf Amber
+		pad:SetAttribute("TycoonState", "ready")
+		pad.Color = ready
+		price.TextColor3 = ready
+		g:Advance(0.6)
+		g:InClient(p, function()
+			mod.PadFlash(pad)
+		end)
+		g:Advance(0.8)
+		T.check(pad.Color == ready and price.TextColor3 == ready, "Blitz endet auf der Ready-Farbe")
+		-- Zerstörtes Pad (Stufenwechsel): Datensatz weg
+		local padsBefore = mod.Counts().pads
+		T.check(mod.PadInfo(pad) ~= nil, "Pad beobachtet")
+		g:InClient(p, function()
+			pad:Destroy()
+		end)
+		g:Advance(0.6)
+		T.eq(mod.PadInfo(pad), nil, "Datensatz nach Destroy freigegeben")
+		T.eq(mod.Counts().pads, padsBefore - 1, "Pad-Zähler kleiner")
+		T.eq(g:ErrorText(), "", "keine Fehler")
+	end },
+
+	{ "TycoonClient: Handy hochkant – Freischaltungs- und Hinweiskarten liegen unter dem Bargeld-Abzeichen und rücken nach, wenn es verschwindet", function(T, H)
+		local g, p = startClient(H, { viewport = Vector2.new(390, 844) })
+		local rec = recorder(T)
+		local PrestigeUI, _, MiniUI, _, _, ctx = build(g, p, "PrestigeUI", rec)
+		local UnlocksUI = build(g, p, "UnlocksUI", rec)
+		local TutorialUI = build(g, p, "TutorialUI", rec)
+		local mod = g:ClientModule(p, "Mini.TycoonClient")
+		g:InClient(p, function()
+			mod.Start(ctx)
+			PrestigeUI.OnSnapshot(base("tycoon"))
+			PrestigeUI.Step(1)
+			mod.OnSnapshot(base("tycoon"))
+			mod.Step(1)
+		end)
+		T.eq(mod.HudVisible(), true, "Bargeld-Abzeichen sichtbar")
+		local hudGui = p.PlayerGui:FindFirstChild("TycoonHUD")
+		local badge = hudGui and hudGui:FindFirstChild("Bargeld")
+		local prestigeBottom = PrestigeUI.HudBottom()
+		T.check(badge and badge.Position.Y.Offset >= prestigeBottom, "Abzeichen unter dem Prestige-Abzeichen (schmal: y " .. tostring(badge and badge.Position.Y.Offset) .. ")")
+		local tyBottom = mod.HudBottom()
+		T.check(tyBottom > 130, "Bargeld-Unterkante unter der Toast-Zone (schmal): " .. tostring(tyBottom))
+		-- Freischaltungskarte: unter dem Bargeld-Abzeichen
+		g:InClient(p, function()
+			UnlocksUI.ShowCard("Neu freigeschaltet", "Schnelles Spiel")
+		end)
+		local cardsGui = p.PlayerGui:FindFirstChild("UnlockCards")
+		local card = cardsGui and cardsGui:FindFirstChild("UnlockCard")
+		T.check(card ~= nil and card.Visible, "Karte sichtbar")
+		local cardTop = card and (card.AbsolutePosition.Y - cardsGui.AbsolutePosition.Y) or 0
+		T.check(cardTop >= tyBottom, "Karte unter dem Bargeld-Abzeichen (" .. tostring(cardTop) .. " ≥ " .. tostring(tyBottom) .. ")")
+		local overlayTop = g:InClient(p, function()
+			return PrestigeUI.OverlayTop()
+		end)
+		T.check(overlayTop >= tyBottom + PrestigeUI.CardGap, "PrestigeUI.OverlayTop rechnet das Bargeld-Abzeichen ein (" .. tostring(overlayTop) .. ")")
+		-- Hinweiskarte: unter der Freischaltungskarte, also auch unter dem Abzeichen
+		g:InClient(p, function()
+			TutorialUI.ShowHint("Sammle Bargeld am Sammel-Pad.", "h_tycoon")
+			TutorialUI.Step(0.3)
+		end)
+		local tutGui = p.PlayerGui:FindFirstChild("Tutorial")
+		local hint = tutGui and tutGui:FindFirstChild("HintCard", true)
+		T.check(hint ~= nil and hint.Visible, "Hinweiskarte sichtbar")
+		local hintTop = hint and (hint.AbsolutePosition.Y - tutGui.AbsolutePosition.Y) or 0
+		T.check(hintTop >= tyBottom, "Hinweiskarte unter dem Bargeld-Abzeichen (" .. tostring(hintTop) .. ")")
+		T.check(hintTop >= cardTop + card.AbsoluteSize.Y, "Hinweiskarte unter der Freischaltungskarte")
+		-- Abzeichen verschwindet (Panel offen): Karten rücken nach oben
+		g:InClient(p, function()
+			MiniUI.Open("overview")
+			mod.Step(1)
+		end)
+		T.eq(mod.HudVisible(), false, "Abzeichen weg")
+		local cardTop2 = card.AbsolutePosition.Y - cardsGui.AbsolutePosition.Y
+		T.check(cardTop2 < cardTop, "Karte rückt nach oben (" .. tostring(cardTop2) .. " < " .. tostring(cardTop) .. ")")
+		T.check(cardTop2 >= prestigeBottom, "aber unter dem Prestige-Abzeichen")
+		g:InClient(p, function()
+			MiniUI.Close()
+			mod.Step(1)
+		end)
+		T.eq(mod.HudVisible(), true, "Abzeichen wieder da")
+		local cardTop3 = card.AbsolutePosition.Y - cardsGui.AbsolutePosition.Y
+		T.check(cardTop3 >= mod.HudBottom(), "Karte wieder darunter")
 		T.eq(g:ErrorText(), "", "keine Fehler")
 	end },
 }

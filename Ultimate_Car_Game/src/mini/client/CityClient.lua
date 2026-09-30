@@ -80,7 +80,7 @@ local Players = game:GetService("Players")
 local CityClient = {}
 
 local started = false
-local records = {} -- [inst] = Datensatz
+local records = setmetatable({}, { __mode = "k" }) -- [inst] = Datensatz; schwach: zerstörte Objekte (Tycoon-Stufen) fallen heraus
 local frameRecs = {} -- Liste der bewegten Datensätze (ohne Verkehr)
 local trafficRecs = {} -- Verkehr
 local pressRecs = {}

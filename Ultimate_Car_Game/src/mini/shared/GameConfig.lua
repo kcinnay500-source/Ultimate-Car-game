@@ -251,10 +251,20 @@ GameConfig.Tycoon = {
 	TradeMaxOpen = 5, -- offene Angebote je Spieler
 	TradeMaxQty = 999,
 	TradeMinPrice = 1,
+	TradeMaxPrice = 999999999, -- höchster Angebotspreis (Server prüft, Client deckelt die Stepper)
+	TradeOfferInterval = 15, -- s zwischen zwei Angeboten desselben Absenders an denselben Empfänger (Toast-Spam)
+	TradeDeclineBlock = 300, -- s Sperre für neue Angebote an einen Empfänger, der abgelehnt hat
+	MarketBroadcastInterval = 1, -- Marktplatz-Hinweis (tycoon_market) höchstens so oft je s; Rest im Tick gebündelt
 	-- Zeiten des TycoonService (s): Pad-Entprellung je Pad, Toast-Drossel je Grund, Beschriftungen und Snapshot
 	-- höchstens 1×/s im laufenden Durchlauf, Nachvergabe eines Grundstücks alle 2 s
 	PadDebounce = 0.5,
+	PadGrace = 1.5, -- Schonfrist neuer Pads nach dem Aufbau (Figur steht beim Stufenaufstieg schon auf dem nächsten Pad)
+	PromptDebounce = 0.5, -- Start-/Sammel-Pad-Prompt je Spieler höchstens so oft (s)
+	PromptRangeSlack = 4, -- Prompt nur, wenn die Figur höchstens MaxActivationDistance + Slack vom Pad entfernt ist
 	PadToastSeconds = 2,
+	-- Pad-Farben je Zustand (Server färbt die Pads/Preise, der Client blitzt darauf zurück)
+	PadColors = { owned = { 62, 217, 166 }, ready = { 247, 176, 63 }, locked = { 156, 170, 177 } },
+	StageRequiresAllUpgrades = true, -- Stufen-Pad erst, wenn alle Upgrades der aktuellen Stufe gekauft sind
 	LabelInterval = 1,
 	SnapshotInterval = 1,
 	PlotRetry = 2,

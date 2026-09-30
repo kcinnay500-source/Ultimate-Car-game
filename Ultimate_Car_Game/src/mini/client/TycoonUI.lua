@@ -16,7 +16,8 @@
 --                        rebirths, runsDone { [typ] = n }, boost, bonus { [typ] = { runs, pct, text } },
 --                        slot (optional), offers[] (Handel, optional: { id, from, fromName, to, toName, item, qty, price,
 --                        expiresAt }), players[] (optional: { userId, name }) }
---   s.tycoonPlayers[] (optional, { userId, name }) – sonst Players:GetPlayers().
+--   s.tycoonPlayers[] (optional, { userId, name }); ohne Liste nur Absender offener Marktangebote, nie Players:GetPlayers()
+--   (Lobby-/Open-World-Spieler oder Tycoon-Spieler ohne Durchlauf könnten sonst gewählt werden).
 -- Schnittstelle wie die anderen Bereiche: Build(page, ctx), Render(s), OnShow(), OnNotice(data).
 local Players = game:GetService("Players")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
@@ -35,16 +36,34 @@ local marketOffers = {} -- letzte Marktplatz-Angebote (mini_notice tycoon_market
 
 TycoonUI.MaxQty = TY.TradeMaxQty or 999
 TycoonUI.MinPrice = TY.TradeMinPrice or 1
-TycoonUI.MaxPrice = 999999999
+TycoonUI.MaxPrice = TY.TradeMaxPrice or 999999999
 TycoonUI.StageAction = "tycoon_stage" -- Stufen-Karte: Vertragsaktion; "tycoon_buy" sendet tycoon_buy {id = stageId}
 
--- Texte je Gebäudetyp: Spielweise (Karte ohne Durchlauf)
-local STYLE = {
-	werkstatt = "Spielweise: gleichmäßig. Viele kleine Upgrades, stetiges Bargeld – gut für den Einstieg.",
-	autohaus = "Spielweise: teuer, aber lohnend. Große Sprünge beim Verkaufsstand – Geduld zahlt sich aus.",
-	produktion = "Spielweise: Fabrik-Takt. Hohe Grundrate und viele Bauteile zum Handeln.",
-	schrottplatz = "Spielweise: günstig starten. Niedrige Rate, dafür schnelle erste Upgrades und viel Schrott zum Tauschen.",
+-- Texte je Gebäudetyp: Spielweise (Karte ohne Durchlauf). Nur echte Unterschiede: alle Typen laufen mit derselben
+-- Tuning-Tabelle (gleiche Stufenzeiten, ≈ 5 Std.); sie unterscheiden sich in den erzeugten Waren (GameConfig.Tycoon
+-- .Buildings[typ].items) und im Open-World-Bonus einer fertigen Runde (Zeile „Fertige Runde“).
+local STYLE_FLAVOUR = {
+	werkstatt = "gut für den Einstieg",
+	autohaus = "Lack für Lackierer",
+	produktion = "Bauteile für alle",
+	schrottplatz = "Schrott für den Marktplatz",
 }
+local function styleText(typ: string): string
+	local b = TY.Buildings[typ]
+	local names = {}
+	for _, item in ipairs(b and b.items or {}) do
+		local it = TY.Items[item]
+		table.insert(names, it and it.name or item)
+	end
+	local flavour = STYLE_FLAVOUR[typ]
+	return "Spielweise: 5 Stufen mit je " .. tostring(TY.UpgradesPerStage) .. " Upgrades, gleiches Tempo wie alle Gebäude. Dein Lager erzeugt "
+		.. table.concat(names, " und ") .. " zum Handeln" .. (flavour and (" – " .. flavour) or "") .. "."
+end
+local STYLE = setmetatable({}, {
+	__index = function(_, typ)
+		return TY.Buildings[typ] and styleText(typ) or ""
+	end,
+})
 
 local KIND_TEXT = { producer = "Produzent", tempo = "Tempo", lager = "Lager", deko = "Deko" }
 
@@ -138,7 +157,8 @@ local function inTycoon(): boolean
 	return latest == nil or latest.mode == nil or latest.mode == "tycoon"
 end
 
--- Spieler für das Angebot: Snapshot-Liste, sonst Marktplatz-Namen, sonst Players:GetPlayers() (ohne mich)
+-- Spieler für das Angebot: Snapshot-Liste (tycoon.players: im Schnellen Spiel mit Durchlauf), sonst Absender offener
+-- Marktangebote (ohne mich). Kein Players:GetPlayers(): der Server lehnt Spieler ohne Durchlauf ohnehin ab.
 local function candidates(): { { userId: number, name: string } }
 	local out, seen = {}, {}
 	local me = localUserId()
@@ -150,8 +170,8 @@ local function candidates(): { { userId: number, name: string } }
 		seen[userId] = true
 		table.insert(out, { userId = userId, name = type(name) == "string" and name or ("Spieler " .. tostring(userId)) })
 	end
-	local lists = { latest and latest.tycoonPlayers, tycoon().players }
-	for _, list in ipairs(lists) do
+	-- beide Quellen ausdrücklich (kein ipairs über eine Liste mit nil-Lücke: fehlt tycoonPlayers, fiele players weg)
+	for _, list in pairs({ latest and latest.tycoonPlayers or false, tycoon().players or false }) do
 		if type(list) == "table" then
 			for _, pl in ipairs(list) do
 				if type(pl) == "table" then
@@ -165,11 +185,6 @@ local function candidates(): { { userId: number, name: string } }
 			if type(o) == "table" then
 				add(o.from, o.fromName)
 			end
-		end
-	end
-	if #out == 0 then
-		for _, pl in ipairs(Players:GetPlayers()) do
-			add(pl.UserId, pl.DisplayName ~= "" and pl.DisplayName or pl.Name)
 		end
 	end
 	table.sort(out, function(a, b)

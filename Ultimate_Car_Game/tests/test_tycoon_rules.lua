@@ -413,6 +413,10 @@ return {
 		T.check(select(2, TR.TradeValid(seller, "bauteile", 1, 0)) == "price", "Preis 0")
 		T.check(select(2, TR.TradeValid(seller, "bauteile", 1, 0 / 0)) == "price", "Preis NaN")
 		T.check(select(2, TR.TradeValid(seller, "bauteile", 1, 2.5)) == "price", "Preis gebrochen")
+		T.check(select(2, TR.TradeValid(seller, "bauteile", 1, 1e12)) == "price", "Preis über TradeMaxPrice")
+		T.check(select(2, TR.TradeValid(seller, "bauteile", 1, TY.TradeMaxPrice + 1)) == "price", "Preis TradeMaxPrice + 1")
+		T.check(TR.TradeValid(seller, "bauteile", 1, TY.TradeMaxPrice), "Preis = TradeMaxPrice erlaubt")
+		T.check(type(TY.TradeMaxPrice) == "number" and TY.TradeMaxPrice >= 1e6 and TY.TradeMaxPrice < 1e12, "TradeMaxPrice in GameConfig.Tycoon")
 		T.check(select(2, TR.TradeValid(seller, "bauteile", 21, 10)) == "storage", "Lager reicht nicht")
 		T.check(select(2, TR.TradeValid(seller, "reifen", 1, 10)) == "storage", "keine Reifen")
 		T.check(select(2, TR.TradeValid(nil, "bauteile", 1, 10)) == "no_run", "ohne Durchlauf")
@@ -460,6 +464,118 @@ return {
 		T.eq(itemsSum, items0, "Waren-Summe nach 200 Handeln")
 		T.eq(seller.cash + buyer.cash, cash0, "Bargeld-Summe nach 200 Handeln")
 		T.check(seller.cash >= 0 and buyer.cash >= 0, "nie negativ")
+	end },
+
+	{ "Stufen-Sperre hat einen eigenen Schalter (StageRequiresAllUpgrades), unabhängig von Rebirth.requiresAllUpgrades; ClaimStageXP je Stufe einmal", function(T, H)
+		local g, GC, TR = modules(H)
+		local TY = GC.Tycoon
+		local d = profile(g, TR)
+		local run = TR.NewRun(d, "werkstatt", NOW)
+		run.cash = 1e9
+		T.eq(TY.StageRequiresAllUpgrades, true, "StageRequiresAllUpgrades = true")
+		local ok, reason = TR.CanBuy(run, "werkstatt_stage2")
+		T.check(not ok and reason == "stage_incomplete", "Stufen-Pad ohne Upgrades gesperrt")
+		-- Rebirth-Schalter aus: die Stufen-Sperre bleibt
+		local saved = TY.Rebirth.requiresAllUpgrades
+		TY.Rebirth.requiresAllUpgrades = false
+		ok, reason = TR.CanBuy(run, "werkstatt_stage2")
+		T.check(not ok and reason == "stage_incomplete", "Rebirth.requiresAllUpgrades = false ändert die Stufen-Sperre nicht")
+		run.stage = 5
+		T.check(TR.CanRebirth(run), "Rebirth ohne Upgrades nur über den Rebirth-Schalter")
+		TY.Rebirth.requiresAllUpgrades = saved
+		T.check(not TR.CanRebirth(run), "Rebirth-Schalter wieder an")
+		run.stage = 1
+		-- eigener Schalter aus: Stufen-Pad frei (nur Waren/Bargeld)
+		TY.StageRequiresAllUpgrades = false
+		ok = TR.CanBuy(run, "werkstatt_stage2")
+		T.check(ok, "StageRequiresAllUpgrades = false: Stufen-Pad frei")
+		TY.StageRequiresAllUpgrades = true
+		-- ClaimStageXP: je Stufe einmal seit dem letzten Rebirth
+		T.eq(d.games.tycoon.xpStage, 0, "xpStage 0 zu Beginn")
+		T.eq(TR.ClaimStageXP(d), 0, "Stufe 1: keine Stufen-XP")
+		run.stage = 2
+		T.eq(TR.ClaimStageXP(d), TR.XPForStage(), "Stufe 2: XP")
+		T.eq(TR.ClaimStageXP(d), 0, "Stufe 2 nicht doppelt")
+		T.check(TR.Abandon(d), "Abbruch")
+		T.eq(d.games.tycoon.xpStage, 2, "Abbruch behält xpStage")
+		run = TR.NewRun(d, "autohaus", NOW)
+		run.stage = 2
+		T.eq(TR.ClaimStageXP(d), 0, "nach Abbruch+Neustart keine XP für Stufe 2")
+		run.stage = 3
+		T.eq(TR.ClaimStageXP(d), TR.XPForStage(), "Stufe 3: XP")
+		run.stage = 5
+		for _, u in ipairs(TY.Buildings.autohaus.Stages[5].Upgrades) do
+			run.upgrades[u.id] = 1
+		end
+		T.check(TR.Rebirth(d, NOW), "Rebirth")
+		T.eq(d.games.tycoon.xpStage, 0, "Rebirth setzt xpStage zurück")
+		T.eq(TR.Load({ xpStage = -3 }, d, NOW).xpStage, 0, "Load: negativ -> 0")
+		T.eq(TR.Load({ xpStage = 3.7 }, d, NOW).xpStage, 3, "Load: ganzzahlig")
+	end },
+
+	{ "Vorlagen in der Fixture (ServerStorage.TycoonTemplates): je Stufe genau die Pads aus GameConfig (Ids, Namen, TycoonKind), jede Id genau einmal, Hidden mit Producer_1..4", function(T, H)
+		local g, GC = modules(H)
+		local TY = GC.Tycoon
+		local root = g:Find("ServerStorage.TycoonTemplates")
+		T.check(root ~= nil, "ServerStorage.TycoonTemplates in der Fixture")
+		if not root then
+			return
+		end
+		local seen = {}
+		for _, typ in ipairs(TY.Types) do
+			local folder = root:FindFirstChild(typ)
+			T.check(folder ~= nil, "Ordner " .. typ)
+			for s = 1, TY.MaxStage do
+				local st = TY.Buildings[typ].Stages[s]
+				local m = folder and folder:FindFirstChild("Stage_" .. s)
+				T.check(m ~= nil and m.PrimaryPart ~= nil and m.PrimaryPart.Name == "Root", typ .. " Stage_" .. s .. " mit Root")
+				if m then
+					local expected = {}
+					for _, u in ipairs(st.Upgrades) do
+						expected[u.id] = u
+					end
+					if st.stageId then
+						expected[st.stageId] = { name = "Stufe " .. (s + 1), stage = true }
+					end
+					local found = {}
+					for _, x in ipairs(m:GetDescendants()) do
+						local id = x:GetAttribute("TycoonButton")
+						if type(id) == "string" then
+							T.check(found[id] == nil, typ .. " Stage_" .. s .. ": Pad " .. id .. " nur einmal")
+							found[id] = true
+							local u = expected[id]
+							T.check(u ~= nil, typ .. " Stage_" .. s .. ": Pad " .. id .. " gehört zu dieser Stufe")
+							seen[id] = (seen[id] or 0) + 1
+							local label = x:FindFirstChild("Label")
+							local nameLabel = label and label:FindFirstChild("Name")
+							local priceLabel = label and label:FindFirstChild("Price")
+							T.check(nameLabel ~= nil and priceLabel ~= nil, id .. ": Label mit Name/Price")
+							if u and nameLabel then
+								T.eq(nameLabel.Text, u.name, id .. ": Name-Label wie GameConfig")
+							end
+							if u and not u.stage then
+								T.eq(x:GetAttribute("TycoonKind"), u.kind, id .. ": TycoonKind")
+							end
+						end
+					end
+					for id in pairs(expected) do
+						T.check(found[id], typ .. " Stage_" .. s .. ": Pad " .. id .. " vorhanden")
+					end
+					local hidden = m:FindFirstChild("Hidden")
+					T.check(hidden ~= nil and hidden:IsA("Folder"), typ .. " Stage_" .. s .. ": Ordner Hidden")
+					for k = 1, TY.UpgradesPerStage do
+						T.check(hidden and hidden:FindFirstChild("Producer_" .. k) ~= nil, typ .. " Stage_" .. s .. ": Producer_" .. k)
+					end
+					T.check(m:FindFirstChild("CashDisplay") ~= nil, typ .. " Stage_" .. s .. ": CashDisplay")
+				end
+			end
+		end
+		for id in pairs(TY.UpgradeById) do
+			T.eq(seen[id], 1, "Upgrade " .. id .. " genau ein Pad")
+		end
+		for id in pairs(TY.StageById) do
+			T.eq(seen[id], 1, "Stufen-Pad " .. id .. " genau einmal")
+		end
 	end },
 
 	{ "Simulation: gieriger Spieler erreicht Stufe 5 komplett in 4 h .. 6,5 h (Ziel 5 h) je Gebäudetyp; Waren reichen", function(T, H)
