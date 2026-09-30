@@ -139,19 +139,40 @@ function CrossBonus.TycoonRuns(d: any, typ: string): number
 	return math.floor(n)
 end
 
--- Tycoon-Durchläufe „Werkstatt“ -> Werkstatt-Vergütung: 1 + min(n, 5) × 0,02
-function CrossBonus.TycoonWorkshop(d: any): number
+-- Bonus-Anteil eines Gebäudetyps (Vertrag §8): min(n, maxRuns) × step aus GameConfig.Tycoon.Bonus[typ];
+-- fehlt der Eintrag, gelten für werkstatt die Vertragswerte, sonst 0. Ergebnis 0..(maxRuns × step), nie negativ.
+function CrossBonus.TycoonBonus(d: any, typ: string): number
 	local tycoon = GameConfig.Tycoon
-	local bonus = type(tycoon) == "table" and type(tycoon.Bonus) == "table" and tycoon.Bonus.werkstatt or nil
+	local bonus = type(tycoon) == "table" and type(tycoon.Bonus) == "table" and tycoon.Bonus[typ] or nil
 	local step = type(bonus) == "table" and bonus.step or nil
 	local maxRuns = type(bonus) == "table" and bonus.maxRuns or nil
 	if not finite(step) or step < 0 then
-		step = CrossBonus.TycoonWorkshopDefault.step
+		step = typ == "werkstatt" and CrossBonus.TycoonWorkshopDefault.step or 0
 	end
 	if not finite(maxRuns) or maxRuns < 0 then
-		maxRuns = CrossBonus.TycoonWorkshopDefault.maxRuns
+		maxRuns = typ == "werkstatt" and CrossBonus.TycoonWorkshopDefault.maxRuns or 0
 	end
-	return 1 + math.min(CrossBonus.TycoonRuns(d, "werkstatt"), maxRuns) * step
+	return math.min(CrossBonus.TycoonRuns(d, typ), maxRuns) * step
+end
+
+-- Tycoon-Durchläufe „Werkstatt“ -> Werkstatt-Vergütung: 1 + min(n, 5) × 0,02
+function CrossBonus.TycoonWorkshop(d: any): number
+	return 1 + CrossBonus.TycoonBonus(d, "werkstatt")
+end
+
+-- Tycoon-Durchläufe „Autohaus“ -> Händlerrabatt (Anteil 0..0,075, wirkt in CarRules.DealerPrice zusätzlich zum Prestige-Rabatt)
+function CrossBonus.TycoonDealerDiscount(d: any): number
+	return math.min(0.9, CrossBonus.TycoonBonus(d, "autohaus"))
+end
+
+-- Tycoon-Durchläufe „Produktion“ -> Tuning-Tempo: Faktor ≥ 1 (1,15 = Projekte 15 % schneller; TuningRules.Start)
+function CrossBonus.TycoonTuningSpeed(d: any): number
+	return 1 + CrossBonus.TycoonBonus(d, "produktion")
+end
+
+-- Tycoon-Durchläufe „Schrottplatz“ -> Schrott beim Zerlegen: Faktor ≥ 1 (SideGameRules.Dismantle)
+function CrossBonus.TycoonScrap(d: any): number
+	return 1 + CrossBonus.TycoonBonus(d, "schrottplatz")
 end
 
 -- Open-World-Perk eines Karrierewegs (GameConfig.OW.Perks, Meilenstein 6): Platzhalter, wirkt neutral.

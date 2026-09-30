@@ -11,10 +11,13 @@ Hierarchie (alles unter Workspace.Tycoon, Model mit Attribut Zone="tycoon"):
     Base        Part 70 x 1 x 70, Oberseite Y 0
     Sign        Model (Anim=pylon, Slot, Owner=""): Body mit SurfaceGui StreetGui (Number/Owner/Street) und PlotGui
                 (Welcome) wie die Hausnummer-Pylonen der Stadt (CityService/World setzen Owner/Welcome)
-    StartPad    Part (Attribut TycoonSlot=n, ProximityPrompt "Durchlauf starten"), plotlokal (-18, 0.5, 28)
-    CollectPad  Part (Attribut TycoonPad="collect", ProximityPrompt "Sammeln"), plotlokal (18, 0.5, 28)
+    StartPad    Part (Attribut TycoonSlot=n, ProximityPrompt "Durchlauf starten"), plotlokal (18, 0.5, 28) nahe
+                der Straße neben dem Stufen-Pad der Vorlagen (29, 29)
+    CollectPad  Part (Attribut TycoonPad="collect", ProximityPrompt "Sammeln"), plotlokal (-20, 0.5, 20) - genau
+                unter der CashDisplay der Stufenvorlagen (tycoon_templates.CASH_DISPLAY = (-20, 3, 20))
     Anchor      unsichtbares Part (Pivot der Stufenmodelle ServerStorage.TycoonTemplates.<typ>.Stage_n, Meilenstein 4):
                 CFrame = CFrame.new(X, 0.5, Z) * CFrame.Angles(0, rad(Rot), 0), Unterseite auf Y 0
+                (die Vorlagen werden von tycoon_templates.build in ServerStorage gebaut, siehe dort)
     ButtonsRoot Folder (Kaufpads TycoonButton=<upgradeId> legt der TycoonService hier ab)
   Stations (contract.build_station): tycoon_market (MiniTab="tycoon", "Marktplatz · Handel", Anker (0,3,830),
     Spielerseite S) und tycoon (MiniTab="tycoon", "Infostand · Schnelles Spiel", Anker (-32,3,862), Spielerseite E)
@@ -26,6 +29,7 @@ Höhen (§1.2): Gras -1.0 | Asphalt -0.95 | Markierungen -0.90 | Gehwege/Platz -
   | Grundstück (Base) 0 | Plot-Kanten 0.15 | Pads 0.5.
 Budget: <= 2500 Parts, <= 20 Lichter (TYCOON_BUDGET).
 """
+from . import tycoon_templates
 from .contract import build_arrival, build_station
 from .lib import (CF, AMBER, ASPHALT, BLACK, FRAME, GRASS, HEDGE, PLAZA, PLAZA_BAND, SIDEWALK, SLATE, STEEL, TEAL,
                   WHITE, YARD, Color3, set_attrs)
@@ -46,8 +50,8 @@ SLOTS = [
     (8, 135, 940, 180),
 ]
 HALF = 35.0
-START_PAD = (-18.0, 28.0)          # plotlokal (x, z)
-COLLECT_PAD = (18.0, 28.0)
+START_PAD = (18.0, 28.0)           # plotlokal (x, z), Straßenseite (+Z)
+COLLECT_PAD = (-20.0, 20.0)        # unter tycoon_templates.CASH_DISPLAY
 SIGN_LZ = 39.5                     # Pylon auf dem Gehweg vor dem Grundstück
 
 # Straßenschleife und Marktplatz
@@ -304,4 +308,6 @@ def build(workspace, lib, tree):
         for key, (x, fy, z, look) in ARRIVALS.items():
             build_arrival(lib, ar, key, x, fy, z, look)
         lib.spawn(root, "TycoonSpawn", (10, 0.2, 10), CF.at(SPAWN[0], SPAWN[1], SPAWN[2], 0), enabled=False)
+    # Stufen-Vorlagen ServerStorage.TycoonTemplates (nicht Teil des Zonen-Budgets)
+    tycoon_templates.build(tree, lib)
     return root

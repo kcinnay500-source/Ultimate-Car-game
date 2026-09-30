@@ -40,6 +40,7 @@ UI.FontBig = Enum.Font.GothamBlack
 
 UI.Tabs = {
 	{ key = "lobby", label = "Lobby" },
+	{ key = "tycoon", label = "Schnelles Spiel" },
 	{ key = "overview", label = "Übersicht" },
 	{ key = "press", label = "Schrottpresse" },
 	{ key = "tuning", label = "Tuning" },
@@ -60,6 +61,7 @@ UI.Tabs = {
 }
 UI.TabTitles = {
 	lobby = "Lobby",
+	tycoon = "Schnelles Spiel · Tycoon",
 	unlocks = "Freischaltungen",
 	prestige = "Level & Prestige",
 	overview = "Minispiele · Übersicht",

@@ -251,6 +251,13 @@ GameConfig.Tycoon = {
 	TradeMaxOpen = 5, -- offene Angebote je Spieler
 	TradeMaxQty = 999,
 	TradeMinPrice = 1,
+	-- Zeiten des TycoonService (s): Pad-Entprellung je Pad, Toast-Drossel je Grund, Beschriftungen und Snapshot
+	-- höchstens 1×/s im laufenden Durchlauf, Nachvergabe eines Grundstücks alle 2 s
+	PadDebounce = 0.5,
+	PadToastSeconds = 2,
+	LabelInterval = 1,
+	SnapshotInterval = 1,
+	PlotRetry = 2,
 	Rebirth = { boostPct = 15, capPct = 150, requiresStage = 5, requiresAllUpgrades = true },
 	-- Bonus-Tabelle Open World (§8): min(n, maxRuns) × step je abgeschlossenem Durchlauf des Typs
 	Bonus = {

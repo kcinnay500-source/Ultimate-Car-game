@@ -15,6 +15,7 @@
 local MiniConfig = require(script.Parent:WaitForChild("MiniConfig"))
 local MiniRules = require(script.Parent:WaitForChild("MiniRules"))
 local C = require(script.Parent.Parent:WaitForChild("Config"))
+local CrossBonus = require(script.Parent:WaitForChild("CrossBonus")) -- Tycoon-Schrottplatz-Bonus (PHASE4_CONTRACT §8)
 
 local SideGameRules = {}
 
@@ -133,7 +134,8 @@ function SideGameRules.Dismantle(d, rng, now)
 			parts += MiniConfig.ScrapyardRareParts
 		end
 	end
-	local scrap = found * MiniConfig.ScrapyardScrapPerPart
+	-- Tycoon-Durchläufe „Schrottplatz“: +3 % Schrott je Durchlauf (Deckel +15 %, CrossBonus.TycoonScrap)
+	local scrap = math.floor(found * MiniConfig.ScrapyardScrapPerPart * CrossBonus.TycoonScrap(d) + 0.5)
 	g.parts = math.min(2 ^ 53, g.parts + parts)
 	local credits = MiniRules.AddIncome(d, rng:NextInteger(0, 90))
 	g.press.scrap += scrap

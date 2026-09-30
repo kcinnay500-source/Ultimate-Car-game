@@ -272,9 +272,10 @@ return {
 		T.check(#travel >= 1 and travel[#travel].event == "travel" and travel[#travel].mode == "tycoon", "Ben erhält travel")
 		g:Advance(1.1)
 		T.eq(g:MiniSnapshot(b).mode, "tycoon", "Snapshot Ben tycoon")
-		-- Schnelles Spiel ohne Tycoon-Dienst (GameConfig.Tycoon leer): Ankunfts-Toast nennt den Rückweg, die
-		-- Tycoon-Stationen öffnen den Lobby-Tab (Rückweg einen Tastendruck entfernt)
-		T.check(g:HasToast(a, "eröffnet bald", m), "Ankunfts-Toast: eröffnet bald + Rückweg")
+		-- Schnelles Spiel mit Tycoon-Dienst (Meilenstein 4): Ankunfts-Toast „Viel Erfolg“, die Tycoon-Stationen
+		-- öffnen den Tab „tycoon“ (kein „eröffnet bald“ mehr)
+		T.check(g:HasToast(a, "Viel Erfolg", m), "Ankunfts-Toast: Schnelles Spiel")
+		T.check(not g:HasToast(a, "eröffnet bald", m), "kein Toast eröffnet bald")
 		local tst = g:Find("Workspace.Tycoon.Stations.tycoon")
 		T.check(tst ~= nil, "Tycoon-Station tycoon")
 		if tst then
@@ -285,8 +286,8 @@ return {
 			g:Trigger(a, tst:FindFirstChildOfClass("ProximityPrompt"), { force = true })
 			g:Advance(0.3)
 			local openT = g:Events(a, "mini_open", mt)[1]
-			T.check(openT ~= nil and openT.tab == "lobby", "Tycoon-Station öffnet den Lobby-Tab (Rückweg)")
-			T.check(g:HasToast(a, "eröffnet bald", mt), "Hinweis eröffnet bald")
+			T.check(openT ~= nil and openT.tab == "tycoon", "Tycoon-Station öffnet den Tab tycoon")
+			T.check(not g:HasToast(a, "eröffnet bald", mt), "kein Hinweis eröffnet bald")
 		end
 		-- Mitglied kehrt allein zurück (Vertrag §5: lobby_return aus jedem Modus), Party und Leiter bleiben
 		g:Advance(3.1)

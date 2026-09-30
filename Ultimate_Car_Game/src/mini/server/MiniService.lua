@@ -47,6 +47,7 @@ local ArcadeService = require(Server:WaitForChild("ArcadeService"))
 local PrestigeService = require(Server:WaitForChild("PrestigeService"))
 local LobbyService = require(Server:WaitForChild("LobbyService"))
 local TutorialService = require(Server:WaitForChild("TutorialService"))
+local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenstein 4: Schnelles Spiel
 local Profiles = require(Server.Parent:WaitForChild("Profiles"))
 
 local Mini = {}
@@ -135,6 +136,7 @@ local SNAPSHOT_EXTRAS = {
 	{ "Lobby", LobbyService.SnapshotFields },
 	{ "Prestige", PrestigeService.SnapshotFields },
 	{ "Tutorial", TutorialService.SnapshotFields },
+	{ "Tycoon", TycoonService.SnapshotFields }, -- tycoon { active, run, slot, offers, bonus, runsDone, rebirths, boost, plots }
 }
 
 local function sendSnapshot(ms, t)
@@ -416,6 +418,11 @@ local function checkMode(ms, d)
 			warn("[Minispiele] Tutorial-Start: " .. tostring(err))
 		end
 	end
+	-- Schnelles Spiel: Grundstück belegen/freigeben, Durchlauf fortsetzen (TycoonService.Tick holt es sonst nach)
+	local okY, errY = pcall(TycoonService.OnMode, ms, d, mode)
+	if not okY then
+		warn("[Minispiele] Tycoon-Modus: " .. tostring(errY))
+	end
 end
 
 -- Abklingzeit je Aktion und Ziel (z. B. je Parkplatz-Feld), statt 0,12 s je Aktionsname
@@ -566,6 +573,7 @@ function Mini.OnJoin(p)
 		PrestigeService.OnJoin(ms, d, t)
 		local mode = LobbyService.OnJoin(ms, d, t) -- setzt p.mode (das Tutorial richtet sich danach)
 		TutorialService.OnJoin(ms, d, t)
+		TycoonService.OnJoin(ms, d, t) -- Sitzung merken; im Modus tycoon sofort Grundstück + Modelle
 		ms.modeSeen = nil
 		checkMode(ms, d) -- Open World: Pflicht-Tutorial beim ersten Beitritt (TutorialRules.ShouldStart)
 		-- Game Passes (kann warten), danach den Offline-Ertrag gutschreiben: nur Schrott, nie Geld.
@@ -634,6 +642,15 @@ function Mini.Tick(p, t)
 		end
 		pcall(LobbyService.Tick, ms, d, t)
 		checkMode(ms, d)
+		-- Schnelles Spiel: Produktion (0,5 s), Anzeigen, Angebots-Ablauf; true = Snapshot fällig (höchstens 1×/s)
+		local okY, resY = pcall(TycoonService.Tick, ms, d, t)
+		if okY then
+			if resY then
+				ms.dirty = true
+			end
+		else
+			warn("[Minispiele] Tycoon: " .. tostring(resY))
+		end
 		-- Schrottplatz: sobald das Fahrzeug zerlegt werden darf, einmal neuen Snapshot senden
 		local sy = d.games.scrapyard
 		if sy.vehicle and ms.scrapReadySent ~= sy.readyAt and SideGameRules.DismantleIn(d, t) <= 0 then
@@ -700,6 +717,7 @@ function Mini.OnLeave(p, wasWritable)
 	Mini.Sessions[p.player] = nil
 	pcall(TutorialService.OnLeave, ms, p.profile.data) -- zurückgehaltene Tutorial-Belohnung vor P.Save
 	pcall(LobbyService.OnLeave, ms) -- Party verlassen (Leiterwechsel)
+	pcall(TycoonService.OnLeave, ms) -- Grundstück frei, Angebote weg (der Durchlauf bleibt im Profil)
 	local okAuction, errAuction = pcall(AuctionService.OnLeave, ms) -- vor P.Save: Verkäufer-Lose abbrechen
 	if not okAuction then
 		warn("[Minispiele] Auktion verlassen: " .. tostring(errAuction))
@@ -793,11 +811,6 @@ local function openStation(p, tab, station)
 		emit(ms, MiniNet.Events.Open, { tab = tab, page = "credits" })
 	elseif MiniNet.TabSet[tab] and not Unlocks.TabAllowed(d, tab) and not tutorialWants then
 		api.toast(ms, lockedText(Unlocks.ForTab(tab)))
-	elseif tab == "tycoon" and not MiniNet.TabSet[tab] then
-		-- Schnelles Spiel ohne Tycoon-Dienst (Meilenstein 4): Hinweis und der Lobby-Tab, damit der Rückweg einen
-		-- Tastendruck entfernt ist
-		api.toast(ms, MiniLocale.T("coming_soon", CityService.Title(station, tab)))
-		emit(ms, MiniNet.Events.Open, { tab = "lobby" })
 	elseif MiniNet.TabSet[tab] then
 		-- Spielhalle: der Automat (Attribut GameKey/Game bzw. Stationsname arcade_N) wird gleich ausgewählt
 		local game = nil
@@ -854,6 +867,7 @@ ArcadeService.Register(Actions, api)
 PrestigeService.Register(Actions, api)
 LobbyService.Register(Actions, api)
 TutorialService.Register(Actions, api)
+TycoonService.Register(Actions, api)
 
 for name in pairs(MiniNet.Actions) do
 	assert(Mini.Handlers[name], "Kein Handler für " .. name)
@@ -885,6 +899,7 @@ function Mini.Init(c)
 	CityService.Init({ getSession = c.getSession, onStation = openStation })
 	CarService.Init(c)
 	LobbyService.Init(c) -- PlaceRouter (Teleport/Simulation) bekommt emit/toast/moveTo/now
+	TycoonService.Init(c) -- Start-/Sammel-Pads aller Grundstücke (workspace.Tycoon.Plots)
 end
 
 return Mini

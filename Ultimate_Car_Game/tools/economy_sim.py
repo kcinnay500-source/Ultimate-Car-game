@@ -16,6 +16,7 @@ Aufruf (aus dem Projektordner):
     python3 tools/economy_sim.py            # Tabellen ausgeben
     python3 tools/economy_sim.py --check    # zusätzlich Ziele prüfen (Exit-Code 1 bei Verstoß)
     python3 tools/economy_sim.py --write-doc  # Tabellenblock in docs/BALANCE.md ersetzen
+    python3 tools/economy_sim.py --tycoon   # Rundendauer des Schnellen Spiels (tools/tycoon_sim.lua, echte TycoonRules)
 
 Die Annahmen über das Spielverhalten stehen gesammelt in ASSUME (unten) und in docs/BALANCE.md.
 """
@@ -685,7 +686,60 @@ def check(rows, cars):
     return errors
 
 
+# ------------------------------------------------------------------ Schnelles Spiel (Tycoon, PHASE4_CONTRACT §8)
+def tycoon_sim():
+    """Rundendauer je Gebäudetyp mit den echten Regeln (tools/tycoon_sim.lua: TycoonRules + GameConfig.Tycoon).
+
+    Gieriger Spieler wie tests/test_tycoon_rules.lua: alle 15 s sammeln, teuerstes bezahlbares Angebot kaufen.
+    Stellschrauben sind ausschließlich GameConfig.Tycoon.Tuning (Scale, CapSeconds, waits, stageWait, ...).
+    """
+    out = subprocess.run([LUAURUN, "run", os.path.join(ROOT, "tools", "tycoon_sim.lua"), ROOT],
+                         capture_output=True, text=True, cwd=ROOT)
+    if out.returncode != 0:
+        sys.exit("tycoon_sim.lua fehlgeschlagen:\n" + out.stderr + out.stdout)
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+def tycoon_markdown(sim):
+    out = ["#### Schnelles Spiel: Zeit bis Stufe 5 komplett (aktiv, gieriger Kauf alle 15 s)\n",
+           "| Gebäude | Stufe 2 | Stufe 3 | Stufe 4 | Stufe 5 | **komplett** | 2. Runde (Rebirth +15 %) | Bargeld gesamt |",
+           "|---|---:|---:|---:|---:|---:|---:|---:|"]
+    for t in sim["types"]:
+        st = [fmt_time(x) if x is not None else "–" for x in t["stages"]]
+        out.append(f"| {t['name']} | " + " | ".join(st) + f" | **{fmt_time(t['seconds'])}** | "
+                   f"{fmt_time(t['second']) if t['second'] is not None else '–'} | {fmt(t['produced'])} |")
+    lo, hi = sim["target"]["min"], sim["target"]["max"]
+    out.append("")
+    out.append(f"Ziel (Vertrag §8): ≈ 5 Std. je Durchlauf (geprüft: {fmt_time(lo)} bis {fmt_time(hi)}); "
+               "Bargeld bleibt im Durchlauf und wird nie zu Credits.\n")
+    return "\n".join(out)
+
+
+def tycoon_check(sim):
+    errors = []
+    lo, hi = sim["target"]["min"], sim["target"]["max"]
+    for t in sim["types"]:
+        sec = t["seconds"]
+        if sec is None:
+            errors.append(f"Tycoon {t['name']}: Stufe 5 wird nie komplett")
+        elif not (lo <= sec <= hi):
+            errors.append(f"Tycoon {t['name']}: Rundendauer {fmt_time(sec)} statt {fmt_time(lo)}–{fmt_time(hi)}")
+        if sec is not None and t["second"] is not None and t["second"] >= sec:
+            errors.append(f"Tycoon {t['name']}: zweite Runde mit Rebirth-Boost nicht schneller")
+    return errors
+
+
 def main():
+    if "--tycoon" in sys.argv:
+        sim = tycoon_sim()
+        print(tycoon_markdown(sim))
+        if "--check" in sys.argv:
+            errors = tycoon_check(sim)
+            for e in errors:
+                print("ZIEL VERFEHLT: " + e)
+            print(f"Tycoon-Ziele: {len(errors)} Verstöße")
+            sys.exit(1 if errors else 0)
+        return
     rows, cars, cars_cross, timeline, cross_line = build()
     md = markdown(rows, cars, cars_cross, timeline, cross_line)
     if "--write-doc" in sys.argv:
@@ -699,7 +753,7 @@ def main():
     else:
         print(md)
     if "--check" in sys.argv:
-        errors = check(rows, cars)
+        errors = check(rows, cars) + tycoon_check(tycoon_sim())
         for e in errors:
             print("ZIEL VERFEHLT: " + e)
         print(f"Balance-Ziele: {len(errors)} Verstöße")

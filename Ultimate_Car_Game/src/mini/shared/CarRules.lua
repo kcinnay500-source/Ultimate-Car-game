@@ -8,6 +8,7 @@
 -- MiniRules wird erst beim ersten Aufruf geladen (MiniRules.LoadGames lädt dieses Modul; keine Ringabhängigkeit).
 local CarCatalog = require(script.Parent:WaitForChild("CarCatalog"))
 local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules")) -- Rabatt im Autohaus je Rang (PHASE4_CONTRACT §4)
+local CrossBonus = require(script.Parent:WaitForChild("CrossBonus")) -- Tycoon-Autohaus-Rabatt (§8); braucht kein CarRules
 
 local CarRules = {}
 
@@ -262,17 +263,25 @@ function CarRules.StyleCost(car, key)
 	return math.max(def.min, math.floor(CarRules.Value(car) * def.share + 0.5))
 end
 
--- Prestige-Rabatt im Autohaus (1 % je Rang, Deckel 10 %): tatsächlicher Kaufpreis eines Modells für dieses Profil
+-- Rabatt im Autohaus: Prestige (1 % je Rang, Deckel 10 %) + Tycoon-Durchläufe „Autohaus“ (1,5 % je Durchlauf,
+-- Deckel 7,5 %, CrossBonus.TycoonDealerDiscount): tatsächlicher Kaufpreis eines Modells für dieses Profil
 function CarRules.DealerPrice(d, m)
 	local price = type(m) == "table" and m.price or 0
 	if not finite(price) or price <= 0 then
 		return 0
 	end
 	local ok, discount = pcall(PrestigeRules.Discount, d)
-	if not ok or not finite(discount) or discount <= 0 then
+	if not ok or not finite(discount) or discount < 0 then
+		discount = 0
+	end
+	local okT, tycoon = pcall(CrossBonus.TycoonDealerDiscount, d)
+	if okT and finite(tycoon) and tycoon > 0 then
+		discount += tycoon
+	end
+	if discount <= 0 then
 		return price
 	end
-	return math.max(1, math.floor(price * (1 - math.min(discount, 1)) + 0.5))
+	return math.max(1, math.floor(price * (1 - math.min(discount, 0.9)) + 0.5))
 end
 
 ---------------------------------------------------------------- Aktionen (Server)

@@ -24,7 +24,14 @@ Prüfungen:
     AABB-Überschneidung mit Stadt-Parts, Budget (Lobby 1500/12, Tycoon 2500/20), Stationen/Ankünfte/Spawn nach
     Vertrag (Spawn Enabled=false), Lobby.Stations mit MiniTab=lobby + LobbyAction, Tycoon.Plots.Slot_1..8 mit
     Base/Sign/StartPad(TycoonSlot)/Anchor/CollectPad(TycoonPad)/ButtonsRoot, Anim nur unter <Zone>.Animated (+ Plots)
-  Ohne Workspace.City (Place lobby/tycoon) laufen nur die Zonen-Prüfungen.
+  * Stufen-Vorlagen ServerStorage.TycoonTemplates.<typ>.Stage_1..5 (PHASE4_CONTRACT §8, tycoon_templates.py): Aufbau
+    (Root als PrimaryPart bei (0, 0.5, 0), Buttons mit 4 Kaufpads + Label Name/Price, StagePad (Stufe 1-4), Hidden mit
+    Producer_1..4, CashDisplay bei (-20, 3, 20) mit Label "Bargeld"), verankert, innerhalb X/Z ±34 und Y >= 0,
+    Budget 350 Parts / 6 Lichter, keine AABB-Überschneidung (auch Hidden; Ausnahme Attribut Pierce), Z-Fighting,
+    schwebende Teile, bekannte Anim-Arten ohne verschachtelte bewegte Animationen, und - am Anker von Slot_1 (Rot 0)
+    und Slot_3 (Rot 180) eingesetzt - keine Überschneidung mit StartPad/CollectPad/Sign/Kanten/Hecke des Grundstücks,
+    CollectPad genau unter der CashDisplay
+  Ohne Workspace.City (Place lobby/tycoon) laufen nur die Zonen-Prüfungen (+ Vorlagen).
 Exit-Code 1 bei Fehlern (Warnungen nicht).
 """
 import math
@@ -459,6 +466,7 @@ def main(argv):
     if city is None:
         info.append("Workspace.City fehlt (Place lobby/tycoon?) - nur Zonen-Prüfungen")
         zone_checks(tree, [], errors, warns, info, verbose)
+        template_checks(tree, errors, warns, info, verbose)
         return _report(errors, warns, info)
     # 1) verankert / zu tief
     unanch = [p.path for p in parts if not p.anchored]
@@ -677,6 +685,8 @@ def main(argv):
     vehicle_checks(tree, city, parts, errors, warns, info, verbose)
     # 9) Zonen der Ausbaustufe 4
     zone_checks(tree, parts, errors, warns, info, verbose)
+    # 10) Stufen-Vorlagen des Schnellen Spiels (ServerStorage.TycoonTemplates)
+    template_checks(tree, errors, warns, info, verbose)
     return _report(errors, warns, info)
 
 
@@ -981,6 +991,346 @@ def zone_checks(tree, city_parts, errors, warns, info, verbose=False):
         walls = [p.path for p in parts if p.collide and p.transp >= 0.95]
         if walls:
             errors.append("%s: unsichtbare kollidierende Parts: %s" % (nm, walls[:5]))
+
+
+# ---------------------------------------------------------------- Stufen-Vorlagen (PHASE4_CONTRACT §8)
+def _pen(a, b, eps):
+    """AABBs durchdringen sich auf allen drei Achsen um mehr als eps"""
+    return (min(a[1], b[1]) - max(a[0], b[0]) > eps and min(a[3], b[3]) - max(a[2], b[2]) > eps and
+            min(a[5], b[5]) - max(a[4], b[4]) > eps)
+
+
+def _pair_overlaps(parts, eps=0.02, cell=8):
+    """Paare sich durchdringender Parts (AABB) - Vorlagen-Autos und Pierce-Teile ausgenommen"""
+    sel = [p for p in parts if p.transp < 0.95 and not p.car and not p.attrs.get("Pierce")]
+    bb = [p.aabb() for p in sel]
+    grid = defaultdict(list)
+    for i, a in enumerate(bb):
+        for gx in range(int(math.floor(a[0] / cell)), int(math.floor(a[1] / cell)) + 1):
+            for gz in range(int(math.floor(a[4] / cell)), int(math.floor(a[5] / cell)) + 1):
+                grid[(gx, gz)].append(i)
+    seen = set()
+    hits = []
+    for lst in grid.values():
+        for ii in range(len(lst)):
+            for jj in range(ii + 1, len(lst)):
+                i, j = lst[ii], lst[jj]
+                key = (min(i, j), max(i, j))
+                if key in seen:
+                    continue
+                seen.add(key)
+                if _pen(bb[i], bb[j], eps):
+                    hits.append((sel[i], sel[j]))
+    return sorted(hits, key=lambda h: (h[0].path, h[1].path))
+
+
+def _car_overlaps(parts, eps=0.05):
+    """Teile der Vorlagen-Autos gegen alle anderen Parts (AABB)"""
+    cars = [p for p in parts if p.car and p.transp < 0.95]
+    others = [(p, p.aabb()) for p in parts if not p.car and p.transp < 0.95 and not p.attrs.get("Pierce")]
+    hits = []
+    for c in cars:
+        a = c.aabb()
+        for p, b in others:
+            if _pen(a, b, eps):
+                hits.append((c, p))
+    return hits
+
+
+def _floating(parts, grounded, eps=0.06):
+    """Zusammenhang über sich berührende AABBs; Komponenten ohne "grounded"-Teil (schwebend)"""
+    sel = [p for p in parts if p.transp < 0.95]
+    bb = [p.aabb() for p in sel]
+    par = list(range(len(sel)))
+
+    def find(i):
+        while par[i] != i:
+            par[i] = par[par[i]]
+            i = par[i]
+        return i
+
+    for i in range(len(sel)):
+        for j in range(i + 1, len(sel)):
+            if _ov(bb[i], bb[j], eps):
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    par[ri] = rj
+    # Autos sind je ein starres Objekt
+    group = {}
+    for i, p in enumerate(sel):
+        if p.car:
+            key = p.path.rsplit(".", 1)[0]
+            if key in group:
+                ri, rj = find(i), find(group[key])
+                if ri != rj:
+                    par[ri] = rj
+            else:
+                group[key] = i
+    roots = {find(i) for i, p in enumerate(sel) if grounded(p, bb[i])}
+    comps = defaultdict(list)
+    for i in range(len(sel)):
+        r = find(i)
+        if r not in roots:
+            comps[r].append(sel[i])
+    return sorted(comps.values(), key=lambda c: c[0].path)
+
+
+def _sweep_conflicts(model, parts, who):
+    """Drehende Modelle (Anim=turntable): jedes Teil überstreicht einen Kreisring um den Pivot (PrimaryPart) in seiner
+    Höhe; andere Teile in diesem Ring würden beim Drehen durchdrungen. Liefert (Teil, anderes Teil)."""
+    by_ref = {p.item.get("referent"): p for p in parts if p.item is not None}
+    hits = []
+    for it in model.iter("Item"):
+        if it.get("class") != "Model" or get_attrs(it).get("Anim") != "turntable":
+            continue
+        pp = get_prop(it, "PrimaryPart")
+        piv = by_ref.get(pp.text) if pp is not None else None
+        if piv is None:
+            continue
+        cx, cz = piv.cf.p[0], piv.cf.p[2]
+        inside = {id(x) for x in it.iter("Item")}
+        mine = [p for p in parts if id(p.item) in inside and p.transp < 0.95]
+        others = [p for p in parts if id(p.item) not in inside and p.transp < 0.95 and p.name != "Root"]
+        for p in mine:
+            b = p.aabb()
+            round_ = p.cls == "Part" and (p.shape == 0 or (p.shape == 2 and abs(p.cf.vector((1, 0, 0))[1]) > 0.95))
+            if round_:
+                # stehender Zylinder / Kugel: echter Radius statt AABB-Ecken
+                rad = p.size[1] / 2 if p.shape == 2 else p.size[0] / 2
+                dc = math.hypot(p.cf.p[0] - cx, p.cf.p[2] - cz)
+                rmax, rmin = dc + rad, max(0.0, dc - rad)
+            else:
+                cs = [(b[0], b[4]), (b[1], b[4]), (b[0], b[5]), (b[1], b[5])]
+                rmax = max(math.hypot(x - cx, z - cz) for x, z in cs)
+                dx = max(b[0] - cx, 0.0, cx - b[1])
+                dz = max(b[4] - cz, 0.0, cz - b[5])
+                rmin = math.hypot(dx, dz)
+            for q in others:
+                a = q.aabb()
+                if min(a[3], b[3]) - max(a[2], b[2]) <= 0.02:
+                    continue
+                qdx = max(a[0] - cx, 0.0, cx - a[1])
+                qdz = max(a[4] - cz, 0.0, cz - a[5])
+                qmin = math.hypot(qdx, qdz)
+                qcs = [(a[0], a[4]), (a[1], a[4]), (a[0], a[5]), (a[1], a[5])]
+                qmax = max(math.hypot(x - cx, z - cz) for x, z in qcs)
+                if qmin < rmax - 0.05 and qmax > rmin + 0.05:
+                    hits.append((p, q))
+    return hits
+
+
+def _template_structure(model, typ, s, who, errors):
+    from worldgen import tycoon_templates as TT
+    root = child(model, "Root")
+    pp = get_prop(model, "PrimaryPart")
+    if root is None or root.get("class") != "Part":
+        errors.append("%s: Part Root fehlt" % who)
+    else:
+        if pp is None or pp.text != root.get("referent"):
+            errors.append("%s: PrimaryPart ist nicht Root" % who)
+        rec = scan.record(root, who + ".Root")
+        if any(abs(a - b) > 1e-6 for a, b in zip(rec.cf.p, (0.0, TT.ROOT_Y, 0.0))) or \
+                any(abs(v) > 1e-6 for v in (rec.cf.look[0], rec.cf.look[1], rec.cf.look[2] + 1)):
+            errors.append("%s: Root muss unverdreht bei (0, %g, 0) liegen" % (who, TT.ROOT_Y))
+        if rec.collide or rec.transp < 1:
+            errors.append("%s: Root muss unsichtbar und CanCollide=false sein" % who)
+    buttons = child(model, "Buttons")
+    if buttons is None or buttons.get("class") != "Folder":
+        errors.append("%s: Ordner Buttons fehlt" % who)
+    pads = {}
+    for it in model.iter("Item"):
+        bid = get_attrs(it).get("TycoonButton")
+        if bid is not None:
+            if it.get("class") != "Part":
+                errors.append("%s: TycoonButton=%r an %s (kein Part)" % (who, bid, name_of(it)))
+                continue
+            pads[bid] = it
+    want = {TT.upgrade_id(typ, s, k) for k in range(1, TT.UPGRADES_PER_STAGE + 1)}
+    if s < TT.MAX_STAGE:
+        want.add(TT.stage_id(typ, s + 1))
+    if set(pads) != want:
+        errors.append("%s: TycoonButton-Ids %s erwartet, gefunden %s" % (who, sorted(want), sorted(pads)))
+    for bid, it in pads.items():
+        if bid.startswith(typ + "_stage"):
+            if name_of(it) != "StagePad":
+                errors.append("%s: Stufen-Pad %s muss 'StagePad' heißen" % (who, bid))
+        elif buttons is None or it not in list(buttons):
+            errors.append("%s: Kaufpad %s liegt nicht in Buttons" % (who, bid))
+        label = next((g for g in it.findall("Item") if g.get("class") == "SurfaceGui" and name_of(g) == "Label"), None)
+        names = {name_of(x) for x in label.iter("Item") if x.get("class") == "TextLabel"} if label is not None else set()
+        if {"Name", "Price"} - names:
+            errors.append("%s: Pad %s ohne SurfaceGui Label mit TextLabels Name/Price" % (who, bid))
+        rec = scan.record(it, who + "." + name_of(it))
+        if not rec.collide or get_prop(it, "CanTouch") is not None and get_prop(it, "CanTouch").text != "true":
+            errors.append("%s: Pad %s muss CanCollide/CanTouch true haben" % (who, bid))
+    if s == TT.MAX_STAGE and child(model, "StagePad") is not None:
+        errors.append("%s: Stufe 5 darf kein StagePad haben" % who)
+    hidden = child(model, "Hidden")
+    if hidden is None or hidden.get("class") != "Folder":
+        errors.append("%s: Ordner Hidden fehlt" % who)
+    else:
+        prods = {name_of(x) for x in children(hidden) if x.get("class") == "Model"}
+        missing = {"Producer_%d" % k for k in range(1, TT.UPGRADES_PER_STAGE + 1)} - prods
+        if missing:
+            errors.append("%s: Hidden ohne %s" % (who, sorted(missing)))
+        for x in children(hidden):
+            if not any(scan.walk(x)):
+                errors.append("%s: Hidden.%s ist leer" % (who, name_of(x)))
+    cash = child(model, "CashDisplay")
+    if cash is None or cash.get("class") != "Part":
+        errors.append("%s: Part CashDisplay fehlt" % who)
+    else:
+        rec = scan.record(cash, who + ".CashDisplay")
+        if any(abs(a - b) > 1e-6 for a, b in zip(rec.cf.p, TT.CASH_DISPLAY)):
+            errors.append("%s: CashDisplay bei %s erwartet (ist %s)" % (who, TT.CASH_DISPLAY, tuple(rec.cf.p)))
+        gui = next((g for g in cash.findall("Item") if g.get("class") == "SurfaceGui"), None)
+        labels = {name_of(x) for x in gui.iter("Item") if x.get("class") == "TextLabel"} if gui is not None else set()
+        if "Bargeld" not in labels:
+            errors.append("%s: CashDisplay ohne SurfaceGui mit TextLabel 'Bargeld'" % who)
+
+
+def _template_anims(model, who, errors):
+    from worldgen import tycoon_templates as TT
+    anim_items = []
+    for it in model.iter("Item"):
+        a = get_attrs(it)
+        if "Anim" in a:
+            if a["Anim"] not in TT.ANIM_KINDS:
+                errors.append("%s: unbekannte Anim=%r an %s" % (who, a["Anim"], name_of(it)))
+            anim_items.append((it, a["Anim"]))
+        if "TycoonAnim" in a:
+            if a["TycoonAnim"] not in TT.TYCOON_ANIM_KINDS:
+                errors.append("%s: unbekannte TycoonAnim=%r an %s" % (who, a["TycoonAnim"], name_of(it)))
+            anim_items.append((it, a["TycoonAnim"]))
+    moving = {id(it) for it, kind in anim_items if kind in TT.MOVING}
+    parent_of = {id(c): p for p in model.iter("Item") for c in p.findall("Item")}
+    for it, kind in anim_items:
+        if kind not in TT.MOVING:
+            continue
+        p = parent_of.get(id(it))
+        while p is not None and p is not model:
+            if id(p) in moving:
+                errors.append("%s: bewegte Animation %s (%s) innerhalb von %s" % (who, name_of(it), kind, name_of(p)))
+                break
+            p = parent_of.get(id(p))
+
+
+def template_checks(tree, errors, warns, info, verbose=False):
+    from worldgen import tycoon_templates as TT
+    from worldgen.tycoon import SLOTS as TSLOTS, COLLECT_PAD, HALF
+    from worldgen.plots import loc2world
+    from worldgen.lib import CF
+    tpls = TT.templates_of(tree)
+    if not tpls:
+        info.append("ServerStorage.TycoonTemplates nicht im Place")
+        return
+    for typ in TT.TYPES:
+        for s in range(1, TT.MAX_STAGE + 1):
+            if (typ, s) not in tpls:
+                errors.append("TycoonTemplates.%s.Stage_%d fehlt" % (typ, s))
+    zone, zparts = scan.zone_parts(tree, "Tycoon")
+    slot_parts = {}
+    for slot, px, pz, rot in TSLOTS:
+        if slot in (1, 3):
+            pre = "Tycoon.Plots.Slot_%d." % slot
+            slot_parts[slot] = ([p for p in zparts if p.path.startswith(pre) and p.name != "Base" and p.transp < 0.95],
+                                px, pz, rot)
+    total_p = total_l = 0
+    rows = []
+    for (typ, s), model in sorted(tpls.items()):
+        who = "TycoonTemplates.%s.Stage_%d" % (typ, s)
+        if model.get("class") != "Model":
+            errors.append("%s muss ein Model sein" % who)
+            continue
+        _template_structure(model, typ, s, who, errors)
+        _template_anims(model, who, errors)
+        parts = scan.walk(model, who)
+        n = len(parts)
+        nl = sum(1 for x in model.iter("Item") if x.get("class") in ("PointLight", "SpotLight", "SurfaceLight"))
+        total_p += n
+        total_l += nl
+        rows.append("%s.%d %d/%d" % (typ, s, n, nl))
+        if n > TT.TEMPLATE_BUDGET[0]:
+            errors.append("%s: Part-Budget überschritten: %d > %d" % (who, n, TT.TEMPLATE_BUDGET[0]))
+        if nl > TT.TEMPLATE_BUDGET[1]:
+            errors.append("%s: Licht-Budget überschritten: %d > %d" % (who, nl, TT.TEMPLATE_BUDGET[1]))
+        unanch = [p.path for p in parts if not p.anchored]
+        if unanch:
+            errors.append("%s: %d Parts nicht verankert: %s" % (who, len(unanch), unanch[:5]))
+        out = []
+        for p in parts:
+            if p.name == "Root":
+                continue
+            b = p.aabb()
+            if b[0] < -TT.INNER - 0.01 or b[1] > TT.INNER + 0.01 or b[4] < -TT.INNER - 0.01 or b[5] > TT.INNER + 0.01 \
+                    or b[2] < -0.001 or b[3] > 60:
+                out.append((p.path, tuple(round(v, 2) for v in b)))
+        if out:
+            errors.append("%s: %d Parts außerhalb X/Z ±%g bzw. Y 0..60: %s" % (who, len(out), TT.INNER, out[:4]))
+        walls = [p.path for p in parts if p.collide and p.transp >= 0.95 and p.name != "Root"]
+        if walls:
+            errors.append("%s: unsichtbare kollidierende Parts: %s" % (who, walls[:5]))
+        ov = _pair_overlaps(parts)
+        if ov:
+            errors.append("%s: %d Überschneidungen (AABB): " % (who, len(ov)))
+            for a, b in ov[: (200 if verbose else 10)]:
+                errors.append("   %s <-> %s" % (a.path[len(who) + 1:], b.path[len(who) + 1:]))
+        cv = _car_overlaps(parts)
+        if cv:
+            errors.append("%s: %d Auto-Überschneidungen: %s" % (who, len(cv),
+                                                               [(a.path[len(who) + 1:], b.path[len(who) + 1:])
+                                                                for a, b in cv[:4]]))
+        sw = _sweep_conflicts(model, parts, who)
+        if sw:
+            errors.append("%s: %d Teile im Schwenkbereich drehender Modelle: %s" %
+                          (who, len(sw), [(a.path[len(who) + 1:], b.path[len(who) + 1:]) for a, b in sw[:6]]))
+        hits = zfight(parts)
+        if hits:
+            errors.append("%s: %d Z-Fighting-Kandidaten" % (who, len(hits)))
+            for a, b, ar, key in hits[: (200 if verbose else 8)]:
+                errors.append("   %s <-> %s  Fläche %.2f" % (a.path[len(who) + 1:], b.path[len(who) + 1:], ar))
+        nc = near_coplanar(parts)
+        if nc:
+            errors.append("%s: %d fast koplanare Flächenpaare" % (who, len(nc)))
+            for a, b, ar, d, nrm in sorted(nc, key=lambda h: -h[2])[: (200 if verbose else 8)]:
+                errors.append("   %s <-> %s  Fläche %.1f  Abstand %.3f" % (a.path[len(who) + 1:],
+                                                                          b.path[len(who) + 1:], ar, d))
+        cx, cz = COLLECT_PAD
+        fl = _floating(parts, lambda p, b: b[2] <= 0.02 or (b[2] <= 0.52 and cx - 4 <= p.cf.p[0] <= cx + 4 and
+                                                             cz - 4 <= p.cf.p[2] <= cz + 4))
+        if fl:
+            errors.append("%s: %d schwebende Gruppen" % (who, len(fl)))
+            for comp in fl[: (200 if verbose else 8)]:
+                y0 = min(p.aabb()[2] for p in comp)
+                errors.append("   %s (+%d) Unterkante %.2f bei (%.1f, %.1f)" % (comp[0].path[len(who) + 1:],
+                                                                             len(comp) - 1, y0, comp[0].cf.p[0],
+                                                                             comp[0].cf.p[2]))
+        # am Anker eingesetzt (Slot_1 Rot 0, Slot_3 Rot 180): Grundstücks-Teile frei, CollectPad unter der Tafel
+        for slot, (sparts, px, pz, rot) in slot_parts.items():
+            xf = CF.at(px, 0.5, pz, rot) * CF(0, TT.ROOT_Y, 0).inverse()
+            tparts = [p for p in scan.walk(model, who, False, xf) if p.transp < 0.95 and not p.attrs.get("Pierce")]
+            bad = []
+            for p in tparts:
+                a = p.aabb()
+                if a[0] < px - HALF - 0.01 or a[1] > px + HALF + 0.01 or a[4] < pz - HALF - 0.01 or a[5] > pz + HALF + 0.01:
+                    bad.append(p.path)
+                for q in sparts:
+                    if _pen(a, q.aabb(), 0.02):
+                        bad.append("%s <-> %s" % (p.path[len(who) + 1:], q.path))
+            if bad:
+                errors.append("%s an Slot_%d: %d Konflikte mit dem Grundstück: %s" % (who, slot, len(bad), bad[:4]))
+            cash = next((p for p in tparts if p.name == "CashDisplay"), None)
+            pad = next((p for p in sparts if p.name == "CollectPad"), None)
+            if cash is not None and pad is not None:
+                if abs(cash.cf.p[0] - pad.cf.p[0]) > 1e-6 or abs(cash.cf.p[2] - pad.cf.p[2]) > 1e-6:
+                    errors.append("%s an Slot_%d: CollectPad (%.1f, %.1f) liegt nicht unter der CashDisplay (%.1f, %.1f)"
+                                  % (who, slot, pad.cf.p[0], pad.cf.p[2], cash.cf.p[0], cash.cf.p[2]))
+    info.append("TycoonTemplates: %d Vorlagen, %d Parts, %d Lichter (Budget je Vorlage %d / %d)"
+                % (len(tpls), total_p, total_l, *TT.TEMPLATE_BUDGET))
+    if verbose:
+        info.append("  Vorlagen Parts/Lichter: " + ", ".join(rows))
+    else:
+        info.append("  größte: " + ", ".join(sorted(rows, key=lambda r: -int(r.split()[1].split("/")[0]))[:4]))
 
 
 # ---------------------------------------------------------------- Fahrzeuge (PHASE2_CONTRACT §3)

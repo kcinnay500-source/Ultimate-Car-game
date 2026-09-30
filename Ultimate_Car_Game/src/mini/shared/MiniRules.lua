@@ -11,6 +11,8 @@ local AuctionRules = require(script.Parent:WaitForChild("AuctionRules"))
 local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
 -- Ausbaustufe 4: Einstellungen/Tutorial (games.meta) und Prestige (games.prestige); MetaRules braucht nur GameConfig
 local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
+-- Meilenstein 4: Schnelles Spiel (games.tycoon); TycoonRules braucht nur GameConfig, PrestigeRules und Config
+local TycoonRules = require(script.Parent:WaitForChild("TycoonRules"))
 local CrossBonus = require(script.Parent:WaitForChild("CrossBonus"))
 
 local MiniRules = {}
@@ -93,8 +95,8 @@ for _, key in ipairs(MiniRules.STAT_KEYS) do
 	STAT_SET[key] = true
 end
 
--- Tiefe höchstens 3 unter games (games.press.upgrades.pu1, games.cars[1].paint, games.arcade.best.arcade_1,
--- games.meta.hintsSeen.h_map, games.prestige.claimed[n]);
+-- Tiefe höchstens 5 unter games (Vertrag §2): games.press.upgrades.pu1, games.cars[1].paint, games.arcade.best.arcade_1,
+-- games.meta.hintsSeen.h_map, games.prestige.claimed[n], games.tycoon.run.upgrades[id] (Tiefe 4);
 -- R.Snapshot erlaubt 12.
 function MiniRules.DefaultGames()
 	local stats = {}
@@ -130,6 +132,7 @@ function MiniRules.DefaultGames()
 	}
 	CarRules.ApplyDefault(g) -- cars = {}, carSerial = 0, activeCar = 0
 	MetaRules.ApplyDefault(g) -- meta, prestige (Ausbaustufe 4)
+	TycoonRules.ApplyDefault(g) -- tycoon (Meilenstein 4)
 	return g
 end
 
@@ -175,6 +178,7 @@ function MiniRules.LoadGames(raw, d, now)
 	g.arcade = ArcadeRules.Load(raw.arcade, d, now)
 	CarRules.ApplyLoad(g, raw, d, now)
 	MetaRules.ApplyLoad(g, raw, d, now)
+	TycoonRules.ApplyLoad(g, raw, d, now) -- gespeicherter Durchlauf (Fortsetzen), runsDone, rebirths
 	g.parts = loadInt(raw.parts, g.parts, 0, MAX_SAFE)
 	for _, u in ipairs(MiniConfig.Upgrades) do
 		g[u.key] = loadInt(raw[u.key], u.start, u.start, u.max)

@@ -61,6 +61,17 @@ MiniNet.Actions = {
 	tutorial_restart = {}, -- Tutorial-Kiosk in der Lobby: noch einmal von vorn (ohne zweite Belohnung)
 	prestige_claim = { rank = "number" },
 	unlocks_seen = {},
+	-- Meilenstein 4 (PHASE4_CONTRACT §8, §10): Schnelles Spiel (Tycoon). qty/price sind Absichten in Bargeld
+	-- (validate.py INTENT_FIELDS), to = UserId des Handelspartners, id der Angebote = Server-Laufnummer.
+	tycoon_choose = { building = "string" },
+	tycoon_collect = {},
+	tycoon_buy = { id = "string" },
+	tycoon_stage = {},
+	tycoon_rebirth = {},
+	tycoon_abandon = {},
+	tycoon_trade_offer = { to = "number", item = "string", qty = "number", price = "number" },
+	tycoon_trade_accept = { id = "number" },
+	tycoon_trade_cancel = { id = "number" },
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -93,6 +104,14 @@ MiniNet.Cooldowns = {
 	tutorial_skip = 1,
 	tutorial_restart = 2,
 	prestige_claim = 0.5,
+	tycoon_choose = 1,
+	tycoon_collect = 0.3,
+	tycoon_stage = 1,
+	tycoon_rebirth = 2,
+	tycoon_abandon = 2,
+	tycoon_trade_offer = 1,
+	tycoon_trade_accept = 0.5,
+	tycoon_trade_cancel = 0.5,
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",
@@ -111,6 +130,9 @@ MiniNet.Targets = {
 	mini_car_style = "id",
 	party_kick = "userId",
 	prestige_claim = "rank",
+	tycoon_buy = "id",
+	tycoon_trade_accept = "id",
+	tycoon_trade_cancel = "id",
 }
 
 -- Ereignisse Server -> Client
@@ -121,7 +143,7 @@ MiniNet.Events = {
 }
 
 -- Tabs der Minispiel-Oberfläche (auch Werte des Attributs MiniTab an City.Stations.<key>)
-MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade", "lobby", "unlocks", "prestige" }
+MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade", "lobby", "unlocks", "prestige", "tycoon" }
 MiniNet.TabSet = {}
 for _, tab in ipairs(MiniNet.Tabs) do
 	MiniNet.TabSet[tab] = true

@@ -32,6 +32,7 @@ MiniClient.Number = MiniLocale and MiniLocale.Number or nil
 
 local PAGES = {
 	lobby = "LobbyUI",
+	tycoon = "TycoonUI",
 	unlocks = "UnlocksUI",
 	prestige = "PrestigeUI",
 	overview = "OverviewUI",
@@ -56,6 +57,7 @@ local started, starting = false, false
 local UI, Remote, Effects, City
 local Drive -- DriveClient (Fahren: Tacho, Fahrregler, Nitro)
 local Tutorial -- TutorialUI (Ausbaustufe 4: Tutorial-Karte, Beginner-Hinweise; kein Tab)
+local Tycoon -- TycoonClient (Meilenstein 4: Bargeld-Abzeichen, Pad-Blitz, Produzenten-Animationen; kein Tab)
 local Unlocks -- GarageShared.Mini.Unlocks (repliziert): Sperrhinweis je Tab
 local Modules = {}
 local LockNotes = {} -- [tab] = TextLabel „Ab Level n: …“ über dem Bereich (Bereiche bleiben sichtbar, nur markiert)
@@ -216,6 +218,9 @@ local function onSnapshot(s)
 	if Tutorial then
 		call(Tutorial.OnSnapshot, s)
 	end
+	if Tycoon then
+		call(Tycoon.OnSnapshot, s) -- Bargeld-Abzeichen im Modus tycoon, Blitz bei Stufenaufstieg
+	end
 	renderLockNotes(s)
 	renderHeader()
 	renderVisible()
@@ -278,6 +283,12 @@ local function onNotice(data)
 		end
 	elseif kind == "prestige" then
 		call(Modules.prestige and Modules.prestige.OnNotice, data)
+	elseif kind == "tycoon_market" or kind == "tycoon_stage" or kind == "trade" or kind == "tycoon_choose" or kind == "tycoon" then
+		-- Schnelles Spiel: Marktplatz-Tafel, Stufen/Handel (Neuzeichnen), Start-Pad öffnet den Tab (TycoonClient)
+		call(Modules.tycoon and Modules.tycoon.OnNotice, data)
+		if Tycoon then
+			call(Tycoon.OnNotice, data)
+		end
 	elseif kind == "mode" or kind == "party" or kind == "lobby" then
 		call(Modules.lobby and Modules.lobby.OnNotice, data)
 		if kind == "lobby" and Tutorial and type(data.hint) == "string" then
@@ -318,6 +329,7 @@ function MiniClient.Start(o)
 			return call(opts.isTabletOpen) == true
 		end,
 		IsBlocked = MiniClient.IsBlocked,
+		Open = MiniClient.Open, -- Tab öffnen (schließt das Tablet; TycoonClient nutzt es für das Start-Pad)
 		OpenTablet = opts.openTablet and function(key)
 			MiniClient.Close()
 			call(opts.openTablet, key)
@@ -366,6 +378,16 @@ function MiniClient.Start(o)
 	if not okDrive then
 		Drive = nil
 		warnOnce("drive", "Fahren nicht geladen: " .. tostring(errDrive))
+	end
+
+	-- Schnelles Spiel (eigene ScreenGui "TycoonHUD", eigener Heartbeat; läuft unabhängig vom Panel)
+	local okTy, errTy = pcall(function()
+		Tycoon = require(folder:WaitForChild("TycoonClient", 10))
+		Tycoon.Start(ctx)
+	end)
+	if not okTy then
+		Tycoon = nil
+		warnOnce("tycoon", "Schnelles Spiel nicht geladen: " .. tostring(errTy))
 	end
 
 	UI.OnTabShown = function(key)

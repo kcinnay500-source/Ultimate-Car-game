@@ -1717,6 +1717,9 @@ local function consider(inst, root)
 		return
 	end
 	kind = lower(kind)
+	if kind == "conveyor" or kind == "stamp" then
+		return -- Tycoon-Produzenten (Förderband, Stempelpresse) animiert TycoonClient
+	end
 	local fn = Kinds[kind]
 	if not fn then
 		warnOnce("kind_" .. kind, "Unbekannte Animation Anim='" .. kind .. "' (z. B. " .. inst:GetFullName() .. ") – wird nicht animiert")

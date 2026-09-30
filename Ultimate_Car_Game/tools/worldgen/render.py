@@ -10,6 +10,9 @@
 * --cut Y: Schnitt bei Höhe Y (Dächer/Decken darüber entfallen) -> Innenansicht <name>_cut<Y>_iso.png
 * --zones: die Zonen der Ausbaustufe 4 (Workspace.Lobby, Workspace.Tycoon; PHASE4_CONTRACT §1) -> lobby_top.png,
   lobby_iso.png, lobby_cut23_iso.png (Innenansicht ohne Dach), tycoon_top.png, tycoon_iso.png
+* --tycoon-templates [typ [stufe]]: die Stufen-Vorlagen ServerStorage.TycoonTemplates (§8) je Gebäudetyp nebeneinander
+  (Stufe 1..5 von links nach rechts, jede auf einer 70 x 70-Bodenplatte, Hidden-Produzenten sichtbar) ->
+  tycoon_templates_<typ>_top.png / _iso.png; mit typ und stufe eine einzelne Vorlage groß (tycoon_<typ>_<n>_iso.png)
 """
 import math
 import sys
@@ -142,6 +145,64 @@ def markers(city, spawn="CitySpawn"):
 
 # Zone -> (Ausschnitt x0 x1 z0 z1, SpawnLocation, Schnitthöhe für die Innenansicht oder None)
 ZONES = {"Lobby": ((-125, 125, -805, -605), "LobbySpawn", 23.0), "Tycoon": ((-225, 225, 695, 1005), "TycoonSpawn", None)}
+
+
+def _ground(x, z, half=35.0):
+    """Synthetische Bodenplatte (wie Tycoon.Plots.Slot_n.Base) für die Vorlagen-Ansicht"""
+    from worldgen.lib import CF
+    p = scan.P()
+    p.item = None
+    p.name = "Base"
+    p.cls = "Part"
+    p.path = "Base"
+    p.size = (half * 2, 1.0, half * 2)
+    p.cf = CF(x, -0.5, z)
+    p.color = (83, 88, 91)
+    p.transp = 0.0
+    p.material = "Concrete"
+    p.shape = 1
+    p.anchored = True
+    p.collide = True
+    p.attrs = {}
+    p.car = False
+    p.top = 0.0
+    return p
+
+
+def render_templates(tree, out, typ=None, stage=None):
+    """Stufen-Vorlagen je Typ in einer Reihe (Abstand 80 Studs); Hidden-Produzenten werden mitgezeichnet."""
+    from worldgen import tycoon_templates as TT
+    from worldgen.lib import CF
+    tpls = TT.templates_of(tree)
+    if not tpls:
+        print("ServerStorage.TycoonTemplates fehlt im Place")
+        return []
+    paths = []
+    types = [typ] if typ else list(TT.TYPES)
+    for t in types:
+        stages = [stage] if stage else list(range(1, TT.MAX_STAGE + 1))
+        parts = []
+        marks = []
+        for i, s in enumerate(stages):
+            model = tpls.get((t, s))
+            if model is None:
+                continue
+            ox = i * 80.0
+            xf = CF(ox, 0, 0)
+            parts.append(_ground(ox, 0))
+            parts += [p for p in scan.walk(model, "%s.%d" % (t, s), False, xf) if p.transp < 0.97]
+            marks.append(("Stufe %d" % s, (ox - 30, 0, 36), "#ffffff"))
+        if not parts:
+            continue
+        n = len(stages)
+        rect = (-40, (n - 1) * 80 + 40, -40, 40)
+        key = "tycoon_templates_%s" % t if not stage else "tycoon_%s_%d" % (t, stage)
+        p1 = out / ("%s_top.png" % key)
+        top_view(parts, rect, p1, marks, "TycoonTemplates %s" % t, px_per_stud=max(4.0, 2400 / (rect[1] - rect[0])))
+        p2 = out / ("%s_iso.png" % key)
+        iso_view(parts, rect, p2, "TycoonTemplates %s (Stufe 1..5)" % t if not stage else "%s Stufe %d" % (t, stage))
+        paths += [p1, p2]
+    return paths
 
 
 def render_zones(tree, out):
@@ -360,6 +421,7 @@ def main(argv):
     out = OUT
     with_plots = "--plots" in args
     zones = "--zones" in args
+    templates = None
     rect = None
     cut = None
     name = "city"
@@ -384,11 +446,25 @@ def main(argv):
             out = Path(args[i + 1])
             i += 2
             continue
+        if a == "--tycoon-templates":
+            templates = [None, None]
+            i += 1
+            if i < len(args) and not args[i].startswith("--") and not args[i].endswith(".rbxlx"):
+                templates[0] = args[i]
+                i += 1
+                if i < len(args) and args[i].isdigit():
+                    templates[1] = int(args[i])
+                    i += 1
+            continue
         if not a.startswith("--"):
             place = a
         i += 1
     out.mkdir(parents=True, exist_ok=True)
     tree = scan.load(place)
+    if templates is not None:
+        for p in render_templates(tree, out, templates[0], templates[1]):
+            print(p)
+        return
     if zones:
         for p in render_zones(tree, out):
             print(p)

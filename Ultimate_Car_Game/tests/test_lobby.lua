@@ -899,9 +899,9 @@ return {
 			end
 		end
 		T.check(sawSim, "Simulationshinweis als Toast")
-		-- Schnelles Spiel ohne Tycoon-Dienst (GameConfig.Tycoon leer): Karte sagt „Eröffnet bald“
-		T.check(next(GC.Tycoon) == nil, "GameConfig.Tycoon noch leer (Meilenstein 4)")
-		T.check(withText(page, "Eröffnet bald") ~= nil, "Modus-Karte: Eröffnet bald")
+		-- Schnelles Spiel mit Tycoon-Dienst (Meilenstein 4, GameConfig.Tycoon gefüllt): Karte ohne „Eröffnet bald“
+		T.check(next(GC.Tycoon) ~= nil, "GameConfig.Tycoon gefüllt (Meilenstein 4)")
+		T.check(withText(page, "Eröffnet bald") == nil, "Modus-Karte: kein „Eröffnet bald“ mehr")
 		-- kicked-Ereignis: die übrigen erfahren es, der eigene Rauswurf kommt vom Server als Toast
 		local nToasts = #toasts
 		g:InClient(p, function()
