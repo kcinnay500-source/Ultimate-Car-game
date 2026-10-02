@@ -71,11 +71,17 @@ function Purchases.FX(product)
     else detail=tostring(product.name or product.key or "").." · Danke für deinen Einkauf!" end
     return {title=FX_TITLE[kind] or FX_TITLE.credits,detail=detail}
 end
-function Purchases.Init(getSession,onGranted)
+-- 3.0: onDeferred(session, product, reason) (optional): eine Shop-Quittung ist gerade nicht anwendbar (z. B. Garage
+-- voll); sie bleibt offen, wird in dieser Sitzung alle ShopConfig.ReceiptRetrySeconds erneut versucht und der
+-- Spieler bekommt einmal je Quittung einen Hinweis. onGranted(session, product, result) – result = Ergebnis von
+-- ShopRules.ApplyReceipt auf dem lebenden Profil (nil bei Credits-Paketen).
+function Purchases.Init(getSession,onGranted,onDeferred)
     local retries={}
+    local told={} -- 3.0: Hinweis auf eine aufgeschobene Quittung nur einmal je PurchaseId
     Purchases.Validate() -- 3.0: doppelte Produkt-Ids melden
     local function grant(session,receipt,product)
-        local granted,new
+        local granted,new,result -- 3.0: result = ApplyReceipt-Ergebnis
+        local deferred=nil -- 3.0: Grund, wenn ApplyReceipt die Quittung (noch) nicht anwenden konnte
         if Purchases.Kind(product)=="credits" then
             granted,new=Profiles.GrantCredits(session.profile,receipt.PurchaseId,product.credits)
         else
@@ -83,29 +89,42 @@ function Purchases.Init(getSession,onGranted)
             local rules=shop()
             if not rules then return false end
             granted,new=Profiles.GrantReceipt(session.profile,receipt.PurchaseId,function(snapshot)
-                local ok=rules.ApplyReceipt(snapshot,product,os.time())
+                local ok,res=rules.ApplyReceipt(snapshot,product,os.time()) -- 3.0: Ergebnis/Grund merken
+                if ok==true then result=res;deferred=nil else deferred=type(res)=="string" and res or "nicht anwendbar" end
                 return ok==true
             end)
         end
         if granted and new and not session.closing then
-            local ok,err=pcall(onGranted,session,product)
+            local ok,err=pcall(onGranted,session,product,result)
             if not ok then warn("[Purchases] onGranted: "..tostring(err)) end
         end
-        return granted
+        if not granted and deferred and onDeferred and not told[receipt.PurchaseId] and not session.closing then
+            told[receipt.PurchaseId]=true -- 3.0: einmal je Quittung erklären, was zu tun ist
+            local ok,err=pcall(onDeferred,session,product,deferred)
+            if not ok then warn("[Purchases] onDeferred: "..tostring(err)) end
+        end
+        if granted then told[receipt.PurchaseId]=nil end -- 3.0
+        return granted,deferred~=nil -- 3.0: aufgeschoben (nicht anwendbar)?
     end
     Marketplace.ProcessReceipt=function(receipt)
         local product=Purchases.ByProduct(receipt.ProductId)
         local player=Players:GetPlayerByUserId(receipt.PlayerId)
         local session=player and getSession(player)
         if not product or not session or session.closing or type(receipt.PurchaseId)~="string" then return Enum.ProductPurchaseDecision.NotProcessedYet end
-        if grant(session,receipt,product) then return Enum.ProductPurchaseDecision.PurchaseGranted end
+        local granted,deferred=grant(session,receipt,product) -- 3.0
+        if granted then return Enum.ProductPurchaseDecision.PurchaseGranted end
         -- Roblox also retries receipts on rejoin. Resolve ambiguous store writes while
         -- the owner remains present so they do not have to spend Robux a second time.
-        if not retries[receipt.PurchaseId] and session.profile.receiptPending then
+        -- 3.0: auch aufgeschobene Shop-Quittungen (Garage voll) in der Sitzung wiederholen, damit ein frei
+        -- gewordener Platz die Quittung sofort auflöst (nicht erst beim nächsten Beitritt).
+        if not retries[receipt.PurchaseId] and (session.profile.receiptPending or (deferred and session.profile.writable)) then
             retries[receipt.PurchaseId]=true
+            local _,config=shop()
+            local every=config and type(config.ReceiptRetrySeconds)=="number" and config.ReceiptRetrySeconds or 8 -- 3.0
             task.spawn(function()
                 while getSession(player)==session and not session.closing and session.profile.writable do
-                    task.wait(8)
+                    task.wait(every)
+                    if getSession(player)~=session or session.closing then break end -- 3.0: nicht nach dem Verlassen
                     if grant(session,receipt,product) then break end
                 end
                 retries[receipt.PurchaseId]=nil

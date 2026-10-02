@@ -177,10 +177,11 @@ return {
 		T.eq(decision, Enum.ProductPurchaseDecision.PurchaseGranted, "Wiederholung PurchaseGranted")
 		T.eq(w.cars(p, "dlc_komet_sunset"), 1, "kein zweites Auto")
 		T.eq(w.storedCars(701, "dlc_komet_sunset"), 1, "gespeichert weiterhin ein Auto")
-		-- Neuer Beleg für dasselbe Produkt: Auto gibt es schon (Grant überspringt), Quittung trotzdem abgeschlossen
+		-- Neuer (bezahlter) Beleg für dasselbe Produkt: eine Robux-Quittung verfällt nie ohne Gegenwert – das Auto
+		-- wird als zweites Exemplar geliefert (der Shop bietet den Prompt bei Besitz gar nicht erst an)
 		decision = g:Purchase(p, CAR_PRODUCT, "kauf-auto-2")
 		T.eq(decision, Enum.ProductPurchaseDecision.PurchaseGranted, "zweiter Beleg abgeschlossen")
-		T.eq(w.cars(p, "dlc_komet_sunset"), 1, "Auto-Produkt ist genau einmal gültig")
+		T.eq(w.cars(p, "dlc_komet_sunset"), 2, "bezahltes Auto geliefert")
 		T.eq(g:Record(701).receipts["kauf-auto-2"], true, "zweiter Beleg gespeichert")
 		-- Unbekanntes Produkt
 		decision = g:Purchase(p, 999999, "kauf-x")
@@ -201,12 +202,21 @@ return {
 		T.eq(w.shop(p).owned.rims_gold, true, "Goldfelgen im Besitz")
 		T.eq(g:Record(702).receipts["kauf-felgen"], true, "Beleg gespeichert")
 		T.eq(g:Record(702).data.games.shop.owned.rims_gold, true, "Besitz gespeichert")
+		T.eq(d.money, money0, "Kosmetik kostet keine Credits")
+		-- Bündel mit schon vorhandenen Goldfelgen (z. B. Wettlauf): Fehlendes gewährt, Vorhandenes in Credits erstattet
+		local m = g:Mark()
 		T.eq(g:Purchase(p, BUNDLE_PRODUCT, "kauf-set"), Enum.ProductPurchaseDecision.PurchaseGranted, "Bündel gewährt")
 		local shop = w.shop(p)
 		T.eq(shop.owned.wrap_streifen, true, "Bündel: Folierung")
 		T.eq(shop.owned.horn_melodie, true, "Bündel: Hupe")
 		T.eq(shop.owned.trail_blau, true, "Bündel: Spur")
-		T.eq(d.money, money0, "Kosmetik kostet keine Credits")
+		local refund = g:MiniShared("GameConfig").Shop.CosmeticById.rims_gold.creditsPrice
+		T.eq(d.money, money0 + refund, "vorhandene Goldfelgen erstattet")
+		T.eq(g:Record(702).data.money, money0 + refund, "Erstattung mit dem Beleg gespeichert")
+		if w.integrated then
+			T.check(g:HasToast(p, "dafür bekommst du", m), "Toast zur Erstattung")
+		end
+		money0 = d.money
 		-- Credits-Paket (2.4.0-Weg über Purchases.ByProduct, beide Listen)
 		local credits = g:Config().CreditProducts[1].credits
 		T.eq(g:Purchase(p, 424242, "kauf-credits"), Enum.ProductPurchaseDecision.PurchaseGranted, "Credits gewährt")
@@ -554,6 +564,166 @@ return {
 		T.eq(#g:Events(p, "purchasePrompt", m), 0, "Studio: kein Prompt")
 		T.eq(g:Purchase(p, CAR_PRODUCT, "kauf-studio"), Enum.ProductPurchaseDecision.NotProcessedYet, "ohne Speicher keine Gutschrift")
 		T.eq(w.cars(p, "dlc_komet_sunset"), 0, "kein Auto")
+		noErrors(T, g)
+	end },
+	{ "Garage voll: kein Robux-Prompt für Autos; Quittung aufgeschoben mit Hinweis, Verkauf -> Gutschrift in der Sitzung", function(T, H)
+		local g = H.Garage({ level = 8, before = function(g)
+			prepare(g, { car_komet_sunset = CAR_PRODUCT })
+		end })
+		local w = wire(g)
+		local p = w.join(720, { name = "Lia" })
+		local d = g:D(p)
+		local CR = g:MiniShared("CarRules")
+		local CC = g:MiniShared("CarCatalog")
+		local TEXT = g:MiniShared("GameConfig").Shop.Text
+		for _ = 1, CC.MaxCars do
+			CR.AddCar(d, CR.NewCar("komet", g:Now()))
+		end
+		T.eq(#d.games.cars, CC.MaxCars, "Garage voll")
+		local m = g:Mark()
+		w.act(p, "shop_prompt", { product = "car_komet_sunset", rid = 1 })
+		T.check(g:HasToast(p, string.format(TEXT.garageFull, CC.MaxCars), m), "Toast Garage voll")
+		T.eq(#g:Events(p, "purchasePrompt", m), 0, "kein Robux-Prompt bei voller Garage")
+		local view = w.snapshot(p, true).catalog
+		local blocked
+		for _, prod in ipairs(view.products) do
+			if prod.key == "car_komet_sunset" then
+				blocked = prod.blocked
+			end
+		end
+		T.eq(blocked, string.format(TEXT.garageFull, CC.MaxCars), "Katalog: Robux-Knopf mit Grund gesperrt")
+		-- Quittung trotzdem (z. B. Prompt vor dem Füllen der Garage): aufgeschoben, Hinweis, keine Gutschrift
+		m = g:Mark()
+		local decision = g:Purchase(p, CAR_PRODUCT, "kauf-voll")
+		T.eq(decision, Enum.ProductPurchaseDecision.NotProcessedYet, "NotProcessedYet")
+		T.eq(w.cars(p, "dlc_komet_sunset"), 0, "noch kein Auto")
+		T.eq(g:Record(720) and g:Record(720).receipts and g:Record(720).receipts["kauf-voll"], nil, "kein Beleg")
+		if w.integrated then
+			T.check(g:HasToast(p, "sobald ein Platz frei ist", m), "Hinweis: Garage voll, Auto kommt später")
+			T.check(hasNotice(g, p, "deferred", m) ~= nil, "mini_notice shop/deferred")
+		end
+		-- Wiederholung desselben Belegs durch Roblox: kein zweiter Hinweis
+		local m2 = g:Mark()
+		g:Purchase(p, CAR_PRODUCT, "kauf-voll")
+		T.eq(g:HasToast(p, "sobald ein Platz frei ist", m2), false, "Hinweis nur einmal je Quittung")
+		-- Auto verkaufen -> die Sitzung wiederholt die Quittung und liefert das Auto
+		m = g:Mark()
+		T.eq(w.act(p, "mini_car_sell", { id = d.games.cars[1].id, rid = 2 }), "ok", "Auto verkauft")
+		T.eq(#d.games.cars, CC.MaxCars - 1, "Platz frei")
+		g:Advance(10)
+		T.eq(w.cars(p, "dlc_komet_sunset"), 1, "Auto in der Sitzung gutgeschrieben")
+		T.eq(g:Record(720).receipts["kauf-voll"], true, "Beleg gespeichert")
+		T.eq(w.storedCars(720, "dlc_komet_sunset"), 1, "Auto mit dem Beleg gespeichert")
+		if w.integrated then
+			T.check(g:HasToast(p, "Dein neues Auto steht in der Garage", m), "Danke-Toast nach der Gutschrift")
+		end
+		-- Roblox liefert den Beleg später erneut: sofort abgeschlossen, kein zweites Auto
+		T.eq(g:Purchase(p, CAR_PRODUCT, "kauf-voll"), Enum.ProductPurchaseDecision.PurchaseGranted, "Wiederholung gewährt")
+		T.eq(w.cars(p, "dlc_komet_sunset"), 1, "kein zweites Auto")
+		noErrors(T, g)
+	end },
+
+	{ "Besitz: kein Robux-Prompt für vorhandene Kosmetik/teilweise vorhandene Bündel; Doppelkauf-Schutz nach dem Prompt", function(T, H)
+		local g = H.Garage({ level = 8, before = function(g)
+			prepare(g, { cos_rims_gold = COS_PRODUCT, bundle_starter = BUNDLE_PRODUCT, cos_wrap_flammen = 515154 })
+		end })
+		local w = wire(g)
+		local p = w.join(721, { name = "Max" })
+		local d = g:D(p)
+		d.money = 100000
+		local TEXT = g:MiniShared("GameConfig").Shop.Text
+		T.eq(w.act(p, "shop_buy", { item = "rims_gold", rid = 1 }), "ok", "Goldfelgen mit Credits")
+		g:Advance(4)
+		local m = g:Mark()
+		w.act(p, "shop_prompt", { product = "cos_rims_gold", rid = 2 })
+		T.check(g:HasToast(p, TEXT.owned, m), "Toast: Das hast du schon.")
+		T.eq(#g:Events(p, "purchasePrompt", m), 0, "kein Prompt für vorhandene Kosmetik")
+		g:Advance(4)
+		m = g:Mark()
+		w.act(p, "shop_prompt", { product = "bundle_starter", rid = 3 })
+		T.check(g:HasToast(p, "1 von 4 Teilen", m), "Toast: Bündel teilweise vorhanden")
+		T.eq(#g:Events(p, "purchasePrompt", m), 0, "kein Prompt für teilweise vorhandenes Bündel")
+		-- Doppelkauf-Schutz: nach dem Prompt ist dasselbe Teil eine Weile nicht für Credits kaufbar
+		g:Advance(4)
+		m = g:Mark()
+		w.act(p, "shop_prompt", { product = "cos_wrap_flammen", rid = 4 })
+		T.eq(#g:Events(p, "purchasePrompt", m), 1, "Prompt für Flammen")
+		local money = d.money
+		w.act(p, "shop_buy", { item = "wrap_flammen", rid = 5 })
+		T.check(g:HasToast(p, TEXT.promptPending, m), "Toast: Robux-Kauf läuft")
+		T.eq(w.shop(p).owned.wrap_flammen, nil, "nicht doppelt gekauft")
+		T.eq(d.money, money, "nichts abgebucht")
+		-- Dialog abgebrochen -> Sperre sofort aufgehoben
+		g:Activate()
+		g.env.game:GetService("MarketplaceService").PromptProductPurchaseFinished:Fire(p.UserId, 515154, false)
+		g:Flush()
+		T.eq(w.act(p, "shop_buy", { item = "wrap_flammen", rid = 6 }), "ok", "nach Abbruch für Credits kaufbar")
+		T.eq(w.shop(p).owned.wrap_flammen, true, "gekauft")
+		noErrors(T, g)
+	end },
+
+	{ "DLC-Auto: verkauft -> wieder kaufbar (Credits und Robux); Versteigern abgelehnt", function(T, H)
+		local g = H.Garage({ level = 30, before = function(g)
+			prepare(g, { car_komet_sunset = CAR_PRODUCT })
+		end })
+		local w = wire(g)
+		local p = w.join(722, { name = "Nia" })
+		local d = g:D(p)
+		d.money = 10000000
+		local TEXT = g:MiniShared("GameConfig").Shop.Text
+		T.eq(w.act(p, "shop_buy", { item = "dlc_komet_sunset", rid = 1 }), "ok", "mit Credits gekauft")
+		T.eq(w.cars(p, "dlc_komet_sunset"), 1, "in der Garage")
+		local car
+		for _, c in ipairs(d.games.cars) do
+			if c.model == "dlc_komet_sunset" then
+				car = c
+			end
+		end
+		-- Versteigern: abgelehnt (kein Handel mit Robux-Ware zwischen Spielern)
+		local m = g:Mark()
+		w.act(p, "mini_auction_consign", { id = car.id, start = 1000, duration = 120, rid = 2 })
+		T.check(g:HasToast(p, "nicht versteigert", m), "Toast: Sondermodell nicht versteigerbar")
+		T.check(not car.locked, "Auto nicht gesperrt")
+		T.eq(g:MiniShared("AuctionRules").NewPlayerLot(1, { userId = 1, name = "x" }, car, 1000, 120, g:Now()), nil, "NewPlayerLot lehnt Sondermodell ab")
+		-- Kein Robux-Prompt, solange es in der Garage steht
+		g:Advance(4)
+		m = g:Mark()
+		w.act(p, "shop_prompt", { product = "car_komet_sunset", rid = 3 })
+		T.check(g:HasToast(p, TEXT.owned, m), "Besitz: kein Prompt")
+		-- Verkaufen -> wieder kaufbar
+		T.eq(w.act(p, "mini_car_sell", { id = car.id, rid = 4 }), "ok", "verkauft")
+		T.eq(w.cars(p, "dlc_komet_sunset"), 0, "nicht mehr in der Garage")
+		T.eq(w.shop(p).owned.wrap_sunset, true, "Folierung bleibt")
+		local snap = w.snapshot(p, true)
+		T.eq(#snap.dlcCars, 0, "Snapshot: kein Sondermodell in der Garage")
+		g:Advance(4)
+		m = g:Mark()
+		w.act(p, "shop_prompt", { product = "car_komet_sunset", rid = 5 })
+		T.eq(#g:Events(p, "purchasePrompt", m), 1, "Robux-Prompt wieder möglich")
+		g:Advance(61) -- Doppelkauf-Schutz abgelaufen
+		T.eq(w.act(p, "shop_buy", { item = "dlc_komet_sunset", rid = 6 }), "ok", "mit Credits erneut gekauft")
+		T.eq(w.cars(p, "dlc_komet_sunset"), 1, "wieder in der Garage")
+		noErrors(T, g)
+	end },
+
+	{ "Quittung: eine Revision, ein changed je Shop-Produkt; Credits-Paket wie 2.4.0", function(T, H)
+		local g = H.Garage({ level = 8, before = function(g)
+			prepare(g, { cos_rims_gold = COS_PRODUCT })
+			g:Config().CreditProducts[1].productId = 424242
+		end })
+		local w = wire(g)
+		local p = w.join(723, { name = "Ole" })
+		if not w.integrated then
+			T.check(true, "nur integriert prüfbar")
+			return
+		end
+		local sess = g:Session(p)
+		local rev = sess.revision
+		g:Purchase(p, COS_PRODUCT, "kauf-rev")
+		T.eq(sess.revision - rev, 1, "Shop-Quittung: genau eine Revision")
+		rev = sess.revision
+		g:Purchase(p, 424242, "kauf-rev-credits")
+		T.eq(sess.revision - rev, 1, "Credits-Paket: genau eine Revision")
 		noErrors(T, g)
 	end },
 }

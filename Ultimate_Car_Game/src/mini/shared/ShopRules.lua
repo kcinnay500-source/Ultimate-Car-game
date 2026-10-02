@@ -5,8 +5,13 @@
 -- XP über MiniRules.GainXP, Autos über CarRules.AddCar. Keine Instanzen, keine Dienste: nutzbar auf Server
 -- (ShopService, Purchases/Profiles.GrantReceipt über ApplyReceipt) und Client (Katalogtexte).
 -- Grundsätze (§9): kein Pay-to-win (DLC-Autos = Werte des Basismodells), alles auch für Credits oder als
--- Belohnung, Produkt-/Pass-Ids 0 = „noch nicht eingerichtet“ (CanPrompt lehnt ab), ein Auto-Produkt ist
--- genau einmal kaufbar (dlcCars[model]), Gutschriften sind idempotent (Grant überspringt Vorhandenes).
+-- Belohnung, Produkt-/Pass-Ids 0 = „noch nicht eingerichtet“ (CanPrompt lehnt ab), Gutschriften sind idempotent
+-- (Grant überspringt Vorhandenes). Besitz eines DLC-Autos = ein Auto dieses Modells steht in d.games.cars
+-- (HasDlc); dlcCars ist nur die Kauf-Historie (exklusive Folierung bleibt). Verkauft der Spieler das Auto beim
+-- Händler, kann er es wieder kaufen; versteigern lässt es sich nicht (AuctionRules, kein Handel mit Robux-Ware).
+-- CanPrompt öffnet keinen Robux-Dialog, wenn der Kauf nichts Neues brächte (Besitz, Paket teilweise vorhanden)
+-- oder die Garage voll ist; ApplyReceipt liefert ein bezahltes Auto immer (auch als zweites Exemplar) und schreibt
+-- für schon vorhandene Kosmetik deren Credits-Preis gut – eine Robux-Quittung verfällt nie ohne Gegenwert.
 -- MiniRules wird erst beim ersten Aufruf geladen (MiniRules.LoadGames lädt dieses Modul; keine Ringabhängigkeit).
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local CarCatalog = require(script.Parent:WaitForChild("CarCatalog"))
@@ -221,8 +226,22 @@ function ShopRules.Owns(d: any, id: any): boolean
 	return type(id) == "string" and ShopRules.Shop(d).owned[id] == true
 end
 
+-- Steht ein Auto dieses DLC-Modells in der Garage? (Besitz folgt der Garage: verkauft = wieder kaufbar)
 function ShopRules.HasDlc(d: any, modelId: any): boolean
-	return type(modelId) == "string" and ShopRules.Shop(d).dlcCars[modelId] == true
+	if type(modelId) ~= "string" then
+		return false
+	end
+	local g = type(d) == "table" and d.games or nil
+	local cars = type(g) == "table" and g.cars or nil
+	if type(cars) ~= "table" then
+		return false
+	end
+	for _, car in ipairs(cars) do
+		if type(car) == "table" and car.model == modelId then
+			return true
+		end
+	end
+	return false
 end
 
 ---------------------------------------------------------------- Kaufen mit Credits
@@ -325,10 +344,11 @@ end
 
 ---------------------------------------------------------------- Gutschrift (Produkte, Pässe, Belohnungen)
 -- grants = { cosmetics = { id, ... }, cars = { modelId, ... }, credits = n }. Idempotent: vorhandene Kosmetik und
--- bereits gekaufte DLC-Autos werden übersprungen. Rückgabe: ok, Ergebnis | false, Meldung.
+-- DLC-Autos, die schon in der Garage stehen, werden übersprungen – außer always = true (bezahlte Quittung: jedes
+-- Auto wird geliefert). Rückgabe: ok, Ergebnis | false, Meldung.
 -- ok = false nur, wenn ein DLC-Auto nicht angelegt werden konnte (Garage voll): dann wird NICHTS geändert
 -- (Quittung bleibt offen und wird später erneut versucht).
-function ShopRules.Grant(d: any, grants: any, now: any): (boolean, any)
+function ShopRules.Grant(d: any, grants: any, now: any, always: boolean?): (boolean, any)
 	local res: GrantResult = { cosmetics = {}, cars = {}, credits = 0, changed = false }
 	if type(grants) ~= "table" then
 		return true, res
@@ -339,7 +359,7 @@ function ShopRules.Grant(d: any, grants: any, now: any): (boolean, any)
 	if type(grants.cars) == "table" then
 		for _, id in ipairs(grants.cars) do
 			local m = ShopRules.DlcModel(id)
-			if m and not shop.dlcCars[m.id] then
+			if m and (always == true or not ShopRules.HasDlc(d, m.id)) then
 				table.insert(newCars, m)
 			end
 		end
@@ -387,13 +407,103 @@ function ShopRules.ApplyReceipt(snapshot: any, product: any, now: any): (boolean
 	if type(product) ~= "table" or product.kind == "credits" or type(product.grants) ~= "table" then
 		return false, TEXT.unknown
 	end
-	local ok, res = ShopRules.Grant(snapshot, product.grants, now)
+	-- Kosmetik, die schon vorhanden ist (z. B. kurz vorher mit Credits gekauft), wird mit ihrem Credits-Preis
+	-- gutgeschrieben (nur Kosmetik-/Bündel-Produkte; die Folierungs-Beigabe eines Autos ist kein eigener Kauf)
+	local before = {}
+	if product.kind ~= "car" then
+		for _, id in ipairs(product.grants.cosmetics or {}) do
+			if ShopRules.Owns(snapshot, id) then
+				table.insert(before, id)
+			end
+		end
+	end
+	local ok, res = ShopRules.Grant(snapshot, product.grants, now, true)
 	if not ok then
 		return false, res
 	end
+	res.refund = 0
+	res.refunded = {}
+	local refund = 0
+	for _, id in ipairs(before) do
+		local c = ShopRules.Cosmetic(id)
+		if c and finite(c.creditsPrice) and c.creditsPrice > 0 then
+			refund += math.floor(c.creditsPrice)
+			table.insert(res.refunded, c.name)
+		end
+	end
+	if refund > 0 then
+		res.refund = mini().AddMoney(snapshot, refund)
+		res.changed = res.changed or res.refund > 0
+	end
 	res.product = product
 	res.text = string.format(product.kind == "car" and TEXT.receiptCar or TEXT.receipt, product.name)
+	if res.refund > 0 then
+		res.refundText = string.format(TEXT.receiptRefund, table.concat(res.refunded, ", "), tostring(res.refund))
+	end
 	return true, res
+end
+
+-- Teile eines Produkts, die das Profil schon hat / insgesamt (Autos zählen nur, wenn eines in der Garage steht)
+function ShopRules.ProductParts(d: any, p: any): (number, number, { string })
+	local have, total, names = 0, 0, {}
+	if type(p) ~= "table" or type(p.grants) ~= "table" then
+		return 0, 0, names
+	end
+	for _, model in ipairs(p.grants.cars or {}) do
+		total += 1
+		if ShopRules.HasDlc(d, model) then
+			have += 1
+			local m = CarCatalog.Model(model)
+			table.insert(names, m and m.name or tostring(model))
+		end
+	end
+	for _, id in ipairs(p.grants.cosmetics or {}) do
+		total += 1
+		if ShopRules.Owns(d, id) then
+			have += 1
+			local c = ShopRules.Cosmetic(id)
+			table.insert(names, c and c.name or tostring(id))
+		end
+	end
+	return have, total, names
+end
+
+-- Warum gerade kein Robux-Prompt für dieses Produkt? nil = möglich (ohne Prüfung der Produkt-Id).
+-- Besitz (alles vorhanden), Paket teilweise vorhanden (fehlende Teile einzeln für Credits), Garage voll.
+function ShopRules.PromptBlock(d: any, p: any): string?
+	if type(p) ~= "table" or p.kind == "credits" or type(p.grants) ~= "table" then
+		return nil
+	end
+	if p.kind == "car" then
+		-- Auto-Produkt: gilt als Besitz, solange das Auto in der Garage steht (die Folierungs-Beigabe zählt nicht)
+		local cars = p.grants.cars or {}
+		local all = #cars > 0
+		for _, model in ipairs(cars) do
+			if not ShopRules.HasDlc(d, model) then
+				all = false
+			end
+		end
+		if all then
+			return TEXT.owned
+		end
+	elseif ShopRules.ProductOwned(d, p) then
+		return TEXT.owned
+	elseif p.kind == "bundle" then
+		local have, total, names = ShopRules.ProductParts(d, p)
+		if have > 0 then
+			return string.format(TEXT.partlyOwned, have, total, table.concat(names, ", "))
+		end
+	end
+	local newCars = 0
+	for _, model in ipairs(p.grants.cars or {}) do
+		if ShopRules.DlcModel(model) then
+			newCars += 1
+		end
+	end
+	if newCars > 0 and carCount(d) + newCars > CarCatalog.MaxCars then
+		return string.format(TEXT.garageFull, CarCatalog.MaxCars)
+	end
+	return nil
 end
 
 -- Darf der Client einen Robux-Prompt für dieses Produkt bekommen? Rückgabe: ok, Meldung, productId, Produkt
@@ -406,12 +516,9 @@ function ShopRules.CanPrompt(d: any, productKey: any): (boolean, string?, number
 	if id <= 0 then
 		return false, TEXT.notReady, 0, p
 	end
-	if p.kind == "car" then
-		for _, model in ipairs(p.grants.cars or {}) do
-			if ShopRules.HasDlc(d, model) then
-				return false, TEXT.owned, id, p
-			end
-		end
+	local block = ShopRules.PromptBlock(d, p)
+	if block then
+		return false, block, id, p
 	end
 	return true, nil, id, p
 end
@@ -485,7 +592,7 @@ end
 local function carView(d: any, m: any, shop: Shop): any
 	local ok, reason, price = ShopRules.CanBuy(d, m.id)
 	local s = CarRules.Stats(CarRules.NewCar(m.id, 0))
-	local owned = shop.dlcCars[m.id] == true
+	local owned = ShopRules.HasDlc(d, m.id)
 	return {
 		id = m.id, kind = "car", name = m.name, brand = m.brand, body = m.body, base = m.base, level = m.level,
 		price = price, basePrice = m.price, paint = m.paint, rims = m.rims, glow = m.glow, spoiler = m.spoiler, wrap = m.wrap,
@@ -508,24 +615,26 @@ function ShopRules.Catalog(d: any): any
 	local products = {}
 	for _, p in ipairs(SHOP.Products) do
 		local id = ShopRules.ProductId(p)
+		local have, total = ShopRules.ProductParts(d, p)
 		table.insert(products, {
-			key = p.key, kind = p.kind, name = p.name, desc = p.desc, productId = id, ready = id > 0, robuxHint = p.robuxHint,
+			key = p.key, kind = p.kind, name = p.name, desc = p.desc, productId = id, ready = id > 0,
 			creditsPrice = p.creditsPrice, credits = p.kind == "credits" and p.pack and p.pack.credits or nil,
-			grants = p.grants, owned = ShopRules.ProductOwned(d, p),
+			grants = p.grants, owned = ShopRules.ProductOwned(d, p), have = have, parts = total,
+			blocked = ShopRules.PromptBlock(d, p), -- Grund, warum der Robux-Knopf aus ist (nil = möglich)
 		})
 	end
 	local passes = {}
 	for _, p in ipairs(SHOP.Passes) do
 		local id = finite(p.id) and p.id > 0 and math.floor(p.id) or 0
 		table.insert(passes, {
-			key = p.key, name = p.name, desc = p.desc, id = id, ready = id > 0, robuxHint = p.robuxHint,
+			key = p.key, name = p.name, desc = p.desc, id = id, ready = id > 0,
 			grants = p.grants, owned = ShopRules.ProductOwned(d, p),
 		})
 	end
 	return { cosmetics = cosmetics, cars = cars, products = products, passes = passes, slots = SHOP.Slots, hint = TEXT.hint }
 end
 
--- Felder für MiniSnapshot (§11): shop = { owned[], equipped{}, dlcCars[] }; catalog nur bei full (ShopService)
+-- Felder für MiniSnapshot (§11): shop = { owned[], equipped{}, dlcCars[] (in der Garage) }; catalog nur bei full
 function ShopRules.SnapshotFields(d: any, full: boolean?): any
 	local shop = ShopRules.Shop(d)
 	local owned = {}
@@ -533,9 +642,12 @@ function ShopRules.SnapshotFields(d: any, full: boolean?): any
 		table.insert(owned, id)
 	end
 	table.sort(owned)
+	-- DLC-Modelle, von denen gerade ein Auto in der Garage steht (Besitz folgt der Garage)
 	local dlc = {}
-	for id in pairs(shop.dlcCars) do
-		table.insert(dlc, id)
+	for _, m in ipairs(ShopRules.DlcModels()) do
+		if ShopRules.HasDlc(d, m.id) then
+			table.insert(dlc, m.id)
+		end
 	end
 	table.sort(dlc)
 	local equipped = {}

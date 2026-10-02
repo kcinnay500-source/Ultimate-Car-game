@@ -398,10 +398,18 @@ local function baseLot(id, kind, m, car, now, duration)
 	}
 end
 
--- Spieler-Auktion. seller = { userId, name }, car = Datensatz aus d.games.cars (wird kopiert)
+-- Darf dieses Auto eingeliefert werden? (Sondermodelle aus dem Shop nicht)
+function AuctionRules.Consignable(car)
+	local m = CarCatalog.Model(type(car) == "table" and car.model or nil)
+	return m ~= nil and m.dlc ~= true
+end
+
+-- Spieler-Auktion. seller = { userId, name }, car = Datensatz aus d.games.cars (wird kopiert).
+-- Sondermodelle aus dem Shop (dlc = true, ggf. mit Robux gekauft) sind nie versteigerbar: kein Handel mit
+-- Robux-Ware zwischen Spielern (AuctionService meldet AuctionRules.Consignable vorher mit Text).
 function AuctionRules.NewPlayerLot(id, seller, car, start, duration, now)
 	local m = CarCatalog.Model(car and car.model)
-	if not m then
+	if not m or m.dlc == true then
 		return nil
 	end
 	local lot = baseLot(id, "player", m, carRecord(car), now, duration)

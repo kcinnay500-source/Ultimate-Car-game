@@ -479,6 +479,78 @@ return {
 		T.eq(g:ErrorText(), "", "keine Fehler")
 	end },
 
+	{ "ShopUI: kein Neubau bei gleichem Katalog, kein ausgedachter Robux-Preis, Kachelhöhe, Garage voll, Bündel teilweise", function(T, H)
+		local g, p = startClient(H)
+		local rec = recorder(T)
+		local mod, page = build(g, p, rec)
+		local d = profile(g, 20, 100000)
+		render(g, p, mod, snapshot(g, d))
+		local builds = mod.Builds
+		local tile = byName(page, "Cos_wrap_flammen")
+		-- Jeder full-Snapshot bringt eine neue Katalog-Tabelle: gleiche Struktur -> kein Neubau (Scrollposition bleibt)
+		d.money = 50000
+		render(g, p, mod, snapshot(g, d))
+		render(g, p, mod, snapshot(g, d))
+		T.eq(mod.Builds, builds, "gleicher Katalog: kein Neubau")
+		T.check(tile.Parent ~= nil and byName(page, "Cos_wrap_flammen") == tile, "Kachel bleibt dieselbe Instanz")
+		T.check(withText(page, "50.000") ~= nil or withText(page, "50000") ~= nil, "Guthaben trotzdem aktualisiert")
+		-- Kachelhöhe: Vorschau + Name + Info + zwei Knöpfe + Abstände + Innenabstand passen hinein
+		T.eq(tile.Size.Y.Offset, 212, "Kosmetik-Kachel 212 px hoch")
+		local gridLayout = tile.Parent:FindFirstChildOfClass("UIGridLayout")
+		T.eq(gridLayout and gridLayout.CellSize.Y.Offset, 212, "Rasterzelle 212 px")
+		-- Keine ausgedachten Preise: nirgends „≈“; Katalog ohne robuxHint
+		T.eq(withText(page, "≈"), nil, "kein Richtwert-Preis auf der Seite")
+		for _, pr in ipairs(snapshot(g, d).shop.catalog.products) do
+			T.eq(pr.robuxHint, nil, "Katalog ohne robuxHint " .. pr.key)
+		end
+		-- Produkt eingerichtet (Struktur ändert sich -> ein Neubau); Preis nur aus GetProductInfoAsync
+		local s = snapshot(g, d)
+		local car = product(s.shop.catalog, "car_komet_sunset")
+		car.ready, car.productId = true, 880001
+		local cos = product(s.shop.catalog, "cos_rims_gold")
+		cos.ready, cos.productId = true, 880002
+		g:Activate()
+		local mp = g.env.game:GetService("MarketplaceService")
+		rawget(mp, "__data").products[880001] = { ProductId = 880001, Name = "Auto", PriceInRobux = 219, IsForSale = true }
+		render(g, p, mod, s)
+		T.eq(mod.Builds, builds + 1, "eingerichtetes Produkt: ein Neubau")
+		g:Advance(0.5)
+		local robux = byName(page, "Robux_dlc_komet_sunset")
+		T.check(robux ~= nil and robux.Text == "Mit Robux (219)", "echter Preis aus GetProductInfoAsync: " .. tostring(robux and robux.Text))
+		T.check(enabled(robux), "Robux-Knopf an")
+		-- Garage voll: der Server würde ablehnen -> Knopf aus mit Grund
+		local CR = g:MiniShared("CarRules")
+		for _ = 1, g:MiniShared("CarCatalog").MaxCars do
+			CR.AddCar(d, CR.NewCar("komet", NOW))
+		end
+		s = snapshot(g, d)
+		car = product(s.shop.catalog, "car_komet_sunset")
+		car.ready, car.productId = true, 880001
+		cos = product(s.shop.catalog, "cos_rims_gold")
+		cos.ready, cos.productId = true, 880002
+		T.check(car.blocked ~= nil, "Katalog: blocked bei voller Garage")
+		render(g, p, mod, s)
+		T.eq(mod.Builds, builds + 1, "kein weiterer Neubau")
+		robux = byName(page, "Robux_dlc_komet_sunset")
+		T.check(not enabled(robux) and robux.Text == "Garage voll", "Garage voll: Robux-Knopf aus")
+		T.check(withText(byName(page, "Car_dlc_komet_sunset"), "Garage ist voll") ~= nil, "Grund am Auto")
+		-- Bündel teilweise vorhanden: kein Robux-Kauf, Hinweis auf die Einzelteile
+		g:MiniShared("ShopRules").Shop(d).owned.rims_gold = true
+		s = snapshot(g, d)
+		local b = product(s.shop.catalog, "bundle_starter")
+		b.ready, b.productId = true, 880003
+		car = product(s.shop.catalog, "car_komet_sunset")
+		car.ready, car.productId = true, 880001
+		cos = product(s.shop.catalog, "cos_rims_gold")
+		cos.ready, cos.productId = true, 880002
+		render(g, p, mod, s)
+		local bundleButton = byName(page, "Robux_bundle_starter")
+		T.check(not enabled(bundleButton) and bundleButton.Text == "Teilweise da", "Bündel teilweise: Knopf aus")
+		T.check(withText(page, "1 von 4 Teilen") ~= nil, "Hinweis: 1 von 4 Teilen")
+		T.eq(#rec.sent, 0, "Rendern sendet nichts")
+		T.eq(g:ErrorText(), "", "keine Fehler")
+	end },
+
 	---------------------------------------------------------------- VehicleFactory.ApplyCosmetics
 	{ "VehicleFactory.ApplyCosmetics: Folierung, Felgen, Hupe, Spur – ≤ 40 Parts, Massless, verschweißt, Trail, Entfernen", function(T, H)
 		local g = H.Garage({ noServer = true })

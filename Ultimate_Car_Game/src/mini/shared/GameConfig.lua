@@ -796,10 +796,10 @@ export type Cosmetic = {
 }
 export type ShopGrants = { cosmetics: { string }?, cars: { string }? }
 export type ShopProduct = {
-	key: string, kind: string, name: string, desc: string, productId: number, robuxHint: number,
+	key: string, kind: string, name: string, desc: string, productId: number,
 	grants: ShopGrants, creditsPrice: number?, pack: any?,
 }
-export type ShopPass = { key: string, name: string, desc: string, id: number, robuxHint: number, grants: ShopGrants }
+export type ShopPass = { key: string, name: string, desc: string, id: number, grants: ShopGrants }
 
 local Shop = {
 	Slots = { "wrap", "rims", "horn", "trail" },
@@ -807,6 +807,10 @@ local Shop = {
 	DlcPriceFactor = 1.5, -- Credits-Preis eines DLC-Autos = Händlerpreis des Basismodells × 1,5 (gleiche Werte)
 	BuyXp = 10, -- XP für einen Kosmetik-Kauf mit Credits (DLC-Auto: CarCatalog.BuyXp)
 	MaxOwned = 400, -- Deckel für owned beim Laden (Schutz vor aufgeblähten Profilen)
+	PromptGraceSeconds = 60, -- so lange nach einem Robux-Prompt kein Credits-Kauf derselben Teile (Doppelkauf-Schutz)
+	ReceiptRetrySeconds = 8, -- Takt, in dem eine aufgeschobene Quittung (Garage voll) erneut versucht wird (Purchases)
+	HornSeconds = 0.6, -- Lichthupe: Dauer des Aufblitzens (mini_car_horn, VehicleFactory.Flash)
+	HornCooldown = 1.5, -- Lichthupe: Abstand zwischen zwei Hupen
 	Cosmetics = {} :: { Cosmetic },
 	Products = {} :: { ShopProduct },
 	Passes = {} :: { ShopPass },
@@ -833,11 +837,11 @@ local COSMETICS: { Cosmetic } = {
 	{ id = "rims_neon", slot = "rims", name = "Neonfelgen", desc = "Felgen mit leuchtendem Neonring – nachts ein Hingucker.",
 		creditsPrice = 2500, level = 6, style = { color = { 30, 32, 36 }, reflectance = 0.1, neon = { 60, 255, 120 } } },
 	-- Hupen (Text in der Sprechblase + Blinkfarbe der Scheinwerfer)
-	{ id = "horn_melodie", slot = "horn", name = "Melodie-Hupe", desc = "Eine kleine Melodie statt Tröten.",
+	{ id = "horn_melodie", slot = "horn", name = "Melodie-Hupe", desc = "Lichthupe mit Melodie-Sprechblase „♪ Tü-dü-düüü ♪“ und warmem Licht (Taste H oder HUPE-Knopf).",
 		creditsPrice = 800, level = 1, style = { text = "♪ Tü-dü-düüü ♪", light = { 255, 220, 120 } } },
-	{ id = "horn_fanfare", slot = "horn", name = "Fanfare", desc = "Große Fanfare für große Auftritte.",
+	{ id = "horn_fanfare", slot = "horn", name = "Fanfare", desc = "Lichthupe mit Fanfaren-Sprechblase „TÄÄÄ-TÄÄÄ!“ und orangem Licht (Taste H oder HUPE-Knopf).",
 		creditsPrice = 1200, level = 3, style = { text = "TÄÄÄ-TÄÄÄ!", light = { 255, 160, 60 } } },
-	{ id = "horn_laser", slot = "horn", name = "Laser-Hupe", desc = "Piu-piu! Hupe mit Weltraum-Sound.",
+	{ id = "horn_laser", slot = "horn", name = "Laser-Hupe", desc = "Lichthupe mit Weltraum-Sprechblase „Piu-piu!“ und eisblauem Licht (Taste H oder HUPE-Knopf).",
 		creditsPrice = 1500, level = 6, style = { text = "Piu-piu!", light = { 120, 220, 255 } } },
 	-- Reifenspuren
 	{ id = "trail_blau", slot = "trail", name = "Blaue Spur", desc = "Blaue Reifenspuren beim Driften.",
@@ -882,37 +886,38 @@ end
 
 -- Developer Products. productId 0 = Platzhalter (kein Prompt, Hinweis „noch nicht eingerichtet“).
 -- Credits-Pakete zeigen auf die 2.4.0-Einträge (pack = C.CreditProducts[i], Referenz: productId/credits werden
--- dort gepflegt; Purchases verbucht sie weiter über Profiles.GrantCredits). robuxHint ist nur ein Richtwert.
+-- dort gepflegt; Purchases verbucht sie weiter über Profiles.GrantCredits). Robux-Preise stehen bewusst nicht hier:
+-- der Shop zeigt nur den echten Preis aus MarketplaceService:GetProductInfoAsync (sonst „Mit Robux“ ohne Zahl).
 for _, p in ipairs(C.CreditProducts) do
 	table.insert(Shop.Products, {
-		key = p.key, kind = "credits", name = p.name, pack = p, productId = p.productId, robuxHint = p.baseRobux,
+		key = p.key, kind = "credits", name = p.name, pack = p, productId = p.productId,
 		desc = string.format("%s Credits%s.", tostring(p.credits), p.bonus > 0 and (" (+" .. p.bonus .. " % Bonus)") or ""),
 		grants = { credits = p.credits },
 	})
 end
 local PRODUCTS: { ShopProduct } = {
 	-- DLC-Autos: gleiche Fahrwerte wie das Basismodell, dazu feste Optik und eine exklusive Folierung
-	{ key = "car_komet_sunset", kind = "car", name = "Komet S2 Sunset", productId = 0, robuxHint = 149,
+	{ key = "car_komet_sunset", kind = "car", name = "Komet S2 Sunset", productId = 0,
 		desc = "Der Komet S2 in Bernstein mit Goldfelgen, Unterbodenlicht und Sunset-Folierung. Fährt wie der Komet S2.",
 		grants = { cars = { "dlc_komet_sunset" }, cosmetics = { "wrap_sunset" } } },
-	{ key = "car_nord_nacht", kind = "car", name = "Nord R4 Nachtfalke", productId = 0, robuxHint = 249,
+	{ key = "car_nord_nacht", kind = "car", name = "Nord R4 Nachtfalke", productId = 0,
 		desc = "Der Nord R4 in Tiefschwarz mit Chromfelgen, violettem Licht und Nachtfalke-Folierung. Fährt wie der Nord R4.",
 		grants = { cars = { "dlc_nord_nacht" }, cosmetics = { "wrap_nacht" } } },
-	{ key = "car_vektor_blitz", kind = "car", name = "Vektor RS Blitz", productId = 0, robuxHint = 449,
+	{ key = "car_vektor_blitz", kind = "car", name = "Vektor RS Blitz", productId = 0,
 		desc = "Der Vektor RS in Eisblau mit weißen Felgen, blauem Licht und Blitz-Folierung. Fährt wie der Vektor RS.",
 		grants = { cars = { "dlc_vektor_blitz" }, cosmetics = { "wrap_blitz" } } },
 	-- Kosmetik (dieselben Teile gibt es für Credits)
-	{ key = "cos_wrap_flammen", kind = "cosmetic", name = "Flammen-Folierung", productId = 0, robuxHint = 49,
+	{ key = "cos_wrap_flammen", kind = "cosmetic", name = "Flammen-Folierung", productId = 0,
 		desc = "Orange Flammen für jedes deiner Autos.", grants = { cosmetics = { "wrap_flammen" } }, creditsPrice = 2500 },
-	{ key = "cos_rims_gold", kind = "cosmetic", name = "Goldfelgen", productId = 0, robuxHint = 39,
+	{ key = "cos_rims_gold", kind = "cosmetic", name = "Goldfelgen", productId = 0,
 		desc = "Glänzende Goldfelgen für jedes deiner Autos.", grants = { cosmetics = { "rims_gold" } }, creditsPrice = 1200 },
-	{ key = "cos_horn_fanfare", kind = "cosmetic", name = "Fanfare", productId = 0, robuxHint = 29,
-		desc = "Große Fanfare für große Auftritte.", grants = { cosmetics = { "horn_fanfare" } }, creditsPrice = 1200 },
-	{ key = "cos_trail_regenbogen", kind = "cosmetic", name = "Regenbogenspur", productId = 0, robuxHint = 39,
+	{ key = "cos_horn_fanfare", kind = "cosmetic", name = "Fanfare", productId = 0,
+		desc = "Fanfaren-Lichthupe für große Auftritte.", grants = { cosmetics = { "horn_fanfare" } }, creditsPrice = 1200 },
+	{ key = "cos_trail_regenbogen", kind = "cosmetic", name = "Regenbogenspur", productId = 0,
 		desc = "Bunte Reifenspur in allen Farben.", grants = { cosmetics = { "trail_regenbogen" } }, creditsPrice = 2000 },
 	-- Bündel
-	{ key = "bundle_starter", kind = "bundle", name = "Starter-Set", productId = 0, robuxHint = 99,
-		desc = "Rennstreifen, Goldfelgen, Melodie-Hupe und Blaue Spur in einem Paket.",
+	{ key = "bundle_starter", kind = "bundle", name = "Starter-Set", productId = 0,
+		desc = "Rennstreifen, Goldfelgen, Melodie-Lichthupe und Blaue Spur in einem Paket.",
 		grants = { cosmetics = { "wrap_streifen", "rims_gold", "horn_melodie", "trail_blau" } }, creditsPrice = 4500 },
 }
 for _, p in ipairs(PRODUCTS) do
@@ -921,10 +926,10 @@ end
 
 -- Game Passes (rein kosmetisch; id 0 = Platzhalter). Die bestehenden Presse-Pässe (MiniPasses) bleiben.
 Shop.Passes = {
-	{ key = "neon", name = "Neon-Paket", id = 0, robuxHint = 199,
-		desc = "Neonfelgen, Neonspur und Laser-Hupe – alles, was nachts leuchtet.",
+	{ key = "neon", name = "Neon-Paket", id = 0,
+		desc = "Neonfelgen, Neonspur und Laser-Lichthupe – alles, was nachts leuchtet.",
 		grants = { cosmetics = { "rims_neon", "trail_neon", "horn_laser" } } },
-	{ key = "deko", name = "Werkstatt-Deko", id = 0, robuxHint = 149,
+	{ key = "deko", name = "Werkstatt-Deko", id = 0,
 		desc = "Zielflagge, Blauchrom-Felgen und Regenbogenspur für den Deko-Look deiner Werkstattflotte.",
 		grants = { cosmetics = { "wrap_karo", "rims_chrom_blau", "trail_regenbogen" } } },
 }
@@ -946,6 +951,12 @@ Shop.Text = {
 	badSlot = "Unbekannter Platz.",
 	receipt = "Danke für deinen Einkauf: %s!",
 	receiptCar = "Danke! Dein neues Auto steht in der Garage: %s!",
+	receiptDeferred = "Deine Garage ist voll (%d von %d Autos) – dein neues Auto „%s“ wird gutgeschrieben, sobald ein Platz frei ist. Verkaufe einfach ein Auto.",
+	receiptWaiting = "Dein letzter Kauf von „%s“ wartet noch auf einen freien Garagenplatz.",
+	receiptRefund = "Du hattest %s schon – dafür bekommst du %s Credits gutgeschrieben.",
+	partlyOwned = "Du hast schon %d von %d Teilen dieses Pakets (%s). Kauf die fehlenden Teile einzeln für Credits.",
+	promptPending = "Für diesen Artikel läuft gerade ein Robux-Kauf. Bitte warte kurz.",
+	horn = "Lichthupe: Hol zuerst dein Auto und steig ein.",
 	hint = "Alles im Shop gibt es auch für Credits oder als Belohnung – ganz ohne Robux.",
 }
 

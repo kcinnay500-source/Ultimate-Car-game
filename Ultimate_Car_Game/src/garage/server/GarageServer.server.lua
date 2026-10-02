@@ -400,8 +400,11 @@ end
 -- 3.0: Minispiele an dieselben Wege anbinden (ein Eingang, ein Profil, keine neuen Remotes).
 Mini.Init({emit=emit,toast=toast,changed=changed,push=push,getSession=function(player) return sessions[player] end,moveTo=moveTo,now=now})
 Command.OnServerEvent:Connect(request)
-Purchases.Init(function(player) return sessions[player] end,function(p,product)
-    emit(p,"purchaseFX",Purchases.FX(product));changed(p);Mini.OnGranted(p,product) -- 3.0: Titel je Art (Credits/Auto/Optik/Paket), Shop-Hinweis + Optik
+Purchases.Init(function(player) return sessions[player] end,function(p,product,result)
+    emit(p,"purchaseFX",Purchases.FX(product)) -- 3.0: Titel je Art (Credits/Auto/Optik/Paket)
+    if not Mini.OnGranted(p,product,result) then changed(p) end -- 3.0: Shop-Produkte meldet ShopService (ein changed je Quittung), Credits-Pakete wie 2.4.0
+end,function(p,product,reason)
+    Mini.OnDeferred(p,product,reason) -- 3.0: Quittung aufgeschoben (Garage voll): Hinweis, Purchases wiederholt
 end)
 local function join(player)
     if sessions[player] or joining[player] then return end

@@ -76,7 +76,7 @@ return {
 		for i, p in ipairs(S.Products) do
 			kinds[p.kind] += 1
 			T.eq(SR.ProductId(p), 0, "Platzhalter-Id " .. p.key)
-			T.check(type(p.robuxHint) == "number" and p.robuxHint > 0, "robuxHint " .. p.key)
+			T.eq(p.robuxHint, nil, "kein ausgedachter Robux-Preis " .. p.key)
 			T.check(type(p.name) == "string" and type(p.desc) == "string", "Texte " .. p.key)
 			if p.kind == "credits" then
 				T.eq(p.pack, C.CreditProducts[i], "Credits-Paket per Referenz " .. p.key)
@@ -291,10 +291,21 @@ return {
 		ok, msg = SR.Buy(d, m.id, NOW)
 		T.check(not ok and msg == GC.Shop.Text.owned, "nur einmal")
 		T.eq(d.money, 1e9, "Doppelkauf bucht nichts ab")
-		-- nach dem Verkauf bleibt das Produkt verbraucht (kein zweites Auto)
+		-- Besitz folgt der Garage: nach dem Verkauf ist das Sondermodell wieder kaufbar (Credits und Robux)
 		CR.Sell(d, res.car.id)
+		T.check(not SR.HasDlc(d, m.id), "nach Verkauf nicht mehr im Besitz")
+		T.eq(SR.Shop(d).dlcCars[m.id], true, "Kauf-Historie bleibt")
+		T.check(SR.Owns(d, m.wrap), "exklusive Folierung bleibt")
+		local okAgain = SR.CanBuy(d, m.id)
+		T.eq(okAgain, true, "nach Verkauf wieder kaufbar (CanBuy)")
+		local fakeKey = "x_dlc_rebuy"
+		GC.Shop.ProductByKey[fakeKey] = { key = fakeKey, kind = "car", name = "X", productId = 4242, grants = { cars = { m.id }, cosmetics = { m.wrap } } }
+		local canP, msgP = SR.CanPrompt(d, fakeKey)
+		T.check(canP, "nach Verkauf wieder per Robux kaufbar (CanPrompt): " .. tostring(msgP))
+		GC.Shop.ProductByKey[fakeKey] = nil
 		ok = SR.Buy(d, m.id, NOW)
-		T.eq(ok, false, "auch nach Verkauf nur einmal")
+		T.eq(ok, true, "nach Verkauf erneut gekauft")
+		T.check(SR.HasDlc(d, m.id), "wieder in der Garage")
 		-- Preis mit Prestige-Rabatt kleiner, nie unter 1
 		local rich = profile(g, SR, 300, 0)
 		T.check(SR.DlcPrice(rich, m) < SR.DlcPrice(profile(g, SR, m.level, 0), m), "Rabatt wirkt")
@@ -381,12 +392,27 @@ return {
 		T.eq(#d.games.cars, 1, "Original unverändert")
 		T.check(snapshot.games.shop.dlcCars.dlc_vektor_blitz and not SR.HasDlc(d, "dlc_vektor_blitz"), "dlcCars nur im Schnappschuss")
 		T.eq(snapshot.money, 500, "kein Geld verändert")
-		-- Wiederholung auf dem geschriebenen Stand: ok, nichts geändert (Quittung trotzdem abschließen)
+		-- Neue bezahlte Quittung für ein Auto, das schon in der Garage steht: das Auto wird trotzdem geliefert
+		-- (eine Robux-Quittung verfällt nie ohne Gegenwert; doppelte Belege fängt Profiles über receipts ab)
 		ok, res = SR.ApplyReceipt(snapshot, p, NOW)
-		T.check(ok and not res.changed, "idempotent")
+		T.check(ok and res.changed and #res.cars == 1, "zweites Exemplar geliefert")
+		T.eq(#snapshot.games.cars, 3, "zwei Sondermodelle in der Garage")
 		-- Kosmetik-Produkt
 		ok, res = SR.ApplyReceipt(snapshot, GC.Shop.ProductByKey.cos_rims_gold, NOW)
 		T.check(ok and res.cosmetics[1] == "rims_gold", "Kosmetik-Produkt")
+		T.eq(res.refund, 0, "keine Rückerstattung bei Neuem")
+		-- Schon vorhandene Kosmetik (Wettlauf Prompt/Credits-Kauf): Credits-Preis wird gutgeschrieben
+		local money0 = snapshot.money
+		ok, res = SR.ApplyReceipt(snapshot, GC.Shop.ProductByKey.cos_rims_gold, NOW)
+		T.check(ok and #res.cosmetics == 0, "nichts Neues")
+		T.eq(res.refund, GC.Shop.CosmeticById.rims_gold.creditsPrice, "Credits-Preis erstattet")
+		T.eq(snapshot.money, money0 + res.refund, "Credits im Schnappschuss")
+		T.check(res.changed and type(res.refundText) == "string" and res.refundText:find("Goldfelgen", 1, true) ~= nil, "Erstattungstext")
+		-- Bündel teilweise vorhanden: Fehlendes gutgeschrieben, Vorhandenes erstattet
+		money0 = snapshot.money
+		ok, res = SR.ApplyReceipt(snapshot, GC.Shop.ProductByKey.bundle_starter, NOW)
+		T.check(ok and #res.cosmetics == 3, "fehlende Bündelteile")
+		T.eq(snapshot.money - money0, GC.Shop.CosmeticById.rims_gold.creditsPrice, "vorhandener Teil erstattet")
 		-- Credits-Pakete laufen nicht über ApplyReceipt
 		ok = SR.ApplyReceipt(snapshot, GC.Shop.Products[1], NOW)
 		T.eq(ok, false, "Credits-Paket abgelehnt")
@@ -411,6 +437,38 @@ return {
 		can, msg, id = SR.CanPrompt(d, "x")
 		T.check(can and id == 123456, "Prompt erlaubt")
 		GC.Shop.ProductByKey.x = nil
+		-- Garage voll -> kein Robux-Prompt für ein Auto-Produkt (sonst bezahlt und nicht lieferbar)
+		local full = profile(g, SR, 20, 0)
+		for _ = 1, g:MiniShared("CarCatalog").MaxCars do
+			CR.AddCar(full, CR.NewCar("komet", NOW))
+		end
+		GC.Shop.ProductByKey.x = fake
+		can, msg = SR.CanPrompt(full, "x")
+		T.check(not can and msg == string.format(GC.Shop.Text.garageFull, g:MiniShared("CarCatalog").MaxCars), "Garage voll -> kein Prompt: " .. tostring(msg))
+		T.check(SR.PromptBlock(full, fake) ~= nil, "PromptBlock nennt den Grund")
+		GC.Shop.ProductByKey.x = nil
+		-- Kosmetik schon vorhanden -> kein Prompt; Bündel teilweise vorhanden -> kein Prompt mit Hinweis
+		local cosP = GC.Shop.ProductByKey.cos_wrap_flammen
+		local bundle = GC.Shop.ProductByKey.bundle_starter
+		local id0, idB = cosP.productId, bundle.productId
+		cosP.productId, bundle.productId = 5551, 5552
+		local own = profile(g, SR, 20, 1e6)
+		T.eq((SR.CanPrompt(own, "cos_wrap_flammen")), true, "Kosmetik nicht im Besitz -> Prompt")
+		T.eq((SR.CanPrompt(own, "bundle_starter")), true, "Bündel ohne Teile -> Prompt")
+		SR.Buy(own, "wrap_flammen", NOW)
+		can, msg = SR.CanPrompt(own, "cos_wrap_flammen")
+		T.check(not can and msg == GC.Shop.Text.owned, "Kosmetik im Besitz -> kein Prompt")
+		SR.Buy(own, "rims_gold", NOW)
+		can, msg = SR.CanPrompt(own, "bundle_starter")
+		T.check(not can and msg == string.format(GC.Shop.Text.partlyOwned, 1, 4, "Goldfelgen"), "Bündel teilweise -> kein Prompt: " .. tostring(msg))
+		local have, total = SR.ProductParts(own, bundle)
+		T.check(have == 1 and total == 4, "ProductParts 1/4")
+		for _, id in ipairs(bundle.grants.cosmetics) do
+			SR.Shop(own).owned[id] = true
+		end
+		can, msg = SR.CanPrompt(own, "bundle_starter")
+		T.check(not can and msg == GC.Shop.Text.owned, "Bündel komplett -> owned")
+		cosP.productId, bundle.productId = id0, idB
 		T.eq(SR.ProductId({ pack = { productId = 77 }, productId = 0 }), 77, "ProductId aus Paket-Referenz")
 	end },
 

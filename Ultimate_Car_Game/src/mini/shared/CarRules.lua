@@ -529,7 +529,7 @@ function CarRules.View(car, d)
 	end
 	local s = CarRules.Stats(car)
 	return {
-		id = car.id, model = car.model, name = m.name, brand = m.brand, body = m.body, special = m.special,
+		id = car.id, model = car.model, name = m.name, brand = m.brand, body = m.body, special = m.special, dlc = m.dlc == true,
 		paint = car.paint, rims = car.rims, glow = car.glow, spoiler = car.spoiler,
 		engine = car.engine, gearbox = car.gearbox, tires = car.tires, suspension = car.suspension, nitro = car.nitro,
 		locked = car.locked, bought = car.bought,

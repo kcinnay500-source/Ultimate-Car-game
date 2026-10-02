@@ -842,16 +842,29 @@ function Mini.OnLeave(p, wasWritable)
 	Mini.Leaving[p] = { ms = ms, writable = wasWritable == true and not p.profile.receiptPending }
 end
 
--- Nach P.Save(release): saved = Rückgabe von P.Save. Blockiert nicht (Schreiben in eigenem Task,
--- BindToClose wartet über Mini.Pending()).
 -- Robux-Quittung verbucht (Purchases.Init-Rückruf in GarageServer): Hinweis, Snapshot, Optik (Credits-Pakete
--- meldet GarageServer über purchaseFX; ShopService ignoriert kind "credits").
-function Mini.OnGranted(p, product)
-	local ok, err = pcall(ShopService.OnGranted, p, product)
+-- meldet GarageServer über purchaseFX; ShopService ignoriert kind "credits"). result = ShopRules.ApplyReceipt-
+-- Ergebnis (Rückerstattung). Rückgabe true = ShopService hat die Änderung gemeldet (api.changed) – GarageServer
+-- ruft changed(p) dann nicht noch einmal auf (eine Revision, ein Push je Quittung).
+function Mini.OnGranted(p, product, result): boolean
+	local ok, res = pcall(ShopService.OnGranted, p, product, result)
 	if not ok then
-		warn("[Shop] Quittung melden: " .. tostring(err))
+		warn("[Shop] Quittung melden: " .. tostring(res))
+		return false
+	end
+	return res == true
+end
+
+-- Robux-Quittung aufgeschoben (Garage voll): einmaliger Hinweis an den Spieler (Purchases wiederholt selbst)
+function Mini.OnDeferred(p, product, reason)
+	local ok, err = pcall(ShopService.OnDeferred, p, product, reason)
+	if not ok then
+		warn("[Shop] Aufgeschobene Quittung melden: " .. tostring(err))
 	end
 end
+
+-- Nach P.Save(release): saved = Rückgabe von P.Save. Blockiert nicht (Schreiben in eigenem Task,
+-- BindToClose wartet über Mini.Pending()).
 
 function Mini.OnSaved(p, saved)
 	local entry = Mini.Leaving[p]

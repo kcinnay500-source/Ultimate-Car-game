@@ -1081,7 +1081,37 @@ function VehicleFactory.Flash(model: Model, seconds: number?): boolean
 	elseif #lamps == 0 then
 		return false
 	end
+	-- Sprechblase mit dem Hupentext über dem Auto (nur mit Hupen-Kosmetik; BillboardGui, keine Assets)
+	local text = model:GetAttribute("HornText")
+	local bubble = nil
+	if type(text) == "string" and text ~= "" then
+		local old = model:FindFirstChild("HornBubble")
+		if old then
+			old:Destroy()
+		end
+		bubble = Instance.new("BillboardGui")
+		bubble.Name = "HornBubble"
+		bubble.Size = UDim2.new(0, 160, 0, 40)
+		bubble.StudsOffset = Vector3.new(0, 5, 0)
+		bubble.AlwaysOnTop = false
+		bubble.MaxDistance = 120
+		bubble.Adornee = info.chassis
+		local label = Instance.new("TextLabel")
+		label.Name = "Label"
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundColor3 = Color3.fromRGB(28, 30, 34)
+		label.BackgroundTransparency = 0.2
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.TextColor3 = color
+		label.Text = text
+		label.Parent = bubble
+		bubble.Parent = model
+	end
 	task.delay(math.clamp(type(seconds) == "number" and seconds or 0.35, 0.05, 2), function()
+		if bubble and bubble.Parent then
+			bubble:Destroy()
+		end
 		if bar and bar.Parent then
 			bar.Transparency = 1
 			local pl = bar:FindFirstChild("FlashLight")

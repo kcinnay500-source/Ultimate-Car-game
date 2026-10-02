@@ -23,12 +23,17 @@ local UI, Remote, T, ctx
 local refs = {}
 local state = nil -- letzter Snapshot
 local catalog = nil -- zuletzt gesehener Katalog (nur in full-Snapshots)
-local builtFor = nil -- Katalog-Tabelle, für die die Karten gebaut wurden
+local builtSig = nil -- Signatur (Ids + ready) des Katalogs, für den die Karten gebaut wurden
+local lookup = { products = {}, cars = {}, cos = {}, passes = {} } -- aktuelle Katalogeinträge nach Schlüssel
+local prices = {} -- ["product:<id>" | "pass:<id>"] = Robux-Preis aus MarketplaceService (nur bei Erfolg)
+local pricePending = {}
 
 local POLICY = "Alle Inhalte sind auch ohne Robux erreichbar. Keine Zufallskisten."
 local HINT = "Alles im Shop gibt es auch für Credits oder als Belohnung – ganz ohne Robux."
 local NOT_READY = "Noch nicht eingerichtet"
-local COS_CARD_H = 194 -- Vorschau + Name + Info + zwei Knöpfe à UI.MinTouch (44 px)
+-- Kosmetik-Karte: Vorschau 44 + Name 18 + Info 30 + zwei Knöpfe à UI.MinTouch (44) = 180, dazu 4 Abstände à 4 px
+-- (UI.List) und Innenabstand 2 × 8 px (UI.Padding) = 212 px
+local COS_CARD_H = 212
 local SLOT_ORDER = { "wrap", "rims", "horn", "trail" }
 local SLOT_NAMES = { wrap = "Folierungen", rims = "Felgen-Sets", horn = "Hupen", trail = "Reifenspuren" }
 
@@ -118,13 +123,50 @@ local function fixed(parent, name, height, order, color)
 	return f
 end
 
--- Robux-Knopftext: Richtwert, nie ein verbindlicher Preis (den zeigt Roblox im Dialog)
+-- Echter Robux-Preis (MarketplaceService:GetProductInfoAsync, pcall, im Hintergrund): nie ein ausgedachter Wert.
+-- Bis er da ist (oder wenn die Abfrage scheitert) steht nur „Mit Robux“ ohne Zahl; Roblox zeigt den
+-- verbindlichen Preis ohnehin im Kaufdialog.
+local function priceKey(p)
+	if type(p) ~= "table" or not p.ready then
+		return nil, nil, nil
+	end
+	if num(p.productId) and p.productId > 0 then
+		return "product:" .. p.productId, p.productId, "Product"
+	end
+	if num(p.id) and p.id > 0 then
+		return "pass:" .. p.id, p.id, "GamePass"
+	end
+	return nil, nil, nil
+end
+
+local function robuxPrice(p)
+	local key, id, infoType = priceKey(p)
+	if not key then
+		return nil
+	end
+	if prices[key] == nil and not pricePending[key] then
+		pricePending[key] = true
+		task.defer(function() -- nie mitten im Aufbau/Rendern zurückkehren (kein verschachteltes Render)
+			local ok, info = pcall(function()
+				return game:GetService("MarketplaceService"):GetProductInfoAsync(id, Enum.InfoType[infoType])
+			end)
+			local price = ok and type(info) == "table" and num(info.PriceInRobux) or nil
+			prices[key] = (price and price > 0) and math.floor(price) or false
+			if prices[key] and state then
+				ShopUI.Render(state)
+			end
+		end)
+	end
+	return prices[key] or nil
+end
+
+-- Robux-Knopftext: nur mit dem echten Preis eine Zahl, sonst „Mit Robux“
 local function robuxText(p)
 	if not p or not p.ready then
 		return NOT_READY
 	end
-	local hint = num(p.robuxHint)
-	return hint and ("Mit Robux (≈ " .. hint .. ")") or "Mit Robux"
+	local price = robuxPrice(p)
+	return price and ("Mit Robux (" .. price .. ")") or "Mit Robux"
 end
 
 ---------------------------------------------------------------- Vorschau-Kacheln (Kosmetik)
@@ -489,30 +531,90 @@ local function buildPasses()
 	end
 end
 
+-- Struktur-Signatur des Katalogs: Ids und ready-Flags (nur das ändert die Karten). Jeder full-Snapshot bringt eine
+-- neue Katalog-Tabelle mit; Preise, Besitz und Gründe aktualisieren die render*-Funktionen ohne Neubau, damit
+-- Scrollposition und Knöpfe unter dem Finger erhalten bleiben.
+function ShopUI.Signature(cat)
+	if type(cat) ~= "table" then
+		return ""
+	end
+	local parts = {}
+	for _, slot in ipairs(cat.slots or {}) do
+		table.insert(parts, "s:" .. tostring(slot))
+	end
+	for _, c in ipairs(cat.cosmetics or {}) do
+		table.insert(parts, "c:" .. tostring(c.id) .. ":" .. tostring(c.slot))
+	end
+	for _, e in ipairs(cat.cars or {}) do
+		table.insert(parts, "a:" .. tostring(e.id))
+	end
+	for _, p in ipairs(cat.products or {}) do
+		table.insert(parts, "p:" .. tostring(p.key) .. ":" .. tostring(p.kind) .. ":" .. tostring(p.ready == true))
+	end
+	for _, p in ipairs(cat.passes or {}) do
+		table.insert(parts, "g:" .. tostring(p.key) .. ":" .. tostring(p.ready == true))
+	end
+	return table.concat(parts, "|")
+end
+
+-- Aktuelle Einträge nach Schlüssel (für die Anzeige; die Karten halten nur Schlüssel/Ids fest)
+local function index()
+	lookup = { products = {}, cars = {}, cos = {}, passes = {} }
+	for _, p in ipairs(catalog.products or {}) do
+		lookup.products[p.key] = p
+	end
+	for _, e in ipairs(catalog.cars or {}) do
+		lookup.cars[e.id] = e
+	end
+	for _, c in ipairs(catalog.cosmetics or {}) do
+		lookup.cos[c.id] = c
+	end
+	for _, p in ipairs(catalog.passes or {}) do
+		lookup.passes[p.key] = p
+	end
+end
+
 local function rebuild()
+	builtSig = ShopUI.Signature(catalog) -- vor dem Aufbau: ein erneuter Render-Aufruf baut nicht noch einmal
 	refs.products, refs.cars, refs.cos, refs.passes = {}, {}, {}, {}
 	buildCredits()
 	buildCars()
 	buildCosmetics()
 	buildPasses()
-	builtFor = catalog
+	ShopUI.Builds += 1
 	refs.loading.Visible = false
 	if type(catalog.hint) == "string" and catalog.hint ~= "" then
 		refs.hint.Text = catalog.hint
 	end
 end
 
+-- Für Tests: wie oft die Karten neu gebaut wurden
+ShopUI.Builds = 0
+
 ---------------------------------------------------------------- Anzeige
 local function renderCredits(s)
-	for _, r in pairs(refs.products) do
-		local p = r.product
+	for key, r in pairs(refs.products) do
+		local p = lookup.products[key] or r.product
+		r.product = p
 		if p.kind == "credits" then
-			r.small.Text = p.ready and ("≈ " .. tostring(num(p.robuxHint) or "?") .. " Robux") or NOT_READY
+			local price = p.ready and robuxPrice(p) or nil
+			r.small.Text = not p.ready and NOT_READY or (price and (price .. " Robux") or "Preis zeigt Roblox im Kaufdialog.")
 			r.button.Text = p.ready and "Kaufen" or NOT_READY
 			UI.SetEnabled(r.button, p.ready == true, T.purple)
 		else
-			r.button.Text = p.owned and "Gekauft ✓" or robuxText(p)
-			UI.SetEnabled(r.button, p.ready == true and not p.owned, T.purple)
+			-- Bündel: schon (teilweise) vorhanden -> kein Robux-Kauf, Hinweis auf die Einzelteile
+			local have, parts = num(p.have) or 0, num(p.parts) or 0
+			if p.owned then
+				r.button.Text = "Gekauft ✓"
+				r.small.Text = "Alle Teile gehören dir schon."
+			elseif have > 0 then
+				r.button.Text = "Teilweise da"
+				r.small.Text = "Du hast schon " .. have .. " von " .. parts .. " Teilen – die fehlenden gibt es einzeln für Credits."
+			else
+				r.button.Text = robuxText(p)
+				r.small.Text = "Alle Teile gibt es einzeln auch für Credits."
+			end
+			UI.SetEnabled(r.button, p.ready == true and not p.owned and p.blocked == nil, T.purple)
 		end
 	end
 end
@@ -521,7 +623,11 @@ local function renderCars(s, dlc)
 	local level = num(s.level) or 1
 	local money = num(s.credits) or 0
 	for id, r in pairs(refs.cars) do
-		local e = r.entry
+		local e = lookup.cars[id] or r.entry
+		r.entry = e
+		if r.product then
+			r.product = lookup.products[r.product.key] or r.product
+		end
 		local owned = dlc[id] == true
 		r.preview:Set(e.body, Lib.Style(s, nil, { paint = e.paint, rims = e.rims, glow = e.glow, spoiler = e.spoiler }))
 		local price = num(e.price) or 0
@@ -550,8 +656,17 @@ local function renderCars(s, dlc)
 			else
 				r.status.Visible = false
 			end
-			r.robux.Text = robuxText(r.product)
-			UI.SetEnabled(r.robux, r.product ~= nil and r.product.ready == true, T.purple)
+			-- Robux-Knopf aus, wenn der Server den Prompt ablehnen würde (z. B. Garage voll)
+			local blocked = r.product and r.product.blocked or nil
+			if blocked and r.product.ready then
+				r.robux.Text = "Garage voll"
+				r.status.Text = blocked
+				r.status.TextColor3 = T.yellow
+				r.status.Visible = true
+			else
+				r.robux.Text = robuxText(r.product)
+			end
+			UI.SetEnabled(r.robux, r.product ~= nil and r.product.ready == true and blocked == nil, T.purple)
 		end
 	end
 end
@@ -561,7 +676,11 @@ local function renderCosmetics(s, owned, equipped)
 	local money = num(s.credits) or 0
 	for key, r in pairs(refs.cos) do
 		if r.item then
-			local c = r.item
+			local c = lookup.cos[key] or r.item
+			r.item = c
+			if r.product then
+				r.product = lookup.products[r.product.key] or r.product
+			end
 			local has = owned[c.id] == true
 			local on = equipped[c.slot] == c.id
 			local price = num(c.price)
@@ -599,7 +718,7 @@ local function renderCosmetics(s, owned, equipped)
 				local p = r.product
 				r.robux.Text = has and "Gekauft ✓" or robuxText(p)
 				r.robux.Visible = not has
-				UI.SetEnabled(r.robux, p ~= nil and p.ready == true and not has, T.purple)
+				UI.SetEnabled(r.robux, p ~= nil and p.ready == true and not has and p.blocked == nil, T.purple)
 			end
 		elseif r.unequip then
 			local slot = key:sub(6)
@@ -613,7 +732,8 @@ end
 local function renderPasses(s, shop)
 	local passes = type(shop.passes) == "table" and shop.passes or {}
 	for key, r in pairs(refs.passes) do
-		local p = r.pass
+		local p = lookup.passes[key] or r.pass
+		r.pass = p
 		local owned = passes[key] == true or p.owned == true
 		if owned then
 			r.status.Text = "Bereits aktiv ✓ – die Teile liegen unter Kosmetik."
@@ -646,8 +766,11 @@ function ShopUI.Render(s)
 		catalog = shop.catalog
 	end
 	refs.wallet.Text = "Guthaben: " .. credits(num(s.credits) or 0) .. " · Level " .. tostring(num(s.level) or 1)
-	if catalog and catalog ~= builtFor then
-		rebuild()
+	if catalog then
+		index()
+		if ShopUI.Signature(catalog) ~= builtSig then
+			rebuild()
+		end
 	end
 	if not catalog then
 		refs.loading.Visible = true

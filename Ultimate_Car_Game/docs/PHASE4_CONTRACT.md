@@ -277,6 +277,18 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   Unlock-Eintrag: Freischaltung über `car:<basis>`. `CarService` wendet `ApplyCosmetics` nach Bau/Umstylen an und
   setzt `ShopService.Restyle` (stehende Autos nach `shop_equip`/Kauf/Quittung/Pass ohne Neubau). Das Credit-Center
   öffnet den Tab `shop`; der 2.4.0-Credits-Shop bleibt als Tablet-Seite erreichbar.
+- **Nachbesserungen Meilenstein 8 (Review)**: Besitz eines DLC-Autos = ein Auto dieses Modells steht in der Garage
+  (`ShopRules.HasDlc`; `dlcCars` ist nur Kauf-Historie) – verkauft = wieder kaufbar; DLC-Autos sind **nicht
+  versteigerbar** (`AuctionRules.Consignable`/`NewPlayerLot`, kein Handel mit Robux-Ware). `ShopRules.CanPrompt`
+  (`PromptBlock`) öffnet keinen Robux-Dialog bei Besitz, teilweise vorhandenem Bündel oder voller Garage; der
+  Katalog trägt den Grund als `blocked`. `ApplyReceipt` liefert ein bezahltes Auto immer und erstattet schon
+  vorhandene Kosmetik mit ihrem Credits-Preis. `Purchases.Init(getSession, onGranted(session, product, result),
+  onDeferred(session, product, reason))`: nicht anwendbare Shop-Quittungen (Garage voll) werden in der Sitzung alle
+  `GameConfig.Shop.ReceiptRetrySeconds` wiederholt, der Spieler bekommt einmal einen Hinweis. Je Quittung genau ein
+  `changed` (`Mini.OnGranted` → true). Nach einem Robux-Prompt sperrt `shop_buy` dieselben Teile
+  `PromptGraceSeconds` lang (Abbruch über `PromptProductPurchaseFinished` gibt sofort frei). Keine ausgedachten
+  Robux-Preise: Zahlen nur aus `GetProductInfoAsync`. Hupen = Lichthupe (`mini_car_horn`, Taste H/HUPE-Knopf,
+  `VehicleFactory.Flash` mit Sprechblase).
 
 ## 10. Aktionen (Zusammenfassung; alle flach, ≤ 10 Felder, Beträge sind nie Client-Werte außer den markierten Absichten)
 
@@ -291,6 +303,7 @@ side_claim {id}
 tycoon_choose {building}  tycoon_collect  tycoon_buy {id}  tycoon_stage  tycoon_rebirth  tycoon_abandon
 tycoon_trade_offer {to, item, qty, price}  tycoon_trade_accept {id}  tycoon_trade_cancel {id}   -- qty/price = Absicht (Bargeld)
 shop_buy {item}  shop_equip {slot, item}  shop_prompt {product}
+mini_car_horn                                                       -- Lichthupe (Hupen-Kosmetik)
 unlocks_seen
 ```
 

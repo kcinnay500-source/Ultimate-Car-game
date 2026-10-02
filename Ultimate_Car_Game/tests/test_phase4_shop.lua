@@ -248,4 +248,44 @@ return {
 		T.eq(d3.games.shop.equipped.wrap, "", "ohne gespeichertes shop: nichts angelegt")
 		noErrors(T, g)
 	end },
+	{ "Lichthupe: mini_car_horn nur am Steuer, blitzt Leiste + Scheinwerfer, Sprechblase mit Hupentext, Abklingzeit", function(T, H)
+		local g = H.Garage({ level = 12 })
+		local p = g:Join(803, { name = "Hupe" })
+		local d = g:D(p)
+		local TEXT = g:MiniShared("GameConfig").Shop.Text
+		d.money = 200000
+		act(g, p, "mini_car_buy", { model = "komet" })
+		act(g, p, "shop_buy", { item = "horn_melodie", rid = 1 })
+		act(g, p, "shop_equip", { slot = "horn", item = "horn_melodie", rid = 2 })
+		local car = d.games.cars[1]
+		act(g, p, "mini_car_spawn", { id = car.id, at = "workshop" })
+		local model = spawned(g, p)
+		if not T.check(model ~= nil, "Auto steht") then
+			return
+		end
+		local bar = model:FindFirstChild("Lichthupe", true)
+		T.check(bar ~= nil and bar.Transparency == 1, "Lichthupe vorhanden, aus")
+		local m = g:Mark()
+		act(g, p, "mini_car_horn")
+		T.check(g:HasToast(p, TEXT.horn, m), "ohne Einsteigen: Hinweis")
+		T.eq(bar.Transparency, 1, "nichts geblitzt")
+		g:Activate()
+		model.DriverSeat.Occupant = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+		g:Flush()
+		g:Advance(0.5) -- MiniNet-Abklingzeit der ersten Absicht
+		T.eq(act(g, p, "mini_car_horn"), "ok", "Hupen-Absicht angenommen")
+		T.eq(bar.Transparency, 0, "Lichtleiste blitzt")
+		local bubble = model:FindFirstChild("HornBubble")
+		T.check(bubble ~= nil and bubble:FindFirstChild("Label") and bubble.Label.Text:find("Tü-dü", 1, true) ~= nil, "Sprechblase mit Hupentext")
+		g:Advance(1)
+		T.eq(bar.Transparency, 1, "Lichtleiste wieder aus")
+		T.eq(model:FindFirstChild("HornBubble"), nil, "Sprechblase weg")
+		-- Abklingzeit (GameConfig.Shop.HornCooldown 1,5 s): 1,3 s nach dem Hupen -> nichts; danach wieder
+		act(g, p, "mini_car_horn")
+		T.eq(model:FindFirstChild("HornBubble"), nil, "innerhalb der Abklingzeit kein zweites Hupen")
+		g:Advance(0.5)
+		act(g, p, "mini_car_horn")
+		T.check(model:FindFirstChild("HornBubble") ~= nil, "nach der Abklingzeit wieder")
+		noErrors(T, g)
+	end },
 }

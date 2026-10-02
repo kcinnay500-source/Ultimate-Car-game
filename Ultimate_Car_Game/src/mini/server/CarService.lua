@@ -1,6 +1,8 @@
 -- CarService: eigene Autos auf dem Server (PHASE2_CONTRACT §1, §4, §6).
 -- * Aktionen: mini_car_buy, mini_car_sell, mini_car_spawn, mini_car_despawn, mini_car_testdrive, mini_car_tune,
---   mini_car_style, mini_car_nitro, mini_carwash, mini_track_start (Register).
+--   mini_car_style, mini_car_nitro, mini_car_horn, mini_carwash, mini_track_start (Register).
+--   mini_car_horn: Lichthupe des gefahrenen Autos (VehicleFactory.Flash mit HornText-Sprechblase, für alle sichtbar;
+--   Abstand GameConfig.Shop.HornCooldown) – Taste H / HUPE-Knopf im DriveClient.
 -- * Fahrzeuge unter workspace.PlayerCars: höchstens 1 eigenes Auto ("Car_<UserId>") + 1 Probefahrt ("Probe_<UserId>").
 --   Spawn an City.CarSpawns.<key> (fehlt er: Werkstatt-Parkplatz, Part "CarSpawn" im Plot bzw. Einfahrt).
 --   Netzwerk-Besitz beim Besitzer, nur er darf einsteigen (fremde Insassen fliegen sofort raus).
@@ -27,6 +29,7 @@ local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 local VehicleFactory = require(script.Parent:WaitForChild("VehicleFactory"))
 local CityService = require(script.Parent:WaitForChild("CityService"))
 local ShopService = require(script.Parent:WaitForChild("ShopService")) -- Meilenstein 8: Kosmetik je Auto (CosmeticsFor)
+local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 
 local CarService = {}
 CarService.States = {} -- [Player] = Auto-Zustand der Sitzung (cs)
@@ -933,6 +936,21 @@ function CarService.Register(Actions, a)
 				VehicleFactory.SetNitro(v.model, false)
 			end
 		end)
+	end)
+
+	-- Lichthupe: nur im eigenen, gefahrenen Auto; Abstand HornCooldown (still während der Abklingzeit)
+	Actions.Register("mini_car_horn", function(ms, _, d, t)
+		local cs = stateOf(ms)
+		local v = cs.car
+		if not v or not v.occupied or not vehicleAlive(v) then
+			toast(cs, GameConfig.Shop.Text.horn)
+			return
+		end
+		if t < (cs.hornReadyAt or 0) then
+			return
+		end
+		cs.hornReadyAt = t + GameConfig.Shop.HornCooldown
+		VehicleFactory.Flash(v.model, GameConfig.Shop.HornSeconds)
 	end)
 
 	Actions.Register("mini_carwash", function(ms, _, d, t)

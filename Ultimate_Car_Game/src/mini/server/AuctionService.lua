@@ -43,6 +43,7 @@ local S -- Zustand des Auktionshauses (AuctionService.Reset)
 local TEXT = {
 	gone = "Diese Auktion gibt es nicht mehr.",
 	not_found = "Auto nicht gefunden.",
+	dlc = "Sondermodelle aus dem Shop können nicht versteigert werden.",
 	locked = "Dieses Auto ist schon in einer Auktion.",
 	duration = "Bitte eine Laufzeit von 2, 5 oder 10 Minuten wählen.",
 	start = "Dieses Startgebot ist nicht (mehr) möglich. Bitte neu wählen.",
@@ -799,6 +800,10 @@ function AuctionService.Register(Actions, a)
 		end
 		if car.locked then
 			toast(ms, TEXT.locked)
+			return
+		end
+		if not AuctionRules.Consignable(car) then
+			toast(ms, TEXT.dlc) -- Sondermodelle aus dem Shop: kein Handel mit Robux-Ware zwischen Spielern
 			return
 		end
 		local duration = AuctionRules.ValidDuration(data.duration)

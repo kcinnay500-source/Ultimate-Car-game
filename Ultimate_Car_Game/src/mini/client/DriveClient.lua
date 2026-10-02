@@ -8,6 +8,8 @@
 --     Werte ohne Verzögerung. Der Server stellt beim Bau nur die Parkbremse ein.
 --   * Tacho (km/h, Gang), Nitro-Taste N / Gamepad X / Handy-Knopf (sendet nur mini_car_nitro; der Server setzt
 --     NitroUntil/NitroReadyAt), Zeitfahren-Anzeige (mini_notice track_*), Probefahrt-Restzeit.
+--   * Lichthupe: Taste H / Gamepad L1 / Handy-Knopf HUPE sendet mini_car_horn; der Server lässt Scheinwerfer und
+--     (mit Hupen-Kosmetik) die Lichtleiste in der Hupenfarbe aufblitzen und zeigt die Sprechblase (für alle sichtbar).
 --   * Auto aufrichten: liegt das Auto auf der Seite/dem Dach (UpVector.Y < FlipUp) und steht fast (< FlipSpeed)
 --     länger als FlipDelay, erscheint „Auto aufrichten [R]“ (Handy: Knopf). Der Fahrer ist Netzwerk-Besitzer, daher
 --     setzt der Client das Auto selbst 4 Studs höher aufrecht hin (gleiche Stelle, gleiche Blickrichtung).
@@ -46,6 +48,8 @@ DriveClient.NitroBoost = 1.35
 DriveClient.NitroSendGap = 0.75
 DriveClient.Action = "UCG_Nitro"
 DriveClient.FlipAction = "UCG_Aufrichten"
+DriveClient.HornAction = "UCG_Hupe"
+DriveClient.HornSendGap = 0.5 -- höchstens alle 0,5 s eine Absicht (Server: GameConfig.Shop.HornCooldown)
 DriveClient.FlipUp = 0.3 -- UpVector.Y darunter: Auto liegt auf der Seite oder dem Dach
 DriveClient.FlipSpeed = 3 -- Studs/s: darunter gilt das Auto als liegen geblieben
 DriveClient.FlipDelay = 2 -- Sekunden, bis „Auto aufrichten“ angeboten wird
@@ -66,6 +70,7 @@ local gui, refs = nil, {}
 local drive = nil -- { seat, model, motors = {{c, dir}}, steers = {{c, dir}}, baseTorque, last = {} }
 local cachedChar, cachedHum
 local lastNitroSent = -math.huge
+local lastHornSent = -math.huge
 local flipSince, lastFlip = nil, -math.huge
 local shownSpeed = 0
 local info = { driving = false, speed = 0, kmh = 0, gear = "N", nitro = false }
@@ -269,6 +274,17 @@ local function buildHud()
 		corner.CornerRadius = UDim.new(0.5, 0)
 	end
 
+	-- Lichthupe (Hupen-Kosmetik), links neben dem Nitro-Knopf
+	refs.horn = UI.Button(gui, "HUPE", T.blue, function()
+		DriveClient.Horn()
+	end, {
+		Name = "Hupe", AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -100, 1, -150), Size = UDim2.new(0, 64, 0, 64), TextSize = 13,
+	})
+	local hornCorner = refs.horn:FindFirstChildOfClass("UICorner")
+	if hornCorner then
+		hornCorner.CornerRadius = UDim.new(0.5, 0)
+	end
+
 	-- Auto aufrichten (nur sichtbar, wenn das Auto umgekippt liegen bleibt)
 	refs.flip = UI.Button(gui, "Auto aufrichten [R]", T.yellow, function()
 		DriveClient.Flip()
@@ -316,6 +332,25 @@ end
 local function onNitroAction(_, inputState)
 	if inputState == Enum.UserInputState.Begin then
 		DriveClient.Nitro()
+		return Enum.ContextActionResult.Sink
+	end
+	return Enum.ContextActionResult.Pass
+end
+
+---------------------------------------------------------------- Lichthupe
+-- Hupen-Absicht (Taste H, Gamepad L1, Handy-Knopf). Der Server blitzt das Auto auf (VehicleFactory.Flash).
+function DriveClient.Horn()
+	if not drive or os.clock() - lastHornSent < DriveClient.HornSendGap then
+		return false
+	end
+	lastHornSent = os.clock()
+	Remote.Send("mini_car_horn")
+	return true
+end
+
+local function onHornAction(_, inputState)
+	if inputState == Enum.UserInputState.Begin and drive then
+		DriveClient.Horn()
 		return Enum.ContextActionResult.Sink
 	end
 	return Enum.ContextActionResult.Pass
@@ -440,6 +475,8 @@ local function enter(seat, model)
 	refs.nitro.Text = isTouch() and "NITRO" or "NITRO\n[N]"
 	ContextActionService:BindActionAtPriority(DriveClient.Action, onNitroAction, false, 3000, Enum.KeyCode.N, Enum.KeyCode.ButtonX)
 	ContextActionService:BindActionAtPriority(DriveClient.FlipAction, onFlipAction, false, 3000, Enum.KeyCode.R, Enum.KeyCode.ButtonY)
+	ContextActionService:BindActionAtPriority(DriveClient.HornAction, onHornAction, false, 3000, Enum.KeyCode.H, Enum.KeyCode.ButtonL1)
+	refs.horn.Text = isTouch() and "HUPE" or "HUPE\n[H]"
 	flipSince = nil
 	refs.flip.Visible = false
 	refs.flip.Text = isTouch() and "Auto aufrichten" or "Auto aufrichten [R]"
@@ -455,6 +492,7 @@ local function exit()
 	end
 	ContextActionService:UnbindAction(DriveClient.Action)
 	ContextActionService:UnbindAction(DriveClient.FlipAction)
+	ContextActionService:UnbindAction(DriveClient.HornAction)
 	flipSince = nil
 	if refs.flip then
 		refs.flip.Visible = false
@@ -790,6 +828,7 @@ function DriveClient.Start(c)
 			gui.Enabled = false
 			ContextActionService:UnbindAction(DriveClient.Action)
 			ContextActionService:UnbindAction(DriveClient.FlipAction)
+			ContextActionService:UnbindAction(DriveClient.HornAction)
 			warn("[Fahren] " .. tostring(err))
 		end
 	end)

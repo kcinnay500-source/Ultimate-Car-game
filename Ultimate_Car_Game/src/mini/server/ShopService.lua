@@ -11,8 +11,13 @@
 --   OnJoin(ms, d, now)               Sitzung merken, Game-Pass-Besitz prüfen (UserOwnsGamePassAsync in pcall, kann
 --                                    warten) und die Pass-Kosmetik idempotent gutschreiben (ShopRules.Grant)
 --   OnLeave(ms)                      Sitzung vergessen
---   OnGranted(p, product)            nach einer Robux-Quittung (Purchases.Init-Rückruf): Toast + mini_notice
---                                    { kind="shop", event="receipt" } + api.changed (Autos/Kosmetik im Snapshot)
+--   OnGranted(p, product, result)    nach einer Robux-Quittung (Purchases.Init-Rückruf): Toast (+ Rückerstattung
+--                                    schon vorhandener Kosmetik) + mini_notice { kind="shop", event="receipt" } +
+--                                    api.changed (einziges changed je Quittung); Rückgabe true = gemeldet
+--   OnDeferred(p, product, reason)   Quittung aufgeschoben (Garage voll): einmaliger Hinweis, was zu tun ist;
+--                                    bis zur Gutschrift kein zweiter Prompt für dasselbe Produkt
+-- Doppelkauf-Schutz: nach einem Robux-Prompt sperrt shop_buy dieselben Teile GameConfig.Shop.PromptGraceSeconds
+-- lang (bricht der Spieler den Roblox-Dialog ab, gibt PromptProductPurchaseFinished sie sofort frei).
 --   Apply(product, snapshot, now)    = ShopRules.ApplyReceipt (Name aus dem Vertrag §9; Purchases ruft ShopRules direkt)
 --   SnapshotFields(ms, d, now, full) { shop = { owned[], equipped{}, dlcCars[], passes{}, catalog (nur full) } }
 --   CosmeticsFor(d, car)             { wrap, rims, horn, trail } (Einträge mit style) für VehicleFactory.ApplyCosmetics
@@ -27,6 +32,7 @@ local MiniShared = Shared:WaitForChild("Mini")
 local C = require(Shared:WaitForChild("Config"))
 local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 local ShopRules = require(MiniShared:WaitForChild("ShopRules"))
+local CarCatalog = require(MiniShared:WaitForChild("CarCatalog"))
 local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
 
 local ShopService = {}
@@ -160,7 +166,24 @@ local function applyPass(ms: any, d: any, pass: any, announce: boolean)
 end
 
 ---------------------------------------------------------------- Aktionen
+-- Läuft für dieses Teil (Kosmetik-/DLC-Modell-Id) gerade ein Robux-Prompt? (Doppelkauf-Schutz)
+local function promptPending(ms: any, item: any, t: number): boolean
+	local pending = ms.shopPrompt
+	if type(pending) ~= "table" then
+		return false
+	end
+	if t >= pending.untilT then
+		ms.shopPrompt = nil
+		return false
+	end
+	return type(item) == "string" and pending.items[item] == true
+end
+
 local function buy(ms: any, data: any, d: any, t: number): boolean
+	if promptPending(ms, data.item, t) then
+		toast(ms, TEXT.promptPending)
+		return false
+	end
 	-- Freischaltung (§12): DLC-Auto ab dem Level des Basismodells ("car:<basis>" aus GameConfig.Unlocks)
 	local m = ShopRules.DlcModel(data.item)
 	if m and m.base then
@@ -238,6 +261,10 @@ local function prompt(ms: any, data: any, d: any, t: number): boolean
 		toast(ms, msg)
 		return false
 	end
+	if ms.shopDeferred and ms.shopDeferred[product.key] then
+		toast(ms, string.format(TEXT.receiptWaiting, tostring(product.name or product.key)))
+		return false
+	end
 	if RunService:IsStudio() or not api.writable(ms) then
 		toast(ms, TEXT_LOCAL.noRobux)
 		return false
@@ -250,6 +277,16 @@ local function prompt(ms: any, data: any, d: any, t: number): boolean
 		end
 	end
 	ms.shopPromptAt = t + PROMPT_SECONDS
+	-- Doppelkauf-Schutz: dieselben Teile bis zur Quittung (höchstens PromptGraceSeconds) nicht für Credits
+	local items = {}
+	local grants = type(product.grants) == "table" and product.grants or {}
+	for _, id in ipairs(grants.cosmetics or {}) do
+		items[id] = true
+	end
+	for _, id in ipairs(grants.cars or {}) do
+		items[id] = true
+	end
+	ms.shopPrompt = { key = product.key, productId = productId, items = items, untilT = t + (SHOP.PromptGraceSeconds or 60) }
 	emitPrompt(ms, productId)
 	return true
 end
@@ -282,6 +319,19 @@ function ShopService.Init(c: any?)
 	if not ok then
 		warn("[Shop] Game-Pass-Kaufereignis nicht verfügbar: " .. tostring(err))
 	end
+	-- Roblox-Dialog abgebrochen: Doppelkauf-Sperre sofort aufheben (ohne das Ereignis läuft sie nach Ablauf aus)
+	pcall(function()
+		MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, productId, purchased)
+			if purchased then
+				return
+			end
+			for player, ms in pairs(sessions) do
+				if player.UserId == userId and type(ms.shopPrompt) == "table" and ms.shopPrompt.productId == productId then
+					ms.shopPrompt = nil
+				end
+			end
+		end)
+	end)
 end
 
 ---------------------------------------------------------------- Sitzung
@@ -289,6 +339,8 @@ function ShopService.OnJoin(ms: any, d: any, t: number?)
 	sessions[ms.player] = ms
 	ms.shopPasses = {}
 	ms.shopPromptAt = 0
+	ms.shopPrompt = nil
+	ms.shopDeferred = {}
 	ShopRules.Shop(d) -- Standard anlegen, falls ein Profil ohne shop in der Sitzung ist
 	-- Pass-Besitz prüfen (kann warten); ohne eingetragene Ids (0) kehrt es sofort zurück
 	local toCheck = {}
@@ -327,17 +379,52 @@ end
 
 -- Nach einer Robux-Quittung (Purchases.Init-Rückruf in GarageServer): Hinweis an den Spieler, Snapshot/Revision.
 -- product = Eintrag aus GameConfig.Shop.Products (Credits-Pakete meldet GarageServer weiter selbst).
-function ShopService.OnGranted(p: any, product: any)
+-- result = ShopRules.ApplyReceipt-Ergebnis auf dem lebenden Profil (refund/refundText), optional.
+-- Rückgabe true = Änderung gemeldet (api.changed); GarageServer ruft changed(p) dann nicht noch einmal.
+function ShopService.OnGranted(p: any, product: any, result: any?): boolean
 	local ms = p and sessions[p.player] or nil
 	if not ms or not alive(ms) or type(product) ~= "table" or product.kind == "credits" then
-		return
+		return false
 	end
 	local d = p.profile.data
+	if ms.shopDeferred then
+		ms.shopDeferred[product.key] = nil
+	end
+	if type(ms.shopPrompt) == "table" and ms.shopPrompt.key == product.key then
+		ms.shopPrompt = nil
+	end
 	local text = string.format(product.kind == "car" and TEXT.receiptCar or TEXT.receipt, tostring(product.name or product.key))
 	toast(ms, text)
-	notice(ms, { event = "receipt", product = product.key, kind = product.kind, name = product.name, grants = product.grants })
-	api.changed(ms) -- neue Autos/Kosmetik: 2.4.0-Revision + Snapshot
+	local refund = type(result) == "table" and finite(result.refund) and result.refund or 0
+	if refund > 0 and type(result.refundText) == "string" then
+		toast(ms, result.refundText)
+	end
+	notice(ms, {
+		event = "receipt", product = product.key, kind = product.kind, name = product.name, grants = product.grants,
+		refund = refund > 0 and refund or nil,
+	})
+	api.changed(ms) -- neue Autos/Kosmetik: 2.4.0-Revision + Snapshot (einziges changed je Quittung)
 	restyle(ms, d)
+	return true
+end
+
+-- Quittung aufgeschoben (Purchases: ApplyReceipt nicht anwendbar, meist Garage voll). Einmal je Quittung.
+function ShopService.OnDeferred(p: any, product: any, reason: any)
+	local ms = p and sessions[p.player] or nil
+	if not ms or not alive(ms) or type(product) ~= "table" then
+		return
+	end
+	ms.shopDeferred = ms.shopDeferred or {}
+	ms.shopDeferred[product.key] = true
+	ms.shopPrompt = nil
+	local grants = type(product.grants) == "table" and product.grants or {}
+	if type(grants.cars) == "table" and #grants.cars > 0 then
+		local cars = type(p.profile.data.games) == "table" and type(p.profile.data.games.cars) == "table" and #p.profile.data.games.cars or 0
+		toast(ms, string.format(TEXT.receiptDeferred, cars, CarCatalog.MaxCars, tostring(product.name or product.key)))
+	else
+		toast(ms, type(reason) == "string" and reason or TEXT.unknown)
+	end
+	notice(ms, { event = "deferred", product = product.key, kind = product.kind, name = product.name })
 end
 
 -- Vertrag §9: Apply(product, snapshot) – Purchases ruft ShopRules.ApplyReceipt direkt (gleiche Funktion)

@@ -42,6 +42,7 @@ MiniNet.Actions = {
 	mini_car_tune = { id = "number", part = "string", level = "number" },
 	mini_car_style = { id = "number", paint = "number", rims = "number", glow = "number", spoiler = "boolean" },
 	mini_car_nitro = {},
+	mini_car_horn = {}, -- Lichthupe (Hupen-Kosmetik): Server blitzt das gefahrene Auto für alle sichtbar auf
 	mini_carwash = {},
 	mini_track_start = {},
 	mini_arcade_start = { game = "string" },
@@ -108,6 +109,7 @@ MiniNet.Cooldowns = {
 	mini_car_testdrive = 3,
 	mini_car_style = 0.5,
 	mini_car_nitro = 0.5,
+	mini_car_horn = 0.5, -- CarService prüft zusätzlich GameConfig.Shop.HornCooldown
 	mini_carwash = 2,
 	mini_track_start = 3,
 	mini_arcade_input = 0, -- eigenes Budget in ArcadeService (25/s); 0,12 s verwürfe schnelle Eingaben

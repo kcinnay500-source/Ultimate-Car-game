@@ -215,7 +215,7 @@ end
 local function eligibleCars()
 	local out = {}
 	for _, car in ipairs(carList()) do
-		if type(car) == "table" and not car.locked and num(car.id) then
+		if type(car) == "table" and not car.locked and num(car.id) and car.dlc ~= true then -- Shop-Sondermodelle nicht versteigerbar
 			table.insert(out, car)
 		end
 	end
@@ -604,7 +604,7 @@ local function drawConsign()
 	elseif own then
 		info = "Du hast schon ein Auto in der Auktion (" .. tostring(own.name) .. "). Warte das Ende ab oder ziehe es zurück, solange es keine Gebote gibt."
 	elseif not car then
-		info = #carList() > 0 and "Alle deine Autos sind gerade in einer Auktion." or "Du hast noch kein eigenes Auto. Autos gibt es im Autohaus."
+		info = #carList() > 0 and "Keines deiner Autos kann gerade versteigert werden (in einer Auktion oder Sondermodell aus dem Shop)." or "Du hast noch kein eigenes Auto. Autos gibt es im Autohaus."
 	else
 		info = "Wähle Auto, Startgebot und Laufzeit. Bis zum Ende ist das Auto gesperrt. Beim Verkauf gehen 5 % Gebühr ab."
 	end
