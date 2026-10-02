@@ -11,6 +11,8 @@
 --                 AlwaysOnTop, leicht wippend, Entfernung in Studs.
 --   MissionCard   „Mission geschafft!“ oben Mitte (unter der Toast-Zone) bei mini_notice { kind = "mission", done = true },
 --                 Abholung (story/claimed, side_claimed) und Lieferung (gestartet/abgeliefert); kurzer Tween, Warteschlange.
+--                 Auf schmalen Bildschirmen (Breite < CardWidth + HintWidth + Ränder, also Handy/Tablet) rückt sie unter die
+--                 Karten oben rechts („Tipp“/„Neu freigeschaltet“ aus TutorialUI/UnlocksUI), solange die zu sehen sind.
 --   ChapterCard   Kapitel-Intro (Titel + Erzähltext, „Los geht's!“) beim Kapitelwechsel im Snapshot und beim Story-Ende.
 --   NPC           Kunden am Kiesplatz: Modelle/Parts mit Attribut Anim="npc_idle" unter City.Animated.Kiesplatz (worldgen:
 --                 Kunde_1..3, Attribut Period) oder City.Districts.Kiesplatz wippen und drehen sich dezent (prozedural,
@@ -30,6 +32,7 @@ local MissionClient = {}
 MissionClient.DisplayOrder = 21
 MissionClient.CardWidth = 420
 MissionClient.CardTop = 62 + 60 + 8 -- Mindestabstand: unter der Toast-Zone (Toast y 62, 60 hoch); tatsächlich UI.ToastTop()
+MissionClient.HintWidth = 300 -- Breite der Karten oben rechts (TutorialUI.HintWidth / UnlocksUI), für die Schmal-Prüfung
 MissionClient.CardSeconds = 4
 MissionClient.ChapterSeconds = 15
 MissionClient.QueueMax = 6
@@ -167,12 +170,45 @@ local function buildMarker(name: string, color: Color3)
 	return m
 end
 
+-- Unterkante der sichtbaren Karten oben rechts (Tutorial „Tipp“/„Neu freigeschaltet“, UnlocksUI „Neu freigeschaltet“),
+-- relativ zur eigenen ScreenGui; 0 ohne sichtbare Karte. AutomaticSize-Karten ohne gemessene Höhe zählen 80 px.
+local RIGHT_CARDS = { { "Tutorial", "HintCard" }, { "Tutorial", "UnlockCard" }, { "UnlockCards", "UnlockCard" } }
+local function rightCardsBottom(): number
+	local pg = playerGui()
+	if not pg or not gui then
+		return 0
+	end
+	local bottom = 0
+	local base = gui.AbsolutePosition.Y
+	for _, pair in ipairs(RIGHT_CARDS) do
+		local sg = pg:FindFirstChild(pair[1])
+		local frame = sg and sg:IsA("LayerCollector") and sg.Enabled and sg:FindFirstChild(pair[2]) or nil
+		if frame and frame:IsA("GuiObject") and frame.Visible then
+			local h = frame.AbsoluteSize.Y > 0 and frame.AbsoluteSize.Y or 80
+			bottom = math.max(bottom, frame.AbsolutePosition.Y - base + h)
+		end
+	end
+	return bottom
+end
+
+-- Schmal: Karte in der Mitte (420) und Karte rechts (300) passen nicht nebeneinander
+local function narrowScreen(): boolean
+	local w = gui and gui.AbsoluteSize.X or 0
+	return w > 0 and w < MissionClient.CardWidth + 24 + MissionClient.HintWidth + 32
+end
+
 local function cardTop(): number
 	local top = MissionClient.CardTop
 	if UI and type(UI.ToastTop) == "function" then
 		local ok, t = pcall(UI.ToastTop)
 		if ok and type(t) == "number" and t == t then
 			top = math.max(top, t + 60 + 8)
+		end
+	end
+	if narrowScreen() then
+		local okB, bottom = pcall(rightCardsBottom)
+		if okB and type(bottom) == "number" and bottom > 0 then
+			top = math.max(top, bottom + 8)
 		end
 	end
 	return top
@@ -719,6 +755,10 @@ function MissionClient.Step(dt: number?)
 					showChapterNow(e)
 				end
 				showNextCard()
+				-- sichtbare Karte neu legen, falls rechts gerade eine Karte auf- oder abgetaucht ist (schmale Bildschirme)
+				if card.frame and card.frame.Visible then
+					card.frame.Position = UDim2.new(0.5, 0, 0, cardTop())
+				end
 			end
 			updateMarkers()
 		end

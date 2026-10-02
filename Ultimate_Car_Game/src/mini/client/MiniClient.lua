@@ -236,6 +236,9 @@ local function onSnapshot(s)
 	if Mission then
 		call(Mission.OnSnapshot, s) -- Missions-Marker, Kapitel-Intro bei neuem Kapitel
 	end
+	if Modules.story and Modules.story.OnSnapshot then
+		call(Modules.story.OnSnapshot, s) -- Preistafel am Kiesplatz und Kunden-Countdown auch bei geschlossenem Panel
+	end
 	renderLockNotes(s)
 	renderHeader()
 	renderVisible()

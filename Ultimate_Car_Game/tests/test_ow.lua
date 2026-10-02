@@ -256,7 +256,10 @@ return {
 		T.check(garbage.buildings.autohaus.extra == nil and garbage.buildings.bogus == nil and garbage.foo == nil, "Whitelist der Schlüssel")
 		T.eq(garbage.buildings.produktion.stage, 4, "Stufe über Maximum -> Maximum")
 		T.eq(garbage.buildings.produktion.built, 2, "laufender Bau (readyAt in der Zukunft) bleibt built 2")
-		T.eq(garbage.buildings.schrottplatz.built, 2, "readyAt erreicht -> beim Laden fertig (Offline-Bauzeit)")
+		T.eq(garbage.buildings.schrottplatz.built, 1, "readyAt erreicht -> built bleibt wie gespeichert (erst Settle beim Beitritt verbucht, mit ow_ready)")
+		local settled = { games = { ow = OWR.Load(garbage, {}, NOW) } }
+		T.check(H.DeepEqual(OWR.Settle(settled, NOW), { "schrottplatz" }), "Settle hebt den offline fertigen Bau nach dem Laden")
+		T.eq(settled.games.ow.buildings.schrottplatz.built, 2, "nach Settle built 2")
 		T.eq(garbage.buildings.schrottplatz.collectedAt, NOW - 1, "collectedAt nie vor readyAt (Umbau stand still)")
 		T.eq(garbage.passive, false, "passive nur bei echtem true")
 		T.eq(garbage.lastPassiveAt, 0, "lastPassiveAt negativ -> 0")
@@ -383,6 +386,18 @@ return {
 		T.eq(got.parts, sp.partsPerHour * 2, "Altteile für 2 Std.")
 		T.eq(d.games.press.scrap - scrap0, sp.scrapPerHour * 2, "Schrott in der Presse")
 		T.eq(d.games.parts - parts0, sp.partsPerHour * 2, "Altteile im Lager")
+		-- häufiges Abholen verliert keine Altteile: zweimal 25 Min. (Stufe 1: 2 Teile/Std.) ergeben zusammen 1 Teil (Rest in partsCarry)
+		local t2 = t + 2 * HOUR
+		parts0 = d.games.parts
+		got = OWR.Collect(d, "schrottplatz", t2 + 25 * 60)
+		T.check(got ~= nil and got.parts == 0 and got.scrap > 0, "nach 25 Min.: Schrott ja, noch kein ganzes Teil")
+		local carry = OWR.Entry(d, "schrottplatz").partsCarry
+		T.check(carry > 0.8 and carry < 0.9, "Rest 0,83 Teile gemerkt (" .. tostring(carry) .. ")")
+		got = OWR.Collect(d, "schrottplatz", t2 + 50 * 60)
+		T.eq(got.parts, 1, "nach weiteren 25 Min.: ein Teil (Rest zählt mit)")
+		T.eq(d.games.parts - parts0, 1, "zusammen 1 Altteil für 50 Min.")
+		T.check(OWR.Entry(d, "schrottplatz").partsCarry >= 0 and OWR.Entry(d, "schrottplatz").partsCarry < 1, "Rest bleibt unter 1")
+		T.check(g:MiniShared("MiniRules").IsClean(d.games.ow), "ow mit partsCarry sauber")
 		-- Produktion Stufe 1: Paket alle n Stunden, angebrochener Zeitraum bleibt
 		t = finish("produktion", 1, NOW)
 		local pr = OW.Buildings.produktion.Stages[1]
@@ -606,7 +621,10 @@ return {
 		local mark = g:Mark()
 		local pl2, d2 = join(g, 7002, "Pendler", 40)
 		local e = OWR.Entry(d2, "schrottplatz")
-		T.check(e.stage == 1 and e.built == 1, "beim Laden fertig (readyAt lag in der Vergangenheit)")
+		T.check(e.stage == 1 and e.built == 1, "nach dem Beitritt fertig (Settle in OnJoin, readyAt lag in der Vergangenheit)")
+		local offlineReady = g:Notices(pl2, "ow_ready", mark)
+		T.check(#offlineReady == 1 and offlineReady[1].typ == "schrottplatz" and offlineReady[1].stage == 1, "offline fertig: ow_ready beim Beitritt (nach hello)")
+		T.check(g:HasToast(pl2, "fertig gebaut", mark), "offline fertig: Toast beim Beitritt")
 		T.eq(e.readyAt, readyAt, "readyAt unverändert")
 		T.eq(e.collectedAt, readyAt, "Ertrag läuft ab readyAt")
 		local model = OWS.ModelOf(pl2, "schrottplatz")
@@ -634,7 +652,7 @@ return {
 		T.eq(snap.ow.buildings.autohaus.next.stage, 3, "Snapshot: nächste Stufe 3")
 		T.eq(snap.ow.buildings.autohaus.next.cost, ah[3].price, "Snapshot: Kosten Stufe 3")
 		T.eq(snap.ow.buildings.autohaus.next.seconds, ah[3].buildSeconds, "Snapshot: Bauzeit Stufe 3")
-		T.eq(#g:Notices(pl2, "ow_ready", mark), 2, "zwei ow_ready (Autohaus 1 und 2)")
+		T.eq(#g:Notices(pl2, "ow_ready", mark), 3, "drei ow_ready (Schrottplatz offline, Autohaus 1 und 2)")
 		-- Verlassen räumt die Modelle weg
 		g:Leave(pl2)
 		g:Advance(1)

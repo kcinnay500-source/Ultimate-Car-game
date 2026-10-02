@@ -96,7 +96,11 @@ Was die automatischen Tests nicht abdecken können: Rendering, echtes Netzwerk, 
 
 - [ ] Tutorial endet jetzt am Kiesplatz (Schritt 11): Schnellreise „Kiesplatz“, E an der Hütte öffnet den Tab „Story“, Belohnung einmalig.
 - [ ] Kapitel 1: Mission „Drei Gebrauchtwagen verkaufen“ starten; am Kiesplatz steht ein Kunde (NPC-Figuren wippen leicht), Karte mit Wunsch und drei Preisknöpfen; „günstig“ klappt immer, „teuer“ platzt manchmal (gleicher Kunde = gleiche Antwort), Gewinn wird gutgeschrieben, nächster Kunde nach 45 s. Weit weg vom Kiesplatz: Hinweis, kein Verkauf.
-- [ ] Mission „Werkstatt kennenlernen“ wird durch eine echte Abrechnung erledigt; „1.000 Credits“ durch den Kontostand; Abholen gibt Credits + XP, Kapitel 2 ab Level 5 (gesperrt: „Ab Level 5“).
+- [ ] Mission „Zurück in die Werkstatt“ wird durch eine echte Abrechnung erledigt; „2.500 Credits“ durch den Kontostand; Abholen gibt Credits + XP, Kapitel 2 ab Level 5 (gesperrt: „Ab Level 5“).
+- [ ] Kiesplatz: Kunden kommen nur, solange die Figur am Kiesplatz steht (in der Werkstatt kein „hatte keine Lust mehr“-Hinweis); nach einem Verkauf bringt Lobby-Hin-und-Zurück oder ein Rejoin keinen früheren Kunden (45 s). Die Preistafel neben der Hütte zeigt die drei Preise des aktuellen Kunden, sonst günstig/fair/teuer.
+- [ ] Lieferung: mit Vollgas durch das Start- und das Zielfeld fahren (nicht anhalten) – Start und „abgeliefert“ werden trotzdem erkannt.
+- [ ] Nebenmissionen: ein abgelehnter Schrott-Tausch (0 Schrott), eine Waschstraße ohne Auto, ein abgebrochener Spielhallen-Automat zählen nicht; nur Nebenmissionen, die das Level schon erlaubt, stehen im Tab.
+- [ ] Gebäude: Baustelle läuft (Gebäude-Tab zählt lokal herunter); ein Bau, der offline fertig wird, meldet sich beim nächsten Beitritt mit „fertig gebaut“. Schrottplatz: zweimal kurz hintereinander abholen verliert keine Altteile (Rest wird aufgehoben).
 - [ ] Welt-Marker (▼) über dem Ziel der aktiven Mission (Kiesplatz/Empfang/Autohaus …), Missions-Karte oben bei Fortschritt, Kapitel-Intro beim neuen Kapitel.
 - [ ] Nebenmissionen: täglich 3 (UTC), z. B. Lieferung: mit dem eigenen Auto auf das Start-Feld „Lieferung“ fahren, Timer läuft, Ziel erreichen → erledigt; Tageslimit 3, am nächsten Tag neue Auswahl. „Werkstatt-Legende“ dauerhaft.
 - [ ] Co-op (2 Spieler, Party in der Lobby): beide starten dieselbe Mission, ein Verkauf des einen zählt für beide (Hinweis „Party: … hat … weitergebracht“), jeder holt selbst ab; passives Mitglied bekommt nichts.

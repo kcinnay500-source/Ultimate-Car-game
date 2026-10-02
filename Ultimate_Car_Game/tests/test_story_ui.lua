@@ -431,7 +431,7 @@ return {
 		local SR = g:MiniShared("StoryRules")
 		local Story = SR.Config()
 		local today = SR.DayKey(NOW)
-		local daily = SR.DailyDefs(today)
+		local daily = SR.DailyDefs(today, 4) -- Auswahl des Spielers auf Level 4 (nur freigeschaltete Nebenmissionen)
 		T.eq(#daily, 3, "drei Tagesmissionen")
 		local first, second = daily[1], daily[2]
 		local s = storySnapshot(g, { level = 4, mutate = function(d)
@@ -842,6 +842,90 @@ return {
 			local gui = p.PlayerGui:FindFirstChild("Missionen")
 			local cardFrame = gui and gui:FindFirstChild("MissionCard")
 			T.check(cardFrame and cardFrame.Visible and cardFrame.AbsoluteSize.X <= vp.X - 24, tag .. ": Missions-Karte passt (" .. tostring(cardFrame and cardFrame.AbsoluteSize.X) .. ")")
+			T.eq(g:ErrorText(), "", tag .. ": keine Fehler")
+			g:Close()
+		end
+	end },
+
+	{ "StoryUI: Preistafel am Kiesplatz zeigt die Preise des Kunden, ohne Kunden die Legende günstig/fair/teuer", function(T, H)
+		local g, p = startClient(H)
+		local rec = recorder(T)
+		local mod = build(g, p, "StoryUI", rec)
+		local MiniLocale = g:MiniShared("MiniLocale")
+		local dm = g:Find("Workspace.City.Districts.Kiesplatz")
+		T.check(dm ~= nil, "Kiesplatz in der Fixture")
+		local board
+		for _, x in ipairs(dm:GetDescendants()) do
+			if x:IsA("SurfaceGui") and x.Name == "PriceBoard" then
+				board = x
+			end
+		end
+		T.check(board ~= nil, "SurfaceGui PriceBoard")
+		T.check(board.Line1.Text:find("günstig", 1, true) ~= nil and board.Line3.Text:find("teuer", 1, true) ~= nil, "Legende aus dem Generator: " .. board.Line1.Text)
+		local s, _, sale = storySnapshot(g, { level = 2, sale = true, mutate = function(d, R)
+			R.Start(d, "c1_m1", NOW, 0, 2)
+		end })
+		g:InClient(p, function()
+			mod.OnSnapshot(s) -- wie MiniClient bei jedem Snapshot (auch bei geschlossenem Panel)
+		end)
+		for tier = 1, 3 do
+			T.eq(board["Line" .. tier].Text, tostring(tier) .. " · " .. MiniLocale.Credits(sale.tiers[tier].price), "Preis Stufe " .. tier .. " auf der Tafel")
+		end
+		local s2 = storySnapshot(g, { level = 2, saleIn = 30 })
+		g:InClient(p, function()
+			mod.OnSnapshot(s2)
+		end)
+		T.eq(board.Line1.Text, "1 · günstig", "ohne Kunden: Legende 1")
+		T.eq(board.Line2.Text, "2 · fair", "ohne Kunden: Legende 2")
+		T.eq(board.Line3.Text, "3 · teuer", "ohne Kunden: Legende 3")
+		T.eq(g:ErrorText(), "", "keine Fehler")
+	end },
+
+	{ "MissionClient: auf schmalen Bildschirmen rückt die Missions-Karte unter die Karte „Neu freigeschaltet“ oben rechts; breit bleibt sie oben", function(T, H)
+		for _, case in ipairs({ { vp = Vector2.new(390, 844), narrow = true }, { vp = Vector2.new(1280, 720), narrow = false } }) do
+			local g, p = startClient(H, { viewport = case.vp })
+			local rec = recorder(T)
+			local _, _, _, _, _, ctx = build(g, p, "PrestigeUI", rec)
+			local mc = g:ClientModule(p, "Mini.MissionClient")
+			local unlockCard
+			g:InClient(p, function()
+				local sg = Instance.new("ScreenGui")
+				sg.Name = "UnlockCards"
+				sg.ResetOnSpawn = false
+				sg.DisplayOrder = 21
+				sg.Parent = p.PlayerGui
+				unlockCard = Instance.new("Frame")
+				unlockCard.Name = "UnlockCard"
+				unlockCard.AnchorPoint = Vector2.new(1, 0)
+				unlockCard.Position = UDim2.new(1, -16, 0, 130)
+				unlockCard.Size = UDim2.new(0, 300, 0, 90)
+				unlockCard.Visible = true
+				unlockCard.Parent = sg
+				mc.Start(ctx)
+				mc.Step(0.3)
+				mc.OnNotice({ kind = "mission", id = "c1_m1", title = "Drei Gebrauchtwagen verkaufen", progress = 3, target = 3, done = true, side = false })
+				mc.Step(0.3)
+			end)
+			local gui = p.PlayerGui:FindFirstChild("Missionen")
+			local cardFrame = gui and gui:FindFirstChild("MissionCard")
+			local tag = tostring(case.vp.X) .. " px"
+			T.check(cardFrame and cardFrame.Visible, tag .. ": Missions-Karte sichtbar")
+			local top = cardFrame.Position.Y.Offset
+			local unlockBottom = unlockCard.AbsolutePosition.Y - gui.AbsolutePosition.Y + unlockCard.AbsoluteSize.Y
+			if case.narrow then
+				T.check(top >= unlockBottom + 8, tag .. ": Karte unter der rechten Karte (" .. tostring(top) .. " ≥ " .. tostring(unlockBottom + 8) .. ")")
+				T.check(cardFrame.AbsoluteSize.X <= case.vp.X - 24, tag .. ": Karte passt in die Breite")
+				-- rechte Karte verschwindet: die Missions-Karte rückt wieder nach oben
+				g:InClient(p, function()
+					unlockCard.Visible = false
+					mc.Step(0.3)
+				end)
+				T.check(cardFrame.Position.Y.Offset < top, tag .. ": ohne rechte Karte wieder oben (" .. tostring(cardFrame.Position.Y.Offset) .. ")")
+			else
+				T.check(top < unlockBottom, tag .. ": breit – Karte bleibt oben neben der rechten Karte (" .. tostring(top) .. ")")
+				T.check(cardFrame.AbsolutePosition.X + cardFrame.AbsoluteSize.X <= unlockCard.AbsolutePosition.X - 8, tag .. ": keine Überlappung")
+			end
+			T.eq(cardFrame.AnchorPoint.X, 0.5, tag .. ": weiter mittig verankert")
 			T.eq(g:ErrorText(), "", tag .. ": keine Fehler")
 			g:Close()
 		end

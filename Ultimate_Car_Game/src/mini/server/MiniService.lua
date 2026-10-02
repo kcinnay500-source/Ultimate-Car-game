@@ -20,7 +20,9 @@
 -- (StoryService, Meilenstein 7). Jede Aktion, die etwas Freischaltbares nutzt, prüft Mini.Handle zentral über
 -- Unlocks (ACTION_UNLOCK); Stationen über Unlocks.TabAllowed. Im Passiv-Modus (§5) blockt Mini.Handle Story-Start,
 -- Kiesplatz-Verkauf und Auktionen (PASSIVE_BLOCKED, Hinweis über OWService.BlockIfPassive). Story-Ereignisse:
--- Statistiken über MiniRules.StatHook, Ereignisse aus Hinweisen der Dienste (notice -> storyEventOf) und api.event.
+-- Statistiken über MiniRules.StatHook, Ereignisse aus Hinweisen der Dienste (notice -> storyEventOf; Spielhallen-Runden
+-- nur gewertet, nicht abgebrochen/abgelehnt) und api.event; "action:<name>" nur, wenn der Handler true zurückgibt
+-- (gelungener Tausch, gültiges Gebot, Wäsche, Tuning) – abgelehnte Absichten zählen nicht für Nebenmissionen.
 -- Geld (d.money) ändern Minispiele nur in Handle (also innerhalb von request()); danach ruft
 -- MiniService ctx.changed(p) (höchstens 2×/s, dazwischen ctx.push und ein nachgeholtes changed im Tick).
 -- Sonst wird nur der Minispiel-Snapshot als geändert markiert.
@@ -209,8 +211,8 @@ local function storyEventOf(kind, data)
 		return "track_finish"
 	elseif kind == "auction_won" then
 		return "auction_won"
-	elseif kind == "arcade_result" and not data.replay and not data.expired then
-		return "arcade_round"
+	elseif kind == "arcade_result" and not data.replay and not data.expired and not data.aborted and not data.rejected then
+		return "arcade_round" -- nur zu Ende gespielte, gewertete Runden (kein Sofort-Abbruch mit 0 Punkten)
 	elseif kind == "ow_build" then
 		return "ow_built:" .. tostring(data.typ)
 	end
@@ -249,6 +251,7 @@ local function flushNotices(ms)
 	-- Hinweise, die Dienste vor 'hello' eingereiht haben (Freischaltungen, Tutorial-Schritt)
 	pcall(PrestigeService.Flush, ms)
 	pcall(TutorialService.Flush, ms)
+	pcall(OWService.Flush, ms) -- offline fertig gewordene Bauten (ow_ready aus OnJoin)
 end
 
 local function pushBoard(ms)
@@ -409,7 +412,7 @@ local ACTION_UNLOCK = {
 		local key = "car:" .. tostring(clean.model)
 		return Unlocks.Known(key) and key or nil -- unbekannte Modelle meldet CarRules.Buy selbst
 	end,
-	-- Open-World-Gebäude (Meilenstein 6): building:<typ> (Autohaus 10, Schrottplatz 18, Produktion 35);
+	-- Open-World-Gebäude (Meilenstein 6): building:<typ> (Autohaus 10, Schrottplatz 18, Produktion 30 – wie Kapitel 4);
 	-- werkstatt und unbekannte Typen beantwortet OWService selbst
 	ow_build = function(clean)
 		local key = "building:" .. tostring(clean.typ)
@@ -575,6 +578,7 @@ function Mini.Handle(p, action, args)
 	if not ok then
 		warn("[Minispiele] " .. action .. ": " .. tostring(err))
 	else
+		local succeeded = err == true -- Rückgabe true = Aktion wirklich gelungen (Tausch, Gebot, Wäsche, Tuning …)
 		-- Tutorial-Schritte "action:<name>" (mini_travel meldet sich selbst, nur bei gelungener Reise) und der
 		-- Beginner-Hinweis "first:dismantled"; danach ein eventueller Moduswechsel (lobby_go/lobby_return)
 		local okT, errT = pcall(function()
@@ -584,8 +588,12 @@ function Mini.Handle(p, action, args)
 			if action == "mini_scrapyard_dismantle" then
 				TutorialService.OnStat(ms, d, "dismantled")
 			end
-			-- Nebenmissionen "action:<name>" (Gebote, Waschstraße, Tauschgeschäfte, Tuning am Auto)
-			StoryService.OnEvent(ms, d, "action:" .. action, clean)
+			-- Nebenmissionen "action:<name>" (Gebote, Waschstraße, Tauschgeschäfte, Tuning am Auto): nur nach einer
+			-- gelungenen Aktion (Handler gibt true zurück) – abgelehnte Absichten (kein Schrott, kein Auto, ungültiges
+			-- Gebot) melden sich nur per Toast und zählen nicht (Vertrag §7)
+			if succeeded then
+				StoryService.OnEvent(ms, d, "action:" .. action, clean)
+			end
 			checkMode(ms, d)
 		end)
 		if not okT then
@@ -768,7 +776,7 @@ function Mini.OnSettled(p)
 		if ms then
 			TutorialService.OnEvent(ms, d, "settled") -- Tutorial-Schritt „Abrechnen“
 			TutorialService.OnStat(ms, d, "jobsDone") -- Beginner-Hinweis zum ersten Auftrag
-			StoryService.OnEvent(ms, d, "settle") -- Story-Mission „Werkstatt kennenlernen“ (jobsDone kommt über StatHook)
+			StoryService.OnEvent(ms, d, "settle") -- Story-Mission „Zurück in die Werkstatt“ (jobsDone kommt über StatHook)
 		end
 	end)
 	if not ok then

@@ -12,14 +12,18 @@
 --                                     und den Diensten bzw. zentral): Story-/Nebenmissionen, Co-op
 --   OnEvent(ms, d, event, data?)      Ereignis: "settle", "car_bought", "auction_won", "auction_consigned", "track_finish" {time},
 --                                     "arcade_round", "ow_built:<typ>", "action:<aktion>" (nach jeder gelungenen Aktion), …
---   Tick(ms, d, now) -> changed       alle 0,5 s: Tageswechsel, Kunden am Kiesplatz, Bedingungs-Missionen, Lieferfahrten
+--   Tick(ms, d, now) -> changed       alle 0,5 s: Tageswechsel, Kunden am Kiesplatz (nur solange die Figur in Reichweite der
+--                                     Station ist), Bedingungs-Missionen, Lieferfahrten
 --   OnLeave(ms)                       Sitzung vergessen
 --   SnapshotFields(ms, d, now, full)  { story = StoryRules.View(...) } (missions/chapters nur bei full)
 -- Co-op (§7): Fortschritt eines Party-Mitglieds (LobbyService.PartyOf) zählt für alle Mitglieder mit derselben aktiven
 -- Mission im selben Server (StoryRules.CoopApply, geteilte Arten stat/event/sell). Belohnung holt jeder selbst.
 -- Passiv-Modus (§5): story_start/story_sell abgelehnt, Ereignisse zählen nicht, Co-op überträgt nichts an Passive.
--- Welt: City.Stations.kiesplatz (Reichweite für story_sell, optional), City.Missions.Delivery_<n> mit Teilen
--- Role="start"/"end" (sonst Namen Start/Ziel) – die Lieferung erkennt den Rumpf des eigenen Autos (workspace.PlayerCars.Car_<UserId>).
+-- Welt: City.Stations.kiesplatz (Reichweite für Kunden und story_sell, optional), City.Missions.Delivery_<n> mit Teilen
+-- Role="start"/"end" (sonst Namen Start/Ziel) – die Lieferung erkennt den Rumpf des eigenen Autos (workspace.PlayerCars.Car_<UserId>)
+-- und prüft die Strecke seit dem letzten Tick (Segment gegen Teil + Slack), damit auch schnelle Durchfahrten zählen.
+-- Kiesplatz-Wurf: der Seed enthält ein Server-Geheimnis (SALT je Serverstart) – aus Snapshot-Feldern (offer = Serial)
+-- lässt sich der Wurf nicht nachrechnen. Der Kunden-Takt (sales.nextAt) liegt im Profil und überlebt Moduswechsel/Rejoin.
 -- Alle Instanz-Arbeit läuft in pcall; ohne Welt läuft die Story trotzdem (nur ohne Lieferungen/Reichweite).
 local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local StoryRules = require(MiniShared:WaitForChild("StoryRules"))
@@ -32,6 +36,7 @@ local StoryService = {}
 
 export type Session = {
 	sale: any, nextAt: number, delivery: any, seen: { [string]: number }, routesAt: number, routes: { any }, checkAt: number,
+	lastPos: Vector3?,
 }
 
 StoryService.Sessions = setmetatable({}, { __mode = "k" }) :: { [Player]: any } -- [Player] = ms
@@ -40,6 +45,8 @@ local api -- MiniService-api: now, toast, notice, dirty, alive, writable
 local ctx -- GarageServer-Kontext (getSession, emit, now)
 local CHECK_INTERVAL = 1 -- Bedingungs-Missionen und Legende höchstens 1×/s prüfen
 local ROUTES_INTERVAL = 5 -- Lieferrouten höchstens alle 5 s neu suchen
+-- Server-Geheimnis für den Kiesplatz-Seed (je Serverstart; nie im Snapshot, nie im Profil)
+local SALT = tostring(Random.new():NextInteger(1, 2 ^ 31 - 1)) .. ":" .. tostring(math.floor((os.clock() % 1) * 1e6))
 
 ---------------------------------------------------------------- Hilfen
 local function finite(v: any): boolean
@@ -115,7 +122,7 @@ end
 
 local function session(ms: any): Session
 	if type(ms.story) ~= "table" then
-		ms.story = { sale = false, nextAt = 0, delivery = false, seen = {}, routesAt = -math.huge, routes = {}, checkAt = -math.huge }
+		ms.story = { sale = false, nextAt = 0, delivery = false, seen = {}, routesAt = -math.huge, routes = {}, checkAt = -math.huge, lastPos = nil }
 	end
 	return ms.story
 end
@@ -211,7 +218,7 @@ local function newOffer(ms: any, d: any, t: number)
 	local ss = session(ms)
 	local st = StoryRules.Data(d)
 	local serial = st and st.sales.serial + 1 or 1
-	local offer = StoryRules.NextSale(d, tostring(ms.userId or (ms.player and ms.player.UserId) or 0) .. ":" .. tostring(serial), levelOf(d))
+	local offer = StoryRules.NextSale(d, SALT .. ":" .. tostring(ms.userId or (ms.player and ms.player.UserId) or 0) .. ":" .. tostring(serial), levelOf(d))
 	offer.at = t
 	ss.sale = offer
 	ss.nextAt = t
@@ -254,6 +261,7 @@ local function storySell(ms: any, data: any, d: any, t: number)
 	end
 	ss.sale = false
 	ss.nextAt = t + (res.sold and (S().Sale.OfferInterval or 45) or (S().Sale.FailInterval or 20))
+	StoryRules.ScheduleNext(d, ss.nextAt)
 	notice(ms, "story", {
 		event = "sale", offer = offer.serial, customer = offer.customer, sold = res.sold, tier = tier,
 		credits = res.credits, xp = res.xp, special = res.special, text = res.text, chapter = StoryRules.Current(d).chapter,
@@ -424,14 +432,28 @@ local function carChassis(ms: any): BasePart?
 	return chassis and chassis:IsA("BasePart") and chassis or nil
 end
 
-local function touching(part: BasePart, pos: Vector3): boolean
-	return (part.Position - pos).Magnitude <= part.Size.Magnitude / 2 + (S().Side.Delivery.Slack or 6)
+-- Hat der Rumpf das Teil berührt? Geprüft wird die Strecke vom letzten Tick (prev) bis jetzt (pos) gegen eine Kugel um
+-- das Teil (halbe Diagonale + Slack): nächster Punkt des Segments zur Teilmitte. So zählt eine Durchfahrt mit 70 Studs
+-- je Tick genauso wie ein Stillstand im Teil. Sprünge über MaxStep (Schnellreise, Spawn) prüfen nur den Endpunkt.
+local function touching(part: BasePart, pos: Vector3, prev: Vector3?): boolean
+	local D = S().Side.Delivery
+	local radius = part.Size.Magnitude / 2 + (D.Slack or 6)
+	local centre = part.Position
+	if prev and (pos - prev).Magnitude <= (D.MaxStep or 120) then
+		local ab = pos - prev
+		local len2 = ab:Dot(ab)
+		local k = len2 > 0 and math.clamp((centre - prev):Dot(ab) / len2, 0, 1) or 0
+		local nearest = prev + ab * k
+		return (centre - nearest).Magnitude <= radius
+	end
+	return (centre - pos).Magnitude <= radius
 end
 
 local function tickDelivery(ms: any, d: any, t: number): boolean
 	local ss = session(ms)
 	local D = S().Side.Delivery
 	if not inOpenWorld(ms) or passive(d) or not StoryRules.WantsEvent(d, "delivery", t) then
+		ss.lastPos = nil
 		if ss.delivery then
 			ss.delivery = false
 			return true
@@ -440,13 +462,17 @@ local function tickDelivery(ms: any, d: any, t: number): boolean
 	end
 	local list = routes(ss, t)
 	if #list == 0 then
+		ss.lastPos = nil
 		return false
 	end
 	local chassis = carChassis(ms)
 	if not chassis then
+		ss.lastPos = nil
 		return false
 	end
 	local pos = chassis.Position
+	local prev = ss.lastPos
+	ss.lastPos = pos
 	local run = ss.delivery
 	if type(run) == "table" then
 		if t - run.startedAt > (D.TimeLimit or 240) then
@@ -455,7 +481,7 @@ local function tickDelivery(ms: any, d: any, t: number): boolean
 			notice(ms, "story", { event = "delivery", state = "expired", route = run.n })
 			return true
 		end
-		if touching(run.finish, pos) then
+		if touching(run.finish, pos, prev) then
 			ss.delivery = false
 			local took = math.floor(t - run.startedAt)
 			toast(ms, string.format(D.Texts.done, run.n, took))
@@ -468,7 +494,7 @@ local function tickDelivery(ms: any, d: any, t: number): boolean
 		return false
 	end
 	for _, r in ipairs(list) do
-		if touching(r.start, pos) then
+		if touching(r.start, pos, prev) then
 			ss.delivery = { n = r.n, finish = r.finish, startedAt = t }
 			toast(ms, string.format(D.Texts.started, r.n, D.TimeLimit or 240))
 			notice(ms, "story", { event = "delivery", state = "started", route = r.n, limit = D.TimeLimit or 240 })
@@ -485,16 +511,21 @@ function StoryService.OnJoin(ms: any, d: any, t: number?)
 	local ss = session(ms)
 	StoryRules.Data(d)
 	StoryRules.EnsureSideDay(d, t)
-	ss.nextAt = t + (S().Sale.FirstOfferDelay or 2)
+	-- Der Takt nach einem Verkauf (OfferInterval/FailInterval) steht im Profil: ein Rejoin bringt keinen früheren Kunden
+	ss.nextAt = math.max(StoryRules.NextOfferAt(d), t + (S().Sale.FirstOfferDelay or 2))
 end
 
 function StoryService.OnMode(ms: any, d: any, mode: any)
 	StoryService.Sessions[ms.player] = ms
 	local ss = session(ms)
 	if mode ~= "openworld" then
+		if type(ss.sale) == "table" then
+			StoryRules.OfferGone(d, ss.sale) -- der Kunde kommt nicht mit demselben Wurf zurück
+		end
 		ss.sale = false
 		ss.delivery = false
-		ss.nextAt = now() + (S().Sale.FirstOfferDelay or 2)
+		ss.lastPos = nil
+		ss.nextAt = math.max(ss.nextAt, StoryRules.NextOfferAt(d), now() + (S().Sale.FirstOfferDelay or 2))
 		dirty(ms)
 	end
 end
@@ -510,19 +541,25 @@ function StoryService.Tick(ms: any, d: any, t: number?): boolean
 	if StoryRules.EnsureSideDay(d, t) then
 		changed = true
 	end
-	-- Kiesplatz: Kunde kommt (Open World, nicht passiv), zieht nach Patience weiter
+	-- Kiesplatz: Kunde kommt (Open World, nicht passiv, Figur in Reichweite der Station), zieht nach Patience weiter;
+	-- den Abschieds-Hinweis gibt es nur, wenn der Spieler gerade dort steht (sonst hat er den Kunden nie gesehen)
 	local sale = ss.sale
 	if type(sale) == "table" then
 		if not inOpenWorld(ms) or passive(d) then
+			StoryRules.OfferGone(d, sale)
 			ss.sale = false
 			changed = true
 		elseif t - (sale.at or t) > (S().Sale.Patience or 180) then
+			StoryRules.OfferGone(d, sale)
 			ss.sale = false
 			ss.nextAt = t + (S().Sale.FailInterval or 20)
-			toast(ms, string.format(S().Sale.Texts.gone, sale.customer))
+			StoryRules.ScheduleNext(d, ss.nextAt)
+			if nearKiesplatz(ms) then
+				toast(ms, string.format(S().Sale.Texts.gone, sale.customer))
+			end
 			changed = true
 		end
-	elseif inOpenWorld(ms) and not passive(d) and t >= ss.nextAt then
+	elseif inOpenWorld(ms) and not passive(d) and t >= ss.nextAt and nearKiesplatz(ms) then
 		newOffer(ms, d, t)
 		changed = true
 	end

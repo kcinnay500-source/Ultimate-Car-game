@@ -278,7 +278,7 @@ return {
 		local o10 = SR.NextSale({ level = 10, money = 0, games = { story = SR.Default() } }, "1:1", 10)
 		T.check(o10.tiers[1].profit > o1.tiers[1].profit, "Level-Skalierung")
 		T.eq(o1.special, false, "Kapitel 1: kein Sondermodell-Kunde")
-		local d4 = { level = 30, money = 0, games = { story = SR.Load({ done = { c1_m1 = true, c1_m2 = true, c1_m3 = true, c2_m1 = true, c2_m2 = true, c2_m3 = true, c3_m1 = true, c3_m2 = true, c3_m3 = true } }, nil, NOW) } }
+		local d4 = { level = 30, money = 0, games = { story = SR.Load({ done = { c1_m1 = true, c1_m2 = true, c1_m3 = true, c2_m1 = true, c2_m2 = true, c2_m3 = true, c3_m1 = true, c3_m2 = true, c3_m3 = true, c3_m4 = true } }, nil, NOW) } }
 		d4.games.story.sales.serial = 2
 		T.eq(d4.games.story.chapter, 4, "Kapitel 4")
 		local o4 = SR.NextSale(d4, "x", 30)
@@ -302,7 +302,8 @@ return {
 		T.eq(snap.next, "c1_m1", "nächste Mission")
 		T.check(type(snap.missions) == "table" and #snap.missions == 3 and snap.missions[1].startable == true, "Missionsliste im vollen Snapshot")
 		T.eq(S.snapshot(pl, false).missions, nil, "Missionsliste nur bei full")
-		T.check(#snap.side == 6, "3 Tages- + 3 Legende-Nebenmissionen")
+		T.check(#snap.side == 1 + 3, "Level 1: nur die immer machbare Nebenmission (s_jobs) + 3 Legende")
+		T.eq(snap.side[1].id, "s_jobs", "Level 1: s_jobs")
 		T.check(#snap.intro > 50 and snap.chapterTitle == "Der Kiesplatz", "Intro/Titel")
 		-- falsche Reihenfolge / unbekannt
 		local m = g:Mark()
@@ -413,13 +414,17 @@ return {
 		T.eq(S.story(pl).active.progress, 1, "settle gezählt")
 		S.act(pl, "story_claim", { id = "c1_m2" })
 		T.eq(S.story(pl).done.c1_m2, true, "c1_m2 abgeholt")
-		-- c1_m3: Kontostand ≥ 1.000 (Bedingung ist nach Verkäufen und Belohnungen schon erfüllt)
-		T.check(d.money >= 1000, "Kontostand über 1.000")
+		-- c1_m3: Kontostand ≥ 2.500 (Startgeld + Belohnungen reichen nicht: Bedingung wird erst im Tick erfüllt)
+		T.check(d.money < 2500, "Kontostand noch unter 2.500 (" .. tostring(d.money) .. ")")
 		m = g:Mark()
 		S.act(pl, "story_start", { id = "c1_m3" })
 		S.tick(1.5)
 		snap = S.snapshot(pl)
-		T.check(snap.active and snap.active.progress == 1000 and snap.active.claimable, "Bedingung sofort erfüllt")
+		T.check(snap.active and snap.active.progress < 2500 and not snap.active.claimable, "Bedingung noch offen")
+		S.MR.AddMoney(d, 2500 - d.money)
+		S.tick(1.5)
+		snap = S.snapshot(pl)
+		T.check(snap.active and snap.active.progress == 2500 and snap.active.claimable, "Bedingung im Tick erfüllt")
 		money = d.money
 		S.act(pl, "story_claim", { id = "c1_m3" })
 		local done = g:Notices(pl, "story", m)
@@ -486,10 +491,11 @@ return {
 		T.check(#n >= 1 and n[#n].id == "c2_m2" and n[#n].done == true, "Tick meldet erfüllte Bedingung")
 		S.act(pl, "story_claim", { id = "c2_m2" })
 		T.eq(S.story(pl).done.c2_m2, true, "c2_m2")
-		-- event track_finish (beliebige Zeit)
+		-- stat quizCorrect (Quiz ab Level 4 – passt zu Kapitel 2 ab 5)
 		S.act(pl, "story_start", { id = "c2_m3" })
-		SS.OnEvent(ms, d, "track_finish", { time = 123.4 })
-		T.eq(S.story(pl).active.progress, 1, "Zeitfahren gezählt")
+		SS.OnStat(ms, d, "quizCorrect", 4)
+		SS.OnStat(ms, d, "quizCorrect", 6)
+		T.eq(S.story(pl).active.progress, 10, "zehn Quizfragen gezählt")
 		m = g:Mark()
 		S.act(pl, "story_claim", { id = "c2_m3" })
 		T.check(g:HasToast(pl, "Kapitel 2 abgeschlossen", m), "Kapitel 2 fertig")
@@ -506,30 +512,36 @@ return {
 		S.act(pl, "story_start", { id = "c3_m2" })
 		SS.OnEvent(ms, d, "car_bought", { model = "komet" })
 		S.act(pl, "story_claim", { id = "c3_m2" })
+		-- event track_finish (beliebige Zeit; Teststrecke ab 8, eigenes Auto aus c3_m2)
 		S.act(pl, "story_start", { id = "c3_m3" })
+		SS.OnEvent(ms, d, "track_finish", { time = 123.4 })
+		T.eq(S.story(pl).active.progress, 1, "Zeitfahren gezählt")
+		S.act(pl, "story_claim", { id = "c3_m3" })
+		S.act(pl, "story_start", { id = "c3_m4" })
 		SS.OnEvent(ms, d, "auction_lost")
 		T.eq(S.story(pl).active.progress, 0, "fremdes Ereignis zählt nicht")
 		SS.OnEvent(ms, d, "auction_consigned")
 		T.eq(S.story(pl).active.progress, 1, "Einliefern zählt")
 		m = g:Mark()
-		S.act(pl, "story_claim", { id = "c3_m3" })
+		S.act(pl, "story_claim", { id = "c3_m4" })
 		T.eq(S.story(pl).chapter, 4, "Kapitel 4")
 		T.check(g:HasToast(pl, "ab Level 30", m), "Kapitel 4 ab Level 30")
 		T.eq(S.snapshot(pl).locked, true, "locked")
 		S.act(pl, "story_start", { id = "c4_m1" })
 		T.eq(S.story(pl).active, false, "gesperrt")
-		T.eq(d.games.stats.missionsDone, 6, "6 Missionen")
+		T.eq(d.games.stats.missionsDone, 7, "7 Missionen")
 		noErrors(T, g, "Kapitel 2/3")
 	end },
 
 	{ "Kapitel 5: Bestpreis-Verkäufe, Sondermodell-Kunden, Traumwagen, Titel und Story-Ende", function(T, H)
 		local S = setup(H, { level = 60 })
 		local g, SR, SS = S.g, S.SR, S.SS
+		local GC = g:MiniShared("GameConfig")
 		g:SeedLevel(7201, 60, function(data)
 			local done = {}
 			for ci = 1, 4 do
-				for mi = 1, 3 do
-					done["c" .. ci .. "_m" .. mi] = true
+				for _, m in ipairs(GC.Story.Chapters[ci].Missions) do
+					done[m.id] = true
 				end
 			end
 			data.games = { story = { done = done } }
@@ -882,5 +894,94 @@ return {
 		SS.OnMode(ms, d, ms.p.mode)
 		T.eq(S.offer(pl), false, "Lobby: Kunde weg")
 		noErrors(T, g, "Passiv")
+	end },
+
+	{ "Regressionen (Regeln): Voraussetzung ≤ Kapitel-Level, Tagesauswahl nach Level, Kunde nach Geduld = neuer Kunde, Server-Geheimnis im Seed, Kunden-Takt über Moduswechsel/Rejoin", function(T, H)
+		local S = setup(H, { level = 12 })
+		local g, SR, SS = S.g, S.SR, S.SS
+		-- Jede Story-Mission ist spätestens auf dem Level ihres Kapitels machbar (keine Sackgasse wie Produktion 35 in Kapitel 4 ab 30)
+		local bad = SR.UnlockCheck()
+		T.eq(#bad, 0, "UnlockCheck leer: " .. table.concat(bad, "; "))
+		T.eq(SR.RequiredLevel(SR.Mission("c2_m3")), 4, "c2_m3 (Quiz) braucht Level 4")
+		T.eq(SR.RequiredLevel(SR.Mission("c3_m3")), 8, "c3_m3 (Teststrecke) braucht Level 8")
+		T.eq(SR.RequiredLevel(SR.Mission("c3_m4")), 12, "c3_m4: günstigste Alternative (NPC-Auktion 12, Einliefern 20)")
+		T.eq(SR.RequiredLevel(SR.Mission("c4_m2")), 30, "c4_m2 (Produktion) braucht Level 30")
+		T.eq(SR.RequiredLevel(SR.Mission("c5_m3")), 50, "c5_m3: günstigster Traumwagen ab Level 50")
+		T.eq(#SR.BalanceCheck(), 0, "Balance weiter ≤ 40 %: " .. table.concat(SR.BalanceCheck(), "; "))
+		-- Tagesauswahl: nur Nebenmissionen, die das Level schon erlaubt; jeden Tag mindestens eine
+		local day0 = NOW - 3600
+		for _, lvl in ipairs({ 1, 3, 5, 8, 50 }) do
+			local minCount = math.huge
+			for k = 0, 59 do
+				local ids = SR.DailyIds(SR.DayKey(day0 + k * DAY), lvl)
+				minCount = math.min(minCount, #ids)
+				for _, id in ipairs(ids) do
+					local need = SR.SideLevel(SR.SideDef(id))
+					if need > lvl then
+						T.check(false, "Level " .. lvl .. ", Tag " .. k .. ": " .. id .. " braucht Level " .. need)
+					end
+				end
+			end
+			T.check(minCount >= 1, "Level " .. lvl .. ": jeden Tag mindestens eine Nebenmission (" .. tostring(minCount) .. ")")
+			if lvl >= 12 then
+				T.eq(minCount, 3, "Level " .. lvl .. ": drei je Tag")
+			end
+		end
+		T.check(H.DeepEqual(SR.DailyIds("2026-10-02", 1), { "s_jobs" }), "Level 1: nur s_jobs")
+		T.check(H.DeepEqual(SR.DailyIds("2026-10-02", 50), SR.DailyIds("2026-10-02")), "alles frei = ganzer Pool")
+		T.eq(SR.SideDef("s_delivery").needsCar, true, "Lieferung braucht ein eigenes Auto (Hinweis)")
+		-- Server-Geheimnis: der Wurf lässt sich aus userId und Serial (Snapshot) nicht nachrechnen
+		local pl, ms, d = S.join(7601, "Kim")
+		local predicted = 0
+		local seen = 0
+		for i = 1, 3 do
+			if i > 1 then
+				S.tick(46)
+			end
+			local offer = S.customer(pl)
+			T.check(offer ~= nil, "Kunde")
+			local naive = SR.NextSale(d, "7601:" .. tostring(offer.serial), d.level)
+			seen += 1
+			if naive.roll == offer.roll and naive.customer == offer.customer then
+				predicted += 1
+			end
+			S.act(pl, "story_sell", { offer = offer.serial, price = 1 })
+		end
+		T.check(seen == 3 and predicted < 3, "Wurf aus userId:serial nicht vorhersagbar (" .. predicted .. " von 3 Treffer)")
+		T.eq(S.snapshot(pl).sale, false, "kein Kunde direkt nach dem Verkauf")
+		-- Kunden-Takt steht im Profil: Moduswechsel und Rejoin bringen keinen früheren Kunden
+		local nextAt = S.story(pl).sales.nextAt
+		T.check(nextAt >= g:Now() + 40, "sales.nextAt ≈ jetzt + 45 s")
+		SS.OnMode(ms, d, "lobby")
+		SS.OnMode(ms, d, "openworld")
+		SS.OnJoin(ms, d, g:Now())
+		S.tick(10)
+		T.eq(S.offer(pl), false, "nach Lobby-Hin-und-Zurück: noch kein Kunde (Takt bleibt)")
+		S.leave(pl)
+		g:Advance(1)
+		local rec = g:Record(7601)
+		T.eq(rec and rec.data.games.story.sales.nextAt, nextAt, "nextAt gespeichert")
+		local pl2, ms2, d2 = S.join(7601, "Kim")
+		T.eq(d2.games.story.sales.nextAt, nextAt, "nextAt geladen (Whitelist)")
+		S.tick(5)
+		T.eq(S.offer(pl2), false, "nach Rejoin: noch kein Kunde")
+		S.tick(40)
+		T.check(S.customer(pl2) ~= nil, "nach dem Takt kommt der Kunde")
+		-- Geduld zu Ende: der nächste Kunde ist ein anderer (Serial +1), nicht derselbe mit demselben Wurf
+		local o1 = S.offer(pl2)
+		local m = g:Mark()
+		S.tick(SR.Config().Sale.Patience + 2)
+		T.eq(S.offer(pl2), false, "Kunde weg")
+		T.eq(S.story(pl2).sales.serial, o1.serial, "Serial rückt vor (OfferGone)")
+		local o2 = S.customer(pl2)
+		T.check(o2 ~= nil and o2.serial == o1.serial + 1, "nächster Kunde hat Serial + 1")
+		T.check(o2.roll ~= o1.roll or o2.customer ~= o1.customer, "nächster Kunde ist ein anderer")
+		-- Moduswechsel mit wartendem Kunden: Serial rückt ebenfalls vor
+		SS.OnMode(ms2, d2, "lobby")
+		T.eq(S.story(pl2).sales.serial, o2.serial, "OnMode: Serial rückt vor")
+		SS.OnMode(ms2, d2, "openworld")
+		local o3 = S.customer(pl2)
+		T.check(o3 ~= nil and o3.serial == o2.serial + 1, "nach Moduswechsel neuer Kunde")
+		noErrors(T, g, "Regressionen")
 	end },
 }

@@ -1,10 +1,11 @@
 -- OWRules: Open-World-Gebäude, Perks und Passiv-Modus als reine Regeln (docs/PHASE4_CONTRACT.md §2, §5, §7).
--- Daten: d.games.ow = { buildings = { [typ] = { stage, built, readyAt, collectedAt, carAt } }, passive, lastPassiveAt }
+-- Daten: d.games.ow = { buildings = { [typ] = { stage, built, readyAt, collectedAt, carAt, partsCarry } }, passive, lastPassiveAt }
 --   stage       = gekaufte Zielstufe (0 = nichts gebaut), readyAt = Serverzeit (unix), ab der diese Stufe fertig ist
---   built       = fertig gebaute Stufe (≤ stage); nur sie zählt für Erträge und Perks. Settle(d, now) hebt built auf
---                 stage, sobald readyAt erreicht ist (auch offline: Bauzeit läuft weiter, der Dienst ruft Settle beim
---                 Beitritt und im Tick).
+--   built       = fertig gebaute Stufe (≤ stage); nur sie zählt für Erträge und Perks. Nur Settle(d, now) hebt built auf
+--                 stage, sobald readyAt erreicht ist – auch für offline fertig gewordene Bauten: Load lässt built wie
+--                 gespeichert, der Dienst ruft Settle beim Beitritt (dann gibt es ow_ready + Toast) und im Tick.
 --   collectedAt = Beginn des laufenden Ertragszeitraums (unix); carAt = Beginn des Gutschein-Zeitraums (Produktion 4)
+--   partsCarry  = angebrochener Altteil-Rest (0 ≤ x < 1) aus partsPerHour, damit häufiges Abholen keine Teile verliert
 -- werkstatt ist das 2.4.0-Grundstück: Stufe = d.bays, kein Kaufweg hier (CanBuild -> "werkstatt").
 -- Zahlen nur aus GameConfig.OW. Keine Instanzen, kein Zufall. Geld ändert sich nur über MiniRules.AddMoney/AddIncome
 -- (lazy require wie CarRules: MiniRules lädt OWRules, darum kein require am Dateikopf).
@@ -22,7 +23,7 @@ local OW = GameConfig.OW
 local MAX_SAFE = 2 ^ 53
 local HOUR = 3600
 
-export type Building = { stage: number, built: number, readyAt: number, collectedAt: number, carAt: number }
+export type Building = { stage: number, built: number, readyAt: number, collectedAt: number, carAt: number, partsCarry: number }
 export type OW = { buildings: { [string]: Building }, passive: boolean, lastPassiveAt: number }
 export type Amounts = { credits: number, scrap: number, parts: number, car: string?, hours: number }
 
@@ -84,7 +85,7 @@ end
 
 ---------------------------------------------------------------- Standardwerte und Laden
 local function newBuilding(): Building
-	return { stage = 0, built = 0, readyAt = 0, collectedAt = 0, carAt = 0 }
+	return { stage = 0, built = 0, readyAt = 0, collectedAt = 0, carAt = 0, partsCarry = 0 }
 end
 
 function OWRules.Default(): OW
@@ -97,12 +98,12 @@ function OWRules.Default(): OW
 	return { buildings = buildings, passive = false, lastPassiveAt = 0 }
 end
 
--- raw = gespeichertes d.games.ow (oder nil). Idempotent, Whitelist, NaN/negativ -> Standard. Ist readyAt bei now
--- schon erreicht, gilt die Stufe als fertig (built = stage): die Bauzeit lief offline weiter.
-function OWRules.Load(raw: any, d: any, now: any): OW
+-- raw = gespeichertes d.games.ow (oder nil). Idempotent, Whitelist, NaN/negativ -> Standard. built bleibt wie gespeichert
+-- (≤ stage): einen offline fertig gewordenen Bau verbucht erst Settle (OWService.OnJoin), damit der Spieler den Hinweis
+-- ow_ready und den Toast bekommt. now wird nicht mehr gebraucht (Signatur wie die anderen ApplyLoad).
+function OWRules.Load(raw: any, d: any, _now: any): OW
 	local o = OWRules.Default()
 	local r = type(raw) == "table" and raw or {}
-	local t = finite(now) and now or nil
 	local rb = type(r.buildings) == "table" and r.buildings or {}
 	for typ, b in pairs(o.buildings) do
 		local src = type(rb[typ]) == "table" and rb[typ] or {}
@@ -110,9 +111,6 @@ function OWRules.Load(raw: any, d: any, now: any): OW
 		b.stage = loadInt(src.stage, 0, 0, max)
 		b.readyAt = loadInt(src.readyAt, 0, 0, MAX_SAFE)
 		local built = loadInt(src.built, src.built == nil and b.stage or 0, 0, b.stage)
-		if t and b.stage > 0 and b.readyAt <= t then
-			built = b.stage
-		end
 		b.built = math.min(built, b.stage)
 		if b.stage == 0 then
 			b.readyAt = 0
@@ -120,9 +118,12 @@ function OWRules.Load(raw: any, d: any, now: any): OW
 		end
 		b.collectedAt = loadInt(src.collectedAt, 0, 0, MAX_SAFE)
 		b.carAt = loadInt(src.carAt, 0, 0, MAX_SAFE)
+		local carry = src.partsCarry
+		b.partsCarry = finite(carry) and carry >= 0 and carry < 1 and carry or 0
 		if b.built == 0 then
 			b.collectedAt = 0
 			b.carAt = 0
+			b.partsCarry = 0
 		else
 			-- Ertrag nie vor der Fertigstellung der aktuellen Stufe rechnen (Umbau: Anlage stand still)
 			b.collectedAt = math.max(b.collectedAt, b.readyAt)
@@ -359,7 +360,8 @@ function OWRules.Collectable(d: any, typ: any, now: any): Amounts?
 		out.scrap = math.floor(st.scrapPerHour * hours)
 	end
 	if finite(st.partsPerHour) then
-		out.parts += math.floor(st.partsPerHour * hours)
+		-- angebrochener Rest aus früheren Abholungen zählt mit (partsCarry), sonst gingen bei häufigem Abholen alle Teile verloren
+		out.parts += math.floor(st.partsPerHour * hours + (finite(e.partsCarry) and e.partsCarry or 0))
 	end
 	if finite(st.partsEveryHours) and st.partsEveryHours > 0 then
 		local packs = math.floor(hours / st.partsEveryHours)
@@ -406,6 +408,13 @@ function OWRules.Collect(d: any, typ: any, now: any, opts: { skipCar: boolean? }
 		g.parts = math.min(MAX_SAFE, g.parts + a.parts)
 	elseif a.parts > 0 then
 		a.parts = 0
+	end
+	-- Altteile je Stunde (Schrottplatz): den Bruchteil eines Teils für das nächste Abholen aufheben
+	if finite(st.partsPerHour) then
+		local capped = math.min(math.max(0, t - e.collectedAt), capHours() * HOUR)
+		local raw = st.partsPerHour * (capped / HOUR) + (finite(e.partsCarry) and e.partsCarry or 0)
+		local carry = raw - math.floor(raw)
+		e.partsCarry = (carry >= 0 and carry < 1) and carry or 0
 	end
 	-- Paketbau (Produktion): der angebrochene Zeitraum bleibt erhalten (collectedAt rückt um volle Pakete vor)
 	if finite(st.partsEveryHours) and st.partsEveryHours > 0 and not finite(st.yieldPerHour) and not finite(st.scrapPerHour) then

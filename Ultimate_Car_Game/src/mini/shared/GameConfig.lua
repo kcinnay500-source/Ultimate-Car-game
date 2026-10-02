@@ -74,7 +74,7 @@ GameConfig.Unlocks = {
 	car(3, "komet", "Komet C1"),
 	entry(4, "feature:quiz", "feature", "Mechaniker-Quiz", "Richtige Antworten bringen Diagnosepunkte, die Reparaturen verkürzen.", "quiz"),
 	entry(5, "feature:parking", "feature", "Parkplatz-Chaos", "Räum Parkplätze frei; eine lange Serie bringt Kundenbonus in der Werkstatt.", "parking"),
-	entry(5, "story:2", "story", "Kapitel 2: Die erste Werkstatt", "Aufträge abrechnen, Hebebühne 2 kaufen, Zeitfahren fahren.", "story"),
+	entry(5, "story:2", "story", "Kapitel 2: Die erste Werkstatt", "Aufträge abrechnen, Hebebühne 2 kaufen, das Mechaniker-Quiz bestehen.", "story"),
 	entry(6, "feature:tuning", "feature", "Tuning-Projekte", "Projekte laufen weiter, auch wenn du nicht da bist – später abholen.", "tuning"),
 	entry(8, "feature:track", "feature", "Teststrecke", "Zeitfahren mit Checkpoints; nur neue Bestzeiten bringen Credits.", "track"),
 	entry(8, "feature:carwash", "feature", "Waschstraße", "Lass dein Auto glänzen.", "carwash"),
@@ -84,16 +84,16 @@ GameConfig.Unlocks = {
 	car(10, "komet_rally", "Komet C1 Rallye", true),
 	entry(12, "feature:auction", "feature", "Auktionshaus", "Biete bei NPC-Auktionen auf seltene Sondermodelle.", "auction"),
 	car(14, "nord", "Nord R4"),
-	entry(15, "story:3", "story", "Kapitel 3: Das Autohaus", "Autohaus bauen, ein Auto kaufen, eine Auktion gewinnen oder einliefern.", "story"),
+	entry(15, "story:3", "story", "Kapitel 3: Das Autohaus", "Autohaus bauen, ein Auto kaufen und einfahren, eine Auktion gewinnen oder einliefern.", "story"),
 	entry(18, "building:schrottplatz", "building", "Gebäude: Schrottplatz", "Ein eigener Schrottplatz: passiver Schrott und Altteile.", "buildings"),
 	car(18, "nord_classic", "Nord R4 Classic", true),
 	entry(20, "auction:player", "feature", "Spieler-Auktionen", "Gib eigene Autos in die Auktion und biete auf Autos anderer Spieler.", "auction"),
 	car(22, "komet_urban", "Komet Urban"),
 	entry(30, "story:4", "story", "Kapitel 4: Die Produktion", "Schrottplatz und Produktion bauen, Sondermodelle verkaufen.", "story"),
 	car(32, "atlas", "Nord Atlas Tourer"),
-	entry(35, "building:produktion", "building", "Gebäude: Produktion", "Deine Automobil-Produktion: Bauteil-Pakete, ab Stufe 4 ein Auto-Gutschein.", "buildings"),
+	entry(30, "building:produktion", "building", "Gebäude: Produktion", "Deine Automobil-Produktion: Bauteil-Pakete, ab Stufe 4 ein Auto-Gutschein.", "buildings"), -- wie Kapitel 4 (c4_m2 baut sie)
 	car(45, "vektor", "Vektor RS"),
-	entry(50, "story:5", "story", "Kapitel 5: Der Mega-Verkäufer", "Produktion Stufe 4, zehn Bestpreis-Verkäufe, ein Supersportwagen.", "story"),
+	entry(50, "story:5", "story", "Kapitel 5: Der Mega-Verkäufer", "Produktion Stufe 4, zehn Bestpreis-Verkäufe, ein Traumwagen in der Garage.", "story"),
 	car(50, "vektor_gold", "Vektor RS Goldstück", true),
 	car(58, "vektor_gtx", "Vektor GTX"),
 	car(72, "aureon", "Vektor Aureon V12"),
@@ -459,8 +459,7 @@ GameConfig.OW = {
 	Types = { "werkstatt", "autohaus", "produktion", "schrottplatz" },
 	MaxStage = 4,
 	PassiveCapHours = 12, -- Erträge sammeln sich höchstens 12 Std. an (abholen!)
-	CountdownInterval = 1, -- Baustellen-Countdown (SurfaceGui) höchstens 1×/s vom Server beschriftet
-	SnapshotInterval = 1, -- Snapshot höchstens 1×/s, solange eine Baustelle läuft
+	CountdownInterval = 1, -- Baustellen-Countdown (SurfaceGui) höchstens 1×/s vom Server beschriftet; der Client zählt lokal (kein Snapshot je Sekunde)
 	ReadyToastSeconds = 2, -- Toast-Drossel je Grund (ow_build/ow_collect)
 	Buildings = {
 		werkstatt = {
@@ -523,6 +522,8 @@ GameConfig.OW = {
 --   kind = "build"  typ = OW-Gebäude, stage = Stufe (gelesen aus d.games.ow.buildings[typ].stage)
 --   kind = "own"    money = n (Kontostand) | bays = n (Hebebühnen) | cars = { modelIds } (eins davon in der Garage) |
 --                   equipmentAll = true (alle Geräte der Werkstatt mindestens Stufe 1)
+--   Voraussetzung (Freischaltung): Story.Requires (stat/event -> Unlocks-Schlüssel), build -> building:<typ>, cars -> car:<id>;
+--   StoryRules.RequiredLevel(def) muss ≤ Kapitel-Level sein (tests/test_story.lua), sonst sitzt der Spieler in einer Sackgasse.
 --   reward = { credits = n, xp = n?, cosmetic = id?, title = string? }; fehlt xp, gilt GameConfig.XP.StoryMission[kapitel]
 --   minutes = erwarteter Aufwand (Balance: credits / minutes ≤ Balance.Share × Werkstatt-Cr/Min des Kapitel-Levels)
 local Story = {}
@@ -533,26 +534,27 @@ Story.Title = "Vom Kiesplatzhändler zum Mega-Verkäufer"
 Story.Chapters = {
 	{
 		id = 1, title = "Der Kiesplatz", unlockLevel = 1,
-		intro = "Ein staubiger Kiesplatz am Stadtrand, drei alte Autos und ein handgemaltes Schild – das ist dein Anfang. "
+		intro = "Neben deiner Werkstatt hast du einen kleinen Kiesplatz am Stadtrand gepachtet: drei alte Autos und ein handgemaltes Schild. "
 			.. "Die Kunden kommen schon, jetzt brauchst du nur noch den richtigen Preis. "
 			.. "Jeder Verkauf bringt dich deinem Traum vom eigenen Autohaus ein Stück näher.",
 		Missions = {
 			{ id = "c1_m1", title = "Drei Gebrauchtwagen verkaufen", kind = "sell", target = 3, minutes = 4,
 				text = "Geh zum Kiesplatz, sprich mit den Kunden und nenne deinen Preis. Günstig klappt immer, teuer braucht Verhandlungsglück.",
 				reward = { credits = 150 } },
-			{ id = "c1_m2", title = "Werkstatt kennenlernen", kind = "event", event = "settle", target = 1, minutes = 3,
-				text = "Deine Kunden wollen auch reparieren lassen. Nimm in deiner Werkstatt einen Auftrag an und rechne ihn am Empfang ab.",
+			{ id = "c1_m2", title = "Zurück in die Werkstatt", kind = "event", event = "settle", target = 1, minutes = 3,
+				text = "Deine Kunden wollen auch reparieren lassen. Nimm in deiner Werkstatt noch einen Auftrag an und rechne ihn am Empfang ab.",
 				reward = { credits = 120 } },
-			{ id = "c1_m3", title = "Die ersten 1.000 Credits", kind = "own", money = 1000, target = 1000, minutes = 4,
-				text = "Bring deinen Kontostand auf 1.000 Credits – mit Verkäufen am Kiesplatz oder Aufträgen in der Werkstatt.",
+			-- Startgeld 800 + Tutorial 500 + c1_m1/c1_m2 ≈ 1.700 Cr: 2.500 verlangt echtes Spiel (≈ 4 Min. Werkstatt auf Level 1–3)
+			{ id = "c1_m3", title = "Die ersten 2.500 Credits", kind = "own", money = 2500, target = 2500, minutes = 4,
+				text = "Bring deinen Kontostand auf 2.500 Credits – mit Verkäufen am Kiesplatz oder Aufträgen in der Werkstatt.",
 				reward = { credits = 200 } },
 		},
 	},
 	{
 		id = 2, title = "Die erste Werkstatt", unlockLevel = 5,
-		intro = "Mit den ersten Credits in der Tasche wird aus dem Kiesplatz eine richtige Werkstatt. "
+		intro = "Mit den ersten Credits wird deine Werkstatt zum richtigen Betrieb. "
 			.. "Deine Kunden wollen nicht nur kaufen, sondern auch reparieren lassen. "
-			.. "Zeig, was du kannst – und gönn dir zwischendurch eine Runde auf der Teststrecke.",
+			.. "Zeig, was du kannst – an der Hebebühne und im Mechaniker-Quiz.",
 		Missions = {
 			{ id = "c2_m1", title = "Fünf Aufträge abrechnen", kind = "stat", stat = "jobsDone", target = 5, minutes = 10,
 				text = "Fünf Kundenautos reparieren und am Empfang abrechnen. Jeder Auftrag bringt Credits, XP und Ruf.",
@@ -560,15 +562,15 @@ Story.Chapters = {
 			{ id = "c2_m2", title = "Hebebühne Nummer zwei", kind = "own", bays = 2, target = 2, minutes = 5,
 				text = "Kauf im Hallenanbau deiner Werkstatt eine zweite Hebebühne. Zwei Aufträge gleichzeitig – doppelt so schnell.",
 				reward = { credits = 500 } },
-			{ id = "c2_m3", title = "Ab auf die Teststrecke", kind = "event", event = "track_finish", target = 1, minutes = 4,
-				text = "Fahr ein Zeitfahren auf der Teststrecke bis ins Ziel. Die Zeit ist egal – Hauptsache ankommen!",
+			{ id = "c2_m3", title = "Mechaniker-Quiz bestehen", kind = "stat", stat = "quizCorrect", target = 10, minutes = 3,
+				text = "Beantworte im Mechaniker-Quiz (Stadt) zehn Fragen richtig. Diagnosepunkte machen deine Reparaturen schneller.",
 				reward = { credits = 400 } },
 		},
 	},
 	{
 		id = 3, title = "Das Autohaus", unlockLevel = 15,
 		intro = "Die ganze Stadt redet über dich! Zeit für ein eigenes Autohaus auf deinem Grundstück. "
-			.. "Kauf dein erstes Auto beim Händler und mach dich im Auktionshaus einen Namen.",
+			.. "Kauf dein erstes Auto beim Händler, fahr es auf der Teststrecke ein und mach dir im Auktionshaus einen Namen.",
 		Missions = {
 			{ id = "c3_m1", title = "Das eigene Autohaus", kind = "build", typ = "autohaus", stage = 1, target = 1, minutes = 10,
 				text = "Bau auf deinem Grundstück das Gebäude „Autohaus“ (Tab „Gebäude“). Es bringt passive Verkaufserlöse und Händler-Rabatt.",
@@ -576,8 +578,11 @@ Story.Chapters = {
 			{ id = "c3_m2", title = "Der erste Neuwagen", kind = "event", event = "car_bought", target = 1, minutes = 8,
 				text = "Kauf beim Händler in der Stadt ein Auto für deine Garage. Mit Rabatt aus deinem Autohaus wird's günstiger.",
 				reward = { credits = 2000 } },
-			{ id = "c3_m3", title = "Unter dem Hammer", kind = "event", events = { "auction_won", "auction_consigned" }, target = 1, minutes = 10,
-				text = "Gewinne eine NPC-Auktion im Auktionshaus – oder gib ein eigenes Auto in die Auktion.",
+			{ id = "c3_m3", title = "Ab auf die Teststrecke", kind = "event", event = "track_finish", target = 1, minutes = 4,
+				text = "Fahr mit deinem eigenen Auto ein Zeitfahren auf der Teststrecke bis ins Ziel. Die Zeit ist egal – Hauptsache ankommen!",
+				reward = { credits = 400 } },
+			{ id = "c3_m4", title = "Unter dem Hammer", kind = "event", events = { "auction_won", "auction_consigned" }, target = 1, minutes = 10,
+				text = "Gewinne eine NPC-Auktion im Auktionshaus – oder (ab Level 20) gib ein eigenes Auto in die Auktion.",
 				reward = { credits = 3000 } },
 		},
 	},
@@ -603,13 +608,14 @@ Story.Chapters = {
 			.. "und in deiner Garage steht ein Traumwagen. Dann kennt die ganze Stadt deinen Namen – Mega-Verkäufer!",
 		Missions = {
 			{ id = "c5_m1", title = "Produktion auf Stufe 4", kind = "build", typ = "produktion", stage = 4, target = 4, minutes = 30,
-				text = "Bau deine Produktion bis Stufe 4 aus. Ab dann rollt alle paar Stunden ein Auto-Gutschein vom Band.",
+				text = "Bau deine Produktion bis Stufe 4 aus. Ab dann rollt alle zwei Tage ein Auto-Gutschein für einen Kompaktwagen vom Band.",
 				reward = { credits = 20000 } },
 			{ id = "c5_m2", title = "Zehn Verkäufe zum Bestpreis", kind = "sell", target = 10, tier = 3, minutes = 15,
 				text = "Verkauf am Kiesplatz zehn Autos zur Preisstufe „teuer“. Nur erfolgreiche Verhandlungen zählen.",
 				reward = { credits = 15000 } },
-			{ id = "c5_m3", title = "Der Traumwagen", kind = "own", cars = { "aureon", "elys", "aureon_nero", "elys_proto" }, target = 1, minutes = 30,
-				text = "Besitze einen Vektor Aureon V12 oder einen Nord Elys E9 (auch als Sondermodell). Dann bist du der Mega-Verkäufer!",
+			{ id = "c5_m3", title = "Der Traumwagen", kind = "own", cars = { "vektor_gold", "vektor_gtx", "aureon", "elys", "aureon_nero", "elys_proto" }, target = 1, minutes = 30,
+				text = "Besitze einen Traumwagen: das Vektor RS Goldstück (Auktion, ab Level 50), einen Vektor GTX (Händler, ab Level 58) "
+					.. "oder später einen Vektor Aureon V12 (ab Level 72) bzw. Nord Elys E9 (ab Level 90). Dann bist du der Mega-Verkäufer!",
 				reward = { credits = 25000, cosmetic = "wrap_mega", title = "Mega-Verkäufer" } },
 		},
 	},
@@ -678,32 +684,36 @@ Story.Side = {
 		Routes = 3, -- City.Missions.Delivery_1..3 (Start/Ziel-Teile, Attribut Role = "start" | "end")
 		TimeLimit = 240, -- Sekunden vom Start bis zum Ziel
 		Slack = 6, -- Studs Zugabe auf die halbe Teilgröße (Berührung des Fahrzeugrumpfs)
+		MaxStep = 120, -- Studs: längere Sprünge des Rumpfs zwischen zwei Ticks (Schnellreise, Spawn) gelten nicht als Durchfahrt
 		Texts = {
 			started = "Lieferung %d gestartet! Fahr mit deinem Auto zum Ziel – du hast %d Sekunden.",
 			done = "Lieferung %d abgeliefert! Das war in %d Sekunden.",
 			expired = "Die Lieferung hat zu lange gedauert. Fahr noch einmal zum Start.",
 		},
 	},
+	-- Tagesauswahl (StoryRules.DailyIds(day, level)): nur Einträge, deren Freischaltung (unlock bzw. Story.Requires) das Level
+	-- des Spielers erreicht hat; needsCar = eigenes Auto nötig (Hinweis im Text). s_jobs geht immer, also gibt es jeden Tag
+	-- mindestens eine machbare Nebenmission. Die "action:<aktion>"-Ereignisse feuert MiniService nur bei gelungener Aktion.
 	Pool = {
-		{ id = "s_delivery", title = "Lieferung", kind = "event", event = "delivery", target = 1, credits = 150,
-			text = "Fahr mit deinem Auto zum Lieferstart in der Stadt (Schild „Lieferung“) und bring es rechtzeitig zum Ziel." },
-		{ id = "s_timetrial", title = "Zeitfahren unter Zielzeit", kind = "event", event = "track_finish", maxTime = 75, target = 1, credits = 150,
-			text = "Fahr auf der Teststrecke ein Zeitfahren unter 75 Sekunden." },
-		{ id = "s_arcade", title = "Dreimal Spielhalle", kind = "event", event = "arcade_round", target = 3, credits = 120,
-			text = "Spiel in der Spielhalle drei Runden an den Automaten." },
-		{ id = "s_dismantle", title = "Fünf Fahrzeuge zerlegen", kind = "stat", stat = "dismantled", target = 5, credits = 150,
+		{ id = "s_delivery", title = "Lieferung", kind = "event", event = "delivery", target = 1, credits = 150, unlock = "feature:dealer", needsCar = true,
+			text = "Fahr mit deinem eigenen Auto zum Lieferstart in der Stadt (Schild „Lieferung“) und bring es rechtzeitig zum Ziel." },
+		{ id = "s_timetrial", title = "Zeitfahren unter Zielzeit", kind = "event", event = "track_finish", maxTime = 75, target = 1, credits = 150, unlock = "feature:track", needsCar = true,
+			text = "Fahr mit deinem eigenen Auto auf der Teststrecke ein Zeitfahren unter 75 Sekunden." },
+		{ id = "s_arcade", title = "Dreimal Spielhalle", kind = "event", event = "arcade_round", target = 3, credits = 120, unlock = "feature:arcade",
+			text = "Spiel in der Spielhalle drei Runden an den Automaten – bis zum Ende, abgebrochene Runden zählen nicht." },
+		{ id = "s_dismantle", title = "Fünf Fahrzeuge zerlegen", kind = "stat", stat = "dismantled", target = 5, credits = 150, unlock = "feature:scrapyard",
 			text = "Zerlege auf dem Schrottplatz fünf Fahrzeuge in Altteile." },
-		{ id = "s_auction", title = "Zweimal mitbieten", kind = "event", event = "action:mini_auction_bid", target = 2, credits = 120,
-			text = "Gib im Auktionshaus zwei Gebote ab – gewinnen musst du nicht." },
-		{ id = "s_wash", title = "Autowäsche", kind = "event", event = "action:mini_carwash", target = 1, credits = 80,
-			text = "Fahr mit deinem Auto durch die Waschstraße." },
-		{ id = "s_press", title = "Zehn Schrott-Tauschgeschäfte", kind = "event", event = "action:mini_press_exchange", target = 10, credits = 120,
+		{ id = "s_auction", title = "Zweimal mitbieten", kind = "event", event = "action:mini_auction_bid", target = 2, credits = 120, unlock = "feature:auction",
+			text = "Gib im Auktionshaus zwei gültige Gebote ab – gewinnen musst du nicht." },
+		{ id = "s_wash", title = "Autowäsche", kind = "event", event = "action:mini_carwash", target = 1, credits = 80, unlock = "feature:carwash", needsCar = true,
+			text = "Fahr mit deinem eigenen Auto durch die Waschstraße." },
+		{ id = "s_press", title = "Zehn Schrott-Tauschgeschäfte", kind = "event", event = "action:mini_press_exchange", target = 10, credits = 120, unlock = "feature:press",
 			text = "Tausche an der Schrottpresse zehnmal Schrott beim Händler." },
-		{ id = "s_tune", title = "Ein Auto tunen", kind = "event", event = "action:mini_car_tune", target = 1, credits = 120,
-			text = "Verbessere in deiner Garage ein Teil an einem deiner Autos." },
-		{ id = "s_quiz", title = "Fünf Quizfragen", kind = "stat", stat = "quizCorrect", target = 5, credits = 100,
+		{ id = "s_tune", title = "Ein Auto tunen", kind = "event", event = "action:mini_car_tune", target = 1, credits = 120, unlock = "feature:dealer", needsCar = true,
+			text = "Verbessere in deiner Garage ein Teil an einem deiner eigenen Autos." },
+		{ id = "s_quiz", title = "Fünf Quizfragen", kind = "stat", stat = "quizCorrect", target = 5, credits = 100, unlock = "feature:quiz",
 			text = "Beantworte im Mechaniker-Quiz fünf Fragen richtig." },
-		{ id = "s_parking", title = "Drei Parkrätsel", kind = "stat", stat = "parkingSolved", target = 3, credits = 100,
+		{ id = "s_parking", title = "Drei Parkrätsel", kind = "stat", stat = "parkingSolved", target = 3, credits = 100, unlock = "feature:parking",
 			text = "Löse drei Rätsel im Parkplatz-Chaos." },
 		{ id = "s_jobs", title = "Drei Aufträge", kind = "stat", stat = "jobsDone", target = 3, credits = 150,
 			text = "Rechne in deiner Werkstatt drei Aufträge ab." },
@@ -717,6 +727,18 @@ Story.Side = {
 		{ id = "l_bays4", title = "Werkstatt-Legende: Vier Bühnen", kind = "own", bays = 4, target = 4, credits = 6000, xp = 500,
 			text = "Bau deine Werkstatt auf vier Hebebühnen aus." },
 	},
+}
+
+---------------------------------------------------------------- Voraussetzungen (Freischaltung je Statistik/Ereignis; StoryRules.RequiredLevel)
+-- Fehlt ein Eintrag, braucht die Mission keine Freischaltung (z. B. settle/jobsDone). Alternativen (events = { … }) zählen mit
+-- der niedrigsten Voraussetzung; eigene Autos (own cars) mit dem günstigsten Modell; Hebebühnen mit C.BayLevels.
+Story.Requires = {
+	stat = { quizCorrect = "feature:quiz", parkingSolved = "feature:parking", dismantled = "feature:scrapyard",
+		tuningStarted = "feature:tuning", tuningCollected = "feature:tuning", pressed = "feature:press", clicks = "feature:press" },
+	event = { track_finish = "feature:track", car_bought = "feature:dealer", auction_won = "feature:auction", auction_consigned = "auction:player",
+		arcade_round = "feature:arcade", delivery = "feature:dealer",
+		["action:mini_auction_bid"] = "feature:auction", ["action:mini_carwash"] = "feature:carwash",
+		["action:mini_press_exchange"] = "feature:press", ["action:mini_car_tune"] = "feature:dealer" },
 }
 
 ---------------------------------------------------------------- Co-op (§7)

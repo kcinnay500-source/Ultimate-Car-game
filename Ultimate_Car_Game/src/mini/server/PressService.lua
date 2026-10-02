@@ -96,9 +96,11 @@ function PressService.Register(Actions, api)
 		end
 	end)
 
+	-- Rückgabe true nur bei gelungenem Tausch (MiniService zählt dann "action:mini_press_exchange" für Nebenmissionen)
 	Actions.Register("mini_press_exchange", function(ms, data, d)
 		local ok, res = PressRules.Exchange(d, data.index)
 		api.toast(ms, ok and ("Schrotthändler: +" .. MiniLocale.Credits(res)) or res)
+		return ok == true
 	end)
 
 	Actions.Register("mini_press_rebirth", function(ms, data, d, now)

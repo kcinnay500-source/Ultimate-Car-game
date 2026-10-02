@@ -87,17 +87,6 @@ In Klammern: Anteil an der Werkstatt auf demselben Level (Ziel ≤ 60 %). Schrot
 
 In Klammern: Anteil an der Werkstatt (Ziel ≤ 25 %).
 
-Open-World-Gebäude (Ausbaustufe 4, Meilenstein 6, `GameConfig.OW.Buildings`; Erträge sammeln sich höchstens 12 Std. an):
-
-| Gebäude | Stufe 1 | Stufe 2 | Stufe 3 | Stufe 4 | Level |
-|---|---:|---:|---:|---:|---:|
-| Autohaus (Credits/Min) | 25 (3 % auf Lv 10) | 67 (5 % auf Lv 20) | 150 (5 % auf Lv 30) | 300 (≈ 10 % auf Lv 30, 5 % auf Lv 40) | 10 |
-| Schrottplatz (Schrott/Std. → Credits/Min beim Händler) | 2 Mrd. (≈ 3) | 6 Mrd. (≈ 10) | 15 Mrd. (≈ 25) | 40 Mrd. (≈ 67) | 18 |
-| Produktion (Altteile) | 10 je 6 Std. | 15 je 4 Std. | 20 je 3 Std. | 30 je 2 Std. + Auto-Gutschein je 48 Std. | 35 |
-
-Story-Missionen (Meilenstein 7): `StoryRules.BalanceCheck()` prüft je Mission `credits / minutes ≤ 0,4 × Werkstatt-Cr/Min`
-des Kapitel-Levels (Tabelle oben, interpoliert; `GameConfig.Story.Balance`), abgesichert in `tests/test_story.lua`.
-
 #### Tageslimits der Minispiele
 
 | Minispiel | Limit je UTC-Tag | Credits/Tag Lv 1 | Credits/Tag Lv 40 | Minuten bis zum Limit |
@@ -112,7 +101,7 @@ des Kapitel-Levels (Tabelle oben, interpoliert; `GameConfig.Story.Balance`), abg
 
 | Automat | Credits bei 1000 P. | Credits/Runde | Credits/Min. |
 |---|---:|---:|---:|
-| Blitz-Reaktion | 35 | 22 | 37 |
+| Blitz-Reaktion | 35 | 22 | 33 |
 | Bremsweg-Profi | 40 | 26 | 39 |
 | Boxenstopp | 30 | 19 | 33 |
 | Drehmoment | 30 | 19 | 37 |
@@ -125,15 +114,15 @@ des Kapitel-Levels (Tabelle oben, interpoliert; `GameConfig.Story.Balance`), abg
 
 | Auto | Level | Preis | Level erreicht | Kaufbar: nur Werkstatt | Kaufbar: mit Querboni |
 |---|---:|---:|---:|---:|---:|
-| Komet C1 | 1 | 4.500 Cr | 0 Min. | **26 Min.** | 19 Min. |
-| Komet S2 | 3 | 18.000 Cr | 6 Min. | **48 Min.** | 33 Min. |
-| Nord R4 | 4 | 28.000 Cr | 9 Min. | **57 Min.** | 42 Min. |
-| Komet Urban | 7 | 40.000 Cr | 22 Min. | **70 Min.** | 50 Min. |
-| Nord Atlas Tourer | 10 | 72.000 Cr | 34 Min. | **1,8 Std.** | 68 Min. |
-| Vektor RS | 18 | 390.000 Cr | 78 Min. | **3,9 Std.** | 2,8 Std. |
-| Vektor GTX | 24 | 850.000 Cr | 1,9 Std. | **5,7 Std.** | 3,8 Std. |
-| Vektor Aureon V12 | 30 | 2.600.000 Cr | 2,6 Std. | **11,9 Std.** | 6,4 Std. |
-| Nord Elys E9 | 38 | 4.600.000 Cr | 3,3 Std. | **17,7 Std.** | 9,6 Std. |
+| Komet C1 | 3 | 4.500 Cr | 6 Min. | **26 Min.** | 19 Min. |
+| Komet S2 | 8 | 18.000 Cr | 26 Min. | **48 Min.** | 33 Min. |
+| Nord R4 | 14 | 28.000 Cr | 52 Min. | **57 Min.** | 52 Min. |
+| Komet Urban | 22 | 40.000 Cr | 1,7 Std. | **1,7 Std.** | 1,7 Std. |
+| Nord Atlas Tourer | 32 | 72.000 Cr | 2,7 Std. | **2,7 Std.** | 2,7 Std. |
+| Vektor RS | 45 | 390.000 Cr | 4,1 Std. | **4,1 Std.** | 4,1 Std. |
+| Vektor GTX | 58 | 850.000 Cr | 5,8 Std. | **5,8 Std.** | 5,8 Std. |
+| Vektor Aureon V12 | 72 | 2.600.000 Cr | 7,9 Std. | **11,9 Std.** | 7,9 Std. |
+| Nord Elys E9 | 90 | 4.600.000 Cr | 11,5 Std. | **17,7 Std.** | 11,5 Std. |
 
 Querboni (Spalte rechts): Parkplatz-Serie gedeckelt (×1,25), Diagnosepunkte gedeckelt (−35 % Arbeitszeit), Tuning-Abteilung wie Annahme, Presse-Anteil nach gleicher Presszeit.
 
@@ -144,6 +133,20 @@ Querboni (Spalte rechts): Parkplatz-Serie gedeckelt (×1,25), Diagnosepunkte ged
 | erreicht nach | 4 Min. | 15 Min. | 34 Min. | 78 Min. | 1,9 Std. | 2,6 Std. | 3,3 Std. | 3,5 Std. |
 
 <!-- SIM:END -->
+
+Open-World-Gebäude (Ausbaustufe 4, Meilenstein 6, `GameConfig.OW.Buildings`; Erträge sammeln sich höchstens 12 Std. an):
+
+| Gebäude | Stufe 1 | Stufe 2 | Stufe 3 | Stufe 4 | Level |
+|---|---:|---:|---:|---:|---:|
+| Autohaus (Credits/Min) | 25 (3 % auf Lv 10) | 67 (5 % auf Lv 20) | 150 (5 % auf Lv 30) | 300 (≈ 10 % auf Lv 30, 5 % auf Lv 40) | 10 |
+| Schrottplatz (Schrott/Std. → Credits/Min beim Händler) | 2 Mrd. (≈ 3) | 6 Mrd. (≈ 10) | 15 Mrd. (≈ 25) | 40 Mrd. (≈ 67) | 18 |
+| Produktion (Altteile) | 10 je 6 Std. | 15 je 4 Std. | 20 je 3 Std. | 30 je 2 Std. + Auto-Gutschein je 48 Std. | 30 |
+
+Story-Missionen (Meilenstein 7): `StoryRules.BalanceCheck()` prüft je Mission `credits / minutes ≤ 0,4 × Werkstatt-Cr/Min`
+des Kapitel-Levels (Tabelle oben, interpoliert; `GameConfig.Story.Balance`), und `StoryRules.UnlockCheck()` prüft, dass jede
+Mission spätestens auf dem Level ihres Kapitels machbar ist (Freischaltungen aus `GameConfig.Unlocks`); beides abgesichert
+in `tests/test_story.lua`. Die Spalte „Level“ der Auto-Tabelle oben ist das Händler-/Auktions-Level aus `GameConfig.Unlocks`
+(`Unlocks.CarLevel`, über `tools/economy_dump.lua`), nicht das 2.4.0-Feld `C.Cars[].level`.
 
 ## Geänderte Stellschrauben (gegenüber dem Stand vor dem Abgleich)
 

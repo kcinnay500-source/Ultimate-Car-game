@@ -781,6 +781,7 @@ function AuctionService.Register(Actions, a)
 		toast(ms, "Gebot abgegeben: " .. credits(bid.amount) .. " für den " .. lot.name .. ". Bezahlt wird erst beim Zuschlag.")
 		S.dirty = true
 		flushPublic(t)
+		return true -- gültiges Gebot: zählt für Nebenmissionen ("action:mini_auction_bid")
 	end)
 
 	-- mini_auction_consign {id, start, duration}: eigenes Auto einliefern (sperrt es)

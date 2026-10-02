@@ -17,6 +17,9 @@
 --   aus der replizierten Konfiguration (StoryRules.Chapter) nach.
 -- Hinweise: mini_notice { kind = "story", event = "sale" | "started" | "claimed" | "side_claimed" | "delivery" },
 --           mini_notice { kind = "mission", id, progress, target, done, side }.
+-- Preistafel am Kiesplatz (worldgen: City.Districts.Kiesplatz … SurfaceGui "PriceBoard", TextLabels Line1..3): bei jedem
+-- Snapshot schreibt der Client die drei Preise des aktuellen Kunden hinein („2 · 3.275 Cr“), ohne Kunden die Legende
+-- („2 · fair“). Nur Anzeige – der Server rechnet.
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
@@ -285,6 +288,60 @@ local function showSaleResult(data: any)
 			end
 		end
 	end)
+end
+
+---------------------------------------------------------------- Preistafel am Kiesplatz
+local board = nil -- SurfaceGui "PriceBoard" (einmal gesucht, neu gesucht wenn sie verschwindet)
+local boardSearchedAt = -math.huge
+StoryUI.BoardSearchInterval = 5
+
+local function findBoard(): Instance?
+	if board and board.Parent then
+		return board
+	end
+	board = nil
+	local t = os.clock()
+	if t - boardSearchedAt < StoryUI.BoardSearchInterval then
+		return nil
+	end
+	boardSearchedAt = t
+	local city = workspace:FindFirstChild("City")
+	local districts = city and city:FindFirstChild("Districts")
+	local dm = districts and districts:FindFirstChild("Kiesplatz")
+	if not dm then
+		return nil
+	end
+	for _, x in ipairs(dm:GetDescendants()) do
+		if x:IsA("SurfaceGui") and x.Name == "PriceBoard" then
+			board = x
+			return board
+		end
+	end
+	return nil
+end
+
+-- Preistafel beschriften: mit Kunde die Preise je Stufe, sonst die Legende (günstig/fair/teuer)
+function StoryUI.RenderBoard(s: any)
+	local gui = findBoard()
+	if not gui then
+		return
+	end
+	local st = story(s)
+	local sale = inOpenWorld(s) and st.passive ~= true and type(st.sale) == "table" and st.sale or nil
+	local tiers = sale and type(sale.tiers) == "table" and sale.tiers or nil
+	local defs = StoryRules.Config().Sale.Tiers or {}
+	for tier = 1, 3 do
+		local line = gui:FindFirstChild("Line" .. tier)
+		if line and line:IsA("TextLabel") then
+			local t = tiers and tiers[tier] or nil
+			if type(t) == "table" and num(t.price, 0) > 0 then
+				line.Text = tostring(tier) .. " · " .. MiniLocale.Credits(num(t.price, 0))
+			else
+				local def = defs[tier]
+				line.Text = tostring(tier) .. " · " .. tostring(def and def.label or "–")
+			end
+		end
+	end
 end
 
 ---------------------------------------------------------------- Wegweiser
@@ -643,6 +700,7 @@ function StoryUI.OnSnapshot(s: any)
 		pendingOffer = nil
 	end
 	latest = s
+	pcall(StoryUI.RenderBoard, s)
 end
 
 function StoryUI.Render(s: any)

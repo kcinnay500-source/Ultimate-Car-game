@@ -1,7 +1,9 @@
 -- StoryRules: Story „Vom Kiesplatzhändler zum Mega-Verkäufer“, Kiesplatz-Verkauf, Nebenmissionen und Co-op-Regeln
 -- (docs/PHASE4_CONTRACT.md §2, §7). Rein: keine Instanzen, keine Dienste, keine Zeit (now kommt immer von außen).
 -- Daten: d.games.story = { chapter, step, done = { [missionId] = true }, side = { [id] = { n, day, claimed } },
---                          active = false | { id, progress, startedAt, party }, sales = { n, best, special, serial }, title }
+--                          active = false | { id, progress, startedAt, party }, sales = { n, best, special, serial, nextAt }, title }
+-- sales.nextAt = Serverzeit (os.time) des nächsten Kiesplatz-Kunden: der Takt (OfferInterval/FailInterval) überlebt
+-- Moduswechsel und Rejoin (StoryService setzt ihn nur über ScheduleNext/OfferGone).
 -- chapter/step werden beim Laden und nach jeder Abholung aus `done` neu bestimmt (Kapitel der Reihe nach, step = erste
 -- offene Mission). Zahlen und Texte: GameConfig.Story.
 -- Geld/XP ändern nur Claim, SideClaim und Sell (über MiniRules.AddMoney/AddIncome/GainXP); MiniRules wird erst beim
@@ -19,13 +21,14 @@ export type Mission = {
 	stat: string?, absolute: boolean?, event: string?, events: { string }?, maxTime: number?,
 	tier: number?, special: boolean?, typ: string?, stage: number?, money: number?, bays: number?, cars: { string }?,
 	equipmentAll: boolean?, credits: number?, xp: number?, chapter: number?, index: number?, side: boolean?, legend: boolean?,
+	unlock: string?, needsCar: boolean?,
 }
 export type Chapter = { id: number, title: string, intro: string, unlockLevel: number, Missions: { Mission } }
 export type Active = { id: string, progress: number, startedAt: number, party: number }
 export type SideEntry = { n: number, day: string, claimed: boolean }
 export type Story = {
 	chapter: number, step: number, done: { [string]: boolean }, side: { [string]: SideEntry }, active: Active | boolean,
-	sales: { n: number, best: number, special: number, serial: number }, title: string,
+	sales: { n: number, best: number, special: number, serial: number, nextAt: number }, title: string,
 }
 export type Change = { id: string, progress: number, target: number, done: boolean, side: boolean, delta: number, title: string }
 export type Offer = {
@@ -62,6 +65,16 @@ local function hash(s: string): number
 	local h = 5381
 	for i = 1, #s do
 		h = (h * 33 + string.byte(s, i)) % 2147483647
+	end
+	return h
+end
+
+-- Nicht-lineare Mischung von Tages-Hash und Ziehungsnummer k (Quadrat modulo 2^31−1, exakt unter 2^53): ein affiner
+-- Schritt (hash(day .. k)) ergäbe nur benachbarte Pool-Indizes und damit nur #Pool verschiedene Tagesauswahlen.
+local function scramble(h: number, k: number): number
+	for _ = 1, 2 do
+		h = h % 67108864 -- 2^26: das Quadrat bleibt unter 2^53
+		h = (h * h + k * 7919 + 104729) % 2147483647
 	end
 	return h
 end
@@ -150,11 +163,66 @@ function StoryRules.ChapterOpen(d: any, n: number, level: any): boolean
 	return levelOf(d, level) >= StoryRules.ChapterLevel(n)
 end
 
+-- Level, das eine Mission wirklich braucht (Freischaltungen GameConfig.Unlocks über Story.Requires / unlock / build / cars /
+-- bays). Alternativen zählen mit der niedrigsten Voraussetzung. 1, wenn nichts freizuschalten ist.
+function StoryRules.RequiredLevel(def: Mission): number
+	local S = config()
+	local req = type(S.Requires) == "table" and S.Requires or { stat = {}, event = {} }
+	local function keyLevel(key: any): number
+		local lvl = type(key) == "string" and Unlocks.Level(key) or nil
+		return finite(lvl) and lvl or 1
+	end
+	local need = 1
+	if type(def.unlock) == "string" then
+		need = math.max(need, keyLevel(def.unlock))
+	end
+	if def.kind == "stat" then
+		need = math.max(need, keyLevel((req.stat or {})[def.stat or ""]))
+	elseif def.kind == "event" then
+		local events = type(def.events) == "table" and def.events or { def.event }
+		local best = math.huge
+		for _, e in ipairs(events) do
+			best = math.min(best, keyLevel((req.event or {})[e]))
+		end
+		need = math.max(need, best == math.huge and 1 or best)
+	elseif def.kind == "build" then
+		need = math.max(need, keyLevel("building:" .. tostring(def.typ)))
+	elseif def.kind == "own" then
+		if type(def.cars) == "table" then
+			local best = math.huge
+			for _, id in ipairs(def.cars) do
+				best = math.min(best, keyLevel("car:" .. tostring(id)))
+			end
+			need = math.max(need, best == math.huge and 1 or best)
+		elseif finite(def.bays) then
+			local levels = type(C.BayLevels) == "table" and C.BayLevels or {}
+			local lvl = levels[math.floor(def.bays)]
+			need = math.max(need, finite(lvl) and lvl or 1)
+		end
+	end
+	return need
+end
+
+-- Kapitel-Missionen, deren Voraussetzung über dem Kapitel-Level liegt (leer = alles erreichbar); für den Test
+function StoryRules.UnlockCheck(): { string }
+	local out = {}
+	for ci, ch in ipairs(config().Chapters) do
+		local open = StoryRules.ChapterLevel(ci)
+		for _, m in ipairs(ch.Missions) do
+			local need = StoryRules.RequiredLevel(m)
+			if need > open then
+				table.insert(out, string.format("%s: braucht Level %d, Kapitel %d öffnet ab %d", m.id, need, ci, open))
+			end
+		end
+	end
+	return out
+end
+
 ---------------------------------------------------------------- Standardwerte und Laden (§2)
 function StoryRules.Default(): Story
 	return {
 		chapter = 1, step = 1, done = {}, side = {}, active = false,
-		sales = { n = 0, best = 0, special = 0, serial = 0 }, title = "",
+		sales = { n = 0, best = 0, special = 0, serial = 0, nextAt = 0 }, title = "",
 	}
 end
 
@@ -229,6 +297,7 @@ function StoryRules.Load(raw: any, d: any, now: any): Story
 	st.sales.best = math.min(st.sales.n, loadInt(s.best, 0, 0, MAX_SAFE))
 	st.sales.special = math.min(st.sales.n, loadInt(s.special, 0, 0, MAX_SAFE))
 	st.sales.serial = loadInt(s.serial, 0, 0, MAX_SAFE)
+	st.sales.nextAt = loadInt(s.nextAt, 0, 0, MAX_SAFE)
 	st.title = type(r.title) == "string" and #r.title <= 40 and r.title or ""
 	return st
 end
@@ -421,16 +490,33 @@ local function bumpActive(st: Story, def: Mission, delta: number): Change?
 end
 
 ---------------------------------------------------------------- Nebenmissionen: Tag, Auswahl, Zähler
--- Heutige Auswahl (deterministisch je UTC-Tag wie GoalRules.DailyGoals): Side.Daily verschiedene Ids aus dem Pool
-function StoryRules.DailyIds(day: string): { string }
+-- Level, ab dem eine Nebenmission machbar ist (unlock bzw. Story.Requires)
+function StoryRules.SideLevel(def: Mission): number
+	return StoryRules.RequiredLevel(def)
+end
+
+-- Heutige Auswahl (deterministisch je UTC-Tag wie GoalRules.DailyGoals): Side.Daily verschiedene Ids aus dem Teil des
+-- Pools, den der Spieler auf diesem Level schon kann (level nil = ganzer Pool). s_jobs ist immer dabei, darum gibt es
+-- jeden Tag mindestens eine machbare Nebenmission; mit einem Levelaufstieg kann die Auswahl am selben Tag wechseln.
+function StoryRules.DailyIds(day: string, level: any): { string }
 	local ix = index()
-	local pool = ix.poolIds
+	local pool = {}
+	for _, id in ipairs(ix.poolIds) do
+		local def = ix.sideById[id]
+		if not finite(level) or StoryRules.SideLevel(def) <= level then
+			table.insert(pool, id)
+		end
+	end
+	if #pool == 0 then
+		pool = ix.poolIds
+	end
 	local want = math.min(#pool, index().S.Side.Daily or 3)
 	local out, used = {}, {}
 	local k = 0
+	local base = hash(day .. ":side")
 	while #out < want and k < 64 do
 		k += 1
-		local idx = (hash(day .. ":side:" .. tostring(k)) % #pool) + 1
+		local idx = (scramble(base, k) % #pool) + 1
 		if not used[idx] then
 			used[idx] = true
 			table.insert(out, pool[idx])
@@ -439,9 +525,9 @@ function StoryRules.DailyIds(day: string): { string }
 	return out
 end
 
-function StoryRules.DailyDefs(day: string): { Mission }
+function StoryRules.DailyDefs(day: string, level: any): { Mission }
 	local out = {}
-	for _, id in ipairs(StoryRules.DailyIds(day)) do
+	for _, id in ipairs(StoryRules.DailyIds(day, level)) do
 		table.insert(out, StoryRules.SideDef(id))
 	end
 	return out
@@ -517,9 +603,9 @@ local function bumpSide(d: any, st: Story, def: Mission, delta: number, now: num
 	return change(def, e.n, delta, true)
 end
 
--- Heutige Nebenmissionen als Definitionsliste (nur die aktuelle Auswahl)
-local function todaysDefs(now: number): { Mission }
-	return StoryRules.DailyDefs(dayKey(now))
+-- Heutige Nebenmissionen des Spielers als Definitionsliste (Auswahl nach Tag und Level)
+local function todaysDefs(d: any, now: number, level: any): { Mission }
+	return StoryRules.DailyDefs(dayKey(now), levelOf(d, level))
 end
 
 ---------------------------------------------------------------- Ereignisse (Statistik, Ereignis, Verkauf)
@@ -556,7 +642,7 @@ function StoryRules.OnStat(d: any, key: any, delta: any, now: number): { Change 
 			table.insert(out, bumpActive(st, def, delta))
 		end
 	end
-	for _, def in ipairs(todaysDefs(now)) do
+	for _, def in ipairs(todaysDefs(d, now)) do
 		if def.kind == "stat" and not def.absolute and def.stat == key then
 			table.insert(out, bumpSide(d, st, def, delta, now))
 		end
@@ -578,7 +664,7 @@ function StoryRules.OnEvent(d: any, event: any, data: any, now: number): { Chang
 			table.insert(out, bumpActive(st, def, 1))
 		end
 	end
-	for _, def in ipairs(todaysDefs(now)) do
+	for _, def in ipairs(todaysDefs(d, now)) do
 		if def.kind == "event" and matchesEvent(def, event, data) then
 			table.insert(out, bumpSide(d, st, def, 1, now))
 		end
@@ -625,7 +711,7 @@ function StoryRules.WantsEvent(d: any, event: string, now: number): boolean
 		end
 	end
 	local today = dayKey(now)
-	for _, def in ipairs(todaysDefs(now)) do
+	for _, def in ipairs(todaysDefs(d, now)) do
 		if def.kind == "event" and matchesEvent(def, event, { time = 0 }) and not sideClaimed(st, def, today)
 			and StoryRules.SideProgress(d, def, now) < StoryRules.Target(def) then
 			return true
@@ -728,7 +814,7 @@ function StoryRules.SideClaim(d: any, id: any, now: number, level: any): (boolea
 	local today = dayKey(now)
 	if not def.legend then
 		local listed = false
-		for _, x in ipairs(todaysDefs(now)) do
+		for _, x in ipairs(todaysDefs(d, now, level)) do
 			if x.id == def.id then
 				listed = true
 			end
@@ -797,11 +883,11 @@ function StoryRules.SideList(d: any, now: number, level: any): { any }
 		local claimed = sideClaimed(st, def, today)
 		table.insert(out, {
 			id = def.id, title = def.title, text = def.text, progress = progress, target = target,
-			done = claimed, claimable = not claimed and progress >= target, legend = def.legend == true,
+			done = claimed, claimable = not claimed and progress >= target, legend = def.legend == true, needsCar = def.needsCar == true,
 			credits = StoryRules.SideCredits(def, lvl), xp = finite(def.xp) and def.xp or (type(GameConfig.XP) == "table" and GameConfig.XP.SideMission or 0),
 		})
 	end
-	for _, def in ipairs(todaysDefs(now)) do
+	for _, def in ipairs(todaysDefs(d, now, lvl)) do
 		add(def)
 	end
 	for _, id in ipairs(index().legendIds) do
@@ -816,8 +902,9 @@ function StoryRules.LevelFactor(level: number): number
 	return math.min(S.LevelFactorCap or 3, 1 + (S.LevelFactor or 0) * (math.max(1, level) - 1))
 end
 
--- Angebot des nächsten Kunden aus einem Seed (Server: "<userId>:<serial>"): Kunde, Wunsch, Wurf (0..1) und die drei
--- Preisstufen mit erwartetem Gewinn. Sondermodell-Kunden ab Kapitel SpecialChapter, jeder SpecialEvery-te Kunde.
+-- Angebot des nächsten Kunden aus einem Seed (Server: "<Server-Geheimnis>:<userId>:<serial>" – das Geheimnis kennt nur
+-- StoryService, der Client kann den Wurf nicht nachrechnen): Kunde, Wunsch, Wurf (0..1) und die drei Preisstufen mit
+-- erwartetem Gewinn. Sondermodell-Kunden ab Kapitel SpecialChapter, jeder SpecialEvery-te Kunde.
 function StoryRules.NextSale(d: any, seed: any, level: any): Offer
 	local S = config().Sale
 	local st = StoryRules.Data(d)
@@ -856,7 +943,7 @@ end
 
 -- Verkauf zur Preisstufe tier (1..3) gegen das Angebot: Erfolg, wenn roll < chance (Stufe 1 immer). Bei Erfolg Gewinn
 -- als Einnahme (MiniRules.AddIncome, Prestige-Bonus) und XP; die Verkaufszähler und die aktive sell-Mission laufen mit.
--- Nichts Zufälliges hier: der Wurf stammt aus dem Angebot (Seed).
+-- Nichts Zufälliges hier: der Wurf stammt aus dem Angebot (Seed mit Server-Geheimnis).
 function StoryRules.Sell(d: any, offer: Offer, tier: any, now: number): SellResult?
 	local S = config().Sale
 	local st = StoryRules.Data(d)
@@ -881,6 +968,28 @@ function StoryRules.Sell(d: any, offer: Offer, tier: any, now: number): SellResu
 	local texts = S.Texts.sold
 	return { sold = true, credits = credits, xp = xp, tier = tier, special = offer.special, changed = changed,
 		text = string.format(texts[(offer.serial % #texts) + 1], offer.customer, MiniLocale.Credits(credits)) }
+end
+
+-- Kunde weg ohne Verkauf (Geduld zu Ende, Moduswechsel): die laufende Nummer rückt vor, damit der nächste Kunde ein
+-- anderer ist (neuer Seed) und nicht derselbe mit demselben Wurf zurückkommt.
+function StoryRules.OfferGone(d: any, offer: any)
+	local st = StoryRules.Data(d)
+	if st and type(offer) == "table" and finite(offer.serial) then
+		st.sales.serial = math.max(st.sales.serial, math.floor(offer.serial))
+	end
+end
+
+-- Nächsten Kunden frühestens zur Serverzeit at (bleibt über Moduswechsel und Rejoin erhalten; nie rückwärts)
+function StoryRules.ScheduleNext(d: any, at: any)
+	local st = StoryRules.Data(d)
+	if st and finite(at) then
+		st.sales.nextAt = math.max(st.sales.nextAt, math.floor(at))
+	end
+end
+
+function StoryRules.NextOfferAt(d: any): number
+	local st = StoryRules.Data(d)
+	return st and st.sales.nextAt or 0
 end
 
 ---------------------------------------------------------------- Co-op (§7)

@@ -9,7 +9,7 @@ return {
 		{path="base/Ultimate_Car_Game_2.4.0.rbxlx",size=5636778,hash="481beef3348e9985"},
 		{path="tools/build_place.py",size=13830,hash="039c7acf0c9d8a70"},
 		{path="tools/worldgen/__init__.py",size=4914,hash="58ead1af084be078"},
-		{path="tools/worldgen/checks.py",size=93576,hash="38b00d5e2bd4b2a5"},
+		{path="tools/worldgen/checks.py",size=94068,hash="6a3937cf2a820d22"},
 		{path="tools/worldgen/contract.py",size=6794,hash="7c3bbfab2174e502"},
 		{path="tools/worldgen/design/ascii.py",size=4133,hash="5017d38f2e8d536c"},
 		{path="tools/worldgen/design/check.py",size=8818,hash="202e84ee220d8a3d"},
@@ -21,7 +21,7 @@ return {
 		{path="tools/worldgen/design/walk_out.txt",size=2328,hash="083504e82c6a5529"},
 		{path="tools/worldgen/districts/__init__.py",size=788,hash="4fb488061f360a47"},
 		{path="tools/worldgen/districts/dealer_track.py",size=39533,hash="447b6b891af4dda0"},
-		{path="tools/worldgen/districts/kiesplatz.py",size=16046,hash="0b3ce4422b818c9e"},
+		{path="tools/worldgen/districts/kiesplatz.py",size=16206,hash="734a338632ad4332"},
 		{path="tools/worldgen/districts/parking_misc.py",size=60727,hash="679c23831fee61a2"},
 		{path="tools/worldgen/districts/plaza_arrival.py",size=63321,hash="1684e6641c15acf6"},
 		{path="tools/worldgen/districts/plaza_buildings.py",size=58983,hash="4215fe420ed01967"},
@@ -10970,9 +10970,9 @@ return {
 {"Part","Tafel",{Anchored=true,CanCollide=false,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(8,4,0.3),Shape=E.PartType.Block,CFrame=CF(300.8,3.4,324,0,0,1,0,1,0,-1,0,0)},{
 {"SurfaceGui","PriceBoard",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(320,160),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Title",{Size=U2(0.9,0,0.2,0),Position=U2(0.05,0,0.03,0),BackgroundTransparency=1,Text="ANGEBOTE",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
-{"TextLabel","Line1",{Size=U2(0.9,0,0.22,0),Position=U2(0.05,0,0.26,0),BackgroundTransparency=1,Text="1 · – Credits",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Line2",{Size=U2(0.9,0,0.22,0),Position=U2(0.05,0,0.5,0),BackgroundTransparency=1,Text="2 · – Credits",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Line3",{Size=U2(0.9,0,0.22,0),Position=U2(0.05,0,0.74,0),BackgroundTransparency=1,Text="3 · – Credits",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}}}},
+{"TextLabel","Line1",{Size=U2(0.9,0,0.22,0),Position=U2(0.05,0,0.26,0),BackgroundTransparency=1,Text="1 · günstig",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
+{"TextLabel","Line2",{Size=U2(0.9,0,0.22,0),Position=U2(0.05,0,0.5,0),BackgroundTransparency=1,Text="2 · fair",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
+{"TextLabel","Line3",{Size=U2(0.9,0,0.22,0),Position=U2(0.05,0,0.74,0),BackgroundTransparency=1,Text="3 · teuer",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}}}},
 {"Model","Leitlinie",{},{
 {"Part","Leitlinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(214,160,72),Material=E.Material.Neon,Size=V3(1,0.05,12.5),Shape=E.PartType.Block,CFrame=CF(178.5,-0.975,217.25)}},
 {"Part","Leitlinie",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(214,160,72),Material=E.Material.Neon,Size=V3(148.5,0.05,1),Shape=E.PartType.Block,CFrame=CF(253.25,-0.975,223)}},

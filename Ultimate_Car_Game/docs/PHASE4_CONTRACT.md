@@ -96,7 +96,8 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 - Freischaltkurve (Level): Schrottpresse 2, Schrottplatz 3, Quiz 4, Parkplatz 5, Tuning-Projekte 6, Tycoon-Modus 1
   (immer), Story Kapitel 2 ab 5, Kapitel 3 ab 15, Kapitel 4 ab 30, Kapitel 5 ab 50; Autohaus 3, Teststrecke 8,
   Waschstraße 8, Spielhalle 10, Auktionshaus 12, Spieler-Auktionen 20; OW-Gebäude Autohaus 10, Schrottplatz 18,
-  Produktion 35. Autos beim Händler: Komet C1 3, Komet S2 8, Nord R4 14, Komet Urban 22, Nord Atlas Tourer 32,
+  Produktion 30 (wie Kapitel 4, das sie bauen lässt). Jede Story-Mission ist spätestens auf dem Level ihres Kapitels
+  machbar (`StoryRules.UnlockCheck()`, Test). Autos beim Händler: Komet C1 3, Komet S2 8, Nord R4 14, Komet Urban 22, Nord Atlas Tourer 32,
   Vektor RS 45, Vektor GTX 58, Vektor Aureon V12 72, **Nord Elys E9 90**. Sondermodelle (NPC-Auktion): Rallye 10,
   Classic 18, Goldstück 50, Nero 78, Prototyp 95. Das Balance-Team darf Level verschieben, Elys bleibt 90.
 - Level-Kurve: `R.XPNeeded` bleibt (2.4.0). Zielwerte für das Balance-Team: Level 50 nach ≈ 8 Std. gemischtem
@@ -179,14 +180,15 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 - **Story** „Vom Kiesplatzhändler zum Mega-Verkäufer“ (`GameConfig.Story.Chapters`, 5 Kapitel à 3–5 Missionen):
   1. *Der Kiesplatz* (Level 1): Kiesplatz-Stand am Stadtrand (worldgen: `City.Districts.Kiesplatz`, Station `kiesplatz`,
      Ankunft `kiesplatz`): 3 Gebrauchtwagen an NPC-Kunden verkaufen (Dialog-Karten: Preis nennen, NPC feilscht;
-     reine Serverlogik mit Seed), Werkstatt kennenlernen (Tutorial-Anschluss), erste 1.000 Credits.
-  2. *Die erste Werkstatt* (Level 5): 5 Aufträge abrechnen, Hebebühne 2, Zeitfahren fahren.
-  3. *Das Autohaus* (Level 15): OW-Gebäude Autohaus bauen, ein Auto beim Händler kaufen, ein Auto in die Auktion
-     geben oder eine NPC-Auktion gewinnen.
+     reine Serverlogik mit Seed und Server-Geheimnis), zurück in die Werkstatt (Tutorial-Anschluss), erste 2.500 Credits.
+  2. *Die erste Werkstatt* (Level 5): 5 Aufträge abrechnen, Hebebühne 2, zehn Quizfragen (die Teststrecke kommt erst
+     ab Level 8 und braucht ein eigenes Auto – darum liegt das Zeitfahren in Kapitel 3 nach dem Autokauf).
+  3. *Das Autohaus* (Level 15): OW-Gebäude Autohaus bauen, ein Auto beim Händler kaufen, damit ein Zeitfahren bis ins
+     Ziel fahren, ein Auto in die Auktion geben (ab Level 20) oder eine NPC-Auktion gewinnen.
   4. *Die Produktion* (Level 30): Schrottplatz + Produktion bauen, 3 Sondermodell-Verkäufe (NPC-Kunden am
      Kiesplatz mit Preisstufen).
-  5. *Der Mega-Verkäufer* (Level 50): Produktion Stufe 4, 10 Verkäufe mit Bestpreis, Vektor Aureon oder Elys
-     besitzen → Titel „Mega-Verkäufer“, Kosmetik, 25.000 Credits. Zweiter Strang „Werkstatt-Legende“ als
+  5. *Der Mega-Verkäufer* (Level 50): Produktion Stufe 4, 10 Verkäufe mit Bestpreis, einen Traumwagen
+     besitzen (Vektor RS Goldstück ab 50, Vektor GTX ab 58 – oder später Aureon/Elys; die Mission nennt die Level) → Titel „Mega-Verkäufer“, Kosmetik, 25.000 Credits. Zweiter Strang „Werkstatt-Legende“ als
      Nebenmissionen (100 Aufträge, alle Geräte, 4 Bühnen).
   - Missionen: `story_start {id}`, `story_claim {id}`; Fortschritt zählt der Server über Statistiken
     (`MiniRules.STAT_KEYS`, `GoalsService`-Mechanik) und Ereignisse (Verkauf am Kiesplatz `story_sell {offer, price}`

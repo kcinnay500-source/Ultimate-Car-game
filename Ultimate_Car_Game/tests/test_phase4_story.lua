@@ -1,6 +1,6 @@
 -- Ausbaustufe 4, Meilensteine 6–7 Ende-zu-Ende über die echte Verkabelung (H.Garage, Remotes.Command -> request ->
 -- Mini.Handle, echte Stadt aus tools/worldgen): neuer Spieler -> Tutorial bis zum Kiesplatz -> Story Kapitel 1 am Kiesplatz
--- (Verkäufe aller Preisstufen, Werkstatt-Auftrag, 1.000 Credits) -> Kapitel 2 über echte Aufträge (jobsDone über
+-- (Verkäufe aller Preisstufen, Werkstatt-Auftrag, 2.500 Credits) -> Kapitel 2 über echte Aufträge (jobsDone über
 -- MiniRules.StatHook), Hebebühne, Zeitfahren -> Level-Sperre für Kapitel 3 -> ow_build Autohaus (Baustelle, Zeitraffer,
 -- ow_ready) -> ow_collect -> Perks wirken in R.Reward und CarRules.DealerPrice (Deckel ×1,6) -> Kapitel 3 über Autokauf und
 -- Auktions-Einlieferung (Ereignisse aus Hinweisen/api.event) -> Passiv-Modus blockt und gibt frei -> Nebenmissionen mit
@@ -100,16 +100,20 @@ local function customerFor(T, g, pl, tier, fail)
 	error("kein passender Kunde gefunden")
 end
 
+-- Verkauf zur Stufe tier an einen passenden Kunden. customerFor fertigt unpassende Kunden vorher günstig ab (Geld und
+-- Fortschritt ändern sich dabei), darum liefert sell als drittes den Stand unmittelbar vor dem eigentlichen Versuch.
 local function sell(T, g, pl, tier, fail)
 	local offer = customerFor(T, g, pl, tier, fail)
+	local d = g:D(pl)
+	local before = { money = d.money, progress = type(d.games.story.active) == "table" and d.games.story.active.progress or 0, sales = d.games.story.sales.n }
 	local m = g:Mark()
 	act(T, g, pl, "story_sell", { offer = offer.serial, price = tier }, "ok", "story_sell Stufe " .. tier)
 	for _, n in ipairs(g:Notices(pl, "story", m)) do
 		if n.event == "sale" then
-			return n, offer
+			return n, offer, before
 		end
 	end
-	return nil, offer
+	return nil, offer, before
 end
 
 local function missionNotice(g, pl, id, since)
@@ -208,27 +212,30 @@ return {
 		act(T, g, pl, "story_sell", { offer = offer.serial, price = "teuer" }, "invalid", "price muss number sein")
 		-- Stufe 1 (sicher)
 		local money = d.money
+		local mStart = g:Mark()
 		local n1 = sell(T, g, pl, 1)
 		T.check(n1 ~= nil and n1.sold == true and n1.tier == 1 and n1.credits == 40, "Stufe 1 verkauft: +40 Cr Reingewinn")
 		T.eq(d.money - money, 40, "Credits nur über den Server (Reingewinn)")
 		T.eq(story(g, pl).sales.n, 1, "sales.n 1")
 		T.eq(story(g, pl).active.progress, 1, "c1_m1 Fortschritt 1")
-		-- Stufe 3 geplatzt (Wurf ≥ 0,5): kein Geld, kein Fortschritt
-		money = d.money
-		local n3f = sell(T, g, pl, 3, true)
+		-- Stufe 3 geplatzt (Wurf ≥ 0,5): kein Geld, kein Fortschritt (Stand unmittelbar vor dem Versuch, siehe sell)
+		local n3f, _, b3f = sell(T, g, pl, 3, true)
 		T.check(n3f ~= nil and n3f.sold == false and n3f.credits == 0, "Stufe 3 geplatzt")
-		T.eq(d.money, money, "geplatzt: kein Geld")
-		T.eq(story(g, pl).active.progress, 1, "geplatzt: kein Fortschritt")
-		-- Stufe 2 und Stufe 3 erfolgreich
-		-- (Gewinn je Stufe × Level-Faktor, beim Angebot festgelegt: offer.tiers[tier].profit)
-		local n2, o2 = sell(T, g, pl, 2, false)
+		T.eq(d.money, b3f.money, "geplatzt: kein Geld")
+		T.eq(story(g, pl).active.progress, b3f.progress, "geplatzt: kein Fortschritt")
+		T.eq(story(g, pl).sales.n, b3f.sales, "geplatzt: kein Verkauf gezählt")
+		-- Stufe 2 und Stufe 3 erfolgreich (Gewinn je Stufe × Level-Faktor, beim Angebot festgelegt: offer.tiers[tier].profit);
+		-- unpassende Kunden dazwischen wurden günstig verkauft, darum zählt der Fortschritt relativ und mit Deckel 3
+		local n2, o2, b2 = sell(T, g, pl, 2, false)
 		T.check(n2 ~= nil and n2.sold == true and n2.credits == o2.tiers[2].profit and n2.credits >= 75, "Stufe 2 verkauft: +" .. tostring(n2 and n2.credits) .. " Cr (Gewinn der Stufe)")
-		m = g:Mark()
-		local n3, o3 = sell(T, g, pl, 3, false)
+		T.check(d.money - b2.money >= (n2 and n2.credits or 1e9), "Stufe 2: Gewinn gutgeschrieben (dazu evtl. Level-Bonus)")
+		local n3, o3, b3 = sell(T, g, pl, 3, false)
 		T.check(n3 ~= nil and n3.sold == true and n3.credits == o3.tiers[3].profit and n3.credits >= 130, "Stufe 3 verkauft: +" .. tostring(n3 and n3.credits) .. " Cr (Gewinn der Stufe)")
+		T.check(d.money - b3.money >= (n3 and n3.credits or 1e9), "Stufe 3: Gewinn gutgeschrieben (dazu evtl. Level-Bonus)")
 		T.near(o3.tiers[3].profit, math.floor(130 * SR.LevelFactor(d.level) + 0.5), 1, "Gewinn = 130 × Level-Faktor")
-		T.eq(story(g, pl).sales.best, 1, "Bestpreis-Verkäufe gezählt")
-		local done1 = missionNotice(g, pl, "c1_m1", m)
+		T.check(story(g, pl).sales.best >= 1, "Bestpreis-Verkäufe gezählt")
+		T.eq(story(g, pl).active.progress, 3, "c1_m1 3/3")
+		local done1 = missionNotice(g, pl, "c1_m1", mStart)
 		T.check(done1 ~= nil and done1.done == true and done1.progress == 3, "mini_notice mission c1_m1 erledigt")
 		act(T, g, pl, "story_claim", { id = "c1_m1" }, "ok", "story_claim c1_m1")
 		T.eq(story(g, pl).done.c1_m1, true, "c1_m1 abgeholt")
@@ -236,22 +243,23 @@ return {
 		T.eq(d.games.stats.missionsDone, 1, "missionsDone 1")
 		act(T, g, pl, "story_claim", { id = "c1_m1" }, "ok", "zweites Abholen -> Toast")
 		T.eq(d.games.stats.missionsDone, 1, "nicht zweimal")
-		-- c1_m2: Werkstatt kennenlernen (settle-Ereignis aus Mini.OnSettled)
+		-- c1_m2: Zurück in die Werkstatt (settle-Ereignis aus Mini.OnSettled)
 		act(T, g, pl, "story_start", { id = "c1_m2" }, "ok")
 		m = g:Mark()
 		local receipt = Flow.CompleteInspection(T, g, pl)
 		T.check(receipt ~= nil, "Auftrag abgerechnet")
 		T.check(missionNotice(g, pl, "c1_m2", m) ~= nil and missionNotice(g, pl, "c1_m2", m).done == true, "c1_m2 erledigt durch echte Abrechnung")
 		act(T, g, pl, "story_claim", { id = "c1_m2" }, "ok")
-		-- c1_m3: 1.000 Credits auf dem Konto (Bedingung aus dem Profil: sofort beim Start oder im Tick 1×/s)
-		if d.money >= 1000 then
-			MR.AddMoney(d, 900 - d.money)
+		-- c1_m3: 2.500 Credits auf dem Konto (Bedingung aus dem Profil, im Tick 1×/s). Startgeld + Tutorial + Belohnungen
+		-- liegen knapp darunter (die Probeverkäufe oben haben etwas dazugegeben); unter 2.500 ist die Mission offen
+		if d.money >= 2500 then
+			MR.AddMoney(d, 2400 - d.money)
 		end
 		m = g:Mark()
 		act(T, g, pl, "story_start", { id = "c1_m3" }, "ok")
 		g:Advance(2.1)
-		T.check(missionNotice(g, pl, "c1_m3", m) == nil or missionNotice(g, pl, "c1_m3", m).done ~= true, "c1_m3 unter 1.000 Cr offen")
-		MR.AddMoney(d, 1000 - d.money)
+		T.check(missionNotice(g, pl, "c1_m3", m) == nil or missionNotice(g, pl, "c1_m3", m).done ~= true, "c1_m3 unter 2.500 Cr offen")
+		MR.AddMoney(d, 2500 - d.money)
 		g:Advance(2.1)
 		local c13 = missionNotice(g, pl, "c1_m3", m)
 		T.check(c13 ~= nil and c13.done == true, "c1_m3 erfüllt (Kontostand)")
@@ -305,13 +313,12 @@ return {
 		g:Advance(2.1)
 		T.check(missionNotice(g, pl, "c2_m2", m) ~= nil and missionNotice(g, pl, "c2_m2", m).done == true, "c2_m2 erfüllt (2 Bühnen)")
 		act(T, g, pl, "story_claim", { id = "c2_m2" }, "ok")
-		-- c2_m3: Zeitfahren ins Ziel (CarService meldet track_finish über api.notice -> Story-Ereignis; hier über das
-		-- Dienst-Ereignis, weil das Fahren Physik braucht)
+		-- c2_m3: zehn Quizfragen (Statistik quizCorrect über MiniRules.AddStat -> StatHook -> StoryService.OnStat)
 		act(T, g, pl, "story_start", { id = "c2_m3" }, "ok")
 		m = g:Mark()
-		SS.OnEvent(g:MiniState(pl), d, "track_finish", { time = 61 })
+		MR.AddStat(d, "quizCorrect", 10, g:Now())
 		g:Advance(1.1)
-		T.check(missionNotice(g, pl, "c2_m3", m) ~= nil and missionNotice(g, pl, "c2_m3", m).done == true, "c2_m3 erledigt (track_finish)")
+		T.check(missionNotice(g, pl, "c2_m3", m) ~= nil and missionNotice(g, pl, "c2_m3", m).done == true, "c2_m3 erledigt (quizCorrect)")
 		act(T, g, pl, "story_claim", { id = "c2_m3" }, "ok")
 		T.eq(story(g, pl).chapter, 3, "Kapitel 3 erreicht")
 
@@ -398,12 +405,20 @@ return {
 		T.eq(#d.games.cars, 1, "ein Auto in der Garage")
 		T.check(missionNotice(g, pl, "c3_m2", m) ~= nil and missionNotice(g, pl, "c3_m2", m).done == true, "c3_m2 erledigt (car_bought aus dem Hinweis)")
 		act(T, g, pl, "story_claim", { id = "c3_m2" }, "ok")
+		-- c3_m3: Zeitfahren ins Ziel mit dem neuen Auto (CarService meldet track_finish über api.notice -> Story-Ereignis;
+		-- hier über das Dienst-Ereignis, weil das Fahren Physik braucht)
 		act(T, g, pl, "story_start", { id = "c3_m3" }, "ok")
+		m = g:Mark()
+		SS.OnEvent(g:MiniState(pl), d, "track_finish", { time = 61 })
+		g:Advance(1.1)
+		T.check(missionNotice(g, pl, "c3_m3", m) ~= nil and missionNotice(g, pl, "c3_m3", m).done == true, "c3_m3 erledigt (track_finish)")
+		act(T, g, pl, "story_claim", { id = "c3_m3" }, "ok")
+		act(T, g, pl, "story_start", { id = "c3_m4" }, "ok")
 		m = g:Mark()
 		local car = d.games.cars[1]
 		act(T, g, pl, "mini_auction_consign", { id = car.id, start = 1, duration = 120 }, "ok", "Auto einliefern (auction_consigned über api.event)")
-		T.check(missionNotice(g, pl, "c3_m3", m) ~= nil and missionNotice(g, pl, "c3_m3", m).done == true, "c3_m3 erledigt (auction_consigned)")
-		act(T, g, pl, "story_claim", { id = "c3_m3" }, "ok")
+		T.check(missionNotice(g, pl, "c3_m4", m) ~= nil and missionNotice(g, pl, "c3_m4", m).done == true, "c3_m4 erledigt (auction_consigned)")
+		act(T, g, pl, "story_claim", { id = "c3_m4" }, "ok")
 		T.eq(story(g, pl).chapter, 4, "Kapitel 4 erreicht (ab Level 30 gesperrt)")
 		g:Advance(1.1)
 		T.eq(g:MiniSnapshot(pl).story.locked, true, "Kapitel 4 gesperrt im Snapshot")
@@ -424,7 +439,7 @@ return {
 		act(T, g, pl, "story_sell", { offer = 1, price = 1 }, "passive", "story_sell geblockt")
 		act(T, g, pl, "mini_auction_bid", { lot = 1, amount = 1 }, "passive", "mini_auction_bid geblockt")
 		act(T, g, pl, "mini_auction_consign", { id = 1, start = 1, duration = 120 }, "passive", "mini_auction_consign geblockt")
-		act(T, g, pl, "story_claim", { id = "c3_m3" }, "ok", "Abholen bleibt erlaubt (Toast: schon abgeholt)")
+		act(T, g, pl, "story_claim", { id = "c3_m4" }, "ok", "Abholen bleibt erlaubt (Toast: schon abgeholt)")
 		T.eq(SS.Offer(g:MiniState(pl)), false, "kein Kunde im Passiv-Modus")
 		g:Advance(1.1)
 		local ps = g:MiniSnapshot(pl)
@@ -444,7 +459,7 @@ return {
 		local side = g:MiniSnapshot(pl).story.side
 		local jobsAtSide = d.games.stats.jobsDone
 		local today = SR.DayKey(g:Now())
-		local wantIds = SR.DailyIds(today)
+		local wantIds = SR.DailyIds(today, d.level)
 		local daily = {}
 		for _, s in ipairs(side) do
 			if not s.legend then
@@ -489,7 +504,7 @@ return {
 			T.eq(story(g, pl).side[id], nil, "Tageszähler " .. id .. " zurückgesetzt")
 		end
 		local side2 = g:MiniSnapshot(pl).story.side
-		local want2 = SR.DailyIds(tomorrow)
+		local want2 = SR.DailyIds(tomorrow, d.level)
 		local daily2 = {}
 		for _, s in ipairs(side2) do
 			if not s.legend then
@@ -668,5 +683,184 @@ return {
 		T.check(#sentBuild >= 1 and sentBuild[1].typ == "autohaus" and sentBuild[1].price == nil and sentBuild[1].cost == nil, "ow_build { typ } gesendet")
 		T.eq(g:MiniShared("OWRules").StageOf(d, "autohaus"), 1, "Server hat gebaut (Baustelle)")
 		noErrors(T, g, "Client")
+	end },
+
+	{ "Regressionen (Ende-zu-Ende): keine Kunden fern vom Kiesplatz, Kunden-Takt über Lobby/Rejoin, Nebenmissionen nur nach gelungenen Aktionen, abgebrochene Spielhallen-Runde, Lieferung bei schneller Durchfahrt, keine Snapshot-Flut der Baustelle", function(T, H)
+		-- Tag, an dem Lieferung, Schrott-Tausch und Spielhalle in der Tagesauswahl (Level 12) liegen
+		local probe = H.Garage({ noServer = true })
+		local SRp = probe:MiniShared("StoryRules")
+		local dayAt
+		for k = 0, 5000 do
+			local ids = SRp.DailyIds(SRp.DayKey(NOW + k * DAY), 12)
+			local has = {}
+			for _, id in ipairs(ids) do
+				has[id] = true
+			end
+			if has.s_delivery and has.s_press and has.s_arcade then
+				dayAt = NOW + k * DAY
+				break
+			end
+		end
+		T.check(dayAt ~= nil, "Tag mit Lieferung, Tausch und Spielhalle gefunden")
+		local g = H.Garage({ placeKind = "all", startTime = dayAt, level = 12 })
+		local SR = g:MiniShared("StoryRules")
+		local SS = g:MiniServer("StoryService")
+		local MR = g:MiniShared("MiniRules")
+		local MC = g:MiniShared("MiniConfig")
+		local CR = g:MiniShared("CarRules")
+		local Sale = SR.Config().Sale
+		local pl, d = join(g, 6301, "Timo")
+		T.eq(d.level, 12, "Level 12")
+		act(T, g, pl, "tutorial_skip", {}, "ok")
+		act(T, g, pl, "lobby_mode", { mode = "openworld" }, "ok")
+		act(T, g, pl, "lobby_go", {}, "ok")
+		T.eq(g:Session(pl).mode, "openworld", "Open World")
+		local function state()
+			return g:MiniState(pl)
+		end
+		local function noGone(since, what)
+			T.check(not g:HasToast(pl, "keine Lust mehr", since), what .. ": kein „keine Lust mehr“-Hinweis")
+		end
+
+		---------------------------------------------------------------- Kunden nur am Kiesplatz, Abschied nur vor Ort
+		g:Teleport(pl, g:Station(pl, "workshop"), Vector3.new(0, 0, 3))
+		local m = g:Mark()
+		g:Advance(60)
+		T.eq(SS.Offer(state()), false, "in der Werkstatt kommt kein Kunde")
+		noGone(m, "Werkstatt")
+		local o1 = customer(g, pl)
+		T.check(o1 ~= nil, "am Kiesplatz kommt der Kunde")
+		g:Teleport(pl, g:Station(pl, "workshop"), Vector3.new(0, 0, 3))
+		m = g:Mark()
+		g:Advance(Sale.Patience + 5)
+		T.eq(SS.Offer(state()), false, "Kunde nach der Geduld weg")
+		noGone(m, "weit weg")
+		T.eq(story(g, pl).sales.serial, o1.serial, "Serial rückt vor")
+		local o2 = customer(g, pl)
+		T.check(o2 ~= nil and o2.serial == o1.serial + 1, "zurück am Kiesplatz: neuer Kunde (Serial + 1)")
+		m = g:Mark()
+		g:Advance(Sale.Patience + 5)
+		T.eq(SS.Offer(state()), false, "zweiter Kunde nach der Geduld weg")
+		T.check(g:HasToast(pl, "keine Lust mehr", m), "vor Ort: Abschieds-Hinweis")
+
+		---------------------------------------------------------------- Kunden-Takt über Lobby-Hin-und-Zurück und Rejoin
+		local o3 = customer(g, pl)
+		T.check(o3 ~= nil, "Kunde")
+		act(T, g, pl, "story_sell", { offer = o3.serial, price = 1 }, "ok", "Verkauf")
+		T.check(story(g, pl).sales.nextAt >= g:Now() + 40, "sales.nextAt ≈ +45 s")
+		act(T, g, pl, "lobby_return", {}, "ok")
+		T.eq(g:Session(pl).mode, "lobby", "Lobby")
+		act(T, g, pl, "lobby_go", {}, "ok")
+		T.eq(g:Session(pl).mode, "openworld", "wieder Open World")
+		local st = cityStation(g, "kiesplatz")
+		local arrival = st and st:FindFirstChild("Arrival")
+		g:Teleport(pl, arrival and arrival.WorldPosition or st.Position, arrival and nil or Vector3.new(0, 3, 4))
+		g:Advance(10)
+		T.eq(SS.Offer(state()), false, "Lobby-Hin-und-Zurück: kein früherer Kunde")
+		g:Advance(40)
+		T.check(SS.Offer(state()) ~= false, "nach 45 s kommt der nächste Kunde")
+		local o4 = SS.Offer(state())
+		act(T, g, pl, "story_sell", { offer = o4.serial, price = 1 }, "ok", "zweiter Verkauf")
+		local nextAt = story(g, pl).sales.nextAt
+		g:Leave(pl)
+		g:Advance(1)
+		pl, d = join(g, 6301, "Timo")
+		T.eq(d.games.story.sales.nextAt, nextAt, "nextAt gespeichert und geladen")
+		act(T, g, pl, "lobby_go", {}, "ok")
+		T.eq(g:Session(pl).mode, "openworld", "nach Rejoin Open World")
+		g:Teleport(pl, arrival and arrival.WorldPosition or st.Position, arrival and nil or Vector3.new(0, 3, 4))
+		g:Advance(10)
+		T.eq(SS.Offer(state()), false, "Rejoin: kein früherer Kunde")
+		g:Advance(40)
+		T.check(SS.Offer(state()) ~= false, "nach dem Takt wieder ein Kunde")
+
+		---------------------------------------------------------------- Nebenmissionen: nur gelungene Aktionen zählen
+		local function sideN(id)
+			local e = story(g, pl).side[id]
+			return e and e.n or 0
+		end
+		d.games.press.scrap = 0
+		m = g:Mark()
+		for _ = 1, 3 do
+			act(T, g, pl, "mini_press_exchange", { index = 1 }, "ok", "Tausch ohne Schrott -> Toast")
+		end
+		T.check(g:HasToast(pl, "Nicht genug Schrott", m), "Toast: nicht genug Schrott")
+		T.eq(sideN("s_press"), 0, "abgelehnter Tausch zählt nicht")
+		d.games.press.scrap = MC.ScrapExchangePackages[1] * 2
+		act(T, g, pl, "mini_press_exchange", { index = 1 }, "ok", "echter Tausch")
+		T.eq(sideN("s_press"), 1, "gelungener Tausch zählt")
+		act(T, g, pl, "mini_press_exchange", { index = 1 }, "ok", "zweiter echter Tausch")
+		T.eq(sideN("s_press"), 2, "zwei Tauschgeschäfte")
+		local sideBefore = H.Copy(story(g, pl).side)
+		m = g:Mark()
+		act(T, g, pl, "mini_carwash", {}, "ok", "Waschstraße ohne Auto -> Toast")
+		act(T, g, pl, "mini_auction_bid", { lot = 987654, amount = 1 }, "ok", "Gebot auf ein Los, das es nicht gibt -> Toast")
+		T.eq(#g:Notices(pl, "mission", m), 0, "abgelehnte Aktionen: kein Missions-Hinweis")
+		T.check(H.DeepEqual(story(g, pl).side, sideBefore), "abgelehnte Aktionen ändern keine Nebenmission")
+		-- Spielhalle: sofort beendete Runde (abgebrochen, 0 Punkte) zählt nicht
+		m = g:Mark()
+		act(T, g, pl, "mini_arcade_start", { game = "arcade_1" }, "ok", "Runde starten")
+		local rounds = g:Notices(pl, "arcade_round", m)
+		T.check(#rounds >= 1 and rounds[#rounds].token ~= nil, "Rundenpaket")
+		act(T, g, pl, "mini_arcade_finish", { token = rounds[#rounds].token }, "ok", "sofort beenden")
+		local results = g:Notices(pl, "arcade_result", m)
+		T.check(#results == 1 and results[1].aborted == true and results[1].score == 0, "Runde abgebrochen mit 0 Punkten")
+		T.eq(sideN("s_arcade"), 0, "abgebrochene Runde zählt nicht für „Dreimal Spielhalle“")
+
+		---------------------------------------------------------------- Lieferung: Durchfahrt mit Tempo (Segment statt Punktprobe)
+		local car = CR.GrantModel(d, "komet", g:Now())
+		T.check(car ~= nil, "Auto in der Garage")
+		act(T, g, pl, "mini_car_spawn", { id = car.id, at = "workshop" }, "ok", "Auto gespawnt")
+		local model = g:Find("Workspace.PlayerCars.Car_6301")
+		local chassis = model and model:FindFirstChild("Chassis")
+		T.check(chassis ~= nil, "Rumpf des eigenen Autos")
+		local route = g:Find("Workspace.City.Missions.Delivery_1")
+		local start, finish
+		for _, x in ipairs(route:GetChildren()) do
+			if x:IsA("BasePart") and x:GetAttribute("Role") == "start" then
+				start = x
+			elseif x:IsA("BasePart") and x:GetAttribute("Role") == "end" then
+				finish = x
+			end
+		end
+		T.check(start ~= nil and finish ~= nil, "Lieferroute 1")
+		chassis.CFrame = CFrame.new(start.Position + Vector3.new(0, 2, 0))
+		m = g:Mark()
+		g:Advance(1.2)
+		T.check(type(SS.Delivery(state())) == "table", "Lieferung gestartet")
+		T.check(g:HasToast(pl, "Lieferung 1 gestartet", m), "Start-Toast")
+		-- 30 Studs vor dem Ziel (Sprung > MaxStep: nur Punktprobe, nicht im Ziel) …
+		chassis.CFrame = CFrame.new(finish.Position + Vector3.new(-30, 2, 0))
+		g:Advance(0.6)
+		T.check(type(SS.Delivery(state())) == "table", "30 Studs vor dem Ziel: noch unterwegs")
+		-- … und in einem Tick 60 Studs weiter: die Strecke führt durch das Zielfeld
+		chassis.CFrame = CFrame.new(finish.Position + Vector3.new(30, 2, 0))
+		g:Advance(0.6)
+		T.eq(SS.Delivery(state()), false, "Durchfahrt erkannt: Lieferung abgeliefert")
+		T.check(g:HasToast(pl, "abgeliefert", m), "Ziel-Toast")
+		T.eq(sideN("s_delivery"), 1, "Lieferung gezählt")
+		local dn = g:Notices(pl, "story", m)
+		T.check(dn[#dn] and dn[#dn].event == "delivery" and dn[#dn].state == "done", "mini_notice delivery done")
+
+		---------------------------------------------------------------- Baustelle: kein Snapshot je Sekunde
+		MR.AddMoney(d, 100000)
+		act(T, g, pl, "ow_build", { typ = "autohaus" }, "ok", "Autohaus bauen (Baustelle 10 Min.)")
+		T.check(g:MiniShared("OWRules").InProgress(d, "autohaus"), "Baustelle läuft")
+		g:Advance(1.1)
+		m = g:Mark()
+		g:Advance(12)
+		-- Leichte Produktions-Snapshots (Presse, 1×/s) sind normal; die Baustelle darf keinen VOLLEN Snapshot je Sekunde
+		-- erzwingen (voll = mit story.missions/Katalog; vorher: ms.dirty jede Sekunde über OWService.Tick)
+		local full, light = 0, 0
+		for _, snap in ipairs(g:Events(pl, "mini", m)) do
+			if type(snap) == "table" and type(snap.story) == "table" and snap.story.missions ~= nil then
+				full += 1
+			else
+				light += 1
+			end
+		end
+		T.check(full <= 3, "Baustelle: höchstens 3 volle Snapshots in 12 s statt einem je Sekunde (" .. tostring(full) .. " voll, " .. tostring(light) .. " leicht)")
+		T.check(g:MiniSnapshot(pl).ow.buildings.autohaus.remaining > 0, "letzter Snapshot kennt die Restzeit (Client zählt lokal weiter)")
+		noErrors(T, g, "Regressionen")
 	end },
 }

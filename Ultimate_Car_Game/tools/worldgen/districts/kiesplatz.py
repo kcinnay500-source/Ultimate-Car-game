@@ -9,7 +9,8 @@ Aufbau (alle Oberseiten auf dem Höhen-Stapel CITY_SPEC §1.2: Kies -1.0, Stellf
     Huette                   Verkaufshütte 14 x 12 (Boden 0), Fenster nach Osten (Station kiesplatz am Fenster),
                              Dachschild "KIESPLATZ · GEBRAUCHTWAGEN" (nach Norden, zur Einfahrt), Lampe
     Spots.Spot_1..3          Part (Stellfläche 10 x 0.1 x 18, Oberseite -0.9, Attribut Spot=n) + Lite-Auto darauf
-    Preistafel               Tafel mit SurfaceGui "PriceBoard" und TextLabels Line1..3 (Server/Client schreiben)
+    Preistafel               Tafel mit SurfaceGui "PriceBoard" und TextLabels Line1..3: Legende "n · günstig/fair/teuer";
+                             StoryUI (Client) schreibt die Preise des aktuellen Kunden hinein ("n · 3.240 Cr")
     Leitlinie                Farbleitlinie (Sand-Ocker, Neon) von der Tankstellen-Ausfahrt zur Hütte
     Deko                     Pylonen, Reifenstapel, Bank, Hoflaternen (2 Lichter)
   City.Animated.Kiesplatz
@@ -216,8 +217,8 @@ def build_price_board(dm, lib):
                      collide=False)
     gui = lib.surface_text(plate, None, face="Back", name="PriceBoard", canvas=(320, 160))
     lib.text_label(gui, "ANGEBOTE", AMBER, "GothamBlack", "Title", None, (0.9, 0.2), (0.05, 0.03))
-    for k in range(3):
-        lib.text_label(gui, "%d · – Credits" % (k + 1), WHITE, "GothamBold", "Line%d" % (k + 1), None, (0.9, 0.22),
+    for k, label in enumerate(("günstig", "fair", "teuer")):
+        lib.text_label(gui, "%d · %s" % (k + 1, label), WHITE, "GothamBold", "Line%d" % (k + 1), None, (0.9, 0.22),
                        (0.05, 0.26 + k * 0.24))
     return m
 

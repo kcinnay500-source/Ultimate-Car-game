@@ -1598,7 +1598,8 @@ def mission_checks(city, parts, errors, warns, info):
 
 
 def kiesplatz_checks(city, errors, warns, info):
-    """Kiesplatz (districts/kiesplatz.py): Spots mit Auto, NPC-Kunden unter Animated, Preistafel, Station/Ankunft."""
+    """Kiesplatz (districts/kiesplatz.py): Spots mit Auto, NPC-Kunden unter Animated, Preistafel (Line1..3 mit der
+    Legende günstig/fair/teuer; StoryUI schreibt die Kundenpreise hinein), Station/Ankunft."""
     districts = child(city, "Districts")
     dm = child(districts, "Kiesplatz") if districts is not None else None
     if dm is None:
@@ -1628,6 +1629,11 @@ def kiesplatz_checks(city, errors, warns, info):
     labels = {name_of(x) for x in board.iter("Item") if x.get("class") == "TextLabel"} if board is not None else set()
     if {"Line1", "Line2", "Line3"} - labels:
         errors.append("Kiesplatz: SurfaceGui PriceBoard mit TextLabels Line1..3 fehlt")
+    elif board is not None:
+        texts = {name_of(x): get_prop(x, "Text") for x in board.iter("Item") if x.get("class") == "TextLabel"}
+        for n, word in ((1, "günstig"), (2, "fair"), (3, "teuer")):
+            if word not in str(texts.get("Line%d" % n) or ""):
+                errors.append("Kiesplatz: PriceBoard.Line%d sollte die Legende „%s“ zeigen (kein Platzhalter)" % (n, word))
     st = child(child(city, "Stations"), "kiesplatz")
     if st is None or get_attrs(st).get("MiniTab") != "story":
         errors.append("Station kiesplatz mit MiniTab=story fehlt")

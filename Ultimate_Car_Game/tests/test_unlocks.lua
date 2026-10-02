@@ -40,7 +40,7 @@ return {
 			["feature:press"] = 2, ["feature:scrapyard"] = 3, ["feature:dealer"] = 3, ["feature:quiz"] = 4, ["feature:parking"] = 5,
 			["feature:tuning"] = 6, ["feature:track"] = 8, ["feature:carwash"] = 8, ["feature:arcade"] = 10, ["feature:auction"] = 12,
 			["auction:player"] = 20, ["story:2"] = 5, ["story:3"] = 15, ["story:4"] = 30, ["story:5"] = 50,
-			["building:autohaus"] = 10, ["building:schrottplatz"] = 18, ["building:produktion"] = 35,
+			["building:autohaus"] = 10, ["building:schrottplatz"] = 18, ["building:produktion"] = 30,
 			["car:komet"] = 3, ["car:komet_s2"] = 8, ["car:nord"] = 14, ["car:komet_urban"] = 22, ["car:atlas"] = 32,
 			["car:vektor"] = 45, ["car:vektor_gtx"] = 58, ["car:aureon"] = 72, ["car:elys"] = 90,
 			["car:komet_rally"] = 10, ["car:nord_classic"] = 18, ["car:vektor_gold"] = 50, ["car:aureon_nero"] = 78, ["car:elys_proto"] = 95,
@@ -488,7 +488,7 @@ return {
 		T.eq(d.games.meta.firstSeen, NOW, "NaN ignoriert")
 	end },
 
-	{ "GameConfig: Places 0, Zonen, Party, Tutorial (10 Schritte, bekannte Ziele/Ereignisse), Hinweise (≥ 12, gültige Auslöser), Platzhalter leer", function(T, H)
+	{ "GameConfig: Places 0, Zonen, Party, Tutorial (11 Schritte, bekannte Ziele/Ereignisse), Hinweise (≥ 12, gültige Auslöser), Platzhalter leer", function(T, H)
 		local g, GC, U = modules(H)
 		local MiniRules = g:MiniShared("MiniRules")
 		for _, k in ipairs({ "lobby", "openworld", "tycoon" }) do
@@ -507,13 +507,13 @@ return {
 		T.eq(GC.Party.CodeLength, 4, "Code 4 Zeichen")
 		T.check(GC.Party.InviteSeconds > 0 and GC.Party.TravelOfferSeconds > 0, "Angebotsdauern")
 		T.check(GC.Party.CodeAlphabet:find("[IO01]") == nil, "Alphabet ohne I, O, 0, 1")
-		T.eq(#GC.Tutorial.Steps, 10, "10 Schritte")
-		T.eq(GC.Tutorial.Count, 10, "Count")
+		T.eq(#GC.Tutorial.Steps, 11, "11 Schritte (Meilenstein 7: Schritt 11 Kiesplatz)")
+		T.eq(GC.Tutorial.Count, 11, "Count")
 		T.eq(GC.Tutorial.Reward.credits, 500, "500 Credits")
 		T.eq(GC.Tutorial.Reward.xp, 60, "60 XP")
 		T.eq(GC.XP.Tutorial, GC.Tutorial.Reward.xp, "XP-Regler passt")
 		local plotStations = { home = true, workshop = true, parts = true, upgrades = true, tools = true, shop = true }
-		local cityStations = { map = true, dealer = true, goals = true }
+		local cityStations = { map = true, dealer = true, goals = true, kiesplatz = true }
 		local ids, kinds = {}, {}
 		for _, k in ipairs(GC.Tutorial.EventKinds) do
 			kinds[k] = true

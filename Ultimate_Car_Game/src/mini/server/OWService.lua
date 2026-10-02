@@ -5,13 +5,16 @@
 -- Schnittstelle für MiniService:
 --   Register(Actions, api)           ow_build {typ}, ow_collect {typ}, ow_passive {on}
 --   Init(ctx)                        ctx aus MiniService.Init (now, getSession)
---   OnJoin(ms, d, now)               d.games.ow sicherstellen, fertige Bauten verbuchen (offline), Modelle aufbauen
---   Tick(ms, d, now) -> changed      1×/s: Settle (fertig -> Modell tauschen + mini_notice ow_ready), Countdown der
---                                    Baustelle, Snapshot höchstens 1×/s solange eine Baustelle läuft
+--   OnJoin(ms, d, now)               d.games.ow sicherstellen, offline fertig gewordene Bauten verbuchen (Settle: Modell als
+--                                    Stufe, mini_notice ow_ready + Toast – OWRules.Load hebt built nicht selbst), Modelle aufbauen
+--   Tick(ms, d, now) -> changed      alle 0,5 s: Settle (fertig -> Modell tauschen + mini_notice ow_ready), Countdown der
+--                                    Baustelle (SurfaceGui, 1×/s). Snapshot nur bei Änderung (ow_build/ow_ready); den
+--                                    Countdown zählt BuildingsUI lokal aus readyAt/remaining weiter
 --   OnLeave(ms)                      Modelle abbauen (das Grundstück verschwindet ohnehin mit World.Remove)
 --   OnCharacter/OnMode               nicht nötig (das Grundstück existiert in jedem Place/Modus)
 --   SnapshotFields(ms, d, now, full) { ow = { buildings { [typ] = { stage, built, readyAt, remaining, building, yield,
 --                                    effect, next { stage, cost, seconds, level, ok, reason }, perk } }, passive, perks, capHours } }
+--   Flush(ms)                        Hinweise aus OnJoin (ow_ready vor 'hello') nachreichen – MiniService ruft es nach 'hello'
 --   IsPassive(d)                     Passiv-Modus (für den Integrator: Missionen/Story/Auktionen blocken)
 --   BlockIfPassive(ms, d, now)       true + gedrosselter deutscher Hinweis, wenn der Spieler im Passiv-Modus ist
 -- Welt: Grundstück workspace.PlayerWorkshops.Plot_<UserId> (World.Create); Anker Plot.OWAnchors.<typ> (unsichtbare
@@ -31,13 +34,12 @@ local OWService = {}
 
 local OW = GameConfig.OW
 local COUNTDOWN_INTERVAL = OW.CountdownInterval or 1
-local SNAPSHOT_INTERVAL = OW.SnapshotInterval or 1
 local TOAST_THROTTLE = OW.ReadyToastSeconds or 2
 local PASSIVE_TOAST_SECONDS = 3
 local FOLDER_NAME = "OWBuildings"
 
 export type Site = { typ: string, model: Instance?, stage: number, isSite: boolean, labelAt: number }
-export type Session = { ms: any, sites: { [string]: Site }, warned: boolean?, snapAt: number, toastAt: { [string]: number } }
+export type Session = { ms: any, sites: { [string]: Site }, warned: boolean?, toastAt: { [string]: number } }
 
 OWService.Sessions = setmetatable({}, { __mode = "k" }) :: { [Player]: Session }
 OWService.PassiveHint = OW.PassiveHint or "Du bist im Passiv-Modus: nur zuschauen und handeln."
@@ -89,9 +91,27 @@ local function toast(ms: any, text: string?)
 	end
 end
 
+-- Hinweise vor dem ersten 'hello' (OnJoin: offline fertig gewordene Bauten) warten, bis der Client zuhört (Flush)
 local function notice(ms: any, kind: string, data: { [string]: any })
-	if api and ms then
-		api.notice(ms, kind, data)
+	if not api or not ms then
+		return
+	end
+	if ms.greeted == false then
+		ms.owNotices = ms.owNotices or {}
+		table.insert(ms.owNotices, { kind = kind, data = data })
+		return
+	end
+	api.notice(ms, kind, data)
+end
+
+function OWService.Flush(ms: any)
+	local list = ms and ms.owNotices
+	if not api or type(list) ~= "table" or #list == 0 or ms.greeted == false then
+		return
+	end
+	ms.owNotices = {}
+	for _, n in ipairs(list) do
+		api.notice(ms, n.kind, n.data)
 	end
 end
 
@@ -145,7 +165,7 @@ local function sessionOf(ms: any): Session?
 	end
 	local s = OWService.Sessions[ms.player]
 	if not s or s.ms ~= ms then
-		s = { ms = ms, sites = {}, snapAt = -math.huge, toastAt = {} }
+		s = { ms = ms, sites = {}, toastAt = {} }
 		OWService.Sessions[ms.player] = s
 	end
 	return s
@@ -225,11 +245,12 @@ local function setCountdown(model: Instance?, text: string)
 	end
 end
 
--- Modell (Stufe oder Baustelle) am Anker aufbauen; tolerant gegenüber fehlenden Ankern/Vorlagen
-local function place(s: Session, typ: string, stage: number, isSite: boolean)
+-- Modell (Stufe oder Baustelle) am Anker aufbauen; tolerant gegenüber fehlenden Ankern/Vorlagen.
+-- Rückgabe: true, wenn ein Modell neu aufgebaut wurde (sonst steht es schon oder Anker/Vorlage fehlen)
+local function place(s: Session, typ: string, stage: number, isSite: boolean): boolean
 	local site = s.sites[typ]
 	if site and site.model and site.model.Parent and site.stage == stage and site.isSite == isSite then
-		return
+		return false
 	end
 	if not site then
 		site = { typ = typ, model = nil, stage = 0, isSite = false, labelAt = -math.huge }
@@ -266,6 +287,7 @@ local function place(s: Session, typ: string, stage: number, isSite: boolean)
 	if not ok then
 		warn("[Gebäude] Aufbau " .. typ .. ": " .. tostring(err))
 	end
+	return site.model ~= nil
 end
 
 -- Alle Gebäude eines Spielers nach dem Profil aufbauen (Stufe fertig -> Stufenmodell; Bau läuft -> Baustelle)
@@ -504,7 +526,8 @@ function OWService.OnJoin(ms: any, d: any, t: number?)
 	t = finite(t) and t or now()
 	local s = sessionOf(ms)
 	OWRules.Ensure(d)
-	-- Offline fertig gewordene Bauten: Modell direkt als Stufe, Hinweis beim ersten Snapshot
+	-- Offline fertig gewordene Bauten: Settle verbucht sie jetzt (built = stage) und meldet ow_ready + Toast (vor 'hello'
+	-- wartet der Hinweis in der Warteschlange von MiniService); das Modell steht danach als Stufe
 	settle(ms, s, d, t)
 	if s then
 		rebuild(s, d, t)
@@ -531,16 +554,16 @@ function OWService.Tick(ms: any, d: any, t: number?): boolean
 			building = true
 			local site = s.sites[typ]
 			if not site or not site.model or not site.model.Parent then
-				place(s, typ, e.stage, true) -- Grundstück kam nach OnJoin (World.Create) oder Modell ging verloren
+				-- Grundstück kam nach OnJoin (World.Create) oder Modell ging verloren; ohne Anker/Vorlage bleibt es still
+				if place(s, typ, e.stage, true) then
+					changed = true
+				end
 			end
 		end
 	end
 	if building then
+		-- nur die Beschriftung in der Welt; kein Snapshot je Sekunde (der Client zählt remaining lokal weiter)
 		updateCountdowns(s, d, t)
-		if t - s.snapAt >= SNAPSHOT_INTERVAL then
-			s.snapAt = t
-			changed = true
-		end
 	end
 	return changed
 end

@@ -867,6 +867,7 @@ function CarService.Register(Actions, a)
 		if ok then
 			toast(cs, CarCatalog.Tune[data.part].name .. " Stufe " .. res .. " eingebaut (−" .. credits(cost) .. ").")
 			refreshSpawned(cs, d, data.id)
+			return true -- eingebaut: zählt für Nebenmissionen ("action:mini_car_tune")
 		elseif res then
 			toast(cs, res)
 		end
@@ -944,6 +945,7 @@ function CarService.Register(Actions, a)
 		VehicleFactory.Sparkle(v.model)
 		v.model:SetAttribute("ShineUntil", cs.shine[car.id])
 		toast(cs, "Glanzwäsche fertig! Dein " .. CarCatalog.Model(car.model).name .. " strahlt (−" .. credits(w.price) .. ").")
+		return true -- gewaschen: zählt für Nebenmissionen ("action:mini_carwash")
 	end)
 
 	Actions.Register("mini_track_start", function(ms, _, d, t)
