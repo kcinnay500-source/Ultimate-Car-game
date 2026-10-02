@@ -247,6 +247,16 @@ return {
 		T.check(g:HasToast(pl, "gekauft", m), "Toast gekauft")
 		T.eq(labelText(pad1, "Price"), "Gekauft", "Label Gekauft")
 		T.check(stage1:FindFirstChild("Producer_1") ~= nil, "Produzent 1 sichtbar")
+		-- Lage: der Produzent steht auf dem Grundstück (mit der Stufe versetzt), nicht am Ursprung der Vorlage
+		do
+			local producer = stage1:FindFirstChild("Producer_1")
+			local plotState = g:MiniServer("TycoonService").Plots[1]
+			local anchor = plotState and plotState.anchor
+			local apos = anchor and (anchor:IsA("BasePart") and anchor.Position or anchor:GetPivot().Position) or nil
+			local ppos = producer and producer:GetPivot().Position or nil
+			T.check(apos ~= nil and ppos ~= nil and (Vector3.new(ppos.X, 0, ppos.Z) - Vector3.new(apos.X, 0, apos.Z)).Magnitude <= 40,
+				"Produzent 1 auf dem Grundstück (≤ 40 Studs vom Anker): " .. tostring(ppos) .. " / " .. tostring(apos))
+		end
 		-- Aktion tycoon_buy: fremde Id / falsche Stufe
 		m = g:Mark()
 		act(T, g, pl, "tycoon_buy", { id = "autohaus_s1_u1" }, "tycoon_buy fremdes Gebäude")

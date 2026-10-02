@@ -35,7 +35,7 @@ return {
 		g:Seed(602, { version = 2, data = { version = 2, money = 99, level = 12, games = games }, receipts = {},
 			lock = { token = "anderer-server", expires = g:Now() + 170 } })
 		local player = g:Join(602, { name = "Rosa" })
-		g:Advance(1)
+		g:Advance(16) -- Profiles.Load wartet bis zu ProfileLockRetries Sekunden auf die fremde Sperre
 		T.check(g:Session(player) ~= nil, "Sitzung trotz Sperre")
 		T.eq(g:Profile(player).writable, false, "nicht beschreibbar")
 		g:D(player).level = 12 -- Sitzung unter fremder Sperre spielt mit Ersatzdaten: Presse ab Level 2 (GameConfig.Unlocks)
@@ -55,6 +55,23 @@ return {
 		T.eq(g:Profile(p3).writable, true, "verwaiste Sperre übernommen")
 		T.eq(g:D(p3).money, 55, "Daten geladen")
 		T.check(g:Record(603).lock.token ~= "abgestuerzt", "Sperre übernommen")
+		noErrors(T, g)
+	end },
+
+	{ "Ortswechsel: Sperre des alten Servers wird kurz danach frei -> Laden wartet und die Sitzung speichert (nicht temporär)", function(T, H)
+		local g = H.Garage({ level = 12 })
+		g:Seed(604, { version = 2, data = { version = 2, money = 321, level = 5 }, receipts = {},
+			lock = { token = "alter-server", expires = g:Now() + 170 } })
+		local player = g:Join(604, { name = "Tim" })
+		g:Advance(3)
+		T.eq(g:Session(player), nil, "noch keine Sitzung, solange die fremde Sperre gilt")
+		-- alter Server speichert beim Verlassen und gibt die Sperre frei
+		g:Record(604).lock = nil
+		g:Advance(3)
+		T.check(g:Session(player) ~= nil, "Sitzung nach freigegebener Sperre")
+		T.eq(g:Profile(player).writable, true, "beschreibbar (keine temporäre Sitzung)")
+		T.eq(g:D(player).money, 321, "Daten geladen")
+		T.check(g:Record(604).lock and g:Record(604).lock.token ~= "alter-server", "eigene Sperre gesetzt")
 		noErrors(T, g)
 	end },
 

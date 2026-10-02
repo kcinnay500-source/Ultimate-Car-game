@@ -6,6 +6,7 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared")
 local Config = require(Shared:WaitForChild("Config"))
 local Rules = require(Shared:WaitForChild("Rules"))
 local MiniRules = require(Shared:WaitForChild("Mini"):WaitForChild("MiniRules")) -- 3.0: Speicherschutz
+local GameConfig = require(Shared:WaitForChild("Mini"):WaitForChild("GameConfig")) -- 3.0: Sperre beim Ortswechsel abwarten
 local Profiles = {}
 local store
 local enabled = Config.EnableSaving and (not RunService:IsStudio() or Config.SaveInStudio)
@@ -22,7 +23,10 @@ function Profiles.Load(player)
     if not store then profile.status = "Speicher nicht erreichbar"; return profile end
     profile.key = "Player_" .. player.UserId
     profile.token = HttpService:GenerateGUID(false)
-    for attempt = 1, 3 do
+    local lockTries = 0 -- 3.0: Sperre einer anderen Sitzung (Ortswechsel: der alte Server gibt sie gleich frei)
+    local attempt = 0
+    while attempt < 3 do
+        attempt = attempt + 1
         local blocked = false
         local ok, result = pcall(function()
             return store:UpdateAsync(profile.key, function(old)
@@ -45,10 +49,17 @@ function Profiles.Load(player)
             return profile
         end
         if blocked then
-            profile.status = "Andere Sitzung aktiv · temporär"
-            return profile
-        end
-        if attempt < 3 then task.wait(attempt) end
+            -- 3.0: nach einem Teleport hält der alte Server die Sperre noch, bis sein PlayerRemoving gespeichert hat:
+            -- warten und erneut versuchen, statt sofort eine temporäre Sitzung (alles Verdiente ginge verloren)
+            lockTries = lockTries + 1
+            if lockTries > GameConfig.ProfileLockRetries or not player.Parent then
+                profile.status = "Andere Sitzung aktiv · temporär"
+                return profile
+            end
+            attempt = attempt - 1 -- 3.0: Wartezeit auf die Sperre zählt nicht als Ladefehler
+            profile.status = "Warte auf andere Sitzung …"
+            task.wait(GameConfig.ProfileLockRetryWait)
+        elseif attempt < 3 then task.wait(attempt) end
     end
     profile.status = "Laden fehlgeschlagen · temporär"
     return profile -- Never overwrite a profile that failed to load.

@@ -264,9 +264,21 @@ function LobbyUI.Render(s)
 	local target = choice or ((mode ~= "lobby") and mode) or "openworld"
 	local party = type(s.party) == "table" and s.party or nil
 	local isLeader = party == nil or party.isLeader == true
-	refs.goButton.Text = "Los geht's: " .. modeTitle(target)
-	UI.SetEnabled(refs.goButton, isLeader and target ~= mode, T.green)
-	if not isLeader then
+	-- Mitglied, dessen Leiter schon in Open World/Tycoon ist: „Los geht's“ bringt es zum Leiter (Server prüft)
+	local leaderMode = party and type(party.leaderMode) == "string" and party.leaderMode or "lobby"
+	local toLeader = not isLeader and leaderMode ~= "lobby" and leaderMode ~= mode
+	-- Leiter am Ziel, Mitglieder woanders: „Los geht's“ holt sie nach
+	local fetch = isLeader and party ~= nil and party.away == true and target == mode and mode ~= "lobby"
+	if toLeader then
+		target = leaderMode
+	end
+	refs.goButton.Text = fetch and "Party zu mir holen" or ("Los geht's: " .. modeTitle(target))
+	UI.SetEnabled(refs.goButton, (isLeader and (target ~= mode or fetch)) or toLeader, T.green)
+	if toLeader then
+		refs.goHint.Text = "Dein Party-Leiter ist schon dort – du reist zu ihm."
+	elseif fetch then
+		refs.goHint.Text = "Deine Party ist noch woanders. Hol sie zu dir!"
+	elseif not isLeader then
 		refs.goHint.Text = "Nur der Party-Leiter startet die Reise – du reist automatisch mit."
 	elseif target == mode then
 		refs.goHint.Text = "Du bist schon hier. Wähle einen anderen Modus."

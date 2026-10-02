@@ -214,8 +214,9 @@ return {
 		local money = d.money
 		local mStart = g:Mark()
 		local n1 = sell(T, g, pl, 1)
-		T.check(n1 ~= nil and n1.sold == true and n1.tier == 1 and n1.credits == 40, "Stufe 1 verkauft: +40 Cr Reingewinn")
-		T.eq(d.money - money, 40, "Credits nur über den Server (Reingewinn)")
+		local tier1 = g:MiniShared("GameConfig").Story.Sale.Tiers[1].profit -- Level 1: Faktor 1
+		T.check(n1 ~= nil and n1.sold == true and n1.tier == 1 and n1.credits == tier1, "Stufe 1 verkauft: +" .. tier1 .. " Cr Reingewinn")
+		T.eq(d.money - money, tier1, "Credits nur über den Server (Reingewinn)")
 		T.eq(story(g, pl).sales.n, 1, "sales.n 1")
 		T.eq(story(g, pl).active.progress, 1, "c1_m1 Fortschritt 1")
 		-- Stufe 3 geplatzt (Wurf ≥ 0,5): kein Geld, kein Fortschritt (Stand unmittelbar vor dem Versuch, siehe sell)
@@ -227,12 +228,12 @@ return {
 		-- Stufe 2 und Stufe 3 erfolgreich (Gewinn je Stufe × Level-Faktor, beim Angebot festgelegt: offer.tiers[tier].profit);
 		-- unpassende Kunden dazwischen wurden günstig verkauft, darum zählt der Fortschritt relativ und mit Deckel 3
 		local n2, o2, b2 = sell(T, g, pl, 2, false)
-		T.check(n2 ~= nil and n2.sold == true and n2.credits == o2.tiers[2].profit and n2.credits >= 75, "Stufe 2 verkauft: +" .. tostring(n2 and n2.credits) .. " Cr (Gewinn der Stufe)")
+		T.check(n2 ~= nil and n2.sold == true and n2.credits == o2.tiers[2].profit and n2.credits >= g:MiniShared("GameConfig").Story.Sale.Tiers[2].profit, "Stufe 2 verkauft: +" .. tostring(n2 and n2.credits) .. " Cr (Gewinn der Stufe)")
 		T.check(d.money - b2.money >= (n2 and n2.credits or 1e9), "Stufe 2: Gewinn gutgeschrieben (dazu evtl. Level-Bonus)")
 		local n3, o3, b3 = sell(T, g, pl, 3, false)
-		T.check(n3 ~= nil and n3.sold == true and n3.credits == o3.tiers[3].profit and n3.credits >= 130, "Stufe 3 verkauft: +" .. tostring(n3 and n3.credits) .. " Cr (Gewinn der Stufe)")
+		T.check(n3 ~= nil and n3.sold == true and n3.credits == o3.tiers[3].profit and n3.credits >= g:MiniShared("GameConfig").Story.Sale.Tiers[3].profit, "Stufe 3 verkauft: +" .. tostring(n3 and n3.credits) .. " Cr (Gewinn der Stufe)")
 		T.check(d.money - b3.money >= (n3 and n3.credits or 1e9), "Stufe 3: Gewinn gutgeschrieben (dazu evtl. Level-Bonus)")
-		T.near(o3.tiers[3].profit, math.floor(130 * SR.LevelFactor(d.level) + 0.5), 1, "Gewinn = 130 × Level-Faktor")
+		T.near(o3.tiers[3].profit, math.floor(g:MiniShared("GameConfig").Story.Sale.Tiers[3].profit * SR.LevelFactor(d.level) + 0.5), 1, "Gewinn = Stufe-3-Gewinn × Level-Faktor")
 		T.check(story(g, pl).sales.best >= 1, "Bestpreis-Verkäufe gezählt")
 		T.eq(story(g, pl).active.progress, 3, "c1_m1 3/3")
 		local done1 = missionNotice(g, pl, "c1_m1", mStart)

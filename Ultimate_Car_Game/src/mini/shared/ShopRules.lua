@@ -494,6 +494,18 @@ function ShopRules.PromptBlock(d: any, p: any): string?
 			return string.format(TEXT.partlyOwned, have, total, table.concat(names, ", "))
 		end
 	end
+	-- DLC-Autos erst ab ihrem Level (Vertrag §9, kein Pay-to-Win): derselbe Riegel wie beim Credits-Kauf. Nur vor dem
+	-- Prompt – eine schon bezahlte Quittung (ApplyReceipt) geht nie verloren.
+	local needLevel = 0
+	for _, model in ipairs(p.grants.cars or {}) do
+		local m = ShopRules.DlcModel(model)
+		if m and finite(m.level) and m.level > needLevel then
+			needLevel = m.level
+		end
+	end
+	if needLevel > 0 and level(d) < needLevel then
+		return string.format(TEXT.level, needLevel)
+	end
 	local newCars = 0
 	for _, model in ipairs(p.grants.cars or {}) do
 		if ShopRules.DlcModel(model) then

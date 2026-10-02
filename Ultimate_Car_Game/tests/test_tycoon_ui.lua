@@ -917,6 +917,42 @@ return {
 		end)
 		g:Advance(0.2)
 		T.eq(mod.Counts().kinds.stamp, 2, "später Stempel erkannt")
+		-- worldgen-Aufbau (tycoon_templates.stamp): der Stempel selbst ist das PrimaryPart. Er darf nicht wegdriften
+		-- (früher: Bezug = GetPivot = Stempel -> jedes Bild tiefer, nach einem Takt durch den Boden)
+		local wgMover
+		g:InClient(p, function()
+			local press = Instance.new("Model")
+			press.Name = "Karosseriepresse"
+			press:SetAttribute("TycoonAnim", "stamp")
+			press:SetAttribute("Stroke", 2)
+			press:SetAttribute("Period", 2.6)
+			local amboss = Instance.new("Part")
+			amboss.Name = "Amboss"
+			amboss.Anchored = true
+			amboss.Size = Vector3.new(6, 1.6, 4)
+			amboss.CFrame = CFrame.new(30, 0.8, 760)
+			amboss.Parent = press
+			wgMover = Instance.new("Part")
+			wgMover.Name = "Stempel"
+			wgMover.Anchored = true
+			wgMover:SetAttribute("Mover", true)
+			wgMover.Size = Vector3.new(5, 4, 3)
+			wgMover.CFrame = CFrame.new(30, 7, 760)
+			wgMover.Parent = press
+			press.PrimaryPart = wgMover
+			press.Parent = slot
+		end)
+		g:Advance(0.05)
+		local yRest = 7
+		local lowest, highest = math.huge, -math.huge
+		for _ = 1, 40 do
+			g:Advance(0.1)
+			lowest = math.min(lowest, wgMover.Position.Y)
+			highest = math.max(highest, wgMover.Position.Y)
+		end
+		T.check(lowest >= yRest - 2 - 0.05, "Stempel (PrimaryPart) sinkt höchstens um den Hub: tiefster Y " .. tostring(lowest))
+		T.check(highest <= yRest + 0.05, "Stempel nie über der Ruhelage: höchster Y " .. tostring(highest))
+		T.check(highest >= yRest - 0.3, "Stempel kommt wieder hoch: höchster Y " .. tostring(highest))
 		T.eq(g:ErrorText(), "", "keine Fehler")
 	end },
 

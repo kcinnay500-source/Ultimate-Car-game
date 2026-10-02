@@ -805,4 +805,51 @@ return {
 		T.check(mod.CardVisible(), "nach dem Schließen wieder da")
 		T.check(#g:Errors() == 0, "keine Clientfehler: " .. g:ErrorText())
 	end },
+	{ "TutorialUI: Karte rückt über die 2.4.0-Fahrzeugknöpfe (E/F/H), wenn sie sich überschneiden; Endkarte nach Neustart ohne Belohnungs-Versprechen", function(T, H)
+		local g, p = startClient(H, { viewport = Vector2.new(1000, 700) })
+		local rec = recorder(T)
+		local mod = buildUI(g, p, rec)
+		local gui = p.PlayerGui:FindFirstChild("Tutorial")
+		local d = newProfile(g)
+		g:InClient(p, function()
+			mod.Render(tutorialSnapshot(g, d))
+			mod.Step(0.3)
+		end)
+		local cardFrame = byName(gui, "Card")
+		T.eq(cardFrame.Position.Y.Offset, -mod.CardBottom, "ohne Fahrzeugknöpfe: Standardlage")
+		-- 2.4.0-Leiste der Fahrzeugknöpfe (GarageClient: 360×126 bei x 12, Unterkante 150 px über dem Rand)
+		local va
+		g:InClient(p, function()
+			local sg = Instance.new("ScreenGui")
+			sg.Name = "GarageUI"
+			sg.Parent = p.PlayerGui
+			va = Instance.new("Frame")
+			va.Name = "VehicleActions"
+			va.Size = UDim2.fromOffset(360, 126)
+			va.Position = UDim2.new(0, 12, 1, -276)
+			va.Visible = true
+			va.Parent = sg
+			mod.Step(0.3)
+		end)
+		T.check(cardFrame.Position.Y.Offset <= -(mod.CardBottom + 126 + 8), "Karte über den Fahrzeugknöpfen: " .. tostring(cardFrame.Position.Y.Offset))
+		local cardBottom = cardFrame.AbsolutePosition.Y + cardFrame.AbsoluteSize.Y
+		T.check(cardBottom <= va.AbsolutePosition.Y + 1, "keine Überdeckung: Karte endet bei " .. tostring(cardBottom) .. ", Knöpfe beginnen bei " .. tostring(va.AbsolutePosition.Y))
+		g:InClient(p, function()
+			va.Visible = false
+			mod.Step(0.3)
+		end)
+		T.eq(cardFrame.Position.Y.Offset, -mod.CardBottom, "Knöpfe weg: Karte zurück")
+		-- Endkarte: erster Abschluss nennt die Belohnung, nach einem Neustart (again = true) nicht
+		local text = byName(gui, "Text")
+		g:InClient(p, function()
+			mod.OnNotice({ kind = "tutorial", step = 11, count = 11, id = "kiesplatz", text = "…", next = false, done = true, skipped = false, active = false, finished = true })
+		end)
+		T.check(text.Text:find("Belohnung", 1, true) ~= nil, "erste Endkarte mit Belohnung")
+		g:Advance(mod.FinishSeconds + 0.5)
+		g:InClient(p, function()
+			mod.OnNotice({ kind = "tutorial", step = 11, count = 11, id = "kiesplatz", text = "…", next = false, done = true, skipped = false, active = false, finished = true, again = true })
+		end)
+		T.check(mod.CardVisible() and text.Text:find("noch einmal geschafft", 1, true) ~= nil and text.Text:find("Belohnung", 1, true) == nil, "Endkarte nach Neustart ohne Belohnung: " .. tostring(text.Text))
+		T.check(#g:Errors() == 0, "keine Clientfehler: " .. g:ErrorText())
+	end },
 }

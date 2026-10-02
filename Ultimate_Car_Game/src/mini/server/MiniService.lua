@@ -52,6 +52,7 @@ local CarService = require(Server:WaitForChild("CarService"))
 local ArcadeService = require(Server:WaitForChild("ArcadeService"))
 local PrestigeService = require(Server:WaitForChild("PrestigeService"))
 local LobbyService = require(Server:WaitForChild("LobbyService"))
+local PlaceRouter = require(Server:WaitForChild("PlaceRouter"))
 local TutorialService = require(Server:WaitForChild("TutorialService"))
 local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenstein 4: Schnelles Spiel
 local OWService = require(Server:WaitForChild("OWService")) -- Meilenstein 6: Open-World-Gebäude, Passiv-Modus
@@ -495,6 +496,88 @@ local function checkMode(ms, d)
 	end
 end
 
+-- Reisen in die Stadt aus Lobby oder Schnellem Spiel (Stadtplan, Autos, Strecke, Waschstraße, 2.4.0-Tablet
+-- „Zum Ziel“/Stationen): ohne Moduswechsel stünde die Figur mit p.mode = "lobby"/"tycoon" in der Open World –
+-- kein Tutorial, kein Kiesplatz-Kunde, Tycoon-Geld liefe weiter. Im all-Place wechselt der Server deshalb zuerst den
+-- Modus (PlaceRouter.Simulate: Modus, lastMode, Ankunft, mini_notice "mode"), danach Tutorial/Tycoon/Story
+-- (checkMode); die Aktion läuft dann normal weiter. In einzelnen Places (Lobby/Tycoon) gibt es die Stadt nicht:
+-- Hinweis, die Aktion entfällt.
+local CITY_ACTIONS = {
+	mini_travel = true,
+	mini_car_spawn = true,
+	mini_car_testdrive = true,
+	mini_track_start = true,
+	mini_carwash = true,
+}
+Mini.CityActions = CITY_ACTIONS
+
+-- mini_travel führt nur dann in die Stadt, wenn das Ziel die eigene Werkstatt oder ein Ankunftspunkt der Stadt ist
+-- (Ankunftspunkte der Lobby/des Tycoon-Geländes bleiben in ihrer Zone, CityService.Travel)
+local function needsOpenWorld(action, clean)
+	if not CITY_ACTIONS[action] then
+		return false
+	end
+	if action ~= "mini_travel" then
+		return true
+	end
+	local key = clean.key
+	if key == "workshop" or key == "home" then
+		return true
+	end
+	local city = workspace:FindFirstChild("City")
+	local arrivals = city and city:FindFirstChild("Arrivals")
+	if arrivals and arrivals:FindFirstChild(key) then
+		return true
+	end
+	-- Ziel nur in Lobby/Tycoon (oder unbekannt: CityService.Travel meldet selbst)
+	return false
+end
+local TEXT_OPENWORLD_ONLY = "Das geht nur in der Open World – reise über die Lobby dorthin („Los geht's: Open World“)."
+
+-- Rückgabe: true, wenn die Aktion weiterlaufen darf (schon in der Open World oder gerade dorthin gewechselt)
+local function ensureOpenWorld(ms, d)
+	local p = ms.p
+	local mode = p.mode
+	if mode ~= "lobby" and mode ~= "tycoon" then
+		return true
+	end
+	if PlaceRouter.PlaceKind() ~= "all" then
+		if ctx then
+			ctx.toast(p, TEXT_OPENWORLD_ONLY)
+		end
+		return false
+	end
+	local ok = PlaceRouter.Simulate(p, "openworld", { single = p.single == true })
+	if not ok then
+		return false -- Zone fehlt in diesem Place (Simulate zeigt den Hinweis)
+	end
+	ms.lobbyChoice = nil
+	ms.arrivalPending = false
+	if ctx then
+		ctx.toast(p, PlaceRouter.ArrivedText("openworld"))
+	end
+	checkMode(ms, d) -- Tycoon verlassen, Tutorial starten, Story/Kiesplatz an
+	ms.dirty = true
+	return true
+end
+
+-- Für GarageServer (2.4.0-Tablet: travel/target): true = weiter, false = abgelehnt (Hinweis schon gezeigt)
+function Mini.EnsureOpenWorld(p)
+	if not ctx or not p or not p.profile or type(p.profile.data) ~= "table" then
+		return true
+	end
+	local ms = stateFor(p)
+	local ok, res = pcall(ensureOpenWorld, ms, p.profile.data)
+	if not ok then
+		warn("[Minispiele] Moduswechsel vor der Reise: " .. tostring(res))
+		return true
+	end
+	if ms.p.mode == "openworld" then
+		flush(ms, now())
+	end
+	return res
+end
+
 -- Abklingzeit je Aktion und Ziel (z. B. je Parkplatz-Feld), statt 0,12 s je Aktionsname
 local function cooledDown(ms, action, clean, t)
 	local cd = MiniNet.Cooldowns[action] or MiniNet.DefaultCooldown
@@ -540,7 +623,7 @@ function Mini.Handles(action)
 	return MiniNet.IsAction(action)
 end
 
--- Rückgabe (für Tests): "ok" | "invalid" | "cooldown" | "duplicate" | "error" | "dropped" | "locked" | "passive"
+-- Rückgabe (für Tests): "ok" | "invalid" | "cooldown" | "duplicate" | "error" | "dropped" | "locked" | "passive" | "mode"
 function Mini.Handle(p, action, args)
 	local schema, handler = MiniNet.Actions[action], Mini.Handlers[action]
 	if not ctx or not schema or not handler then
@@ -574,6 +657,11 @@ function Mini.Handle(p, action, args)
 		return "duplicate"
 	end
 	local d = p.profile.data
+	if needsOpenWorld(action, clean) and not ensureOpenWorld(ms, d) then
+		ms.dirty = true
+		flush(ms, t)
+		return "mode" -- nur in der Open World (einzelner Lobby-/Tycoon-Place), nichts ausgeführt
+	end
 	local money = d.money
 	ms.worldChanged = false
 	local ok, err = pcall(handler, ms, clean, d, t)

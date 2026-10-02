@@ -42,6 +42,7 @@ UI.Tabs = {
 	{ key = "lobby", label = "Lobby" },
 	{ key = "tycoon", label = "Schnelles Spiel" },
 	{ key = "story", label = "Story" },
+	{ key = "map", label = "Stadtplan" }, -- so heißt er im Tutorial („Drück M … Tab „Stadtplan““), gleich sichtbar
 	{ key = "buildings", label = "Gebäude" },
 	{ key = "overview", label = "Übersicht" },
 	{ key = "press", label = "Schrottpresse" },
@@ -58,7 +59,6 @@ UI.Tabs = {
 	{ key = "unlocks", label = "Freischaltungen" },
 	{ key = "prestige", label = "Prestige" },
 	{ key = "leaderboard", label = "Bestenliste" },
-	{ key = "map", label = "Schnellreise" },
 	{ key = "shop", label = "Shop" },
 }
 UI.TabTitles = {
@@ -79,7 +79,7 @@ UI.TabTitles = {
 	parking = "Parkplatz-Chaos",
 	goals = "Ziele und Meilensteine",
 	leaderboard = "Bestenliste",
-	map = "Schnellreise",
+	map = "Stadtplan · Schnellreise",
 	shop = "Shop",
 	auction = "Auktionshaus",
 	arcade = "Spielhalle",

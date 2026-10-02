@@ -191,6 +191,7 @@ local function act(p,action,a)
     if action=="travel" then
         if not C.StationNames[a.key] then return end
         if a.key=="shop" then resetInteraction(p);emit(p,"page","shop");return push(p) end
+        if not Mini.EnsureOpenWorld(p) then return push(p) end -- 3.0: aus Lobby/Tycoon zuerst Moduswechsel (sonst stockt Tutorial/Kiesplatz)
         resetInteraction(p);p.confirm=nil
         moveTo(p,p.world.model.Stations[a.key]);emit(p,"page",a.key);Mini.OnStation(p,a.key);return push(p) -- 3.0: Tablet-Navigation zählt als Stationsbesuch
     end
@@ -204,6 +205,7 @@ local function act(p,action,a)
     if action=="target" then
         local j=selected(p,a.id)
         if a.id and not j then return end
+        if not Mini.EnsureOpenWorld(p) then return push(p) end -- 3.0: aus Lobby/Tycoon zuerst Moduswechsel
         resetInteraction(p);p.confirm=nil
         local _,target=objectiveFor(p,j);if j then p.selected=j.id end
         if a.car and j then target=p.world.cars[j.id].model.DiagnosticPoint end

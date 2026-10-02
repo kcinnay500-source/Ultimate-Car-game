@@ -52,6 +52,7 @@ local hintSerial, unlockSerial, finishSerial = 0, 0, 0
 local sentNextFor = nil -- Schrittnummer, für die der Client schon tutorial_next geschickt hat
 local movedFor = 0
 local finishedUntil = 0
+local finishedAgain = false -- Endkarte nach einem Neustart: die Belohnung gab es schon
 local hintQueue, unlockQueue = {}, {} -- wartende Hinweise/Freischaltungen
 local hintShowing, unlockShowing = false, false
 
@@ -169,6 +170,53 @@ local function buildUnlockCard()
 	unlock.scale.Parent = frame
 end
 
+-- 2.4.0-Fahrzeugknöpfe (E · Arbeiten, F · Hebebühne, H · Motorhaube) unten links: genau die Höhe der Karte. Auf
+-- schmalen Bildschirmen (< ~1184 px) läge die Karte darüber – gerade in den Schritten OBD/Reparatur, die diese
+-- Knöpfe brauchen. Sind sie zu sehen und überschneiden sich waagerecht, rückt die Karte darüber.
+local function vehicleActionsFrame(): GuiObject?
+	local pg = playerGui()
+	local va = pg and pg:FindFirstChild("VehicleActions", true)
+	if not va or not va:IsA("GuiObject") or not va.Visible then
+		return nil
+	end
+	local layer = va:FindFirstAncestorWhichIsA("LayerCollector")
+	if layer and layer.Enabled == false then
+		return nil
+	end
+	return va
+end
+
+function TutorialUI.CardBottomFor(w: number): number
+	local va = vehicleActionsFrame()
+	if not va then
+		return TutorialUI.CardBottom
+	end
+	local cw = math.min(TutorialUI.CardWidth, w - 24)
+	local cardLeft = w / 2 - cw / 2
+	local vaRight = va.AbsolutePosition.X + va.AbsoluteSize.X
+	if va.AbsoluteSize.X > 0 and cardLeft >= vaRight + 8 then
+		return TutorialUI.CardBottom -- breit genug: nebeneinander
+	end
+	local h = va.AbsoluteSize.Y > 0 and va.AbsoluteSize.Y or 126
+	return TutorialUI.CardBottom + h + 8
+end
+
+local function placeCard()
+	if not gui or not card.frame then
+		return
+	end
+	local w = gui.AbsoluteSize.X
+	if w <= 0 then
+		return
+	end
+	local bottom = TutorialUI.CardBottomFor(w)
+	local pos = UDim2.new(0.5, 0, 1, -bottom)
+	if card.frame.Position ~= pos then
+		card.frame.Position = pos
+	end
+end
+TutorialUI.PlaceCard = placeCard
+
 local function layout()
 	if not gui then
 		return
@@ -188,6 +236,7 @@ local function layout()
 	local narrow = w < 480
 	card.skip.Size = UDim2.new(narrow and 0.5 or 0, narrow and -4 or 150, 0, UI.MinTouch)
 	card.next.Size = UDim2.new(narrow and 0.5 or 0, narrow and -4 or 130, 0, UI.MinTouch)
+	placeCard()
 end
 
 function TutorialUI.Build(_page: any, context: any)
@@ -292,11 +341,16 @@ local function renderCard()
 	if not show then
 		return
 	end
+	placeCard() -- über den 2.4.0-Fahrzeugknöpfen, falls die gerade zu sehen sind
 	local count = math.max(1, math.floor(num(view.count, TutorialRules.Count())))
 	local step = math.clamp(math.floor(num(view.step, 1)), 1, count)
 	if TutorialUI.Finished() and not view.active then
 		card.progress.Text = "Tutorial geschafft!"
-		card.text.Text = "Belohnung: " .. tostring(GameConfig.Tutorial.Reward.credits) .. " Credits und " .. tostring(GameConfig.Tutorial.Reward.xp) .. " XP. Viel Spaß!"
+		if finishedAgain then
+			card.text.Text = "Tutorial noch einmal geschafft – viel Spaß!"
+		else
+			card.text.Text = "Belohnung: " .. tostring(GameConfig.Tutorial.Reward.credits) .. " Credits und " .. tostring(GameConfig.Tutorial.Reward.xp) .. " XP. Viel Spaß!"
+		end
 		UI.SetProgress(card.fill, 1)
 		card.next.Visible = false
 		card.skip.Visible = false
@@ -332,12 +386,15 @@ local function apply(v: any, animate: boolean?)
 		done = v.done == true,
 		skipped = v.skipped == true,
 		active = v.active == true and v.done ~= true,
+		rewarded = v.rewarded == true or (v.rewarded == nil and view ~= nil and view.rewarded == true),
 	}
 	if view.step ~= before then
 		sentNextFor = nil
 		movedFor = 0
 	end
 	if v.finished == true and not view.skipped then
+		-- Server meldet again = true, wenn die Belohnung schon vor diesem Durchlauf ausgezahlt war
+		finishedAgain = v.again == true
 		finishSerial += 1
 		finishedUntil = os.clock() + TutorialUI.FinishSeconds
 		local serial = finishSerial

@@ -203,7 +203,12 @@ return {
 				if i > 1 then
 					T.check(st.price > b.Stages[i - 1].price and st.buildSeconds > b.Stages[i - 1].buildSeconds, typ .. " Stufe " .. i .. ": teurer und länger als Stufe " .. (i - 1))
 				end
-				T.eq(st.level, Unlocks.Level(b.unlock), typ .. " Stufe " .. i .. ": Level = Unlock-Level")
+				-- Stufe 1 ab dem Unlock-Level, höhere Stufen dürfen ein eigenes (nie niedrigeres) Level verlangen (Balance)
+				if i == 1 then
+					T.eq(st.level, Unlocks.Level(b.unlock), typ .. " Stufe 1: Level = Unlock-Level")
+				else
+					T.check(st.level >= b.Stages[i - 1].level, typ .. " Stufe " .. i .. ": Level ≥ Level der Vorstufe")
+				end
 			end
 		end
 		local ah = OW.Buildings.autohaus.Stages
@@ -318,7 +323,8 @@ return {
 		T.eq(OWR.Entry(d, "autohaus").collectedAt, tReady, "Ertrag läuft ab readyAt")
 		T.eq(#OWR.Settle(d, tReady + 5), 0, "Settle idempotent")
 		T.near(OWR.Perk(d, "autohaus"), 1 + GC.OW.Perks.autohaus.per, 1e-9, "Perk Stufe 1")
-		-- nächste Stufen bis zum Maximum
+		-- nächste Stufen bis zum Maximum (höhere Stufen haben ein eigenes Mindest-Level)
+		d.level = math.max(d.level, st[4].level)
 		local t = tReady
 		for s = 2, 4 do
 			ok = OWR.Build(d, "autohaus", t)

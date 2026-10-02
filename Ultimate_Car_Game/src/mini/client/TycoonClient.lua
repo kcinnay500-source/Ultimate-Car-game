@@ -475,9 +475,29 @@ local function setupStamp(inst: Instance)
 	local hold = num(inst:GetAttribute("Hold"), 0.2)
 	local up = num(inst:GetAttribute("Up"), 0.8)
 	local period = math.max(down + hold + up + 0.1, num(inst:GetAttribute("Period"), 2.4))
-	local pivot = pivotOf(inst)
-	local offset = pivot:ToObjectSpace((mover :: BasePart).CFrame)
-	local rec = { inst = inst, mover = mover, offset = offset, stroke = stroke, period = period, down = down, hold = hold, up = up }
+	-- Fester Bezug, der sich beim Animieren nicht mitbewegt: der Modell-Pivot nur, wenn der Stempel nicht selbst das
+	-- PrimaryPart ist (worldgen setzt es auf den Stempel – dann wanderte der Bezug jedes Bild mit und der Stempel
+	-- sänke durch den Boden). Sonst ein anderes Teil des Modells (folgt einem Versetzen des Modells), zuletzt die
+	-- Ruhelage des Stempels selbst.
+	local ref: BasePart? = nil
+	local fixedPivot = false
+	if inst:IsA("Model") then
+		if inst.PrimaryPart ~= mover then
+			fixedPivot = true
+		else
+			for _, d in ipairs(inst:GetDescendants()) do
+				if d:IsA("BasePart") and d ~= mover and not d:IsDescendantOf(mover) then
+					ref = d
+					break
+				end
+			end
+		end
+	end
+	local rest = (mover :: BasePart).CFrame
+	local pivot = fixedPivot and pivotOf(inst) or (ref and ref.CFrame) or rest
+	local offset = pivot:ToObjectSpace(rest)
+	local rec = { inst = inst, mover = mover, offset = offset, stroke = stroke, period = period, down = down, hold = hold, up = up,
+		fixedPivot = fixedPivot, ref = ref, rest = rest }
 	function rec.update(r, t: number)
 		local phase = t % r.period
 		local f
@@ -492,7 +512,14 @@ local function setupStamp(inst: Instance)
 		else
 			f = 0
 		end
-		local base = (r.inst:IsA("Model") and r.inst:GetPivot() or pivotOf(r.inst)) * r.offset
+		local base
+		if r.fixedPivot then
+			base = r.inst:GetPivot() * r.offset
+		elseif r.ref and r.ref.Parent then
+			base = r.ref.CFrame * r.offset
+		else
+			base = r.rest
+		end
 		r.mover.CFrame = base * CFrame.new(0, -r.stroke * f, 0)
 	end
 	return rec

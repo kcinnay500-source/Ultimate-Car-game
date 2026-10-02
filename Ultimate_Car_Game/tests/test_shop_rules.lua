@@ -434,11 +434,17 @@ return {
 		GC.Shop.ProductByKey.x = fake
 		can, msg, id = SR.CanPrompt(snapshot, "x")
 		T.check(not can and msg == GC.Shop.Text.owned and id == 123456, "schon gekauft -> kein Prompt")
+		-- DLC-Auto erst ab seinem Level (kein Pay-to-Win): Level darunter -> kein Prompt mit Level-Text
+		local vm = SR.DlcModel("dlc_vektor_blitz")
+		d.level = vm.level - 1
+		can, msg, id = SR.CanPrompt(d, "x")
+		T.check(not can and msg == string.format(GC.Shop.Text.level, vm.level), "unter Level " .. vm.level .. " kein Robux-Prompt: " .. tostring(msg))
+		d.level = vm.level
 		can, msg, id = SR.CanPrompt(d, "x")
 		T.check(can and id == 123456, "Prompt erlaubt")
 		GC.Shop.ProductByKey.x = nil
 		-- Garage voll -> kein Robux-Prompt für ein Auto-Produkt (sonst bezahlt und nicht lieferbar)
-		local full = profile(g, SR, 20, 0)
+		local full = profile(g, SR, 90, 0)
 		for _ = 1, g:MiniShared("CarCatalog").MaxCars do
 			CR.AddCar(full, CR.NewCar("komet", NOW))
 		end

@@ -4,7 +4,7 @@
 
 1. `Ultimate_Car_Game.rbxlx` in Roblox Studio öffnen. Die Stadt ist schon im Editor sichtbar.
 2. **Play** (F5). Du erscheinst in der Ankunftshalle, danach bringt dich das Spiel in den Empfang deiner eigenen Werkstatt.
-3. Minispiele: zu einer Station gehen und **E** drücken, oder Taste **M** / Knopf „Minispiele“. Der Tab **Karte** bietet Schnellreise.
+3. Minispiele: zu einer Station gehen und **E** drücken, oder Taste **M** / Knopf „Minispiele“. Der Tab **Stadtplan** bietet Schnellreise.
 
 In Studio wird nicht gespeichert (wie in 2.4.0). Nach dem Veröffentlichen speichert das Spiel im DataStore `UltimateCarGame_v2`.
 

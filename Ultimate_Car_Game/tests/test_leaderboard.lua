@@ -122,7 +122,7 @@ return {
 		local g = H.Garage({ level = 12 })
 		g:Seed(95, { version = 2, data = { version = 2, money = 50, level = 1 }, receipts = {}, lock = { token = "anderer-server", expires = g:Now() + 170 } })
 		local p = g:Join(95)
-		g:Advance(1)
+		g:Advance(16) -- Profiles.Load wartet bis zu ProfileLockRetries Sekunden auf die fremde Sperre
 		T.eq(g:Profile(p).writable, false, "Profil nicht beschreibbar")
 		g:D(p).games.press.upgrades = { pu1 = 5 }
 		g:Advance(300)

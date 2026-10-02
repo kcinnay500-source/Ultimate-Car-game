@@ -2,7 +2,9 @@
 -- Aktionen (über MiniService.Handle, also innerhalb von request()):
 --   lobby_mode {mode}                        Modus für die nächste Reise wählen ("tycoon" | "openworld"), Sitzungsauswahl
 --   lobby_settings {single, passive, beginner}  Einstellungen (MetaRules.SetSettings, sofort wirksam, in d.games.meta gespeichert)
---   lobby_go                                 Reise mit der Auswahl (PlaceRouter.Go); Party: nur der Leiter, Mitglieder reisen mit
+--   lobby_go                                 Reise mit der Auswahl (PlaceRouter.Go); Party: der Leiter, Mitglieder reisen mit.
+--                                            Ein Mitglied darf allein zum Leiter, wenn dieser schon in Open World/Tycoon
+--                                            ist; ist der Leiter schon am Ziel, holt sein lobby_go fehlende Mitglieder nach
 --   lobby_return                             aus jedem Modus zurück in die Lobby (Party-Mitglieder auch allein: sie bleiben
 --                                            in der Party, nur die Figur reist; der Leiter nimmt bei lobby_go/lobby_return alle mit)
 --   party_create / party_join {code} / party_leave / party_kick {userId}
@@ -60,6 +62,8 @@ local TEXT = {
 	partyLeader = "%s ist jetzt Party-Leiter.",
 	partyLeaderYou = "Du bist jetzt Party-Leiter.",
 	returnAlone = "Du reist allein zurück in die Lobby. Deine Party bleibt bestehen.",
+	toLeader = "Du reist zu deiner Party.",
+	partyComes = "Deine Party kommt zu dir.",
 	partyNoCode = "Es ist gerade kein Party-Code frei. Versuch es gleich noch einmal.",
 	partyTooSoon = "Einen Moment, bitte.",
 	arrived = PlaceRouter.Text.arrived,
@@ -234,22 +238,60 @@ local function livingMembers(party: Party): { Player }
 end
 
 ---------------------------------------------------------------- Reise
+-- Modus des Party-Leiters (nil ohne Sitzung)
+local function leaderMode(party: Party?): string?
+	local lms = party and msOf(party.leader) or nil
+	local mode = lms and lms.p and lms.p.mode or nil
+	return GameConfig.ModeSet[mode] and mode or nil
+end
+
+-- Mitglieder (außer dem Leiter), die nicht im Modus `mode` sind, dorthin holen (Simulation bzw. eigener Teleport)
+local function bringMembers(party: Party, mode: string): number
+	local n = 0
+	for _, member in ipairs(livingMembers(party)) do
+		if member ~= party.leader then
+			local mms = msOf(member)
+			if mms and mms.p and mms.p.profile and mms.p.mode ~= mode then
+				local ms2 = MetaRules.Settings(mms.p.profile.data)
+				local ok2 = PlaceRouter.Go(mms.p, mode, { single = ms2.single, party = party.code })
+				if ok2 then
+					n += 1
+					mms.lobbyChoice = nil
+					toast(mms, PlaceRouter.ArrivedText(mode))
+					dirty(mms)
+				end
+			end
+		end
+	end
+	return n
+end
+
 local function travel(ms: any, mode: string, fromAction: string): boolean
 	local p, d = ms.p, ms.p.profile.data
 	local party = LobbyService.PartyOf(ms.player)
 	local alone = false
+	local toLeader = false
 	if party and party.leader ~= ms.player then
 		if fromAction == "lobby_go" then
-			toast(ms, TEXT.notLeader)
-			return false
+			-- Mitglied: nur zum Leiter, wenn dieser schon unterwegs ist (Open World/Tycoon); allein, die Party bleibt
+			if leaderMode(party) ~= mode or mode == "lobby" then
+				toast(ms, TEXT.notLeader)
+				return false
+			end
+			toLeader = true
 		end
-		-- lobby_return: ein Mitglied darf jederzeit allein zurück (Vertrag §5: aus jedem Modus); die Party bleibt
-		alone = true
+		-- lobby_return: ein Mitglied darf jederzeit allein zurück (Vertrag §5: aus jedem Modus); die Party bleibt.
+		-- Beide Wege reisen allein (keine Mitglieder mit), die Party bleibt bestehen.
+		alone = not toLeader
 		party = nil
 	end
 	local settings = MetaRules.Settings(d)
+	local partyCode = party and party.code or nil
+	if toLeader then
+		partyCode = LobbyService.PartyOf(ms.player).code
+	end
 	local members = party and livingMembers(party) or nil
-	local ok, res = PlaceRouter.Go(p, mode, { single = settings.single, party = party and party.code or nil, players = members })
+	local ok, res = PlaceRouter.Go(p, mode, { single = settings.single, party = partyCode, players = members })
 	if not ok then
 		if type(res) == "string" then
 			toast(ms, res)
@@ -281,6 +323,8 @@ local function travel(ms: any, mode: string, fromAction: string): boolean
 	toast(ms, PlaceRouter.ArrivedText(mode))
 	if alone then
 		toast(ms, TEXT.returnAlone)
+	elseif toLeader then
+		toast(ms, TEXT.toLeader)
 	end
 	return true
 end
@@ -318,12 +362,27 @@ local function lobbyGo(ms: any, _: any, d: any)
 	if mode == "lobby" or not GameConfig.ModeSet[mode] then
 		mode = "openworld"
 	end
+	-- Party-Mitglied, dessen Leiter schon in der Open World/im Schnellen Spiel ist: Reise dorthin (zum Leiter)
+	local party = LobbyService.PartyOf(ms.player)
+	if party and party.leader ~= ms.player then
+		local lm = leaderMode(party)
+		if lm and lm ~= "lobby" then
+			mode = lm
+		end
+	end
 	local ok, msg = Unlocks.Gate(d, "mode:" .. mode)
 	if not ok then
 		toast(ms, msg)
 		return
 	end
 	if ms.p.mode == mode then
+		-- Leiter ist schon hier, Mitglieder aber woanders (z. B. allein zurück in die Lobby): Party nachholen
+		if party and party.leader == ms.player and bringMembers(party, mode) > 0 then
+			notifyParty(party, { event = "travel", mode = mode, userId = ms.player.UserId, name = playerName(ms.player) }, ms.player)
+			toast(ms, TEXT.partyComes)
+			dirty(ms)
+			return
+		end
 		toast(ms, TEXT.alreadyThere)
 		return
 	end
@@ -595,13 +654,22 @@ function LobbyService.SnapshotFields(ms: any, d: any, _t: number?, _full: boolea
 	local partyField: any = false
 	if party then
 		local members = {}
+		local lm = leaderMode(party) or "lobby"
+		local away = false
 		for _, member in ipairs(party.members) do
-			table.insert(members, { userId = member.UserId, name = playerName(member), leader = member == party.leader })
+			local mms = msOf(member)
+			local mmode = mms and mms.p and GameConfig.ModeSet[mms.p.mode] and mms.p.mode or "lobby"
+			if member ~= party.leader and mmode ~= lm then
+				away = true
+			end
+			table.insert(members, { userId = member.UserId, name = playerName(member), leader = member == party.leader, mode = mmode })
 		end
 		partyField = {
 			code = party.code,
 			leader = party.leader.UserId,
 			leaderName = playerName(party.leader),
+			leaderMode = lm, -- Mitglieder in der Lobby reisen mit „Los geht's“ zum Leiter
+			away = away, -- true: mindestens ein Mitglied ist in einem anderen Modus als der Leiter (Leiter holt es nach)
 			isLeader = ms ~= nil and party.leader == ms.player,
 			members = members,
 			max = GameConfig.Party.MaxMembers,

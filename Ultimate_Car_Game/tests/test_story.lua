@@ -564,7 +564,7 @@ return {
 		S.sell(pl, 3)
 		T.eq(S.story(pl).active.progress, 1, "Bestpreis gezählt")
 		T.check(d.money - money >= good.tiers[3].profit, "Gewinn (Level-Faktor, evtl. Prestige)")
-		T.check(good.tiers[3].profit >= 130 * 3 - 1, "Level 60: Faktor ×3 (gedeckelt)")
+		T.check(good.tiers[3].profit >= GC.Story.Sale.Tiers[3].profit * 3 - 1, "Level 60: Faktor ×3 (gedeckelt)")
 		local sawSpecial = false
 		for _ = 1, 4 do
 			S.tick(46)

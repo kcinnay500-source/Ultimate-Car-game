@@ -225,6 +225,8 @@ local function newOffer(ms: any, d: any, t: number)
 	dirty(ms)
 end
 
+local storyStart -- unten definiert (storySell startet eine Verkaufsmission automatisch)
+
 local function storySell(ms: any, data: any, d: any, t: number)
 	local ss = session(ms)
 	local T = S().Sale.Texts
@@ -254,6 +256,12 @@ local function storySell(ms: any, data: any, d: any, t: number)
 		toast(ms, T.notHere)
 		return
 	end
+	-- Verkauf vor „Starten“: ist die aktuelle Story-Mission eine Verkaufsmission (Kapitel offen, nichts aktiv),
+	-- startet sie jetzt automatisch – sonst zählten die ersten Verkäufe nicht (c1_m1 „Drei Gebrauchtwagen verkaufen“)
+	local cur = StoryRules.Current(d)
+	if type(cur.active) ~= "table" and cur.mission and cur.mission.kind == "sell" and StoryRules.ChapterOpen(d, cur.chapter) then
+		storyStart(ms, { id = cur.mission.id, auto = true }, d, t)
+	end
 	local res = StoryRules.Sell(d, offer, tier, t)
 	if not res then
 		toast(ms, T.badTier)
@@ -273,7 +281,7 @@ local function storySell(ms: any, data: any, d: any, t: number)
 end
 
 ---------------------------------------------------------------- Aktionen
-local function storyStart(ms: any, data: any, d: any, t: number)
+function storyStart(ms: any, data: any, d: any, t: number)
 	if passive(d) then
 		toast(ms, S().Texts.passive)
 		return
@@ -282,7 +290,9 @@ local function storyStart(ms: any, data: any, d: any, t: number)
 	local members = type(party) == "table" and type(party.members) == "table" and #party.members or 0
 	local ok, res = StoryRules.Start(d, data.id, t, members)
 	if not ok then
-		toast(ms, res)
+		if not data.auto then
+			toast(ms, res)
+		end
 		return
 	end
 	local cur = StoryRules.Current(d)

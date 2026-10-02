@@ -148,8 +148,9 @@ end
 
 local function afterAdvance(ms: any, d: any, finished: boolean)
 	if finished then
+		local again = TutorialRules.Rewarded(d) -- Belohnung gab es schon (Neustart am Kiosk): Endkarte ohne Belohnung
 		grantReward(ms, d)
-		stepNotice(ms, d, { finished = true })
+		stepNotice(ms, d, { finished = true, again = again })
 	else
 		stepNotice(ms, d)
 	end
@@ -317,8 +318,13 @@ end
 -- Vor P.Save: eine zurückgehaltene Belohnung noch verbuchen (nicht während eines laufenden Robux-Kaufs)
 function TutorialService.OnLeave(ms: any, d: any)
 	if ms and ms.tutorialRewardPending and not transacting(ms) then
-		local r = TutorialRules.Reward()
 		ms.tutorialRewardPending = nil
+		if TutorialRules.Rewarded(d) then
+			return -- schon ausgezahlt (z. B. Neustart am Kiosk): nie doppelt
+		end
+		-- wie grantReward: erst als ausgezahlt markieren, sonst gäbe es sie nach Neustart noch einmal
+		TutorialRules.MarkRewarded(d)
+		local r = TutorialRules.Reward()
 		MiniRules.AddMoney(d, r.credits)
 		MiniRules.GainXP(d, r.xp)
 	end

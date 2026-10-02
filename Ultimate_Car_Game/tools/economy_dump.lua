@@ -113,6 +113,7 @@ local Cat = requireName("MiniCatalog")
 local CC = requireName("CarCatalog")
 local AR = requireName("ArcadeRules")
 local TR = requireName("TrackRules")
+local GC = requireName("GameConfig")
 
 local arcade = {}
 for k, v in pairs(AR) do
@@ -167,5 +168,32 @@ print(encode({
 		Track = CC.Track,
 	},
 	trackMaxSpeed = TR.MaxSpeed(),
+	-- Ausbaustufe 4 (GameConfig): XP-Regler, Unlocks, Prestige, Tycoon-Boni, OW-Gebäude/Perks, Story, Shop
+	game = {
+		XP = GC.XP,
+		Unlocks = GC.Unlocks,
+		WorkshopRewardCap = GC.WorkshopRewardCap,
+		TutorialReward = GC.Tutorial.Reward,
+		Prestige = {
+			MaxRank = GC.Prestige.MaxRank, BaseThresholds = GC.Prestige.BaseThresholds, Growth = GC.Prestige.Growth,
+			RoundTo = GC.Prestige.RoundTo, IncomePerRank = GC.Prestige.IncomePerRank, IncomeCap = GC.Prestige.IncomeCap,
+			DiscountPerRank = GC.Prestige.DiscountPerRank, DiscountCap = GC.Prestige.DiscountCap,
+			RebirthBonusFromRank = GC.Prestige.RebirthBonusFromRank, RebirthBonus = GC.Prestige.RebirthBonus,
+		},
+		Tycoon = { Bonus = GC.Tycoon.Bonus, Rebirth = GC.Tycoon.Rebirth, Types = GC.Tycoon.Types },
+		OW = {
+			Types = GC.OW.Types, Buildings = GC.OW.Buildings, Perks = GC.OW.Perks, PerkCap = GC.OW.PerkCap,
+			PassiveCapHours = GC.OW.PassiveCapHours,
+		},
+		Story = {
+			Chapters = GC.Story.Chapters, Side = GC.Story.Side, Sale = GC.Story.Sale, Balance = GC.Story.Balance,
+			Requires = GC.Story.Requires,
+		},
+		Shop = {
+			Cosmetics = GC.Shop.Cosmetics, Products = GC.Shop.Products, Passes = GC.Shop.Passes,
+			DlcPriceFactor = GC.Shop.DlcPriceFactor, BuyXp = GC.Shop.BuyXp,
+		},
+	},
+	carBuyXp = CC.BuyXp,
 	arcade = arcade,
 }))

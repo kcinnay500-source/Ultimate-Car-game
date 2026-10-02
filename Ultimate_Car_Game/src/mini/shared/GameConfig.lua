@@ -27,6 +27,10 @@ GameConfig.SimulationNotice = "Studio-Simulation: Ortswechsel ohne Teleport"
 -- TeleportData (nur Strings/Zahlen/Booleans, geprüft): erlaubte Schlüssel und Längen
 GameConfig.TeleportDataKeys = { mode = "string", single = "boolean", party = "string" }
 GameConfig.TeleportDataMaxLength = 32
+-- Profil-Sperre beim Laden (Profiles.Load): nach einem Ortswechsel gibt der alte Server die Sperre erst beim
+-- Verlassen frei – so oft (je ProfileLockRetryWait Sekunden) erneut versuchen, bevor die Sitzung nur temporär läuft
+GameConfig.ProfileLockRetries = 12
+GameConfig.ProfileLockRetryWait = 1
 
 ---------------------------------------------------------------- Zonen (Modelle und Ankunftsschlüssel im all-Place)
 -- model = Name unter workspace, arrival = Schlüssel unter <model>.Arrivals, spawn = SpawnLocation der Zone,
@@ -206,9 +210,14 @@ GameConfig.Hints = {
 	{ id = "h_tycoon", when = "station:mode_tycoon", text = "Schnelles Spiel: eine Tycoon-Runde mit Bargeld. Fertige Runden bringen dauerhafte Boni in der Open World." },
 } :: { Hint }
 
+---------------------------------------------------------------- Deckel der Werkstatt-Vergütung (§8)
+-- Gilt nur für den Ausbaustufe-4-Faktor Tycoon × OW-Perk (CrossBonus.CareerCapped); Prestige wirkt außerhalb.
+GameConfig.WorkshopRewardCap = 1.6
+
 ---------------------------------------------------------------- XP-Regler (§3)
--- Platzhalter für das Balance-Team: Ziel Level 50 nach etwa 8 Std., Level 90 nach etwa 25–35 Std. gemischtem
--- Spiel. Nachgeregelt wird nur hier, nie in Rules.XPNeeded. Story/Missionen: Meilenstein 7, Tycoon: Meilenstein 4.
+-- Ziel Level 50 nach etwa 8 Std., Level 90 nach etwa 25–35 Std. gemischtem Spiel (geprüft von
+-- tools/economy_sim.py --check, Stand docs/BALANCE.md: 8,2 / 25,3 Std.). Nachgeregelt wird nur hier, nie in Rules.XPNeeded.
+-- Rund 90 % der XP kommen aus den 2.4.0-Aufträgen; diese Regler können XP nur hinzufügen (nicht bremsen).
 GameConfig.XP = {
 	Tutorial = 60, -- = Tutorial.Reward.xp
 	StoryMission = { 60, 120, 250, 500, 900 }, -- je Mission nach Kapitel (Platzhalter)
@@ -443,7 +452,8 @@ end
 -- ServerStorage.OWBuildings.<typ>_<stufe> und OWBuildings.baustelle (Weltteam), Anker Plot.OWAnchors.<typ>.
 -- werkstatt = das 2.4.0-Grundstück (Stufe = Bühnenzahl d.bays, Kauf nur über den Hallenanbau; hier nur Anzeige + Perk).
 -- Balance (docs/BALANCE.md: Werkstatt Lv 10 ≈ 800 Cr/Min, Lv 20 ≈ 1.470, Lv 30 ≈ 2.850, Lv 40 ≈ 5.770; passive
--- Einnahmen zusammen ≤ 25 %): Autohaus Stufe 1 = 25 Cr/Min (3 % auf Level 10), Stufe 4 = 300 Cr/Min (≈ 10 % auf Level 30).
+-- Einnahmen zusammen ≤ 25 %): Autohaus Stufe 1 = 25 Cr/Min (3 % auf Level 10) … Stufe 4 = 300 Cr/Min ab Level 35 (≈ 7 %);
+-- je Stufe ein eigenes Mindest-Level (st.level), geprüft von tools/economy_sim.py --check (≤ 25 % der Werkstatt des Levels).
 -- Schrott: 1 Credit = 10 Mio. Schrott (MiniConfig.ScrapPerCredit), darum die großen Schrottzahlen. Erträge sammeln sich
 -- höchstens PassiveCapHours an (danach steht die Anlage still, bis abgeholt wird). Bauzeit läuft offline weiter (readyAt).
 export type OWStage = {
@@ -470,10 +480,11 @@ GameConfig.OW = {
 			typ = "autohaus", name = "Autohaus", unlock = "building:autohaus",
 			desc = "Dein eigener Verkaufsstand auf dem Grundstück: verkauft Autos, während du unterwegs bist (Credits je Stunde, abholen) und bringt dir Rabatt beim Händler.",
 			Stages = {
+				-- Stufen-Level (Balance): Ertrag/Min ≤ 25 % der Werkstatt dieses Levels (tools/economy_sim.py --check)
 				{ stage = 1, price = 12000, buildSeconds = 600, yieldPerHour = 1500 },
-				{ stage = 2, price = 50000, buildSeconds = 2700, yieldPerHour = 4000 },
-				{ stage = 3, price = 180000, buildSeconds = 10800, yieldPerHour = 9000 },
-				{ stage = 4, price = 600000, buildSeconds = 28800, yieldPerHour = 18000 },
+				{ stage = 2, price = 50000, buildSeconds = 2700, yieldPerHour = 4000, level = 15 },
+				{ stage = 3, price = 180000, buildSeconds = 10800, yieldPerHour = 9000, level = 25 },
+				{ stage = 4, price = 600000, buildSeconds = 28800, yieldPerHour = 18000, level = 35 },
 			},
 		},
 		schrottplatz = {
@@ -542,11 +553,11 @@ Story.Chapters = {
 				reward = { credits = 150 } },
 			{ id = "c1_m2", title = "Zurück in die Werkstatt", kind = "event", event = "settle", target = 1, minutes = 3,
 				text = "Deine Kunden wollen auch reparieren lassen. Nimm in deiner Werkstatt noch einen Auftrag an und rechne ihn am Empfang ab.",
-				reward = { credits = 120 } },
-			-- Startgeld 800 + Tutorial 500 + c1_m1/c1_m2 ≈ 1.700 Cr: 2.500 verlangt echtes Spiel (≈ 4 Min. Werkstatt auf Level 1–3)
+				reward = { credits = 100 } },
+			-- Startgeld 800 + Tutorial 500 + c1_m1/c1_m2 ≈ 1.550 Cr: 2.500 verlangt echtes Spiel (≈ 4 Min. Werkstatt auf Level 1–3)
 			{ id = "c1_m3", title = "Die ersten 2.500 Credits", kind = "own", money = 2500, target = 2500, minutes = 4,
 				text = "Bring deinen Kontostand auf 2.500 Credits – mit Verkäufen am Kiesplatz oder Aufträgen in der Werkstatt.",
-				reward = { credits = 200 } },
+				reward = { credits = 160 } },
 		},
 	},
 	{
@@ -636,11 +647,11 @@ Story.Sale = {
 	SpecialMultiplier = 3,
 	SpecialChapter = 4, -- ab diesem Kapitel kommen Sondermodell-Kunden (jeder dritte Kunde)
 	SpecialEvery = 3,
-	Xp = { 8, 12, 20 }, -- XP je gelungenem Verkauf nach Preisstufe
+	Xp = { 6, 10, 15 }, -- XP je gelungenem Verkauf nach Preisstufe
 	Tiers = {
-		{ tier = 1, label = "günstig", profit = 40, chance = 1, hint = "Sicherer Verkauf, kleiner Gewinn." },
-		{ tier = 2, label = "fair", profit = 75, chance = 0.85, hint = "Klappt meistens." },
-		{ tier = 3, label = "teuer", profit = 130, chance = 0.5, hint = "Der Kunde feilscht – mit etwas Glück ein dicker Gewinn." },
+		{ tier = 1, label = "günstig", profit = 35, chance = 1, hint = "Sicherer Verkauf, kleiner Gewinn." },
+		{ tier = 2, label = "fair", profit = 60, chance = 0.85, hint = "Klappt meistens." },
+		{ tier = 3, label = "teuer", profit = 95, chance = 0.5, hint = "Der Kunde feilscht – mit etwas Glück ein dicker Gewinn." },
 	},
 	-- Fiktiver Verkaufspreis je Karosserie (nur Anzeige: Preis = Basis + Gewinn); Gewinn ist das, was wirklich ankommt
 	BasePrice = { compact = 3200, sedan = 5800, sport = 14000, super = 60000, electric = 42000 },

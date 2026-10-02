@@ -367,7 +367,7 @@ for _, mode in ipairs(MODES) do
 			lock = { token = "anderer-server", expires = os.time() + 170 } }
 		g:Seed(1001, record)
 		local p = g:Join(1001)
-		g:Advance(1)
+		g:Advance(16) -- 3.0: Profiles.Load wartet bis zu ProfileLockRetries Sekunden auf die fremde Sperre
 		noErrors(T, g)
 		local st = g:State(p)
 		T.check(st ~= nil, "state trotz Sperre")

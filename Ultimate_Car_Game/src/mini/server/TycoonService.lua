@@ -493,13 +493,15 @@ local function rebuild(plot: Plot, run: any?)
 				clone.Name = "Stage_" .. tostring(s)
 				clone:SetAttribute("TycoonStage", s)
 				clone:SetAttribute("TycoonSlot", plot.slot)
+				-- Erst versetzen, dann Hidden lösen: PivotTo bewegt nur Nachfahren – ein vorher gelöster Ordner bliebe am
+				-- Ursprung der Vorlage, gekaufte Produzenten erschienen dann mitten in der Welt statt auf dem Grundstück.
+				clone:PivotTo(pivot)
 				-- Ungekaufte Produzenten dürfen nicht ins Workspace: Ordner Hidden aus dem Klon lösen (Parent nil)
 				local hidden = clone:FindFirstChild("Hidden")
 				if hidden then
 					hidden.Parent = nil
 					plot.hidden = hidden
 				end
-				clone:PivotTo(pivot)
 				clone.Parent = plot.root or plot.model
 				table.insert(plot.stages, clone)
 				bindButtons(plot, clone)
