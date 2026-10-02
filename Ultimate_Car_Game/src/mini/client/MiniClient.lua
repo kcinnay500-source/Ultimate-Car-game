@@ -218,6 +218,10 @@ local function onSnapshot(s)
 				s.story.chapters = latest.story.chapters
 			end
 		end
+		-- shop.catalog (PHASE4_CONTRACT §11: sticky, nur bei vollen Snapshots)
+		if type(s.shop) == "table" and s.shop.catalog == nil and type(latest.shop) == "table" then
+			s.shop.catalog = latest.shop.catalog
+		end
 	end
 	latest, latestAt = s, os.clock()
 	if Modules.press and Modules.press.OnSnapshot then

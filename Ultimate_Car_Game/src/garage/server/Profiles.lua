@@ -55,12 +55,14 @@ function Profiles.Load(player)
 end
 
 function Profiles.Save(profile, release)
-    if not profile.writable or not store or profile.receiptPending then return false end
-    if profile.saving then
+    if not profile.writable or not store then return false end
+    -- 3.0: Beim Verlassen auch auf eine offene Quittung warten (GrantReceipt schreibt gerade bzw. wiederholt),
+    -- damit die Sitzungssperre danach freigegeben wird; ein Autosave wartet wie bisher nicht.
+    if profile.saving or profile.receiptPending then
         if not release then return false end
         local deadline = os.clock() + 12
-        while profile.saving and os.clock() < deadline do task.wait(0.1) end
-        if profile.saving then return false end
+        while (profile.saving or profile.receiptPending) and profile.writable and os.clock() < deadline do task.wait(0.1) end -- 3.0: auch auf eine offene Quittung warten
+        if profile.saving or profile.receiptPending then return false end
     end
     -- Another concurrent close/save may have released the lease while we waited.
     if not profile.writable or profile.receiptPending then return false end
@@ -106,8 +108,16 @@ end
 
 -- Credit and receipt marker commit together under the profile lease. An uncertain write
 -- keeps economy mutations/saves locked until the same immutable transaction is resolved.
-function Profiles.GrantCredits(profile,purchaseId,amount)
-    if not profile.writable or not store or type(purchaseId)~="string" or #purchaseId>160 or type(amount)~="number" or amount<=0 or amount%1~=0 then return false end
+-- 3.0: Allgemeine Quittungs-Gutschrift (PHASE4_CONTRACT §9): apply(snapshot) ändert eine Kopie des Profils
+-- (Credits, DLC-Auto, Kosmetik); sie wird zusammen mit receipts[purchaseId] in EINEM UpdateAsync geschrieben.
+-- Erst wenn beides zusammen gespeichert ist, gilt der Kauf; dann überträgt commit(profile.data, gespeicherteDaten)
+-- die Änderung auf das lebende Profil (Standard: apply(profile.data) noch einmal – transacting hält alle anderen
+-- Geld-/Auto-Änderungen so lange an). Rückgabe wie GrantCredits: granted, new.
+--   apply(data: table) -> boolean   false = Kauf jetzt nicht anwendbar (Deckel, Garage voll): nichts geschrieben,
+--                                    Roblox wiederholt den Beleg später (NotProcessedYet)
+--   receiptPending = { id, snapshot, amount? } bleibt bis zur Auflösung (Save/Autosave warten; Purchases wiederholt).
+function Profiles.GrantReceipt(profile,purchaseId,apply,commit)
+    if not profile.writable or not store or type(purchaseId)~="string" or #purchaseId>160 or type(apply)~="function" then return false end
     if profile.receipts and profile.receipts[purchaseId] then return true,false end
     if profile.receiptPending and profile.receiptPending.id~=purchaseId then return false end
     local deadline=os.clock()+10
@@ -116,10 +126,10 @@ function Profiles.GrantCredits(profile,purchaseId,amount)
     if profile.receipts and profile.receipts[purchaseId] then return true,false end
     if not profile.receiptPending then
         local snapshot=Rules.Snapshot(profile.data)
-        local balance=snapshot.money+amount
-        if balance>Config.NumberCap or balance-snapshot.money~=amount then return false end
-        snapshot.money=balance
-        profile.receiptPending={id=purchaseId,amount=amount,snapshot=snapshot}
+        local okApply,applied=pcall(apply,snapshot) -- 3.0: GrantReceipt: apply auf dem Schnappschuss
+        if not okApply then warn("[Profiles] Quittung "..purchaseId..": "..tostring(applied));return false end
+        if applied~=true or not MiniRules.IsClean(snapshot) then return false end
+        profile.receiptPending={id=purchaseId,snapshot=snapshot,amount=type(snapshot.money)=="number" and type(profile.data.money)=="number" and (snapshot.money-profile.data.money) or nil}
     end
     local pending=profile.receiptPending
     profile.saving=true;profile.transacting=true
@@ -135,7 +145,10 @@ function Profiles.GrantCredits(profile,purchaseId,amount)
             end)
         end)
         if ok and result and not lost and result.receipts and result.receipts[purchaseId] then
-            profile.data.money=result.data.money;profile.receipts=result.receipts
+            profile.receipts=result.receipts -- 3.0: GrantReceipt
+            -- Erst jetzt ins lebende Profil übernehmen (nie profile.data ersetzen: Dienste halten Verweise darauf)
+            local okCommit,errCommit=pcall(commit or apply,profile.data,result.data)
+            if not okCommit then warn("[Profiles] Quittung "..purchaseId.." übernehmen: "..tostring(errCommit)) end
             profile.receiptPending=nil;profile.transacting=false;profile.saving=false;profile.status="Gespeichert"
             return true,true
         end
@@ -144,6 +157,20 @@ function Profiles.GrantCredits(profile,purchaseId,amount)
     end
     profile.saving=false;profile.status="Kaufbestätigung wird erneut versucht"
     return false
+end
+
+-- 3.0: dünne Hülle um GrantReceipt (gleiche Semantik wie 2.4.0: Deckel C.NumberCap, ganzzahliger Betrag,
+-- nach dem Schreiben gilt der gespeicherte Kontostand).
+function Profiles.GrantCredits(profile,purchaseId,amount)
+    if type(amount)~="number" or amount<=0 or amount%1~=0 then return false end
+    return Profiles.GrantReceipt(profile,purchaseId,function(snapshot)
+        local balance=snapshot.money+amount
+        if balance>Config.NumberCap or balance-snapshot.money~=amount then return false end
+        snapshot.money=balance
+        return true
+    end,function(data,stored)
+        data.money=stored.money
+    end)
 end
 
 return Profiles

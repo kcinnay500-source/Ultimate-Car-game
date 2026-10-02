@@ -60,6 +60,25 @@ CarCatalog.Specials = {
 -- Karosserien mit eigenem Spoiler in der Vorlage (Standard: Spoiler an)
 CarCatalog.BodySpoiler = { hot_hatch = true, sport = true, super = true }
 
+---------------------------------------------------------------- DLC-Autos (Shop, PHASE4_CONTRACT §9, Meilenstein 8)
+-- Eigene Modell-Ids "dlc_<name>": Karosserie aus einer bestehenden Vorlage, Fahrwerte EXAKT vom Basismodell
+-- (base = Händlermodell derselben Klasse – kein Pay-to-win, Test in tests/test_shop_rules.lua), dazu feste Optik
+-- (paint/rims/glow/spoiler wie der Auslieferungszustand) und eine exklusive Folierung (wrap = Kosmetik-Id aus
+-- GameConfig.Shop, Beigabe des Produkts). Nicht beim Händler (CarRules.Buy lehnt ab): Kauf über ShopRules.Buy
+-- (Credits: Basispreis × GameConfig.Shop.DlcPriceFactor, ab dem Level des Basismodells) oder als Developer
+-- Product (GameConfig.Shop.Products kind="car" -> ShopRules.Grant). value = Händlerpreis des Basismodells
+-- (Rückkauf/Auktions-Richtwert wie ein normales Auto derselben Klasse).
+CarCatalog.Dlc = {
+	{ id = "dlc_komet_sunset", name = "Komet S2 Sunset", brand = "Komet", body = "hot_hatch", base = "komet_s2",
+		paint = 2, rims = 3, glow = 6, spoiler = true, wrap = "wrap_sunset" },
+	{ id = "dlc_nord_nacht", name = "Nord R4 Nachtfalke", brand = "Nord", body = "sedan", base = "nord",
+		paint = 11, rims = 7, glow = 3, spoiler = false, wrap = "wrap_nacht" },
+	{ id = "dlc_vektor_blitz", name = "Vektor RS Blitz", brand = "Vektor", body = "sport", base = "vektor",
+		paint = 9, rims = 4, glow = 2, spoiler = true, wrap = "wrap_blitz" },
+}
+CarCatalog.DlcPriceFactor = 1.5 -- Rückfall; maßgeblich ist GameConfig.Shop.DlcPriceFactor (ShopRules.DlcPrice)
+CarCatalog.DlcById = {} -- id -> Dlc-Eintrag (nach dem Aufbau der Modell-Liste gefüllt)
+
 ---------------------------------------------------------------- Farbpaletten (Lack 12, Felgen 8, Unterboden 6)
 CarCatalog.Paints = {
 	{ name = "Petrol", color = { 48, 170, 157 } },
@@ -227,6 +246,22 @@ for _, s in ipairs(CarCatalog.Specials) do
 			paint = s.paint, rims = s.rims or 1, glow = s.glow or 0, spoiler = s.spoiler == true,
 			dealer = false, special = true,
 		})
+	end
+end
+
+-- DLC-Modelle (Dlc-Abschnitt): Werte vom Basismodell, eigene Optik; dealer = false, special = false, dlc = true
+for _, x in ipairs(CarCatalog.Dlc) do
+	local base = CarCatalog.ModelById[x.base]
+	if base and not CarCatalog.ModelById[x.id] then
+		add({
+			id = x.id, name = x.name, brand = x.brand or base.brand, body = x.body or base.body,
+			level = base.level, -- ab dem Level des Basismodells (Unlocks "car:<base>")
+			price = base.price, value = base.value, -- Credits-Preis im Shop: price × GameConfig.Shop.DlcPriceFactor
+			power = base.power, top = base.top, weight = base.weight, grip = base.grip, steer = base.steer, drive = base.drive,
+			paint = x.paint or base.paint, rims = x.rims or 1, glow = x.glow or 0, spoiler = x.spoiler == true,
+			dealer = false, special = false, dlc = true, base = base.id, wrap = x.wrap,
+		})
+		CarCatalog.DlcById[x.id] = x
 	end
 end
 

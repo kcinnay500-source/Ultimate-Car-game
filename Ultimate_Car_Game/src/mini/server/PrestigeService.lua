@@ -15,6 +15,7 @@ local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShar
 local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
 local PrestigeRules = require(MiniShared:WaitForChild("PrestigeRules"))
+local ShopRules = require(MiniShared:WaitForChild("ShopRules")) -- Meilenstein 8: Belohnungs-Kosmetik
 local MetaRules = require(MiniShared:WaitForChild("MetaRules"))
 local MiniRules = require(MiniShared:WaitForChild("MiniRules"))
 
@@ -57,18 +58,14 @@ function PrestigeService.Flush(ms: any)
 end
 
 ---------------------------------------------------------------- Kosmetik (Meilenstein 8: d.games.shop.owned)
+-- Belohnungs-Kosmetik über ShopRules.Grant (idempotent, nur bekannte Ids aus GameConfig.Shop.Cosmetics);
+-- ShopRules.Load holt sie aus prestige.claimed bei älteren Profilen ebenfalls nach.
 local function grantCosmetic(d: any, id: any): boolean
 	if type(id) ~= "string" or id == "" then
 		return false
 	end
-	local g = type(d) == "table" and d.games or nil
-	local shop = type(g) == "table" and g.shop or nil
-	local owned = type(shop) == "table" and shop.owned or nil
-	if type(owned) ~= "table" then
-		return false -- Shop-Daten gibt es erst ab Meilenstein 8; die Kosmetik bleibt über claimed nachholbar
-	end
-	owned[id] = true
-	return true
+	local ok, res = ShopRules.Grant(d, { cosmetics = { id } }, api.now())
+	return ok == true and type(res) == "table" and res.changed == true
 end
 
 ---------------------------------------------------------------- Aktionen

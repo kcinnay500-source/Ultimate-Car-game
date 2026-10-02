@@ -59,7 +59,7 @@ UI.Tabs = {
 	{ key = "prestige", label = "Prestige" },
 	{ key = "leaderboard", label = "Bestenliste" },
 	{ key = "map", label = "Schnellreise" },
-	{ key = "shop", label = "Game Passes" },
+	{ key = "shop", label = "Shop" },
 }
 UI.TabTitles = {
 	lobby = "Lobby",
@@ -80,7 +80,7 @@ UI.TabTitles = {
 	goals = "Ziele und Meilensteine",
 	leaderboard = "Bestenliste",
 	map = "Schnellreise",
-	shop = "Game Passes",
+	shop = "Shop",
 	auction = "Auktionshaus",
 	arcade = "Spielhalle",
 }

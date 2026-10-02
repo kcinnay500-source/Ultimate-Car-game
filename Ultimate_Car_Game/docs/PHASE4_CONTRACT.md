@@ -266,6 +266,17 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   (`shop_buy {item}`), `shop_equip {slot, item}`, `shop_prompt {product}` (Client-Prompt läuft über den bestehenden
   Weg `purchasePrompt`).
 - Kosmetik-Anwendung: `VehicleFactory.ApplyCosmetics(model, car, shop)` (Wrap-Parts, Felgen-Farben, Lichtfarbe).
+- **Stand nach Meilenstein 8** (Schnittstellen wie umgesetzt): `Profiles.GrantReceipt(profile, purchaseId, apply, commit?)`
+  – `apply(snapshot) -> true/false` läuft auf einer Kopie (false → nichts geschrieben, `NotProcessedYet`); nach dem
+  atomaren Schreiben überträgt `commit(profile.data, stored)` (Standard: `apply` erneut auf dem Live-Profil) die
+  Änderung. `ShopService.Apply(product, snapshot, now)` = `ShopRules.ApplyReceipt(snapshot, product, now)`;
+  `ShopRules.Grant(d, grants, now)` (idempotent; Prestige/Story/Pässe nutzen es für Belohnungs-Kosmetik).
+  `GarageServer` meldet jede Quittung mit `Purchases.FX(product)` und `Mini.OnGranted(p, product)` (Toast,
+  `mini_notice {kind="shop", event="receipt"}`, Optik). Snapshot: `shop {owned[], equipped{}, dlcCars[], passes{},
+  catalog (nur full, sticky)}`. DLC-Modelle (`CarCatalog.Dlc`, `dlc=true`, `base=<Modell>`) haben keinen eigenen
+  Unlock-Eintrag: Freischaltung über `car:<basis>`. `CarService` wendet `ApplyCosmetics` nach Bau/Umstylen an und
+  setzt `ShopService.Restyle` (stehende Autos nach `shop_equip`/Kauf/Quittung/Pass ohne Neubau). Das Credit-Center
+  öffnet den Tab `shop`; der 2.4.0-Credits-Shop bleibt als Tablet-Seite erreichbar.
 
 ## 10. Aktionen (Zusammenfassung; alle flach, ≤ 10 Felder, Beträge sind nie Client-Werte außer den markierten Absichten)
 
@@ -294,7 +305,7 @@ Neue Tabs: `lobby`, `unlocks`, `story` (Missionen + Nebenmissionen), `tycoon`, `
 `mode`, `placeKind`, `meta {beginner, passive, single, tutorialDone, tutorialStep}`, `party {code, leader, members[]}`,
 `prestige {rank, next, claimable[], claimed[]}`, `unlocks {next, list[] (nur bei full)}`,
 `tutorial {step, text, target, done}`, `story {chapter, active, missions[], side[]}`, `ow {buildings{}, passive}`,
-`tycoon {run, slot, offers[], bonus{}}`, `shop {owned[], equipped{}, catalog[] (full)}`.
+`tycoon {run, slot, offers[], bonus{}}`, `shop {owned[], equipped{}, dlcCars[], passes{}, catalog{} (full)}`.
 Sticky (nur bei full): `unlocks.list`, `shop.catalog`, `story.missions`.
 
 ## 12. Sicherheit und Regeln

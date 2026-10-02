@@ -737,18 +737,18 @@ local function chapterXp(n: number): number
 	return finite(xp) and xp or 0
 end
 
-local function grantCosmetic(d: any, id: any): boolean
+-- Belohnungs-Kosmetik über ShopRules.Grant (Meilenstein 8; idempotent, nur Ids aus GameConfig.Shop.Cosmetics).
+-- ShopRules wird erst hier geladen (ShopRules.Load liest story.done; keine Ringabhängigkeit beim Laden).
+local ShopRules
+local function grantCosmetic(d: any, id: any, now: number): boolean
 	if type(id) ~= "string" or id == "" then
 		return false
 	end
-	local g = type(d) == "table" and d.games or nil
-	local shop = type(g) == "table" and g.shop or nil
-	local owned = type(shop) == "table" and shop.owned or nil
-	if type(owned) ~= "table" then
-		return false -- Shop-Daten gibt es erst ab Meilenstein 8 (die Kosmetik bleibt über done[id] nachholbar)
+	if not ShopRules then
+		ShopRules = require(script.Parent:WaitForChild("ShopRules"))
 	end
-	owned[id] = true
-	return true
+	local ok, res = ShopRules.Grant(d, { cosmetics = { id } }, now)
+	return ok == true and type(res) == "table" and res.changed == true
 end
 
 -- Story-Mission abholen: aktiv, Ziel erreicht. Rückgabe: ok, { mission, credits, xp, cosmetic, cosmeticGranted, title,
@@ -779,7 +779,7 @@ function StoryRules.Claim(d: any, id: any, now: number): (boolean, any)
 	local xp = missionXp(def)
 	M.GainXP(d, xp)
 	M.AddStat(d, "missionsDone", 1, now)
-	local granted = grantCosmetic(d, r.cosmetic)
+	local granted = grantCosmetic(d, r.cosmetic, now)
 	if type(r.title) == "string" and r.title ~= "" then
 		st.title = r.title
 	end

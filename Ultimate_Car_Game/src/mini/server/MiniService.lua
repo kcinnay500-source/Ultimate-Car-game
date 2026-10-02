@@ -56,6 +56,7 @@ local TutorialService = require(Server:WaitForChild("TutorialService"))
 local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenstein 4: Schnelles Spiel
 local OWService = require(Server:WaitForChild("OWService")) -- Meilenstein 6: Open-World-Gebäude, Passiv-Modus
 local StoryService = require(Server:WaitForChild("StoryService")) -- Meilenstein 7: Story, Kiesplatz, Nebenmissionen, Co-op
+local ShopService = require(Server:WaitForChild("ShopService")) -- Meilenstein 8: Shop (Kosmetik, DLC-Autos, Pässe, Quittungen)
 local StoryRules = require(MiniShared:WaitForChild("StoryRules"))
 local Profiles = require(Server.Parent:WaitForChild("Profiles"))
 
@@ -148,6 +149,7 @@ local SNAPSHOT_EXTRAS = {
 	{ "Tycoon", TycoonService.SnapshotFields }, -- tycoon { active, run, slot, offers, bonus, runsDone, rebirths, boost, plots }
 	{ "OW", OWService.SnapshotFields }, -- ow { buildings{}, passive, perks, capHours }
 	{ "Story", StoryService.SnapshotFields }, -- story { chapter, active, side[], sale, …; missions[]/chapters[] nur bei full }
+	{ "Shop", ShopService.SnapshotFields }, -- shop { owned[], equipped{}, dlcCars[], passes{}; catalog nur bei full (§11 sticky) }
 }
 
 local function sendSnapshot(ms, t)
@@ -654,6 +656,7 @@ function Mini.OnJoin(p)
 		TycoonService.OnJoin(ms, d, t) -- Sitzung merken; im Modus tycoon sofort Grundstück + Modelle
 		OWService.OnJoin(ms, d, t) -- Gebäude am Grundstück, offline fertige Bauten
 		StoryService.OnJoin(ms, d, t) -- Story-Sitzung, Tageswechsel der Nebenmissionen, erster Kunde
+		ShopService.OnJoin(ms, d, t) -- Shop-Sitzung, Pass-Besitz (kann warten) -> Kosmetik gutschreiben
 		ms.modeSeen = nil
 		checkMode(ms, d) -- Open World: Pflicht-Tutorial beim ersten Beitritt (TutorialRules.ShouldStart)
 		-- Game Passes (kann warten), danach den Offline-Ertrag gutschreiben: nur Schrott, nie Geld.
@@ -819,6 +822,7 @@ function Mini.OnLeave(p, wasWritable)
 	pcall(TycoonService.OnLeave, ms) -- Grundstück frei, Angebote weg (der Durchlauf bleibt im Profil)
 	pcall(OWService.OnLeave, ms) -- Gebäude-Modelle abbauen (Bauzeit läuft im Profil weiter)
 	pcall(StoryService.OnLeave, ms) -- Story-Sitzung vergessen (Kunde, Lieferung)
+	pcall(ShopService.OnLeave, ms) -- Shop-Sitzung vergessen
 	local okAuction, errAuction = pcall(AuctionService.OnLeave, ms) -- vor P.Save: Verkäufer-Lose abbrechen
 	if not okAuction then
 		warn("[Minispiele] Auktion verlassen: " .. tostring(errAuction))
@@ -840,6 +844,15 @@ end
 
 -- Nach P.Save(release): saved = Rückgabe von P.Save. Blockiert nicht (Schreiben in eigenem Task,
 -- BindToClose wartet über Mini.Pending()).
+-- Robux-Quittung verbucht (Purchases.Init-Rückruf in GarageServer): Hinweis, Snapshot, Optik (Credits-Pakete
+-- meldet GarageServer über purchaseFX; ShopService ignoriert kind "credits").
+function Mini.OnGranted(p, product)
+	local ok, err = pcall(ShopService.OnGranted, p, product)
+	if not ok then
+		warn("[Shop] Quittung melden: " .. tostring(err))
+	end
+end
+
 function Mini.OnSaved(p, saved)
 	local entry = Mini.Leaving[p]
 	if not entry or saved ~= true then
@@ -908,8 +921,9 @@ local function openStation(p, tab, station)
 	local tutorialWants = wanted ~= nil and wanted.event == "tab:" .. tostring(tab)
 	pcall(TutorialService.OnStation, ms, d, key, tab)
 	if tab == "shop" then
-		-- Credit-Center: 2.4.0-Credits-Shop (Tablet-Seite "shop", zeigt auch die Game Passes); ohne Tablet der Tab "shop"
-		emit(ms, MiniNet.Events.Open, { tab = tab, page = "credits" })
+		-- Credit-Center: Tab "shop" (Meilenstein 8: Credits-Pakete, DLC-Autos, Kosmetik, Pässe); der 2.4.0-Credits-Shop
+		-- bleibt als Tablet-Seite "shop" erreichbar (ShopUI verlinkt ihn, Tablet-Navigation).
+		emit(ms, MiniNet.Events.Open, { tab = tab })
 	elseif MiniNet.TabSet[tab] and not Unlocks.TabAllowed(d, tab) and not tutorialWants then
 		api.toast(ms, lockedText(Unlocks.ForTab(tab)))
 	elseif MiniNet.TabSet[tab] then
@@ -971,6 +985,7 @@ TutorialService.Register(Actions, api)
 TycoonService.Register(Actions, api)
 OWService.Register(Actions, api)
 StoryService.Register(Actions, api)
+ShopService.Register(Actions, api)
 
 for name in pairs(MiniNet.Actions) do
 	assert(Mini.Handlers[name], "Kein Handler für " .. name)
@@ -1016,6 +1031,7 @@ function Mini.Init(c)
 	TycoonService.Init(c) -- Start-/Sammel-Pads aller Grundstücke (workspace.Tycoon.Plots)
 	OWService.Init(c)
 	StoryService.Init(c)
+	ShopService.Init(c) -- PromptGamePassPurchaseFinished; purchasePrompt über c.emit
 end
 
 return Mini

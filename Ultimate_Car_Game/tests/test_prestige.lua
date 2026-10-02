@@ -300,8 +300,15 @@ return {
 		T.eq(CC.ModelById.aureon_nero.level, 78, "Nero 78")
 		T.eq(CC.ModelById.elys_proto.level, 95, "Prototyp 95")
 		for _, m in ipairs(CC.Models) do
-			T.eq(m.level, U.CarLevel(m.id), "Level = Unlocks.CarLevel " .. m.id)
-			T.check(GC.UnlockByKey["car:" .. m.id] ~= nil, "Eintrag in GameConfig.Unlocks " .. m.id)
+			if m.dlc then
+				-- Meilenstein 8: DLC-Modelle sind über ihr Basismodell freigeschaltet (ShopService: "car:<basis>")
+				T.eq(m.level, U.CarLevel(m.base), "Level = Unlocks.CarLevel des Basismodells " .. m.id)
+				T.check(GC.UnlockByKey["car:" .. tostring(m.base)] ~= nil, "Basismodell in GameConfig.Unlocks " .. m.id)
+				T.eq(GC.UnlockByKey["car:" .. m.id], nil, "kein eigener Unlock-Eintrag für " .. m.id)
+			else
+				T.eq(m.level, U.CarLevel(m.id), "Level = Unlocks.CarLevel " .. m.id)
+				T.check(GC.UnlockByKey["car:" .. m.id] ~= nil, "Eintrag in GameConfig.Unlocks " .. m.id)
+			end
 		end
 		-- 2.4.0-Kundenautos: C.Cars[].level bleibt (Elys 38 wie in Config)
 		T.eq(C.CarById.elys.level, 38, "C.Cars Elys unverändert")
@@ -428,7 +435,8 @@ return {
 		T.eq(n[1] and n[1].rank, 1, "Rang im Hinweis")
 		T.eq(n[1] and n[1].title, "Meisterschrauber I", "Titel im Hinweis")
 		T.eq(n[1] and n[1].cosmetic, "wrap_prestige_1", "Kosmetik-Id im Hinweis")
-		T.eq(n[1] and n[1].cosmeticGranted, false, "ohne games.shop noch nicht eingetragen")
+		T.eq(n[1] and n[1].cosmeticGranted, true, "Kosmetik eingetragen (Meilenstein 8: games.shop)")
+		T.eq(d.games.shop and d.games.shop.owned.wrap_prestige_1, true, "wrap_prestige_1 in games.shop.owned")
 		T.check(S.hasToast(pl, "Rang 1 abgeholt"), "Toast")
 		S.clear()
 		S.act(pl, "prestige_claim", { rank = 1 })

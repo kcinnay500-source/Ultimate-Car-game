@@ -379,6 +379,28 @@ def validate_static():
         if side_of(p)[0] == "mini" and re.search(r"^\s*print\(", text, re.M):
             warnings.append(f"{rel(p)}: print() im Spielcode")
 
+    # PHASE4_CONTRACT §9 (Meilenstein 8): ProcessReceipt nur in Purchases.lua; Produkt-/Pass-Ids eindeutig (0 = Platzhalter)
+    purchases_path = SRC / "garage" / "server" / "Purchases.lua"
+    for p, text in texts.items():
+        if p != purchases_path and side_of(p)[1] != "client":
+            check(re.search(r"\.ProcessReceipt\s*=", text) is None, f"{rel(p)}: ProcessReceipt außerhalb von Purchases.lua gesetzt")
+    check(re.search(r"\.ProcessReceipt\s*=", texts[purchases_path]) is not None, "Purchases.lua: ProcessReceipt fehlt")
+    game_config = texts[SRC / "mini" / "shared" / "GameConfig.lua"]
+    shop_products = block(game_config, "local PRODUCTS: { ShopProduct } = {")
+    shop_passes = block(game_config, "Shop.Passes = {")
+    if check(shop_products != "" and shop_passes != "", "GameConfig.Shop: Products/Passes-Blöcke nicht gefunden"):
+        product_ids = re.findall(r"productId\s*=\s*(\d+)", texts[SRC / "garage" / "shared" / "Config.lua"])
+        product_ids += re.findall(r"productId\s*=\s*(\d+)", shop_products)
+        live = [i for i in product_ids if i != "0"]
+        check(len(live) == len(set(live)), "Developer-Product-Ids doppelt (C.CreditProducts / GameConfig.Shop.Products)")
+        pass_ids = re.findall(r"\bid\s*=\s*(\d+)", shop_passes)
+        pass_ids += re.findall(r"\bid\s*=\s*(\d+)", block(texts[SRC / "mini" / "shared" / "MiniConfig.lua"], "MiniConfig.GamePasses = {"))
+        live = [i for i in pass_ids if i != "0"]
+        check(len(live) == len(set(live)), "Game-Pass-Ids doppelt (GameConfig.Shop.Passes / MiniConfig.GamePasses)")
+        for kind in ("car", "cosmetic", "bundle"):
+            check(f'kind = "{kind}"' in shop_products, f"GameConfig.Shop.Products: kein Produkt der Art {kind}")
+        check(re.search(r"\bkind\s*=\s*\"(crate|box|lootbox|random)\"", shop_products) is None, "GameConfig.Shop.Products: Zufallskäufe sind nicht erlaubt")
+
     # Version und DataStore-Identität
     config = texts[SRC / "garage" / "shared" / "Config.lua"]
     m = re.search(r'^C\.Version\s*=\s*"([^"]+)"', config, re.M)

@@ -457,15 +457,24 @@ return {
 			T.check(not g:HasToast(p, "eröffnet bald", m), key .. ": kein 'eröffnet bald'")
 			return g:Events(p, "mini_open", m)[1]
 		end
+		-- Meilenstein 8: das Credit-Center öffnet den Shop-Tab (Credits, DLC-Autos, Kosmetik, Pässe); keine Tablet-Umleitung
 		local open = trigger("shop")
-		T.check(open and open.tab == "shop" and open.page == "credits", "Credit-Center: mini_open page=credits")
-		T.check(g:FindGui(p, "Credits für deine Werkstatt") ~= nil, "2.4.0-Credits-Shop im Tablet sichtbar")
-		T.check(g:FindGui(p, "Game Pass · 2× Schrott") ~= nil, "Game Pass 2× Schrott im Credit-Center")
-		T.check(g:FindGui(p, "Game Pass · Schrottpresse+") ~= nil, "Game Pass Schrottpresse+ im Credit-Center")
+		T.check(open and open.tab == "shop" and open.page == nil, "Credit-Center: mini_open tab=shop ohne Tablet-Seite")
 		local MiniClient = g:ClientModule(p, "Mini.MiniClient")
 		T.eq(g:InClient(p, function()
 			return MiniClient.IsOpen()
-		end), false, "Minispiel-Panel bleibt zu")
+		end), true, "Minispiel-Panel offen")
+		T.eq(g:InClient(p, function()
+			local UI = require(p.PlayerScripts.Mini.MiniUI)
+			return UI.CurrentTab
+		end), "shop", "Credit-Center: Tab shop im Panel")
+		T.check(g:FindGui(p, "2× Schrott kaufen") ~= nil, "Game Pass 2× Schrott im Shop-Tab")
+		T.check(g:FindGui(p, "Zum Credits-Shop des Tablets") ~= nil, "2.4.0-Credits-Shop bleibt über das Tablet erreichbar")
+		T.check(g:FindGui(p, "Credits für deine Werkstatt") == nil, "Tablet nicht geöffnet")
+		g:InClient(p, function()
+			MiniClient.Close()
+		end)
+		g:Advance(0.3)
 		local expect = { dealer = "dealer", testdrive = "dealer", track = "track", carwash = "carwash", auction = "auction",
 			auction_consign = "auction", arcade = "arcade" }
 		for key, tab in pairs(expect) do

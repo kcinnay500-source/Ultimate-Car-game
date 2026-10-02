@@ -26,6 +26,7 @@ local MiniRules = require(MiniShared:WaitForChild("MiniRules"))
 local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 local VehicleFactory = require(script.Parent:WaitForChild("VehicleFactory"))
 local CityService = require(script.Parent:WaitForChild("CityService"))
+local ShopService = require(script.Parent:WaitForChild("ShopService")) -- Meilenstein 8: Kosmetik je Auto (CosmeticsFor)
 
 local CarService = {}
 CarService.States = {} -- [Player] = Auto-Zustand der Sitzung (cs)
@@ -664,6 +665,21 @@ despawn = function(cs, slot, reason)
 end
 
 -- Baut und platziert ein Fahrzeug. slot = "car" | "test"; keys = Spawn-Schlüssel mit Rückfall
+-- Kosmetik (Meilenstein 8): angelegte Folierung/Felgen/Hupe/Spur bzw. die exklusive Folierung eines DLC-Autos
+-- (ShopService.CosmeticsFor -> ShopRules.Resolve) auf das gebaute Modell anwenden; idempotent, ersetzt alles.
+local function applyCosmetics(cs, model, car)
+	local d = cs.p and cs.p.profile and cs.p.profile.data
+	if not d or not model then
+		return
+	end
+	local ok, err = pcall(function()
+		VehicleFactory.ApplyCosmetics(model, car, ShopService.CosmeticsFor(d, car))
+	end)
+	if not ok then
+		warn("[Autos] Kosmetik: " .. tostring(err))
+	end
+end
+
 local function spawnVehicle(cs, slot, car, keys, testdrive)
 	local m = CarCatalog.Model(car.model)
 	if not m then
@@ -692,6 +708,7 @@ local function spawnVehicle(cs, slot, car, keys, testdrive)
 	end
 	model.Parent = CarService.CarsFolder()
 	VehicleFactory.Activate(model, player)
+	applyCosmetics(cs, model, car) -- Probefahrt eines DLC-Autos trägt so seine exklusive Folierung
 	local v = {
 		slot = slot, model = model, info = VehicleFactory.Info(model), carId = testdrive and 0 or car.id,
 		modelId = m.id, name = m.name, testdrive = testdrive == true, spawnedAt = t, lastOccupiedAt = t,
@@ -717,6 +734,7 @@ local function refreshSpawned(cs, d, id)
 	local stats = CarRules.Stats(car)
 	VehicleFactory.ApplyStats(v.model, stats)
 	VehicleFactory.ApplyStyle(v.model, car, (cs.shine[id] or 0) > now())
+	applyCosmetics(cs, v.model, car) -- mini_car_style setzt die Optik neu: Kosmetik danach erneut anwenden
 	-- Zeitfahren läuft: schnelleres Auto -> Mindestzeiten der offenen Abschnitte anpassen
 	if cs.run and cs.run.vehicle == v then
 		TrackRules.Rescale(cs.run, TrackRules.CarSpeed(stats))
@@ -996,6 +1014,24 @@ end
 ---------------------------------------------------------------- Lebenszyklus
 function CarService.Init(c)
 	ctx = c
+	-- Meilenstein 8: nach shop_equip/shop_buy/Quittung/Pass die Optik der stehenden Autos ohne Neubau erneuern
+	ShopService.Restyle = function(ms, d)
+		local cs = ms and states[ms.player]
+		if not cs or cs.ms ~= ms then
+			return
+		end
+		local v = cs.car
+		if v and vehicleAlive(v) then
+			local car = CarRules.Find(d, v.carId)
+			if car then
+				applyCosmetics(cs, v.model, car)
+			end
+		end
+		local tv = cs.test
+		if tv and vehicleAlive(tv) then
+			applyCosmetics(cs, tv.model, CarRules.NewCar(tv.modelId, 0))
+		end
+	end
 	pcall(function()
 		Players.PlayerRemoving:Connect(function(player)
 			local cs = states[player]

@@ -1,7 +1,6 @@
 -- GameConfig: die eine Stelle für alle Zahlen und Tabellen der Ausbaustufe 4 (docs/PHASE4_CONTRACT.md §3):
 -- Places, Zonen, Freischaltungen, Prestige, Party, Tutorial, Beginner-Hinweise und die XP-Regler.
--- Tycoon (Meilenstein 4), Open World (Meilenstein 6) und Story (Meilenstein 7) sind gefüllt; Shop ist als leere Tabelle
--- vorbereitet (Meilenstein 8). 2.4.0-Zahlen bleiben in GarageShared.Config, Minispiel-Zahlen in MiniConfig,
+-- Tycoon (Meilenstein 4), Open World (Meilenstein 6), Story (Meilenstein 7) und Shop (Meilenstein 8) sind gefüllt. 2.4.0-Zahlen bleiben in GarageShared.Config, Minispiel-Zahlen in MiniConfig,
 -- Autos in CarCatalog (das nimmt die Händler-Level aus Unlocks.CarLevel).
 -- Rein (keine Instanzen, keine Dienste), auf Server und Client nutzbar (ReplicatedStorage.GarageShared.Mini).
 -- Balance-Änderungen anderer Teams gehen nur über diese Datei, nie über Zahlen im Code.
@@ -774,8 +773,205 @@ Story.Texts = {
 }
 GameConfig.Story = Story
 
----------------------------------------------------------------- Spätere Meilensteine (leer, nichts liest daraus; Tycoon/OW/Story siehe oben)
-GameConfig.Shop = {} -- wird in Meilenstein 8 gefüllt (Produkte, DLC-Autos, Kosmetik, Game Passes)
+---------------------------------------------------------------- Shop & Monetarisierung (§9, Meilenstein 8)
+-- Alle Zahlen des Shops: Kosmetik (Folierungen, Felgen-Sets, Hupen, Reifenspuren), DLC-Autos (Modelle in
+-- CarCatalog.Dlc), Developer Products und Game Passes. Regeln in ShopRules, Server in ShopService, Quittungen in
+-- Purchases/Profiles.GrantReceipt. Grundsätze für ein junges Publikum (Roblox-Richtlinien):
+--   * keine bezahlten Zufallsboxen, keine Wahrscheinlichkeiten, kein Glücksspiel, kein Handel für Robux;
+--   * kein Pay-to-win: DLC-Autos haben exakt die Fahrwerte ihres Basismodells (CarCatalog.Dlc.base);
+--   * alles ist ohne Robux erreichbar: jede Kosmetik hat einen Credits-Preis ODER ist Belohnung (Prestige, Story,
+--     DLC-Auto-Beigabe); DLC-Autos sind ab dem Level des Basismodells mit Credits kaufbar (DlcPriceFactor);
+--   * alle Produkt-/Pass-IDs sind Platzhalter 0 -> der Client zeigt „noch nicht eingerichtet“ und öffnet keinen Prompt.
+-- Kosmetik-Ids: "<slot>_<name>" (Slot wrap | rims | horn | trail). Prestige-Belohnungen heißen wrap_prestige_<rang>
+-- (ungerade Ränge) bzw. rims_prestige_<rang> (gerade Ränge), vgl. GameConfig.Prestige.Rewards[].cosmetic; die
+-- Story vergibt wrap_mega (Kapitel 5). Optik ist rein prozedural (Parts/Farben), keine rbxassetid.
+-- style je Slot (VehicleFactory.ApplyCosmetics):
+--   wrap  = { pattern = "stripes"|"flames"|"checker"|"waves"|"laurel"|"solid", color = {r,g,b}, color2 = {r,g,b}? }
+--   rims  = { color = {r,g,b}, reflectance = 0..1, neon = {r,g,b}? }   (neon: Leuchtring an der Felge)
+--   horn  = { text = string (Sprechblase beim Hupen), light = {r,g,b} (Blinkfarbe der Scheinwerfer) }
+--   trail = { color = {r,g,b}, width = Studs }
+export type Cosmetic = {
+	id: string, slot: string, name: string, desc: string, creditsPrice: number?, rewardOnly: boolean?, level: number?,
+	rewardText: string?, style: { [string]: any },
+}
+export type ShopGrants = { cosmetics: { string }?, cars: { string }? }
+export type ShopProduct = {
+	key: string, kind: string, name: string, desc: string, productId: number, robuxHint: number,
+	grants: ShopGrants, creditsPrice: number?, pack: any?,
+}
+export type ShopPass = { key: string, name: string, desc: string, id: number, robuxHint: number, grants: ShopGrants }
+
+local Shop = {
+	Slots = { "wrap", "rims", "horn", "trail" },
+	SlotNames = { wrap = "Folierung", rims = "Felgen-Set", horn = "Hupe", trail = "Reifenspur" },
+	DlcPriceFactor = 1.5, -- Credits-Preis eines DLC-Autos = Händlerpreis des Basismodells × 1,5 (gleiche Werte)
+	BuyXp = 10, -- XP für einen Kosmetik-Kauf mit Credits (DLC-Auto: CarCatalog.BuyXp)
+	MaxOwned = 400, -- Deckel für owned beim Laden (Schutz vor aufgeblähten Profilen)
+	Cosmetics = {} :: { Cosmetic },
+	Products = {} :: { ShopProduct },
+	Passes = {} :: { ShopPass },
+}
+
+-- Kaufbare Kosmetik (Credits; dieselbe Optik gibt es als Developer Product oder im Game Pass)
+local COSMETICS: { Cosmetic } = {
+	-- Folierungen
+	{ id = "wrap_streifen", slot = "wrap", name = "Rennstreifen", desc = "Zwei klassische Streifen über Haube und Dach.",
+		creditsPrice = 1500, level = 1, style = { pattern = "stripes", color = { 236, 238, 240 }, color2 = { 28, 30, 34 } } },
+	{ id = "wrap_karo", slot = "wrap", name = "Zielflagge", desc = "Schwarz-weißes Karo wie auf der Zielflagge.",
+		creditsPrice = 2000, level = 2, style = { pattern = "checker", color = { 236, 238, 240 }, color2 = { 28, 30, 34 } } },
+	{ id = "wrap_flammen", slot = "wrap", name = "Flammen", desc = "Orange Flammen, die von der Motorhaube nach hinten züngeln.",
+		creditsPrice = 2500, level = 3, style = { pattern = "flames", color = { 247, 120, 40 }, color2 = { 255, 210, 60 } } },
+	{ id = "wrap_wellen", slot = "wrap", name = "Wellen", desc = "Türkise Wellen an den Seiten – wie Surfen auf Asphalt.",
+		creditsPrice = 3000, level = 5, style = { pattern = "waves", color = { 48, 170, 157 }, color2 = { 107, 199, 210 } } },
+	-- Felgen-Sets
+	{ id = "rims_gold", slot = "rims", name = "Goldfelgen", desc = "Glänzende Felgen in Gold.",
+		creditsPrice = 1200, level = 1, style = { color = { 224, 172, 60 }, reflectance = 0.35 } },
+	{ id = "rims_carbon", slot = "rims", name = "Carbon-Felgen", desc = "Matte, dunkle Felgen im Carbon-Look.",
+		creditsPrice = 1500, level = 2, style = { color = { 40, 42, 48 }, reflectance = 0.05 } },
+	{ id = "rims_chrom_blau", slot = "rims", name = "Blauchrom", desc = "Chromfelgen mit blauem Schimmer.",
+		creditsPrice = 1800, level = 4, style = { color = { 150, 190, 230 }, reflectance = 0.5 } },
+	{ id = "rims_neon", slot = "rims", name = "Neonfelgen", desc = "Felgen mit leuchtendem Neonring – nachts ein Hingucker.",
+		creditsPrice = 2500, level = 6, style = { color = { 30, 32, 36 }, reflectance = 0.1, neon = { 60, 255, 120 } } },
+	-- Hupen (Text in der Sprechblase + Blinkfarbe der Scheinwerfer)
+	{ id = "horn_melodie", slot = "horn", name = "Melodie-Hupe", desc = "Eine kleine Melodie statt Tröten.",
+		creditsPrice = 800, level = 1, style = { text = "♪ Tü-dü-düüü ♪", light = { 255, 220, 120 } } },
+	{ id = "horn_fanfare", slot = "horn", name = "Fanfare", desc = "Große Fanfare für große Auftritte.",
+		creditsPrice = 1200, level = 3, style = { text = "TÄÄÄ-TÄÄÄ!", light = { 255, 160, 60 } } },
+	{ id = "horn_laser", slot = "horn", name = "Laser-Hupe", desc = "Piu-piu! Hupe mit Weltraum-Sound.",
+		creditsPrice = 1500, level = 6, style = { text = "Piu-piu!", light = { 120, 220, 255 } } },
+	-- Reifenspuren
+	{ id = "trail_blau", slot = "trail", name = "Blaue Spur", desc = "Blaue Reifenspuren beim Driften.",
+		creditsPrice = 1000, level = 2, style = { color = { 60, 120, 255 }, width = 0.6 } },
+	{ id = "trail_regenbogen", slot = "trail", name = "Regenbogenspur", desc = "Bunte Spur in allen Farben.",
+		creditsPrice = 2000, level = 4, style = { color = { 255, 90, 200 }, color2 = { 60, 200, 255 }, width = 0.8 } },
+	{ id = "trail_neon", slot = "trail", name = "Neonspur", desc = "Grün leuchtende Spur – passt zu den Neonfelgen.",
+		creditsPrice = 1800, level = 6, style = { color = { 60, 255, 120 }, width = 0.7 } },
+	-- Belohnungen (nicht kaufbar): Story-Finale und Beigaben der DLC-Autos
+	{ id = "wrap_mega", slot = "wrap", name = "Mega-Verkäufer", desc = "Die Folierung für den Mega-Verkäufer der Stadt.",
+		rewardOnly = true, rewardText = "Story: Kapitel 5 „Der Traumwagen“",
+		style = { pattern = "laurel", color = { 224, 172, 60 }, color2 = { 28, 30, 34 } } },
+	{ id = "wrap_sunset", slot = "wrap", name = "Sunset", desc = "Sonnenuntergangs-Verlauf, exklusiv zum Komet S2 Sunset.",
+		rewardOnly = true, rewardText = "Beigabe: Komet S2 Sunset",
+		style = { pattern = "waves", color = { 247, 120, 40 }, color2 = { 235, 167, 48 } } },
+	{ id = "wrap_nacht", slot = "wrap", name = "Nachtfalke", desc = "Violette Nachtstreifen, exklusiv zum Nord R4 Nachtfalke.",
+		rewardOnly = true, rewardText = "Beigabe: Nord R4 Nachtfalke",
+		style = { pattern = "stripes", color = { 160, 80, 255 }, color2 = { 28, 30, 34 } } },
+	{ id = "wrap_blitz", slot = "wrap", name = "Blitz", desc = "Eisblaue Blitze, exklusiv zum Vektor RS Blitz.",
+		rewardOnly = true, rewardText = "Beigabe: Vektor RS Blitz",
+		style = { pattern = "flames", color = { 107, 199, 210 }, color2 = { 236, 238, 240 } } },
+}
+for _, c in ipairs(COSMETICS) do
+	table.insert(Shop.Cosmetics, c)
+end
+-- Prestige-Belohnungen (GameConfig.Prestige.Rewards[rank].cosmetic): je Rang eine Folierung oder ein Felgen-Set
+do
+	local tierColors = { { 97, 112, 124 }, { 150, 110, 70 }, { 205, 210, 216 }, { 224, 172, 60 } } -- Silber, Bronze, Chrom, Gold je 5 Ränge
+	for _, r in ipairs(GameConfig.Prestige.Rewards) do
+		local tier = tierColors[math.min(#tierColors, math.floor((r.rank - 1) / 5) + 1)]
+		local isWrap = r.cosmetic:sub(1, 5) == "wrap_"
+		table.insert(Shop.Cosmetics, {
+			id = r.cosmetic, slot = isWrap and "wrap" or "rims",
+			name = (isWrap and "Prestige-Folierung " or "Prestige-Felgen ") .. r.rank,
+			desc = (isWrap and "Lorbeer-Folierung" or "Felgen-Set") .. " für den Prestige-Rang " .. r.rank .. " („" .. r.title .. "“).",
+			rewardOnly = true, rewardText = "Prestige-Rang " .. r.rank,
+			style = isWrap and { pattern = "laurel", color = tier, color2 = { 28, 30, 34 } }
+				or { color = tier, reflectance = 0.2 + 0.1 * math.min(3, math.floor((r.rank - 1) / 5)) },
+		})
+	end
+end
+
+-- Developer Products. productId 0 = Platzhalter (kein Prompt, Hinweis „noch nicht eingerichtet“).
+-- Credits-Pakete zeigen auf die 2.4.0-Einträge (pack = C.CreditProducts[i], Referenz: productId/credits werden
+-- dort gepflegt; Purchases verbucht sie weiter über Profiles.GrantCredits). robuxHint ist nur ein Richtwert.
+for _, p in ipairs(C.CreditProducts) do
+	table.insert(Shop.Products, {
+		key = p.key, kind = "credits", name = p.name, pack = p, productId = p.productId, robuxHint = p.baseRobux,
+		desc = string.format("%s Credits%s.", tostring(p.credits), p.bonus > 0 and (" (+" .. p.bonus .. " % Bonus)") or ""),
+		grants = { credits = p.credits },
+	})
+end
+local PRODUCTS: { ShopProduct } = {
+	-- DLC-Autos: gleiche Fahrwerte wie das Basismodell, dazu feste Optik und eine exklusive Folierung
+	{ key = "car_komet_sunset", kind = "car", name = "Komet S2 Sunset", productId = 0, robuxHint = 149,
+		desc = "Der Komet S2 in Bernstein mit Goldfelgen, Unterbodenlicht und Sunset-Folierung. Fährt wie der Komet S2.",
+		grants = { cars = { "dlc_komet_sunset" }, cosmetics = { "wrap_sunset" } } },
+	{ key = "car_nord_nacht", kind = "car", name = "Nord R4 Nachtfalke", productId = 0, robuxHint = 249,
+		desc = "Der Nord R4 in Tiefschwarz mit Chromfelgen, violettem Licht und Nachtfalke-Folierung. Fährt wie der Nord R4.",
+		grants = { cars = { "dlc_nord_nacht" }, cosmetics = { "wrap_nacht" } } },
+	{ key = "car_vektor_blitz", kind = "car", name = "Vektor RS Blitz", productId = 0, robuxHint = 449,
+		desc = "Der Vektor RS in Eisblau mit weißen Felgen, blauem Licht und Blitz-Folierung. Fährt wie der Vektor RS.",
+		grants = { cars = { "dlc_vektor_blitz" }, cosmetics = { "wrap_blitz" } } },
+	-- Kosmetik (dieselben Teile gibt es für Credits)
+	{ key = "cos_wrap_flammen", kind = "cosmetic", name = "Flammen-Folierung", productId = 0, robuxHint = 49,
+		desc = "Orange Flammen für jedes deiner Autos.", grants = { cosmetics = { "wrap_flammen" } }, creditsPrice = 2500 },
+	{ key = "cos_rims_gold", kind = "cosmetic", name = "Goldfelgen", productId = 0, robuxHint = 39,
+		desc = "Glänzende Goldfelgen für jedes deiner Autos.", grants = { cosmetics = { "rims_gold" } }, creditsPrice = 1200 },
+	{ key = "cos_horn_fanfare", kind = "cosmetic", name = "Fanfare", productId = 0, robuxHint = 29,
+		desc = "Große Fanfare für große Auftritte.", grants = { cosmetics = { "horn_fanfare" } }, creditsPrice = 1200 },
+	{ key = "cos_trail_regenbogen", kind = "cosmetic", name = "Regenbogenspur", productId = 0, robuxHint = 39,
+		desc = "Bunte Reifenspur in allen Farben.", grants = { cosmetics = { "trail_regenbogen" } }, creditsPrice = 2000 },
+	-- Bündel
+	{ key = "bundle_starter", kind = "bundle", name = "Starter-Set", productId = 0, robuxHint = 99,
+		desc = "Rennstreifen, Goldfelgen, Melodie-Hupe und Blaue Spur in einem Paket.",
+		grants = { cosmetics = { "wrap_streifen", "rims_gold", "horn_melodie", "trail_blau" } }, creditsPrice = 4500 },
+}
+for _, p in ipairs(PRODUCTS) do
+	table.insert(Shop.Products, p)
+end
+
+-- Game Passes (rein kosmetisch; id 0 = Platzhalter). Die bestehenden Presse-Pässe (MiniPasses) bleiben.
+Shop.Passes = {
+	{ key = "neon", name = "Neon-Paket", id = 0, robuxHint = 199,
+		desc = "Neonfelgen, Neonspur und Laser-Hupe – alles, was nachts leuchtet.",
+		grants = { cosmetics = { "rims_neon", "trail_neon", "horn_laser" } } },
+	{ key = "deko", name = "Werkstatt-Deko", id = 0, robuxHint = 149,
+		desc = "Zielflagge, Blauchrom-Felgen und Regenbogenspur für den Deko-Look deiner Werkstattflotte.",
+		grants = { cosmetics = { "wrap_karo", "rims_chrom_blau", "trail_regenbogen" } } },
+}
+
+Shop.Text = {
+	notReady = "Dieser Kauf ist noch nicht eingerichtet. Alles gibt es auch für Credits oder als Belohnung!",
+	unknown = "Diesen Artikel gibt es nicht.",
+	owned = "Das hast du schon.",
+	rewardOnly = "Das gibt es nur als Belohnung: %s.",
+	level = "Dafür brauchst du Level %d.",
+	money = "Nicht genug Credits.",
+	garageFull = "Deine Garage ist voll (%d Autos).",
+	bought = "Gekauft: %s!",
+	boughtCar = "Dein neues Auto steht in der Garage: %s!",
+	equipped = "Angelegt: %s.",
+	unequipped = "%s abgelegt.",
+	notOwned = "Das gehört dir noch nicht.",
+	wrongSlot = "Das passt nicht in diesen Platz.",
+	badSlot = "Unbekannter Platz.",
+	receipt = "Danke für deinen Einkauf: %s!",
+	receiptCar = "Danke! Dein neues Auto steht in der Garage: %s!",
+	hint = "Alles im Shop gibt es auch für Credits oder als Belohnung – ganz ohne Robux.",
+}
+
+-- Nachschlagetabellen
+Shop.CosmeticById = {} :: { [string]: Cosmetic }
+Shop.CosmeticsBySlot = {} :: { [string]: { Cosmetic } }
+Shop.SlotSet = {} :: { [string]: boolean }
+for _, slot in ipairs(Shop.Slots) do
+	Shop.SlotSet[slot] = true
+	Shop.CosmeticsBySlot[slot] = {}
+end
+for _, c in ipairs(Shop.Cosmetics) do
+	Shop.CosmeticById[c.id] = c
+	if Shop.CosmeticsBySlot[c.slot] then
+		table.insert(Shop.CosmeticsBySlot[c.slot], c)
+	end
+end
+Shop.ProductByKey = {} :: { [string]: ShopProduct }
+for _, p in ipairs(Shop.Products) do
+	Shop.ProductByKey[p.key] = p
+end
+Shop.PassByKey = {} :: { [string]: ShopPass }
+for _, p in ipairs(Shop.Passes) do
+	Shop.PassByKey[p.key] = p
+end
+GameConfig.Shop = Shop
 
 ---------------------------------------------------------------- Nachschlagetabellen
 GameConfig.ModeSet = {}

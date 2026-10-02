@@ -401,7 +401,7 @@ end
 Mini.Init({emit=emit,toast=toast,changed=changed,push=push,getSession=function(player) return sessions[player] end,moveTo=moveTo,now=now})
 Command.OnServerEvent:Connect(request)
 Purchases.Init(function(player) return sessions[player] end,function(p,product)
-    emit(p,"purchaseFX",{title="Credits erhalten",detail="+"..product.credits.." Credits"});changed(p)
+    emit(p,"purchaseFX",Purchases.FX(product));changed(p);Mini.OnGranted(p,product) -- 3.0: Titel je Art (Credits/Auto/Optik/Paket), Shop-Hinweis + Optik
 end)
 local function join(player)
     if sessions[player] or joining[player] then return end

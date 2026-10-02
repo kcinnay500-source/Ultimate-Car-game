@@ -82,6 +82,11 @@ MiniNet.Actions = {
 	story_claim = { id = "string" },
 	story_sell = { offer = "number", price = "number" },
 	side_claim = { id = "string" },
+	-- Meilenstein 8 (§9, §10): Shop – Kosmetik/DLC-Auto für Credits kaufen, Kosmetik anlegen (item="" legt ab),
+	-- Robux-Prompt anfordern (product = Produkt- oder Pass-Schlüssel aus GameConfig.Shop; Antwort über purchasePrompt)
+	shop_buy = { item = "string" },
+	shop_equip = { slot = "string", item = "string" },
+	shop_prompt = { product = "string" },
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -129,6 +134,7 @@ MiniNet.Cooldowns = {
 	story_claim = 0.5,
 	story_sell = 1,
 	side_claim = 0.5,
+	shop_prompt = 3,
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",
@@ -155,6 +161,9 @@ MiniNet.Targets = {
 	story_start = "id",
 	story_claim = "id",
 	side_claim = "id",
+	shop_buy = "item",
+	shop_equip = "slot",
+	shop_prompt = "product",
 }
 
 -- Ereignisse Server -> Client

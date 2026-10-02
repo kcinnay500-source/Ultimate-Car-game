@@ -578,6 +578,524 @@ function VehicleFactory.ApplyStyle(model, car, shine)
 	model:SetAttribute("Glow", car.glow)
 	model:SetAttribute("Spoiler", car.spoiler == true)
 	model:SetAttribute("Shine", shine == true)
+	-- Kosmetik (Meilenstein 8): ein angelegtes Felgen-Set überdeckt die Palettenfarbe auch nach Waschstraße/Tuning
+	if info.cosmetics and info.cosmetics.rims then
+		VehicleFactory.ApplyRimCosmetic(model, info.cosmetics.rims)
+	end
+	return true
+end
+
+---------------------------------------------------------------- Kosmetik (Shop, Meilenstein 8; docs/PHASE4_CONTRACT.md §9)
+-- VehicleFactory.ApplyCosmetics(model, cosmetics) bzw. (model, car, cosmetics) – beide Formen; cosmetics =
+-- ShopService.CosmeticsFor(d, car) = ShopRules.Resolve(d, car) = { wrap = Eintrag|nil, rims = ..., horn = ..., trail = ... }
+-- (Einträge aus GameConfig.Shop.Cosmetics mit `style`; Ids als Strings werden nachgeschlagen). Alles prozedural,
+-- keine Assets:
+--   wrap   Folierung als dünne Parts (Streifen/Flammen/Karo/Wellen/Lorbeer/Fläche) auf Haube/Dach/Flanken entlang
+--          der Karosserie-Hülle (info.bounds, Lackteile), Massless, CanCollide/CanTouch/CanQuery false, am Chassis
+--          geschweißt, Ordner "Cosmetics" im Modell, höchstens MAX_COSMETIC_PARTS (40) Parts insgesamt.
+--   rims   Farbe/Reflexion der Felgenteile (überdeckt die Palettenfarbe, bleibt nach ApplyStyle erhalten),
+--          neon = Leuchtring (Neon-Zylinder) an jedem Rad, mitgeschweißt am Rad.
+--   horn   Schild "HornPlate" mit SurfaceGui-Text am Heck + „Lichthupe“ (Neon-Leiste in der Lichtfarbe vorn, normal
+--          unsichtbar); VehicleFactory.Flash(model, seconds) blitzt sie und die Scheinwerfer kurz auf
+--          (Taste H: der Fahrer-Client darf dasselbe lokal tun, Attribute HornText/HornLight am Modell).
+--   trail  Trail-Instanzen an beiden Hinterrädern (Attachments am Chassis, Farbe/Breite aus style), Enabled.
+-- Erneutes Anwenden ersetzt alles Alte (Ordner wird neu gebaut); ApplyCosmetics(model, {}) entfernt alles; mit dem
+-- Modell verschwindet die Kosmetik (alles Nachkommen des Modells).
+local MAX_COSMETIC_PARTS = 40
+VehicleFactory.MaxCosmeticParts = MAX_COSMETIC_PARTS
+local COSMETIC_SLOTS = { "wrap", "rims", "horn", "trail" }
+local SLOT_SET = { wrap = true, rims = true, horn = true, trail = true }
+
+local shopConfig = nil
+local function cosmeticById(id: any): any
+	if type(id) ~= "string" then
+		return nil
+	end
+	if shopConfig == nil then
+		local ok, cfg = pcall(function()
+			return require(MiniShared:WaitForChild("GameConfig", 5))
+		end)
+		shopConfig = (ok and type(cfg) == "table" and type(cfg.Shop) == "table") and cfg.Shop or false
+	end
+	return shopConfig and shopConfig.CosmeticById and shopConfig.CosmeticById[id] or nil
+end
+
+local function rgb(t: any, fallback: Color3): Color3
+	if typeof(t) == "Color3" then
+		return t
+	end
+	if type(t) == "table" and type(t[1]) == "number" and type(t[2]) == "number" and type(t[3]) == "number" then
+		return Color3.fromRGB(math.clamp(t[1], 0, 255), math.clamp(t[2], 0, 255), math.clamp(t[3], 0, 255))
+	end
+	return fallback
+end
+
+-- Normalisiert die Eingabe: Einträge (mit style) oder Ids je Platz; falscher Platz / Unbekanntes wird ignoriert
+local function normalizeCosmetics(input: any): { [string]: any }
+	local out = {}
+	if type(input) ~= "table" then
+		return out
+	end
+	for _, slot in ipairs(COSMETIC_SLOTS) do
+		local v = input[slot]
+		if type(v) == "string" then
+			v = cosmeticById(v)
+		end
+		if type(v) == "table" and type(v.style) == "table" and (v.slot == nil or v.slot == slot) then
+			out[slot] = v
+		end
+	end
+	return out
+end
+
+-- Karosserie-Profil aus den Lackteilen (Root-Koordinaten): Oberkante und halbe Breite an einer Z-Position
+local function bodyProfile(info: any)
+	local rootCF = info.root.CFrame
+	local boxes = {}
+	for _, part in ipairs(info.paint) do
+		if part.Parent then
+			local c, e = extents(rootCF, part)
+			table.insert(boxes, { c = c, e = e })
+		end
+	end
+	if #boxes == 0 then
+		for _, part in ipairs(info.body) do
+			if part.Parent then
+				local c, e = extents(rootCF, part)
+				table.insert(boxes, { c = c, e = e })
+			end
+		end
+	end
+	local b = info.bounds
+	local function topAt(z: number): number
+		local top = -math.huge
+		for _, x in ipairs(boxes) do
+			if z >= x.c.Z - x.e.Z - 0.05 and z <= x.c.Z + x.e.Z + 0.05 then
+				top = math.max(top, x.c.Y + x.e.Y)
+			end
+		end
+		if top == -math.huge then
+			top = (b.minY + b.maxY) / 2
+		end
+		return top
+	end
+	local function halfWidthAt(z: number): number
+		local w = 0
+		for _, x in ipairs(boxes) do
+			if z >= x.c.Z - x.e.Z - 0.05 and z <= x.c.Z + x.e.Z + 0.05 then
+				w = math.max(w, math.abs(x.c.X) + x.e.X)
+			end
+		end
+		if w <= 0 then
+			w = (b.maxX - b.minX) / 2
+		end
+		return w
+	end
+	return { topAt = topAt, halfWidthAt = halfWidthAt, minZ = b.minZ, maxZ = b.maxZ, minY = b.minY, maxY = b.maxY, rootCF = rootCF }
+end
+
+local function cosmeticPart(info: any, state: any, name: string, size: Vector3, localCF: CFrame, color: Color3, parent: Instance): BasePart?
+	if state.parts >= MAX_COSMETIC_PARTS then
+		return nil
+	end
+	local p = newPart(name, size, info.root.CFrame * localCF, parent)
+	p.Transparency = 0
+	p.Massless = true
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.Color = color
+	p.Material = Enum.Material.SmoothPlastic
+	p:SetAttribute("Cosmetic", state.id or "")
+	state.parts += 1
+	return p
+end
+
+-- Dünnes Teil auf der Oberseite: folgt der Oberkante zwischen z0 und z1 (Neigung um die X-Achse)
+local function topPlate(info: any, state: any, prof: any, name: string, x: number, width: number, z0: number, z1: number, color: Color3, parent: Instance, lift: number?)
+	local y0, y1 = prof.topAt(z0), prof.topAt(z1)
+	local zm, ym = (z0 + z1) / 2, (y0 + y1) / 2 + (lift or 0.04)
+	local len = math.max(0.2, z1 - z0)
+	local tilt = math.atan2(y1 - y0, len)
+	local cf = CFrame.new(x, ym, zm) * CFrame.Angles(-tilt, 0, 0)
+	return cosmeticPart(info, state, name, Vector3.new(width, 0.06, math.sqrt(len * len + (y1 - y0) ^ 2)), cf, color, parent)
+end
+
+-- Dünnes Teil an der Flanke (links/rechts): Höhe h, Unterkante bei yBottom
+local function sidePlate(info: any, state: any, prof: any, name: string, side: number, z0: number, z1: number, yBottom: number, h: number, color: Color3, parent: Instance)
+	local zm = (z0 + z1) / 2
+	local hw = prof.halfWidthAt(zm) + 0.04
+	local cf = CFrame.new(side * hw, yBottom + h / 2, zm)
+	return cosmeticPart(info, state, name, Vector3.new(0.06, h, math.max(0.2, z1 - z0)), cf, color, parent)
+end
+
+local WRAP_BUILDERS = {}
+
+-- Zwei Rennstreifen über Haube und Dach (2 × 8 Segmente)
+WRAP_BUILDERS.stripes = function(info, state, prof, style, folder)
+	local c1 = rgb(style.color, Color3.fromRGB(236, 238, 240))
+	local len = prof.maxZ - prof.minZ - 1.0
+	local segs = 8
+	local step = len / segs
+	for _, x in ipairs({ -0.65, 0.65 }) do
+		for i = 0, segs - 1 do
+			local z0 = prof.minZ + 0.5 + i * step
+			topPlate(info, state, prof, "Wrap", x, 0.55, z0, z0 + step, c1, folder)
+		end
+	end
+end
+
+-- Zielflagge: Karo über Haube und Dach (3 Spuren × 6 Reihen, nur die Felder beider Farben abwechselnd)
+WRAP_BUILDERS.checker = function(info, state, prof, style, folder)
+	local c1 = rgb(style.color, Color3.fromRGB(236, 238, 240))
+	local c2 = rgb(style.color2, Color3.fromRGB(28, 30, 34))
+	local len = prof.maxZ - prof.minZ - 1.2
+	local rows, cols = 6, 3
+	local step = len / rows
+	local cell = 1.0
+	for r = 0, rows - 1 do
+		for col = 0, cols - 1 do
+			local x = (col - 1) * cell
+			local z0 = prof.minZ + 0.6 + r * step
+			topPlate(info, state, prof, "Wrap", x, cell - 0.08, z0 + 0.04, z0 + step - 0.04, ((r + col) % 2 == 0) and c1 or c2, folder)
+		end
+	end
+end
+
+-- Flammen: Haubenband + je Seite sechs Zungen, die nach hinten kleiner werden
+WRAP_BUILDERS.flames = function(info, state, prof, style, folder)
+	local c1 = rgb(style.color, Color3.fromRGB(247, 120, 40))
+	local c2 = rgb(style.color2, Color3.fromRGB(255, 210, 60))
+	local len = prof.maxZ - prof.minZ
+	local tongues = 6
+	local span = len * 0.6
+	local step = span / tongues
+	local yBase = prof.minY + (prof.maxY - prof.minY) * 0.28
+	for _, side in ipairs({ -1, 1 }) do
+		for i = 0, tongues - 1 do
+			local z0 = prof.minZ + 0.6 + i * step
+			local h = 1.3 - i * 0.16
+			sidePlate(info, state, prof, "Wrap", side, z0, z0 + step - 0.08, yBase, h, (i % 2 == 0) and c1 or c2, folder)
+		end
+	end
+	-- Haubenband vorn (zwei Felder in beiden Farben)
+	topPlate(info, state, prof, "Wrap", 0, 2.4, prof.minZ + 0.5, prof.minZ + 1.7, c1, folder)
+	topPlate(info, state, prof, "Wrap", 0, 1.4, prof.minZ + 1.7, prof.minZ + 2.6, c2, folder)
+end
+
+-- Wellen: je Seite sechs versetzte Felder in zwei Farben
+WRAP_BUILDERS.waves = function(info, state, prof, style, folder)
+	local c1 = rgb(style.color, Color3.fromRGB(48, 170, 157))
+	local c2 = rgb(style.color2, Color3.fromRGB(107, 199, 210))
+	local len = prof.maxZ - prof.minZ - 1.0
+	local n = 6
+	local step = len / n
+	local yBase = prof.minY + (prof.maxY - prof.minY) * 0.22
+	for _, side in ipairs({ -1, 1 }) do
+		for i = 0, n - 1 do
+			local z0 = prof.minZ + 0.5 + i * step
+			local lift = (i % 2 == 0) and 0 or 0.35
+			sidePlate(info, state, prof, "Wrap", side, z0, z0 + step - 0.06, yBase + lift, 0.7, (i % 2 == 0) and c1 or c2, folder)
+		end
+	end
+end
+
+-- Lorbeer: Zierleiste rundum an den Schwellern, dazu zwei Blätter auf der Haube und ein Heckstreifen
+WRAP_BUILDERS.laurel = function(info, state, prof, style, folder)
+	local c1 = rgb(style.color, Color3.fromRGB(224, 172, 60))
+	local c2 = rgb(style.color2, Color3.fromRGB(28, 30, 34))
+	local yBase = prof.minY + (prof.maxY - prof.minY) * 0.12
+	for _, side in ipairs({ -1, 1 }) do
+		sidePlate(info, state, prof, "Wrap", side, prof.minZ + 0.4, prof.maxZ - 0.4, yBase, 0.35, c1, folder)
+	end
+	-- zwei Blätter (geneigte Felder) auf der Haube, ein dunkler Mittelstreifen dazwischen
+	for _, x in ipairs({ -1.1, 1.1 }) do
+		topPlate(info, state, prof, "Wrap", x, 0.8, prof.minZ + 0.8, prof.minZ + 2.4, c1, folder)
+	end
+	topPlate(info, state, prof, "Wrap", 0, 0.5, prof.minZ + 0.6, prof.minZ + 2.6, c2, folder)
+	topPlate(info, state, prof, "Wrap", 0, 2.2, prof.maxZ - 1.6, prof.maxZ - 0.6, c1, folder)
+end
+
+-- Fläche: Haube und Dach in einer Farbe (4 Segmente)
+WRAP_BUILDERS.solid = function(info, state, prof, style, folder)
+	local c1 = rgb(style.color, Color3.fromRGB(236, 238, 240))
+	local len = prof.maxZ - prof.minZ - 1.0
+	local segs = 4
+	local step = len / segs
+	for i = 0, segs - 1 do
+		local z0 = prof.minZ + 0.5 + i * step
+		topPlate(info, state, prof, "Wrap", 0, 2.6, z0, z0 + step, c1, folder)
+	end
+end
+
+local function buildWrap(info: any, state: any, entry: any, folder: Instance)
+	local style = entry.style
+	local builder = WRAP_BUILDERS[style.pattern] or WRAP_BUILDERS.stripes
+	local prof = bodyProfile(info)
+	state.id = entry.id or ""
+	builder(info, state, prof, style, folder)
+	for _, p in ipairs(folder:GetChildren()) do
+		if p:IsA("BasePart") and p.Name == "Wrap" then
+			weld(info.chassis, p)
+		end
+	end
+end
+
+-- Felgenfarbe/-reflexion und Leuchtring; ohne entry: Palettenfarbe aus ApplyStyle (Attribut Rims) zurück
+function VehicleFactory.ApplyRimCosmetic(model: Model, entry: any): boolean
+	local info = registry[model]
+	if not info then
+		return false
+	end
+	local style = type(entry) == "table" and entry.style or nil
+	if style then
+		local color = rgb(style.color, Color3.fromRGB(200, 200, 200))
+		local reflect = type(style.reflectance) == "number" and math.clamp(style.reflectance, 0, 1) or 0
+		for _, part in ipairs(info.rims) do
+			part.Color = color
+			part.Reflectance = reflect
+		end
+	else
+		local rim, reflect = CarCatalog.RimColor(model:GetAttribute("Rims"))
+		for _, part in ipairs(info.rims) do
+			part.Color = rim
+			part.Reflectance = reflect
+		end
+	end
+	return true
+end
+
+local function buildRims(info: any, state: any, entry: any, folder: Instance)
+	VehicleFactory.ApplyRimCosmetic(info.model, entry)
+	local neon = entry.style.neon
+	if type(neon) == "table" then
+		state.id = entry.id or ""
+		local color = rgb(neon, Color3.fromRGB(60, 255, 120))
+		for _, c in ipairs(CORNERS) do
+			local wheel = info.wheels[c]
+			if wheel then
+				local r = wheel.Size.Y / 2 * 0.72
+				local w = wheel.Size.X + 0.16
+				local left = c == "FL" or c == "RL"
+				local ring = cosmeticPart(info, state, "RimNeon_" .. c, Vector3.new(w, r * 2, r * 2),
+					info.root.CFrame:ToObjectSpace(wheel.CFrame), color, folder)
+				if ring then
+					ring.Shape = Enum.PartType.Cylinder
+					ring.Material = Enum.Material.Neon
+					ring.Transparency = 0.15
+					ring:SetAttribute("Side", left and "L" or "R")
+					weld(wheel, ring)
+				end
+			end
+		end
+	end
+end
+
+local function buildHorn(info: any, state: any, entry: any, folder: Instance)
+	local style = entry.style
+	local b = info.bounds
+	local text = type(style.text) == "string" and style.text or "Tuut!"
+	local light = rgb(style.light, Color3.fromRGB(255, 220, 120))
+	state.id = entry.id or ""
+	-- Schild am Heck mit dem Hupentext (SurfaceGui, keine Assets)
+	local plate = cosmeticPart(info, state, "HornPlate", Vector3.new(2.2, 0.5, 0.08),
+		CFrame.new(0, b.minY + (b.maxY - b.minY) * 0.42, b.maxZ + 0.06), Color3.fromRGB(28, 30, 34), folder)
+	if plate then
+		weld(info.chassis, plate)
+		local gui = Instance.new("SurfaceGui")
+		gui.Name = "HornText"
+		gui.Face = Enum.NormalId.Back
+		gui.AlwaysOnTop = false
+		gui.LightInfluence = 0
+		gui.PixelsPerStud = 50
+		gui.Parent = plate
+		local label = Instance.new("TextLabel")
+		label.Name = "Label"
+		label.BackgroundTransparency = 1
+		label.Size = UDim2.fromScale(1, 1)
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.TextColor3 = light
+		label.Text = text
+		label.Parent = gui
+	end
+	-- Lichthupe: Neon-Leiste vorn in der Lichtfarbe, normal unsichtbar; blitzt über VehicleFactory.Flash
+	local bar = cosmeticPart(info, state, "Lichthupe", Vector3.new(math.max(1.5, (b.maxX - b.minX) * 0.7), 0.18, 0.1),
+		CFrame.new(0, b.minY + (b.maxY - b.minY) * 0.42, b.minZ - 0.06), light, folder)
+	if bar then
+		bar.Material = Enum.Material.Neon
+		bar.Transparency = 1
+		weld(info.chassis, bar)
+		local pl = Instance.new("PointLight")
+		pl.Name = "FlashLight"
+		pl.Color = light
+		pl.Brightness = 3
+		pl.Range = 16
+		pl.Shadows = false
+		pl.Enabled = false
+		pl.Parent = bar
+		info.cosmetics.flashBar = bar
+	end
+	info.model:SetAttribute("HornText", text)
+	info.model:SetAttribute("HornLight", light)
+end
+
+local function buildTrail(info: any, state: any, entry: any, folder: Instance)
+	local style = entry.style
+	local c1 = rgb(style.color, Color3.fromRGB(60, 120, 255))
+	local c2 = rgb(style.color2, c1)
+	local width = type(style.width) == "number" and math.clamp(style.width, 0.2, 2) or 0.6
+	local rootCF = info.root.CFrame
+	for _, c in ipairs({ "RL", "RR" }) do
+		local wheel = info.wheels[c]
+		if wheel then
+			local hub = rootCF:ToObjectSpace(wheel.CFrame)
+			local r = wheel.Size.Y / 2
+			local y = hub.Position.Y - r + 0.08
+			local a0 = attach(info.chassis, "Trail0_" .. c, rootCF * CFrame.new(hub.Position.X - width / 2, y, hub.Position.Z))
+			local a1 = attach(info.chassis, "Trail1_" .. c, rootCF * CFrame.new(hub.Position.X + width / 2, y, hub.Position.Z))
+			local trail = Instance.new("Trail")
+			trail.Name = "Trail_" .. c
+			trail.Attachment0 = a0
+			trail.Attachment1 = a1
+			trail.Color = ColorSequence.new(c1, c2)
+			trail.Transparency = NumberSequence.new(0.2, 1)
+			trail.Lifetime = 0.8
+			trail.MinLength = 0.1
+			trail.WidthScale = NumberSequence.new(1, 0.4)
+			trail.LightEmission = 0.6
+			trail.FaceCamera = false
+			trail.Enabled = true
+			trail:SetAttribute("Cosmetic", entry.id or "")
+			trail.Parent = folder
+			table.insert(info.cosmetics.trails, trail)
+			table.insert(info.cosmetics.attachments, a0)
+			table.insert(info.cosmetics.attachments, a1)
+		end
+	end
+	info.model:SetAttribute("TrailColor", c1)
+end
+
+-- Entfernt die aktuelle Kosmetik (Ordner, Trails, Attachments), Felgen zurück auf die Palettenfarbe
+local function clearCosmetics(info: any)
+	local cos = info.cosmetics
+	if cos then
+		for _, a in ipairs(cos.attachments or {}) do
+			a:Destroy()
+		end
+		if cos.folder then
+			cos.folder:Destroy()
+		end
+		if cos.rims then
+			cos.rims = nil
+			VehicleFactory.ApplyRimCosmetic(info.model, nil)
+		end
+	end
+	info.cosmetics = { folder = nil, parts = 0, trails = {}, attachments = {}, rims = nil, ids = {}, flashBar = nil }
+	local model = info.model
+	model:SetAttribute("HornText", nil)
+	model:SetAttribute("HornLight", nil)
+	model:SetAttribute("TrailColor", nil)
+	for _, slot in ipairs(COSMETIC_SLOTS) do
+		model:SetAttribute("Cosmetic_" .. slot, "")
+	end
+end
+
+-- ApplyCosmetics(model, cosmetics) | ApplyCosmetics(model, car, cosmetics). Rückgabe: Anzahl neuer Parts | nil
+function VehicleFactory.ApplyCosmetics(model: Model, a: any, b: any): number?
+	local info = registry[model]
+	if not info then
+		return nil
+	end
+	local input = b
+	if input == nil then
+		input = a
+	end
+	local cos = normalizeCosmetics(input)
+	clearCosmetics(info)
+	local state = info.cosmetics
+	local folder = Instance.new("Folder")
+	folder.Name = "Cosmetics"
+	folder.Parent = model
+	state.folder = folder
+	local st = { parts = 0, id = "" }
+	for _, slot in ipairs(COSMETIC_SLOTS) do
+		local entry = cos[slot]
+		if entry then
+			state.ids[slot] = entry.id or ""
+			model:SetAttribute("Cosmetic_" .. slot, entry.id or "")
+			local ok, err = pcall(function()
+				if slot == "wrap" then
+					buildWrap(info, st, entry, folder)
+				elseif slot == "rims" then
+					state.rims = entry
+					buildRims(info, st, entry, folder)
+				elseif slot == "horn" then
+					buildHorn(info, st, entry, folder)
+				elseif slot == "trail" then
+					buildTrail(info, st, entry, folder)
+				end
+			end)
+			if not ok then
+				warn("[Fahrzeug] Kosmetik " .. slot .. ": " .. tostring(err))
+			end
+		end
+	end
+	state.parts = st.parts
+	return st.parts
+end
+
+-- Angewandte Kosmetik: { ids = { wrap = id, ... }, parts = n, trails = { Trail }, folder = Folder|nil }
+function VehicleFactory.Cosmetics(model: Model): any
+	local info = registry[model]
+	return info and info.cosmetics or nil
+end
+
+-- Lichthupe: Leiste und Scheinwerfer kurz aufleuchten lassen (seconds, Standard 0,35 s). Ohne Hupen-Kosmetik
+-- blitzen nur die Scheinwerfer (weiß). Rückgabe: true, wenn etwas geblitzt hat.
+function VehicleFactory.Flash(model: Model, seconds: number?): boolean
+	local info = registry[model]
+	if not info then
+		return false
+	end
+	local cos = info.cosmetics
+	local bar = cos and cos.flashBar
+	local color = model:GetAttribute("HornLight")
+	if typeof(color) ~= "Color3" then
+		color = Color3.fromRGB(255, 250, 230)
+	end
+	local lamps = {}
+	for _, part in ipairs(info.body) do
+		if part.Parent and part.Name == "Headlamp" then
+			table.insert(lamps, { part = part, color = part.Color, material = part.Material })
+			part.Color = color
+			part.Material = Enum.Material.Neon
+		end
+	end
+	if bar and bar.Parent then
+		bar.Transparency = 0
+		local pl = bar:FindFirstChild("FlashLight")
+		if pl then
+			pl.Enabled = true
+		end
+	elseif #lamps == 0 then
+		return false
+	end
+	task.delay(math.clamp(type(seconds) == "number" and seconds or 0.35, 0.05, 2), function()
+		if bar and bar.Parent then
+			bar.Transparency = 1
+			local pl = bar:FindFirstChild("FlashLight")
+			if pl then
+				pl.Enabled = false
+			end
+		end
+		for _, l in ipairs(lamps) do
+			if l.part.Parent then
+				l.part.Color = l.color
+				l.part.Material = l.material
+			end
+		end
+	end)
 	return true
 end
 

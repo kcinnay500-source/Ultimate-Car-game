@@ -16,6 +16,7 @@ local TycoonRules = require(script.Parent:WaitForChild("TycoonRules"))
 -- Meilensteine 6–7: Open-World-Gebäude (games.ow) und Story (games.story); beide laden MiniRules erst beim Aufruf
 local OWRules = require(script.Parent:WaitForChild("OWRules"))
 local StoryRules = require(script.Parent:WaitForChild("StoryRules"))
+local ShopRules = require(script.Parent:WaitForChild("ShopRules")) -- Meilenstein 8 (lädt MiniRules selbst nur lazy)
 local CrossBonus = require(script.Parent:WaitForChild("CrossBonus"))
 
 local MiniRules = {}
@@ -99,7 +100,7 @@ for _, key in ipairs(MiniRules.STAT_KEYS) do
 end
 
 -- Tiefe höchstens 5 unter games (Vertrag §2): games.press.upgrades.pu1, games.cars[1].paint, games.arcade.best.arcade_1,
--- games.meta.hintsSeen.h_map, games.prestige.claimed[n], games.tycoon.run.upgrades[id] (Tiefe 4);
+-- games.meta.hintsSeen.h_map, games.prestige.claimed[n], games.tycoon.run.upgrades[id] (Tiefe 4), games.shop.owned[id] (Tiefe 3);
 -- R.Snapshot erlaubt 12.
 function MiniRules.DefaultGames()
 	local stats = {}
@@ -138,6 +139,7 @@ function MiniRules.DefaultGames()
 	TycoonRules.ApplyDefault(g) -- tycoon (Meilenstein 4)
 	OWRules.ApplyDefault(g) -- ow (Meilenstein 6)
 	StoryRules.ApplyDefault(g) -- story (Meilenstein 7)
+	ShopRules.ApplyDefault(g) -- shop (Meilenstein 8)
 	return g
 end
 
@@ -186,6 +188,7 @@ function MiniRules.LoadGames(raw, d, now)
 	TycoonRules.ApplyLoad(g, raw, d, now) -- gespeicherter Durchlauf (Fortsetzen), runsDone, rebirths
 	OWRules.ApplyLoad(g, raw, d, now) -- Gebäude (offline fertige Bauten), Passiv-Modus
 	StoryRules.ApplyLoad(g, raw, d, now) -- Kapitel/Missionen aus done, Nebenmissionen, Verkäufe
+	ShopRules.ApplyLoad(g, raw, d, now) -- zuletzt: füllt Prestige-/Story-Kosmetik und DLC-Autos aus g nach
 	g.parts = loadInt(raw.parts, g.parts, 0, MAX_SAFE)
 	for _, u in ipairs(MiniConfig.Upgrades) do
 		g[u.key] = loadInt(raw[u.key], u.start, u.start, u.max)
