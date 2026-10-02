@@ -278,6 +278,11 @@ function CarRules.DealerPrice(d, m)
 	if okT and finite(tycoon) and tycoon > 0 then
 		discount += tycoon
 	end
+	-- Open-World-Autohaus (PHASE4_CONTRACT §7): Rabatt-Anteil 0..0,12 je fertiger Stufe (CrossBonus.OWPerk autohaus)
+	local okO, ow = pcall(CrossBonus.OWDealerDiscount, d)
+	if okO and finite(ow) and ow > 0 then
+		discount += ow
+	end
 	if discount <= 0 then
 		return price
 	end

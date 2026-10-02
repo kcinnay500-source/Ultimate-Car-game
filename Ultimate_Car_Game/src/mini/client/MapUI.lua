@@ -38,6 +38,7 @@ local NAMES = {
 	park = "Stadtpark",
 	track = "Teststrecke",
 	scrapyard_gate = "Schrottplatz-Tor",
+	kiesplatz = "Kiesplatz (Gebrauchtwagen)", -- PHASE4_CONTRACT §7: Story-Stand am Stadtrand
 	scrap_trader = "Schrotthändler",
 	dyno = "Leistungsprüfstand",
 	testdrive = "Probefahrt",

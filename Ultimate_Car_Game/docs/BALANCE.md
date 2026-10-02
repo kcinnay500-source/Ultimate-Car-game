@@ -87,6 +87,17 @@ In Klammern: Anteil an der Werkstatt auf demselben Level (Ziel ≤ 60 %). Schrot
 
 In Klammern: Anteil an der Werkstatt (Ziel ≤ 25 %).
 
+Open-World-Gebäude (Ausbaustufe 4, Meilenstein 6, `GameConfig.OW.Buildings`; Erträge sammeln sich höchstens 12 Std. an):
+
+| Gebäude | Stufe 1 | Stufe 2 | Stufe 3 | Stufe 4 | Level |
+|---|---:|---:|---:|---:|---:|
+| Autohaus (Credits/Min) | 25 (3 % auf Lv 10) | 67 (5 % auf Lv 20) | 150 (5 % auf Lv 30) | 300 (≈ 10 % auf Lv 30, 5 % auf Lv 40) | 10 |
+| Schrottplatz (Schrott/Std. → Credits/Min beim Händler) | 2 Mrd. (≈ 3) | 6 Mrd. (≈ 10) | 15 Mrd. (≈ 25) | 40 Mrd. (≈ 67) | 18 |
+| Produktion (Altteile) | 10 je 6 Std. | 15 je 4 Std. | 20 je 3 Std. | 30 je 2 Std. + Auto-Gutschein je 48 Std. | 35 |
+
+Story-Missionen (Meilenstein 7): `StoryRules.BalanceCheck()` prüft je Mission `credits / minutes ≤ 0,4 × Werkstatt-Cr/Min`
+des Kapitel-Levels (Tabelle oben, interpoliert; `GameConfig.Story.Balance`), abgesichert in `tests/test_story.lua`.
+
 #### Tageslimits der Minispiele
 
 | Minispiel | Limit je UTC-Tag | Credits/Tag Lv 1 | Credits/Tag Lv 40 | Minuten bis zum Limit |

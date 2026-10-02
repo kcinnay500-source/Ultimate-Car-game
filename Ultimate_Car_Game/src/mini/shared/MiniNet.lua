@@ -72,6 +72,16 @@ MiniNet.Actions = {
 	tycoon_trade_offer = { to = "number", item = "string", qty = "number", price = "number" },
 	tycoon_trade_accept = { id = "number" },
 	tycoon_trade_cancel = { id = "number" },
+	-- Meilenstein 6 (PHASE4_CONTRACT §7, §10): Open-World-Gebäude und Passiv-Modus (typ = Gebäude-Id, on = Schalter)
+	ow_build = { typ = "string" },
+	ow_collect = { typ = "string" },
+	ow_passive = { on = "boolean" },
+	-- Meilenstein 7 (§7, §10): Story, Kiesplatz-Verkauf (price = Preisstufe 1..3, eine Absicht: validate.py INTENT_FIELDS),
+	-- Nebenmissionen
+	story_start = { id = "string" },
+	story_claim = { id = "string" },
+	story_sell = { offer = "number", price = "number" },
+	side_claim = { id = "string" },
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -112,6 +122,13 @@ MiniNet.Cooldowns = {
 	tycoon_trade_offer = 1,
 	tycoon_trade_accept = 0.5,
 	tycoon_trade_cancel = 0.5,
+	ow_build = 1,
+	ow_collect = 0.5,
+	ow_passive = 1,
+	story_start = 0.5,
+	story_claim = 0.5,
+	story_sell = 1,
+	side_claim = 0.5,
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",
@@ -133,6 +150,11 @@ MiniNet.Targets = {
 	tycoon_buy = "id",
 	tycoon_trade_accept = "id",
 	tycoon_trade_cancel = "id",
+	ow_build = "typ",
+	ow_collect = "typ",
+	story_start = "id",
+	story_claim = "id",
+	side_claim = "id",
 }
 
 -- Ereignisse Server -> Client
@@ -143,7 +165,7 @@ MiniNet.Events = {
 }
 
 -- Tabs der Minispiel-Oberfläche (auch Werte des Attributs MiniTab an City.Stations.<key>)
-MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade", "lobby", "unlocks", "prestige", "tycoon" }
+MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade", "lobby", "unlocks", "prestige", "tycoon", "buildings", "story" }
 MiniNet.TabSet = {}
 for _, tab in ipairs(MiniNet.Tabs) do
 	MiniNet.TabSet[tab] = true

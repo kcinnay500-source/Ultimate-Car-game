@@ -235,7 +235,7 @@ return {
 		local g = H.Garage({ noServer = true })
 		local TR, GC = g:MiniShared("TutorialRules"), g:MiniShared("GameConfig")
 		local d = newProfile(g)
-		T.eq(TR.Count(), 10, "10 Schritte")
+		T.eq(TR.Count(), 11, "11 Schritte (Meilenstein 7: Kiesplatz)")
 		T.eq(TR.Count(), GC.Tutorial.Count, "Count = GameConfig")
 		T.check(TR.Active(d), "neues Profil: aktiv")
 		T.check(not TR.Done(d) and not TR.Skipped(d), "nicht beendet")
@@ -291,16 +291,19 @@ return {
 		T.check(TR.Advance(d, "action:mini_travel"), "mini_travel")
 		T.check(not TR.Advance(d, "tab:goals"), "tab:goals erledigt dealer nicht")
 		T.check(TR.Advance(d, "tab:dealer"), "tab:dealer")
+		T.check(not TR.Advance(d, "tab:story"), "tab:story erledigt goals nicht")
 		advanced, finished = TR.Advance(d, "tab:goals")
-		T.check(advanced and finished, "letzter Schritt beendet das Tutorial")
+		T.check(advanced and not finished, "Infotafel ist nicht der letzte Schritt")
+		advanced, finished = TR.Advance(d, "tab:story")
+		T.check(advanced and finished, "letzter Schritt (Kiesplatz) beendet das Tutorial")
 		T.check(TR.Done(d) and not TR.Skipped(d), "beendet, nicht übersprungen")
 		T.check(not TR.Active(d), "nicht mehr aktiv")
 		T.eq(TR.Current(d), nil, "kein aktueller Schritt")
-		T.eq(step(g, d), 10, "Schrittzähler bleibt beim letzten Schritt")
-		T.check(not TR.Advance(d, "tab:goals"), "nach dem Ende nichts mehr")
+		T.eq(step(g, d), 11, "Schrittzähler bleibt beim letzten Schritt")
+		T.check(not TR.Advance(d, "tab:story"), "nach dem Ende nichts mehr")
 		T.check(not TR.Skip(d), "Überspringen nach dem Ende: false")
 		local v = TR.View(d)
-		T.check(v.done and v.active == false and v.step == 10 and v.count == 10, "View nach dem Ende")
+		T.check(v.done and v.active == false and v.step == 11 and v.count == 11, "View nach dem Ende")
 		T.check(sendable(v), "View sendbar")
 		-- Überspringen mitten drin
 		local d2 = newProfile(g)
@@ -417,9 +420,12 @@ return {
 		T.check(not TS.OnStation(ms, d, "goals", "goals"), "Infotafel zu früh")
 		T.check(TS.OnStation(ms, d, "dealer", "dealer"), "Autohaus (Stadt-Station)")
 		T.eq(step(g, d), 10, "-> 10 goals")
+		T.check(not TS.OnStation(ms, d, "kiesplatz", "story"), "Kiesplatz zu früh")
+		T.check(TS.OnStation(ms, d, "goals", "goals"), "Infotafel (Stadt-Station)")
+		T.eq(step(g, d), 11, "-> 11 kiesplatz")
 		local moneyBefore, xpBefore, levelBefore = d.money, d.xp, d.level
 		S.log.changed = 0
-		T.check(TS.OnStation(ms, d, "goals", "goals"), "Infotafel beendet das Tutorial")
+		T.check(TS.OnStation(ms, d, "kiesplatz", "story"), "Kiesplatz beendet das Tutorial")
 		T.check(d.games.meta.tutorialDone and not d.games.meta.tutorialSkipped, "beendet")
 		local gained = d.money - moneyBefore
 		T.check(gained >= 500, "mindestens 500 Credits (" .. tostring(gained) .. ")")
@@ -429,14 +435,14 @@ return {
 		local list = S.notices(pl, "tutorial")
 		local last = list[#list]
 		T.check(last and last.finished == true and last.done == true and last.active == false, "letzter Hinweis finished/done")
-		T.eq(last and last.step, 10, "Schritt 10")
+		T.eq(last and last.step, 11, "Schritt 11")
 		for _, n in ipairs(list) do
 			T.check(sendable(n), "tutorial-Hinweis sendbar")
 		end
 		-- kein zweites Mal
 		local moneyDone = d.money
-		T.check(not TS.OnStation(ms, d, "goals", "goals"), "nach dem Ende nichts")
-		S.act(pl, "tutorial_next", { step = 10 })
+		T.check(not TS.OnStation(ms, d, "kiesplatz", "story"), "nach dem Ende nichts")
+		S.act(pl, "tutorial_next", { step = 11 })
 		S.act(pl, "tutorial_skip")
 		T.check(not S.tick(pl), "Tick nach dem Ende ruhig")
 		T.eq(d.money, moneyDone, "Belohnung nur einmal")
@@ -448,7 +454,7 @@ return {
 	end },
 
 	{ "TutorialService: Überspringen an jeder Stelle, ohne Belohnung; danach still", function(T, H)
-		for _, at in ipairs({ 1, 2, 4, 7, 10 }) do
+		for _, at in ipairs({ 1, 2, 4, 7, 10, 11 }) do
 			local S = setup(H)
 			local g = S.g
 			local pl, ms, d = S.join(710 + at, "Skip" .. at)
@@ -533,7 +539,7 @@ return {
 		local g, TS = S.g, S.TS
 		local TR = g:MiniShared("TutorialRules")
 		local function toLast(pl, d)
-			while step(g, d) < 10 do
+			while step(g, d) < TR.Count() do
 				local s = TR.Current(d)
 				if s.event == "next" then
 					S.act(pl, "tutorial_next", { step = step(g, d) })
@@ -548,7 +554,7 @@ return {
 		prof.transacting = true
 		local money, xp, level = d.money, d.xp, d.level
 		S.clear()
-		T.check(S.event(pl, "tab:goals"), "Ende während transacting")
+		T.check(S.event(pl, "tab:story"), "Ende während transacting")
 		T.check(d.games.meta.tutorialDone, "beendet")
 		T.eq(d.money, money, "Geld noch nicht verbucht")
 		T.eq(ms.tutorialRewardPending, true, "Belohnung wartet")
@@ -569,7 +575,7 @@ return {
 		local prof2 = g:Profile(p2)
 		prof2.transacting = true
 		local money2 = d2.money
-		S.event(p2, "tab:goals")
+		S.event(p2, "tab:story")
 		T.eq(d2.money, money2, "zurückgehalten")
 		prof2.transacting = false
 		TS.OnLeave(ms2, d2)
@@ -671,7 +677,7 @@ return {
 		end)
 		T.check(mod.CardVisible(), "Karte sichtbar")
 		local progress, text = byName(gui, "Progress"), byName(gui, "Text")
-		T.eq(progress and progress.Text, "Schritt 1 von 10", "Fortschritt")
+		T.eq(progress and progress.Text, "Schritt 1 von " .. tostring(g:MiniShared("TutorialRules").Count()), "Fortschritt")
 		T.check(text and text.Text:find("Willkommen", 1, true), "Schritt-Text")
 		local nextB, skipB = byName(gui, "Next"), byName(gui, "Skip")
 		T.check(nextB and nextB.Visible and skipB and skipB.Visible, "Weiter und Überspringen sichtbar")

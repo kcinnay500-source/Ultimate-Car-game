@@ -60,10 +60,14 @@ d.games.tycoon   = { runsDone={ werkstatt=int, autohaus=int, produktion=int, sch
                      rebirths=int,
                      run=false | { building=<typ>, stage=1..5, cash=number, upgrades={ [id]=int }, startedAt=unix,
                                    lastTick=unix, produced=number, rebirthBoost=number, storage={ [item]=int } } }
-d.games.ow       = { buildings={ [typ]={ stage=int, readyAt=unix } },     -- typ: werkstatt|autohaus|produktion|schrottplatz
-                     passive=bool, lastPassiveAt=unix }
-d.games.story    = { chapter=int, step=int, done={ [missionId]=true }, side={ [missionId]={ n=int, day="YYYY-MM-DD" } },
-                     active=false | { id=string, progress=number, startedAt=unix, party=int } }
+d.games.ow       = { buildings={ [typ]={ stage=int, built=int, readyAt=unix, collectedAt=unix, carAt=unix } },
+                     passive=bool, lastPassiveAt=unix }   -- typ: autohaus|produktion|schrottplatz (werkstatt = d.bays, nicht gespeichert);
+                                                          -- stage = gekaufte Stufe, built = fertig gebaute Stufe (stage > built: Baustelle bis readyAt);
+                                                          -- passive spiegelt meta.passive (eine Quelle: meta)
+d.games.story    = { chapter=int, step=int, done={ [missionId]=true },
+                     side={ [missionId]={ n=int, day="YYYY-MM-DD", claimed=bool } },   -- Legende: day="legend"
+                     active=false | { id=string, progress=number, startedAt=unix, party=int },
+                     sales={ n=int, best=int, special=int, serial=int }, title=string }   -- chapter/step werden aus done neu bestimmt
 d.games.shop     = { owned={ [itemId]=true }, equipped={ wrap=string|"", rims=string|"", horn=string|"", trail=string|"" },
                      dlcCars={ [modelId]=true } }
 d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): missionsDone, tycoonRuns, prestigeClaims
@@ -136,7 +140,8 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 - Pflicht beim ersten Beitritt in der Open World (`meta.tutorialDone == false`), jederzeit über **„Überspringen“**
   beendbar (`tutorial_skip`, setzt `tutorialSkipped=true, tutorialDone=true`). Schritte in `GameConfig.Tutorial.Steps`
   `{ id, text, target=<Stationsschlüssel|nil>, event=<Serverereignis> }`: Bewegen, Menü öffnen (M), zum Empfang,
-  Auftrag annehmen, OBD, Reparatur, Abrechnen, Stadtplan, Autohaus ansehen, Ziele. Fortschritt bestätigt **der
+  Auftrag annehmen, OBD, Reparatur, Abrechnen, Stadtplan, Autohaus ansehen, Ziele, Kiesplatz (Anschluss an die Story,
+  Meilenstein 7: Station `kiesplatz`, Ereignis `tab:story`). Fortschritt bestätigt **der
   Server** aus echten Ereignissen (`OnSettled`, Stationsbesuch, Aktionen) – der Client sendet nur `tutorial_next` für
   reine Lese-Schritte („Weiter“). Belohnung am Ende: 500 Credits + 60 XP (`GameConfig.Tutorial.Reward`), einmalig
   (`meta.tutorialRewarded`). Das Tutorial läuft **nur in der Open World**: in Lobby und Schnellem Spiel ist
@@ -154,7 +159,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   HUD-Zeile „Nächste Freischaltung“. Beim Erreichen eines Levels mit Freischaltung: `mini_notice { kind="unlock" }`
   mit Titel (Client zeigt eine Karte mit Effekt).
 
-## 7. Open World: Missionen, Story, Gebäude, Passiv-Modus (`OWRules`, `StoryRules`, `OWService`, `StoryService`, `StoryUI`, `OWUI`)
+## 7. Open World: Missionen, Story, Gebäude, Passiv-Modus (`OWRules`, `StoryRules`, `OWService`, `StoryService`, `StoryUI`, `BuildingsUI`, `MissionClient`)
 
 - **Gebäude** (`GameConfig.OW.Buildings[typ]`, Stufen 1–4 mit Preis, Bauzeit, Wirkung):
   - `werkstatt` = 2.4.0-Grundstück (Stufe = Bühnenzahl `d.bays`; Kauf über den bestehenden Hallenanbau; hier nur
@@ -192,7 +197,14 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   - **Co-op**: Story-Missionen laufen für Party-Mitglieder gemeinsam: Fortschritt eines Mitglieds zählt für alle
     Mitglieder im selben Kapitel/Mission (Server prüft Party-Zugehörigkeit im Moment des Ereignisses). Belohnung holt
     jeder einzeln ab. Solo funktioniert identisch ohne Party.
-- **Passiv-Modus** (§5): `OWService` blockt in Passiv Missionen/Story/Auktionen mit freundlichem Hinweis.
+- **Passiv-Modus** (§5): `MiniService.Handle` blockt in Passiv `story_start`, `story_sell`, `mini_auction_bid` und
+  `mini_auction_consign` zentral (`PASSIVE_BLOCKED`, Rückgabe `"passive"`, gedrosselter Hinweis `GameConfig.OW.PassiveHint`
+  über `OWService.BlockIfPassive`); Abholen (`story_claim`, `side_claim`, `ow_collect`) bleibt erlaubt, Ereignisse zählen
+  nicht (`StoryService`), Co-op überträgt nichts an Passive. Quelle ist `meta.passive` (`lobby_settings` und `ow_passive`).
+- **Ereignisse** für Story-/Nebenmissionen: Statistiken über `MiniRules.StatHook` (jede `AddStat`-Erhöhung erreicht
+  `StoryService.OnStat`), Ereignisse aus Hinweisen der Dienste (`car_bought`, `track_finish`, `auction_won`,
+  `arcade_result` → `arcade_round`, `ow_build` → `ow_built:<typ>`) in `MiniService.notice`, `api.event(ms, event, data)` für
+  Dienste (`auction_consigned`), `settle` aus `Mini.OnSettled`, `action:<name>` nach jeder gelungenen Aktion.
 - Beschränkungen: Missions-Belohnungen ≤ 40 % der Werkstatt-Einnahme/Minute des Levels (Balance-Team).
 
 ## 8. Schnelles Spiel (Tycoon) (`TycoonRules`, `TycoonService`, `TycoonUI`, Gelände `workspace.Tycoon`)

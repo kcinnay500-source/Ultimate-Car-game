@@ -6,13 +6,17 @@
 * ohne --district/--rect: Draufsicht der ganzen Stadt -> city_top.png (Parts als gedrehte Grundrisse,
   Farbe = Color3, von unten nach oben gezeichnet; Stationen/Ankunft als Marker)
 * mit --district/--rect: Draufsicht (<name>_top.png) und isometrische Ansicht von Südost (<name>_iso.png)
-* --plots: die getrimmte Werkstatt-Vorlage (4 Hallen) an allen 8 Slots mitzeichnen (ohne Vacant-Kits)
+* --plots: die getrimmte Werkstatt-Vorlage (4 Hallen) an allen 8 Slots mitzeichnen (ohne Vacant-Kits); dazu die
+  Grundflächen der Open-World-Gebäude an den Ankern Plot.OWAnchors (violett: autohaus, produktion, schrottplatz)
 * --cut Y: Schnitt bei Höhe Y (Dächer/Decken darüber entfallen) -> Innenansicht <name>_cut<Y>_iso.png
 * --zones: die Zonen der Ausbaustufe 4 (Workspace.Lobby, Workspace.Tycoon; PHASE4_CONTRACT §1) -> lobby_top.png,
   lobby_iso.png, lobby_cut23_iso.png (Innenansicht ohne Dach), tycoon_top.png, tycoon_iso.png
 * --tycoon-templates [typ [stufe]]: die Stufen-Vorlagen ServerStorage.TycoonTemplates (§8) je Gebäudetyp nebeneinander
   (Stufe 1..5 von links nach rechts, jede auf einer 70 x 70-Bodenplatte, Hidden-Produzenten sichtbar) ->
   tycoon_templates_<typ>_top.png / _iso.png; mit typ und stufe eine einzelne Vorlage groß (tycoon_<typ>_<n>_iso.png)
+* --ow-buildings [typ [stufe]]: die Vorlagen ServerStorage.OWBuildings (§7, ow_buildings.py): je Gebäudetyp die Stufen
+  1..4 nebeneinander auf ihrer Grundfläche (ow_<typ>_top.png / _iso.png) und die Baustelle (ow_baustelle_*.png);
+  mit typ und stufe eine einzelne Vorlage groß; typ "baustelle" zeichnet nur die Baustelle
 """
 import math
 import sys
@@ -35,6 +39,7 @@ DISTRICTS = {
     "track": (-175, 175, 215, 430), "park": (-480, -170, 150, 350), "tankstelle": (170, 410, 150, 270),
     "kreisel_w": (-575, -455, -60, 60), "kreisel_o": (455, 575, -60, 60), "k_west": (-200, -104, -48, 48),
     "meile_w": (-480, -170, -160, 160), "meile_o": (170, 480, -160, 160), "parkplatz": (-140, 140, -370, -220),
+    "kiesplatz": (170, 420, 200, 370), "plot1": (170, 330, -165, -15),
 }
 
 
@@ -122,12 +127,17 @@ def overlays(tree, city, with_plots=False):
                 out.append((p.name, hull([(q[0], q[2]) for q in p.corners()]),
                             "#ff3030" if p.name == "Ziel" else "#ffe02a"))
     if with_plots:
-        from worldgen.plots import SLOTS, slot_cf
+        from worldgen.plots import SLOTS, OW_TYPES, ow_footprint_world, slot_cf
         wk = child(scan.workspace(tree), "Werkstatt")
         cs = child(wk, "CarSpawn") if wk is not None else None
         if cs is not None:
             for slot, house, px, pz, rot in SLOTS:
                 car("Plot%d" % slot, slot_cf(px, pz, rot) * read_cf(cs))
+        # Grundflächen der Open-World-Gebäude an den Ankern (violett)
+        for slot, house, px, pz, rot in SLOTS:
+            for typ in OW_TYPES:
+                x0, x1, z0, z1 = ow_footprint_world(px, pz, rot, typ)
+                out.append(("%s %d" % (typ[:4], slot), [(x0, z0), (x1, z0), (x1, z1), (x0, z1)], "#c05cff"))
     return out
 
 
@@ -201,6 +211,54 @@ def render_templates(tree, out, typ=None, stage=None):
         top_view(parts, rect, p1, marks, "TycoonTemplates %s" % t, px_per_stud=max(4.0, 2400 / (rect[1] - rect[0])))
         p2 = out / ("%s_iso.png" % key)
         iso_view(parts, rect, p2, "TycoonTemplates %s (Stufe 1..5)" % t if not stage else "%s Stufe %d" % (t, stage))
+        paths += [p1, p2]
+    return paths
+
+
+def _ground_rect(x, z, w, d, color=(110, 104, 96)):
+    p = _ground(x, z)
+    p.size = (w, 1.0, d)
+    p.color = color
+    return p
+
+
+def render_ow_buildings(tree, out, typ=None, stage=None):
+    """Open-World-Vorlagen je Typ in einer Reihe (Abstand 40 Studs) auf einer Bodenplatte ihrer Grundfläche."""
+    from worldgen import ow_buildings as OB
+    from worldgen.lib import CF
+    tpls = OB.templates_of(tree)
+    if not tpls:
+        print("ServerStorage.OWBuildings fehlt im Place")
+        return []
+    paths = []
+    groups = []
+    if typ in (None, "baustelle"):
+        groups.append(("baustelle", ["baustelle"]))
+    if typ != "baustelle":
+        for t in ([typ] if typ else list(OB.BUILDERS)):
+            stages = [stage] if stage else list(range(1, OB.STAGES + 1))
+            groups.append((t if not stage else "%s_%d" % (t, stage), ["%s_%d" % (t, s) for s in stages]))
+    for key, names in groups:
+        parts = []
+        marks = []
+        gap = 40.0
+        for i, name in enumerate(names):
+            model = tpls.get(name)
+            if model is None:
+                continue
+            w, d = OB.footprint(name)
+            ox = i * gap
+            parts.append(_ground_rect(ox, 0, w + 2, d + 2))
+            parts += [p for p in scan.walk(model, name, False, CF(ox, 0, 0)) if p.transp < 0.97]
+            marks.append((name, (ox - w / 2, 0, d / 2 + 3), "#ffffff"))
+        if not parts:
+            continue
+        n = len(names)
+        rect = (-22, (n - 1) * gap + 22, -22, 22)
+        p1 = out / ("ow_%s_top.png" % key)
+        top_view(parts, rect, p1, marks, "OWBuildings %s" % key, px_per_stud=max(4.0, 2400 / (rect[1] - rect[0])))
+        p2 = out / ("ow_%s_iso.png" % key)
+        iso_view(parts, rect, p2, "OWBuildings %s" % key)
         paths += [p1, p2]
     return paths
 
@@ -422,6 +480,7 @@ def main(argv):
     with_plots = "--plots" in args
     zones = "--zones" in args
     templates = None
+    ow = None
     rect = None
     cut = None
     name = "city"
@@ -456,11 +515,25 @@ def main(argv):
                     templates[1] = int(args[i])
                     i += 1
             continue
+        if a == "--ow-buildings":
+            ow = [None, None]
+            i += 1
+            if i < len(args) and not args[i].startswith("--") and not args[i].endswith(".rbxlx"):
+                ow[0] = args[i]
+                i += 1
+                if i < len(args) and args[i].isdigit():
+                    ow[1] = int(args[i])
+                    i += 1
+            continue
         if not a.startswith("--"):
             place = a
         i += 1
     out.mkdir(parents=True, exist_ok=True)
     tree = scan.load(place)
+    if ow is not None:
+        for p in render_ow_buildings(tree, out, ow[0], ow[1]):
+            print(p)
+        return
     if templates is not None:
         for p in render_templates(tree, out, templates[0], templates[1]):
             print(p)

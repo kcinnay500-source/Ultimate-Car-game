@@ -177,8 +177,13 @@ return {
 		T.check(openDealer ~= nil and openDealer.tab == "dealer", "Autohaus öffnet im Tutorial auch auf Level 1")
 		T.check(not g:HasToast(pl, "Ab Level 3", m), "kein Sperr-Toast im Tutorial-Schritt")
 		T.eq(g:Act(pl, "mini_car_buy", { model = "komet", rid = 19 }), "locked", "Kauf bleibt gesperrt")
-		local money, xp, level = d.money, d.xp, d.level
 		m = openCityStation(g, pl, "goals")
+		T.eq(step(g, d), 11, "Schritt 11 (Kiesplatz)")
+		T.check(not d.games.meta.tutorialDone, "Infotafel beendet das Tutorial noch nicht")
+		-- 11: Kiesplatz (Meilenstein 7): Station mit MiniTab story öffnet den Story-Tab und beendet das Tutorial
+		local money, xp, level = d.money, d.xp, d.level
+		m = openCityStation(g, pl, "kiesplatz")
+		T.check(g:Events(pl, "mini_open", m)[1] ~= nil and g:Events(pl, "mini_open", m)[1].tab == "story", "Tab story geöffnet")
 		T.check(d.games.meta.tutorialDone and not d.games.meta.tutorialSkipped, "Tutorial beendet")
 		local fin = g:Notices(pl, "tutorial", m)
 		T.check(#fin >= 1 and fin[#fin].finished == true and fin[#fin].done == true, "tutorial-Hinweis finished")
@@ -530,11 +535,11 @@ return {
 		T.check(g:HasToast(pl, "neu gestartet", m), "Toast neu gestartet")
 		g:Advance(1.1)
 		T.eq(g:MiniSnapshot(pl).tutorial.active, true, "Snapshot aktiv")
-		-- Ende erreicht (letzter Schritt an der Infotafel): Belohnung genau einmal
+		-- Ende erreicht (letzter Schritt am Kiesplatz): Belohnung genau einmal
 		d.games.meta.tutorialStep = TR.Count()
 		g:Advance(0.5)
 		m = g:Mark()
-		openCityStation(g, pl, "goals")
+		openCityStation(g, pl, "kiesplatz")
 		T.eq(d.games.meta.tutorialDone, true, "beendet")
 		T.eq(d.games.meta.tutorialRewarded, true, "Belohnung verbucht")
 		T.check(d.money - money >= 500, "500 Credits beim ersten Abschluss")
@@ -548,7 +553,7 @@ return {
 		local xp = d.xp
 		g:Advance(0.5)
 		m = g:Mark()
-		openCityStation(g, pl, "goals")
+		openCityStation(g, pl, "kiesplatz")
 		T.eq(d.games.meta.tutorialDone, true, "zweites Mal beendet")
 		T.eq(d.money, money, "keine zweite Belohnung (Credits)")
 		T.eq(d.xp, xp, "keine zweite Belohnung (XP)")

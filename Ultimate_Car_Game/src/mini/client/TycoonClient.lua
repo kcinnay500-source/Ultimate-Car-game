@@ -745,6 +745,23 @@ function TycoonClient.Start(context)
 			refreshActivity()
 		end)
 	end)
+	-- Meilenstein 6: Förderbänder/Stempelpressen (TycoonAnim) in den Open-World-Gebäuden der Spieler
+	-- (workspace.PlayerWorkshops.Plot_<UserId>.OWBuildings, Ordner entsteht nach dem Grundstück)
+	whenChild(workspace, "PlayerWorkshops", function(folder)
+		local function plot(p)
+			whenChild(p, "OWBuildings", function(buildings)
+				local okA, errA = pcall(attachPlots, buildings)
+				if not okA then
+					warnOnce("ow_plots", "Gebäude: " .. tostring(errA))
+				end
+				refreshActivity()
+			end)
+		end
+		for _, p in ipairs(folder:GetChildren()) do
+			plot(p)
+		end
+		folder.ChildAdded:Connect(plot)
+	end)
 	if not heartbeat then
 		heartbeat = RunService.Heartbeat:Connect(function(dt)
 			local okS, errS = pcall(TycoonClient.Step, dt)

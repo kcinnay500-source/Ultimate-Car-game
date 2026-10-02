@@ -15,8 +15,12 @@
 --                      außerhalb der Open World zur Zonen-Ankunft (Lobby/Tycoon) versetzen
 --   OnStation(p, key)  Ausbaustufe 4: 2.4.0-Plot-Station geöffnet (Tutorial-Schritt, Beginner-Hinweis)
 -- Ausbaustufe 4 (PHASE4_CONTRACT §10–§12): Lobby/Party/Reise (LobbyService, PlaceRouter), Tutorial und
--- Beginner-Hinweise (TutorialService), Level & Prestige, Freischaltungen (PrestigeService). Jede Aktion, die
--- etwas Freischaltbares nutzt, prüft Mini.Handle zentral über Unlocks (ACTION_UNLOCK); Stationen über Unlocks.TabAllowed.
+-- Beginner-Hinweise (TutorialService), Level & Prestige, Freischaltungen (PrestigeService), Schnelles Spiel
+-- (TycoonService), Open-World-Gebäude und Passiv-Modus (OWService, Meilenstein 6), Story/Nebenmissionen/Co-op
+-- (StoryService, Meilenstein 7). Jede Aktion, die etwas Freischaltbares nutzt, prüft Mini.Handle zentral über
+-- Unlocks (ACTION_UNLOCK); Stationen über Unlocks.TabAllowed. Im Passiv-Modus (§5) blockt Mini.Handle Story-Start,
+-- Kiesplatz-Verkauf und Auktionen (PASSIVE_BLOCKED, Hinweis über OWService.BlockIfPassive). Story-Ereignisse:
+-- Statistiken über MiniRules.StatHook, Ereignisse aus Hinweisen der Dienste (notice -> storyEventOf) und api.event.
 -- Geld (d.money) ändern Minispiele nur in Handle (also innerhalb von request()); danach ruft
 -- MiniService ctx.changed(p) (höchstens 2×/s, dazwischen ctx.push und ein nachgeholtes changed im Tick).
 -- Sonst wird nur der Minispiel-Snapshot als geändert markiert.
@@ -48,6 +52,9 @@ local PrestigeService = require(Server:WaitForChild("PrestigeService"))
 local LobbyService = require(Server:WaitForChild("LobbyService"))
 local TutorialService = require(Server:WaitForChild("TutorialService"))
 local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenstein 4: Schnelles Spiel
+local OWService = require(Server:WaitForChild("OWService")) -- Meilenstein 6: Open-World-Gebäude, Passiv-Modus
+local StoryService = require(Server:WaitForChild("StoryService")) -- Meilenstein 7: Story, Kiesplatz, Nebenmissionen, Co-op
+local StoryRules = require(MiniShared:WaitForChild("StoryRules"))
 local Profiles = require(Server.Parent:WaitForChild("Profiles"))
 
 local Mini = {}
@@ -137,6 +144,8 @@ local SNAPSHOT_EXTRAS = {
 	{ "Prestige", PrestigeService.SnapshotFields },
 	{ "Tutorial", TutorialService.SnapshotFields },
 	{ "Tycoon", TycoonService.SnapshotFields }, -- tycoon { active, run, slot, offers, bonus, runsDone, rebirths, boost, plots }
+	{ "OW", OWService.SnapshotFields }, -- ow { buildings{}, passive, perks, capHours }
+	{ "Story", StoryService.SnapshotFields }, -- story { chapter, active, side[], sale, …; missions[]/chapters[] nur bei full }
 }
 
 local function sendSnapshot(ms, t)
@@ -191,10 +200,34 @@ local function flush(ms, t)
 	end
 end
 
+-- Story-Ereignis (StoryService.OnEvent) aus einem Hinweis eines Dienstes: Autokauf, Zeitfahren im Ziel, Zuschlag
+-- in der Auktion (auch außerhalb von Handle, im Auktions-Tick), beendete Spielhallen-Runde, begonnener Gebäudebau.
+local function storyEventOf(kind, data)
+	if kind == "car_bought" then
+		return "car_bought"
+	elseif kind == "track_finish" and data.valid ~= false then
+		return "track_finish"
+	elseif kind == "auction_won" then
+		return "auction_won"
+	elseif kind == "arcade_result" and not data.replay and not data.expired then
+		return "arcade_round"
+	elseif kind == "ow_build" then
+		return "ow_built:" .. tostring(data.typ)
+	end
+	return nil
+end
+
 local function notice(ms, kind, data)
 	data = type(data) == "table" and data or {}
 	data.kind = kind
 	emit(ms, MiniNet.Events.Notice, data)
+	local event = storyEventOf(kind, data)
+	if event and ms.p and ms.p.profile then
+		local ok, err = pcall(StoryService.OnEvent, ms, ms.p.profile.data, event, data)
+		if not ok then
+			warn("[Minispiele] Story-Ereignis " .. event .. ": " .. tostring(err))
+		end
+	end
 end
 
 -- Hinweise vor dem ersten 'hello' (z. B. Offline-Ertrag) warten, bis der Client zuhört.
@@ -277,6 +310,12 @@ function api.save(ms)
 			task.wait(2)
 		end
 	end)
+end
+-- Story-Ereignis eines Dienstes (z. B. AuctionService "auction_consigned"): Missionen und Co-op (StoryService.OnEvent)
+function api.event(ms, event, data)
+	if ms and ms.p and ms.p.profile then
+		StoryService.OnEvent(ms, ms.p.profile.data, event, data)
+	end
 end
 -- Auktions-Übergabe ins Auktionsbuch schreiben (vor dem Speichern beider Profile; darf warten)
 function api.recordTransfer(transfer)
@@ -370,8 +409,29 @@ local ACTION_UNLOCK = {
 		local key = "car:" .. tostring(clean.model)
 		return Unlocks.Known(key) and key or nil -- unbekannte Modelle meldet CarRules.Buy selbst
 	end,
+	-- Open-World-Gebäude (Meilenstein 6): building:<typ> (Autohaus 10, Schrottplatz 18, Produktion 35);
+	-- werkstatt und unbekannte Typen beantwortet OWService selbst
+	ow_build = function(clean)
+		local key = "building:" .. tostring(clean.typ)
+		return Unlocks.Known(key) and key or nil
+	end,
+	-- Story (Meilenstein 7): Kapitel der Mission (story:<n>); unbekannte Ids meldet StoryRules.Start selbst
+	story_start = function(clean)
+		local def = StoryRules.Mission(clean.id)
+		local key = def and ("story:" .. tostring(def.chapter)) or nil
+		return key and Unlocks.Known(key) and key or nil
+	end,
 }
 local LOCK_TOAST_SECONDS = 3
+
+-- Passiv-Modus (PHASE4_CONTRACT §5, §7): nur Zuschauen/Handeln – keine Missionen, keine Story, keine Auktionen.
+-- Abholen (story_claim, side_claim) und Gebäude bleiben erlaubt; der Hinweis kommt gedrosselt aus OWService.
+local PASSIVE_BLOCKED = {
+	story_start = true,
+	story_sell = true,
+	mini_auction_bid = true,
+	mini_auction_consign = true,
+}
 
 local function lockedText(entry)
 	return "Ab Level " .. tostring(entry.level) .. ": " .. tostring(entry.title) .. ". Bis dahin: Aufträge in der Werkstatt bringen XP!"
@@ -423,6 +483,11 @@ local function checkMode(ms, d)
 	if not okY then
 		warn("[Minispiele] Tycoon-Modus: " .. tostring(errY))
 	end
+	-- Story: außerhalb der Open World kein Kunde am Kiesplatz, keine Lieferfahrt
+	local okS, errS = pcall(StoryService.OnMode, ms, d, mode)
+	if not okS then
+		warn("[Minispiele] Story-Modus: " .. tostring(errS))
+	end
 end
 
 -- Abklingzeit je Aktion und Ziel (z. B. je Parkplatz-Feld), statt 0,12 s je Aktionsname
@@ -470,7 +535,7 @@ function Mini.Handles(action)
 	return MiniNet.IsAction(action)
 end
 
--- Rückgabe (für Tests): "ok" | "invalid" | "cooldown" | "duplicate" | "error" | "dropped" | "locked"
+-- Rückgabe (für Tests): "ok" | "invalid" | "cooldown" | "duplicate" | "error" | "dropped" | "locked" | "passive"
 function Mini.Handle(p, action, args)
 	local schema, handler = MiniNet.Actions[action], Mini.Handlers[action]
 	if not ctx or not schema or not handler then
@@ -487,6 +552,9 @@ function Mini.Handle(p, action, args)
 	local t = now()
 	if not unlocked(ms, action, clean, p.profile.data, t) then
 		return "locked" -- Freischaltung fehlt (Toast gedrosselt), nichts ausgeführt
+	end
+	if PASSIVE_BLOCKED[action] and OWService.BlockIfPassive(ms, p.profile.data, t) then
+		return "passive" -- Passiv-Modus (Hinweis gedrosselt), nichts ausgeführt
 	end
 	if not cooledDown(ms, action, clean, t) then
 		return "cooldown"
@@ -516,6 +584,8 @@ function Mini.Handle(p, action, args)
 			if action == "mini_scrapyard_dismantle" then
 				TutorialService.OnStat(ms, d, "dismantled")
 			end
+			-- Nebenmissionen "action:<name>" (Gebote, Waschstraße, Tauschgeschäfte, Tuning am Auto)
+			StoryService.OnEvent(ms, d, "action:" .. action, clean)
 			checkMode(ms, d)
 		end)
 		if not okT then
@@ -574,6 +644,8 @@ function Mini.OnJoin(p)
 		local mode = LobbyService.OnJoin(ms, d, t) -- setzt p.mode (das Tutorial richtet sich danach)
 		TutorialService.OnJoin(ms, d, t)
 		TycoonService.OnJoin(ms, d, t) -- Sitzung merken; im Modus tycoon sofort Grundstück + Modelle
+		OWService.OnJoin(ms, d, t) -- Gebäude am Grundstück, offline fertige Bauten
+		StoryService.OnJoin(ms, d, t) -- Story-Sitzung, Tageswechsel der Nebenmissionen, erster Kunde
 		ms.modeSeen = nil
 		checkMode(ms, d) -- Open World: Pflicht-Tutorial beim ersten Beitritt (TutorialRules.ShouldStart)
 		-- Game Passes (kann warten), danach den Offline-Ertrag gutschreiben: nur Schrott, nie Geld.
@@ -651,6 +723,24 @@ function Mini.Tick(p, t)
 		else
 			warn("[Minispiele] Tycoon: " .. tostring(resY))
 		end
+		-- Open World: Bauten fertig (Modell, ow_ready), Baustellen-Countdown; true = Snapshot fällig (höchstens 1×/s)
+		local okO, resO = pcall(OWService.Tick, ms, d, t)
+		if okO then
+			if resO then
+				ms.dirty = true
+			end
+		else
+			warn("[Minispiele] Gebäude: " .. tostring(resO))
+		end
+		-- Story: Tageswechsel, Kunden am Kiesplatz, Bedingungs-Missionen, Lieferfahrten
+		local okS, resS = pcall(StoryService.Tick, ms, d, t)
+		if okS then
+			if resS then
+				ms.dirty = true
+			end
+		else
+			warn("[Minispiele] Story: " .. tostring(resS))
+		end
 		-- Schrottplatz: sobald das Fahrzeug zerlegt werden darf, einmal neuen Snapshot senden
 		local sy = d.games.scrapyard
 		if sy.vehicle and ms.scrapReadySent ~= sy.readyAt and SideGameRules.DismantleIn(d, t) <= 0 then
@@ -678,6 +768,7 @@ function Mini.OnSettled(p)
 		if ms then
 			TutorialService.OnEvent(ms, d, "settled") -- Tutorial-Schritt „Abrechnen“
 			TutorialService.OnStat(ms, d, "jobsDone") -- Beginner-Hinweis zum ersten Auftrag
+			StoryService.OnEvent(ms, d, "settle") -- Story-Mission „Werkstatt kennenlernen“ (jobsDone kommt über StatHook)
 		end
 	end)
 	if not ok then
@@ -718,6 +809,8 @@ function Mini.OnLeave(p, wasWritable)
 	pcall(TutorialService.OnLeave, ms, p.profile.data) -- zurückgehaltene Tutorial-Belohnung vor P.Save
 	pcall(LobbyService.OnLeave, ms) -- Party verlassen (Leiterwechsel)
 	pcall(TycoonService.OnLeave, ms) -- Grundstück frei, Angebote weg (der Durchlauf bleibt im Profil)
+	pcall(OWService.OnLeave, ms) -- Gebäude-Modelle abbauen (Bauzeit läuft im Profil weiter)
+	pcall(StoryService.OnLeave, ms) -- Story-Sitzung vergessen (Kunde, Lieferung)
 	local okAuction, errAuction = pcall(AuctionService.OnLeave, ms) -- vor P.Save: Verkäufer-Lose abbrechen
 	if not okAuction then
 		warn("[Minispiele] Auktion verlassen: " .. tostring(errAuction))
@@ -868,9 +961,22 @@ PrestigeService.Register(Actions, api)
 LobbyService.Register(Actions, api)
 TutorialService.Register(Actions, api)
 TycoonService.Register(Actions, api)
+OWService.Register(Actions, api)
+StoryService.Register(Actions, api)
 
 for name in pairs(MiniNet.Actions) do
 	assert(Mini.Handlers[name], "Kein Handler für " .. name)
+end
+
+-- Statistiken (MiniRules.AddStat aus Regeln und Diensten) -> Story-/Nebenmissionen und Co-op. Die Sitzung wird über
+-- das Profil gefunden (höchstens 8 Sitzungen je Server); Profile ohne Sitzung (Tests der reinen Regeln) bleiben still.
+MiniRules.StatHook = function(d, key, amount)
+	for _, ms in pairs(Mini.Sessions) do
+		if ms.p and ms.p.profile and ms.p.profile.data == d then
+			StoryService.OnStat(ms, d, key, amount)
+			return
+		end
+	end
 end
 
 function Mini.Init(c)
@@ -900,6 +1006,8 @@ function Mini.Init(c)
 	CarService.Init(c)
 	LobbyService.Init(c) -- PlaceRouter (Teleport/Simulation) bekommt emit/toast/moveTo/now
 	TycoonService.Init(c) -- Start-/Sammel-Pads aller Grundstücke (workspace.Tycoon.Plots)
+	OWService.Init(c)
+	StoryService.Init(c)
 end
 
 return Mini

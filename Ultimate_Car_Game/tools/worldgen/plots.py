@@ -28,10 +28,47 @@ RECT = (-84, 56, -44, 84)          # reservierte plotlokale Fläche (x0,x1,z0,z1
 GRAVEL = (110, 104, 96)
 TREE_LX = 37                       # Straßenbaum (plotlokal X), außerhalb von Einfahrt und Rolltor-Zufahrt
 
+# Open-World-Gebäude (PHASE4_CONTRACT §7): Anker Plot.OWAnchors.<typ> in der Vorlage, plotlokal. Die drei Gebäude
+# stehen in einer Reihe im Oststreifen des Hofs (lokal X 34.4..56, östlich der Halle mit allen 4 Bühnen-Anbauten;
+# Hallen-Ostkante bei 34.4, Vorfeld ab Z 33). Der Anker ist um 90° gedreht: die lange Seite der Vorlage (lokal X)
+# liegt entlang der Plot-Z-Achse, ihre Front (+Z) zeigt vom Hof weg nach +X (bei Rot 180 spiegelbildlich).
+# OWService setzt die Vorlagen ServerStorage.OWBuildings.<typ>_<stufe> (PrimaryPart Root bei (0, 0.5, 0), Boden der
+# Vorlage auf Y 0) per PivotTo auf den Anker; der Anker liegt deshalb 0.5 über der Hof-Oberseite (-1.0), bei -0.5.
+# typ: (Anker-Mitte x, z, yaw, Grundfläche Breite (Vorlagen-X), Tiefe (Vorlagen-Z))
+OW_ANCHOR_Y = -0.5
+OW_ANCHORS = {
+    "schrottplatz": (45.0, -34.0, 90, 18.0, 14.0),      # lokal X 38..52, Z -43..-25
+    "produktion": (45.0, -9.0, 90, 24.0, 16.0),         # lokal X 37..53, Z -21..3
+    "autohaus": (45.0, 17.0, 90, 20.0, 14.0),           # lokal X 38..52, Z 7..27
+}
+OW_TYPES = ("autohaus", "produktion", "schrottplatz")
+
+
+def ow_anchor_cf(typ):
+    """Plotlokaler CFrame des Ankers (wie der Part in der Vorlage)"""
+    x, z, yaw, w, d = OW_ANCHORS[typ]
+    return CF.at(x, OW_ANCHOR_Y, z, yaw)
+
+
+def ow_footprint_local(typ):
+    """Plotlokale Grundfläche (x0, x1, z0, z1) des Gebäudes am Anker (Vorlagen-X entlang Plot-Z)"""
+    x, z, yaw, w, d = OW_ANCHORS[typ]
+    cf = ow_anchor_cf(typ)
+    pts = [cf.point((sx * w / 2, 0, sz * d / 2)) for sx in (-1, 1) for sz in (-1, 1)]
+    return (min(q[0] for q in pts), max(q[0] for q in pts), min(q[2] for q in pts), max(q[2] for q in pts))
+
+
+def ow_footprint_world(px, pz, rot, typ):
+    """Welt-Grundfläche (x0, x1, z0, z1) an einem Slot"""
+    x0, x1, z0, z1 = ow_footprint_local(typ)
+    a = loc2world(px, pz, rot, x0, z0)
+    b = loc2world(px, pz, rot, x1, z1)
+    return (min(a[0], b[0]), max(a[0], b[0]), min(a[1], b[1]), max(a[1], b[1]))
+
 # Code-referenzierte Anker, die der Trimm nie entfernen darf
 KEEP_TOP = {"Root", "Architecture", "Details", "Bays", "ActiveCars", "Extensions", "EndWall", "ExpansionPoint",
             "Reception", "Office", "RollerDoor", "UpgradeBench", "Start", "YardActivities", "CreditShopStation",
-            "Stations", "PartsArea", "EquipmentPositions", "Equipment"}
+            "Stations", "PartsArea", "EquipmentPositions", "Equipment", "OWAnchors"}
 REMOVE_DETAILS = {"NeighbourBuilding", "NeighbourWindow", "GardenBed", "GardenCurb", "GrassBlade", "FencePost",
                   "FenceRail", "Road", "RoadMark", "LampBase", "LampPost", "LampArm", "YardLamp", "Birch",
                   "WorkshopPine", "LeafSpray", "Bollard", "BollardBand", "BenchLeg", "BenchSeat", "BenchBack",
@@ -123,6 +160,8 @@ def trim_template(werkstatt, lib):
     # 4) Plot-Spawn aus (CitySpawn ist der einzige Spawn)
     start = child(werkstatt, "Start")
     set_scalar(start, "bool", "Enabled", "false")
+    # 4b) Anker der Open-World-Gebäude (unsichtbare Parts, Plot.OWAnchors.<typ>)
+    build_ow_anchors(werkstatt, lib)
     # 5) Kontrolle: alles außer Wurzel-Ankern liegt in der Fläche
     outside = []
     for it in children(werkstatt):
@@ -142,6 +181,20 @@ def trim_template(werkstatt, lib):
 
 def it_count(item):
     return sum(1 for x in item.iter("Item") if is_basepart(x))
+
+
+def build_ow_anchors(werkstatt, lib):
+    """Plot.OWAnchors.<typ>: unsichtbare, verankerte Parts 1x1x1 (CanCollide/CanTouch/CanQuery aus) am Pivot der
+    Gebäude (OW_ANCHORS); ersetzt einen vorhandenen Ordner. Attribute: OWType, Width, Depth (Grundfläche)."""
+    old = child(werkstatt, "OWAnchors")
+    if old is not None:
+        werkstatt.remove(old)
+    f = lib.folder(werkstatt, "OWAnchors")
+    for typ in OW_TYPES:
+        x, z, yaw, w, d = OW_ANCHORS[typ]
+        lib.part(f, typ, (1, 1, 1), ow_anchor_cf(typ), TEAL, "SmoothPlastic", transparency=1, collide=False,
+                 touch=False, query=False, cast_shadow=False, attrs={"OWType": typ, "Width": w, "Depth": d})
+    return f
 
 
 # ---------------------------------------------------------------- Deko je Slot (§4.3)

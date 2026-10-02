@@ -1,7 +1,7 @@
 -- GameConfig: die eine Stelle für alle Zahlen und Tabellen der Ausbaustufe 4 (docs/PHASE4_CONTRACT.md §3):
 -- Places, Zonen, Freischaltungen, Prestige, Party, Tutorial, Beginner-Hinweise und die XP-Regler.
--- Tycoon, Open World, Story und Shop sind hier als leere Tabellen vorbereitet und werden in den späteren
--- Meilensteinen gefüllt. 2.4.0-Zahlen bleiben in GarageShared.Config, Minispiel-Zahlen in MiniConfig,
+-- Tycoon (Meilenstein 4), Open World (Meilenstein 6) und Story (Meilenstein 7) sind gefüllt; Shop ist als leere Tabelle
+-- vorbereitet (Meilenstein 8). 2.4.0-Zahlen bleiben in GarageShared.Config, Minispiel-Zahlen in MiniConfig,
 -- Autos in CarCatalog (das nimmt die Händler-Level aus Unlocks.CarLevel).
 -- Rein (keine Instanzen, keine Dienste), auf Server und Client nutzbar (ReplicatedStorage.GarageShared.Mini).
 -- Balance-Änderungen anderer Teams gehen nur über diese Datei, nie über Zahlen im Code.
@@ -175,7 +175,9 @@ GameConfig.Tutorial = {
 		{ id = "settle", text = "Rechne den Auftrag am Empfang ab – die Credits gehören dir!", target = "workshop", zone = "plot", event = "settled" },
 		{ id = "map", text = "Drück M (oder den Knopf „Minispiele“) und öffne den Tab „Stadtplan“ – reise damit in die Stadt.", target = nil, zone = nil, event = "action:mini_travel" },
 		{ id = "dealer", text = "Schau im Autohaus vorbei und drück dort E. Kaufen kannst du ab Level 3 – ansehen darfst du jetzt schon.", target = "dealer", zone = "city", event = "tab:dealer" },
-		{ id = "goals", text = "Sieh dir an der Infotafel deine Tagesziele an. Viel Spaß in der Werkstattmeile!", target = "goals", zone = "city", event = "tab:goals" },
+		{ id = "goals", text = "Sieh dir an der Infotafel deine Tagesziele an – jeden Tag gibt es neue.", target = "goals", zone = "city", event = "tab:goals" },
+		-- Meilenstein 7: Anschluss an die Story (Kapitel 1 „Der Kiesplatz“, Station City.Stations.kiesplatz, Tab story)
+		{ id = "kiesplatz", text = "Zum Schluss: Reise mit dem Stadtplan zum Kiesplatz am Stadtrand und drück dort E. Da beginnt deine Story – vom Kiesplatzhändler zum Mega-Verkäufer. Viel Spaß in der Werkstattmeile!", target = "kiesplatz", zone = "city", event = "tab:story" },
 	} :: { TutorialStep },
 	EventKinds = { "next", "station", "tab", "job", "settled", "action" },
 }
@@ -437,9 +439,320 @@ do
 	end
 end
 
----------------------------------------------------------------- Spätere Meilensteine (leer, nichts liest daraus; Tycoon siehe oben)
-GameConfig.OW = {} -- wird in Meilenstein 6 gefüllt (Gebäude, Bauzeiten, Preise, Perks, Passiv-Modus)
-GameConfig.Story = {} -- wird in Meilenstein 7 gefüllt (Kapitel, Missionen, Nebenmissionen, Belohnungen)
+---------------------------------------------------------------- Open World: Gebäude, Perks, Passiv-Modus (§5, §7, Meilenstein 6)
+-- Feste IDs: Gebäudetypen werkstatt|autohaus|produktion|schrottplatz, Stufen 1..4. Modelle
+-- ServerStorage.OWBuildings.<typ>_<stufe> und OWBuildings.baustelle (Weltteam), Anker Plot.OWAnchors.<typ>.
+-- werkstatt = das 2.4.0-Grundstück (Stufe = Bühnenzahl d.bays, Kauf nur über den Hallenanbau; hier nur Anzeige + Perk).
+-- Balance (docs/BALANCE.md: Werkstatt Lv 10 ≈ 800 Cr/Min, Lv 20 ≈ 1.470, Lv 30 ≈ 2.850, Lv 40 ≈ 5.770; passive
+-- Einnahmen zusammen ≤ 25 %): Autohaus Stufe 1 = 25 Cr/Min (3 % auf Level 10), Stufe 4 = 300 Cr/Min (≈ 10 % auf Level 30).
+-- Schrott: 1 Credit = 10 Mio. Schrott (MiniConfig.ScrapPerCredit), darum die großen Schrottzahlen. Erträge sammeln sich
+-- höchstens PassiveCapHours an (danach steht die Anlage still, bis abgeholt wird). Bauzeit läuft offline weiter (readyAt).
+export type OWStage = {
+	stage: number, price: number, buildSeconds: number, level: number?,
+	yieldPerHour: number?, scrapPerHour: number?, partsPerHour: number?,
+	partsEveryHours: number?, partsPerPack: number?, carEveryHours: number?, carModel: string?,
+}
+export type OWBuilding = { typ: string, name: string, desc: string, unlock: string?, display: boolean?, Stages: { OWStage } }
+export type OWPerk = { kind: string, label: string, per: number, cap: number, perBay: boolean? }
+
+GameConfig.OW = {
+	Types = { "werkstatt", "autohaus", "produktion", "schrottplatz" },
+	MaxStage = 4,
+	PassiveCapHours = 12, -- Erträge sammeln sich höchstens 12 Std. an (abholen!)
+	CountdownInterval = 1, -- Baustellen-Countdown (SurfaceGui) höchstens 1×/s vom Server beschriftet
+	SnapshotInterval = 1, -- Snapshot höchstens 1×/s, solange eine Baustelle läuft
+	ReadyToastSeconds = 2, -- Toast-Drossel je Grund (ow_build/ow_collect)
+	Buildings = {
+		werkstatt = {
+			typ = "werkstatt", name = "Werkstatt", display = true,
+			desc = "Dein 2.4.0-Grundstück. Die Stufe ist die Zahl deiner Hebebühnen – ausbauen am Hallenanbau auf dem Grundstück.",
+			Stages = {}, -- kein zweiter Kaufweg (Stufe = d.bays, Preise in GarageShared.Config)
+		},
+		autohaus = {
+			typ = "autohaus", name = "Autohaus", unlock = "building:autohaus",
+			desc = "Dein eigener Verkaufsstand auf dem Grundstück: verkauft Autos, während du unterwegs bist (Credits je Stunde, abholen) und bringt dir Rabatt beim Händler.",
+			Stages = {
+				{ stage = 1, price = 12000, buildSeconds = 600, yieldPerHour = 1500 },
+				{ stage = 2, price = 50000, buildSeconds = 2700, yieldPerHour = 4000 },
+				{ stage = 3, price = 180000, buildSeconds = 10800, yieldPerHour = 9000 },
+				{ stage = 4, price = 600000, buildSeconds = 28800, yieldPerHour = 18000 },
+			},
+		},
+		schrottplatz = {
+			typ = "schrottplatz", name = "Schrottplatz", unlock = "building:schrottplatz",
+			desc = "Dein eigener Schrottplatz: sammelt Schrott für die Presse und Altteile, auch wenn du nicht da bist. Dazu ein Bonus auf die Schrottpresse.",
+			Stages = {
+				{ stage = 1, price = 40000, buildSeconds = 300, scrapPerHour = 2000000000, partsPerHour = 2 },
+				{ stage = 2, price = 140000, buildSeconds = 1800, scrapPerHour = 6000000000, partsPerHour = 4 },
+				{ stage = 3, price = 400000, buildSeconds = 7200, scrapPerHour = 15000000000, partsPerHour = 8 },
+				{ stage = 4, price = 1100000, buildSeconds = 18000, scrapPerHour = 40000000000, partsPerHour = 15 },
+			},
+		},
+		produktion = {
+			typ = "produktion", name = "Produktion", unlock = "building:produktion",
+			desc = "Deine Automobil-Produktion: alle paar Stunden ein Bauteil-Paket (Altteile), ab Stufe 4 außerdem alle zwei Tage ein Auto-Gutschein für einen Kompaktwagen. Macht deine Tuning-Projekte schneller.",
+			Stages = {
+				{ stage = 1, price = 150000, buildSeconds = 900, partsEveryHours = 6, partsPerPack = 10 },
+				{ stage = 2, price = 500000, buildSeconds = 3600, partsEveryHours = 4, partsPerPack = 15 },
+				{ stage = 3, price = 1500000, buildSeconds = 14400, partsEveryHours = 3, partsPerPack = 20 },
+				{ stage = 4, price = 4000000, buildSeconds = 36000, partsEveryHours = 2, partsPerPack = 30, carEveryHours = 48, carModel = "komet" },
+			},
+		},
+	},
+	-- Perks (§7): Faktor = 1 + min(cap, Stufe × per); werkstatt zählt Bühnen über der ersten (d.bays − 1). Alles ≤ +25 %.
+	-- CrossBonus.OWPerk(d, typ) liest genau diese Tabelle (werkstatt -> Auftragswert, autohaus -> Händlerrabatt-Anteil,
+	-- schrottplatz -> Presse-Schrott, produktion -> Tuning-Tempo). Stufe = fertig gebaute Stufe (built), nie die Baustelle.
+	Perks = {
+		werkstatt = { kind = "werkstatt", label = "Auftragswert", per = 0.08, cap = 0.24, perBay = true },
+		autohaus = { kind = "autohaus", label = "Händlerrabatt", per = 0.03, cap = 0.12 },
+		schrottplatz = { kind = "schrottplatz", label = "Presse-Schrott", per = 0.05, cap = 0.20 },
+		produktion = { kind = "produktion", label = "Tuning-Tempo", per = 0.05, cap = 0.20 },
+	},
+	PerkCap = 0.25, -- harte Obergrenze aller Perks (Vertrag §7)
+	-- Passiv-Modus (§5): nur Zuschauen/Handeln, keine Missionen/Story/Auktionen; passive Einnahmen laufen weiter
+	PassiveHint = "Du bist im Passiv-Modus: nur zuschauen und handeln. Missionen, Story und Auktionen pausieren – deine Gebäude und Tuning-Projekte verdienen weiter. Umschalten im Tab „Gebäude“ oder in der Lobby.",
+}
+
+---------------------------------------------------------------- Story „Vom Kiesplatzhändler zum Mega-Verkäufer“ (§7, Meilenstein 7)
+-- Alle Zahlen und Texte der Story, des Kiesplatz-Verkaufs, der Nebenmissionen und der Lieferfahrten (StoryRules liest nur hier).
+--
+-- Missionen (feste Ids "c<kapitel>_m<n>", Nebenmissionen "s_<name>", Legende "l_<name>"):
+--   kind = "stat"   stat = Statistik (MiniRules.STAT_KEYS), target = n   (zählt den Zuwachs seit dem Start; absolute = true: Gesamtwert)
+--   kind = "event"  event = Ereignis-Schlüssel (StoryService.OnEvent), target = n, maxTime = s (nur mit data.time ≤ maxTime)
+--   kind = "sell"   target = n Verkäufe am Kiesplatz; tier = Mindest-Preisstufe (3 = Bestpreis); special = true: nur Sondermodell-Kunden
+--   kind = "build"  typ = OW-Gebäude, stage = Stufe (gelesen aus d.games.ow.buildings[typ].stage)
+--   kind = "own"    money = n (Kontostand) | bays = n (Hebebühnen) | cars = { modelIds } (eins davon in der Garage) |
+--                   equipmentAll = true (alle Geräte der Werkstatt mindestens Stufe 1)
+--   reward = { credits = n, xp = n?, cosmetic = id?, title = string? }; fehlt xp, gilt GameConfig.XP.StoryMission[kapitel]
+--   minutes = erwarteter Aufwand (Balance: credits / minutes ≤ Balance.Share × Werkstatt-Cr/Min des Kapitel-Levels)
+local Story = {}
+
+Story.Title = "Vom Kiesplatzhändler zum Mega-Verkäufer"
+
+---------------------------------------------------------------- Kapitel (§7: 5 Kapitel à 3 Missionen; Level wie GameConfig.Unlocks "story:<n>")
+Story.Chapters = {
+	{
+		id = 1, title = "Der Kiesplatz", unlockLevel = 1,
+		intro = "Ein staubiger Kiesplatz am Stadtrand, drei alte Autos und ein handgemaltes Schild – das ist dein Anfang. "
+			.. "Die Kunden kommen schon, jetzt brauchst du nur noch den richtigen Preis. "
+			.. "Jeder Verkauf bringt dich deinem Traum vom eigenen Autohaus ein Stück näher.",
+		Missions = {
+			{ id = "c1_m1", title = "Drei Gebrauchtwagen verkaufen", kind = "sell", target = 3, minutes = 4,
+				text = "Geh zum Kiesplatz, sprich mit den Kunden und nenne deinen Preis. Günstig klappt immer, teuer braucht Verhandlungsglück.",
+				reward = { credits = 150 } },
+			{ id = "c1_m2", title = "Werkstatt kennenlernen", kind = "event", event = "settle", target = 1, minutes = 3,
+				text = "Deine Kunden wollen auch reparieren lassen. Nimm in deiner Werkstatt einen Auftrag an und rechne ihn am Empfang ab.",
+				reward = { credits = 120 } },
+			{ id = "c1_m3", title = "Die ersten 1.000 Credits", kind = "own", money = 1000, target = 1000, minutes = 4,
+				text = "Bring deinen Kontostand auf 1.000 Credits – mit Verkäufen am Kiesplatz oder Aufträgen in der Werkstatt.",
+				reward = { credits = 200 } },
+		},
+	},
+	{
+		id = 2, title = "Die erste Werkstatt", unlockLevel = 5,
+		intro = "Mit den ersten Credits in der Tasche wird aus dem Kiesplatz eine richtige Werkstatt. "
+			.. "Deine Kunden wollen nicht nur kaufen, sondern auch reparieren lassen. "
+			.. "Zeig, was du kannst – und gönn dir zwischendurch eine Runde auf der Teststrecke.",
+		Missions = {
+			{ id = "c2_m1", title = "Fünf Aufträge abrechnen", kind = "stat", stat = "jobsDone", target = 5, minutes = 10,
+				text = "Fünf Kundenautos reparieren und am Empfang abrechnen. Jeder Auftrag bringt Credits, XP und Ruf.",
+				reward = { credits = 800 } },
+			{ id = "c2_m2", title = "Hebebühne Nummer zwei", kind = "own", bays = 2, target = 2, minutes = 5,
+				text = "Kauf im Hallenanbau deiner Werkstatt eine zweite Hebebühne. Zwei Aufträge gleichzeitig – doppelt so schnell.",
+				reward = { credits = 500 } },
+			{ id = "c2_m3", title = "Ab auf die Teststrecke", kind = "event", event = "track_finish", target = 1, minutes = 4,
+				text = "Fahr ein Zeitfahren auf der Teststrecke bis ins Ziel. Die Zeit ist egal – Hauptsache ankommen!",
+				reward = { credits = 400 } },
+		},
+	},
+	{
+		id = 3, title = "Das Autohaus", unlockLevel = 15,
+		intro = "Die ganze Stadt redet über dich! Zeit für ein eigenes Autohaus auf deinem Grundstück. "
+			.. "Kauf dein erstes Auto beim Händler und mach dich im Auktionshaus einen Namen.",
+		Missions = {
+			{ id = "c3_m1", title = "Das eigene Autohaus", kind = "build", typ = "autohaus", stage = 1, target = 1, minutes = 10,
+				text = "Bau auf deinem Grundstück das Gebäude „Autohaus“ (Tab „Gebäude“). Es bringt passive Verkaufserlöse und Händler-Rabatt.",
+				reward = { credits = 2500 } },
+			{ id = "c3_m2", title = "Der erste Neuwagen", kind = "event", event = "car_bought", target = 1, minutes = 8,
+				text = "Kauf beim Händler in der Stadt ein Auto für deine Garage. Mit Rabatt aus deinem Autohaus wird's günstiger.",
+				reward = { credits = 2000 } },
+			{ id = "c3_m3", title = "Unter dem Hammer", kind = "event", events = { "auction_won", "auction_consigned" }, target = 1, minutes = 10,
+				text = "Gewinne eine NPC-Auktion im Auktionshaus – oder gib ein eigenes Auto in die Auktion.",
+				reward = { credits = 3000 } },
+		},
+	},
+	{
+		id = 4, title = "Die Produktion", unlockLevel = 30,
+		intro = "Große Verkäufer bauen ihre Autos selbst. Mit Schrottplatz und Produktion wird aus Altteilen Neues – "
+			.. "und am Kiesplatz warten jetzt Kunden mit besonderen Wünschen und dickem Geldbeutel.",
+		Missions = {
+			{ id = "c4_m1", title = "Der eigene Schrottplatz", kind = "build", typ = "schrottplatz", stage = 1, target = 1, minutes = 10,
+				text = "Bau das Gebäude „Schrottplatz“ auf deinem Grundstück. Es liefert passiv Schrott und Altteile.",
+				reward = { credits = 6000 } },
+			{ id = "c4_m2", title = "Die Produktion läuft an", kind = "build", typ = "produktion", stage = 1, target = 1, minutes = 15,
+				text = "Bau die „Automobil-Produktion“ auf deinem Grundstück. Sie produziert Bauteil-Pakete – und später ganze Autos.",
+				reward = { credits = 9000 } },
+			{ id = "c4_m3", title = "Drei Sondermodelle verkaufen", kind = "sell", target = 3, special = true, minutes = 6,
+				text = "Am Kiesplatz fragen jetzt Sammler nach Sondermodellen. Verkauf drei davon – die Preisstufen gelten wie immer.",
+				reward = { credits = 5000 } },
+		},
+	},
+	{
+		id = 5, title = "Der Mega-Verkäufer", unlockLevel = 50,
+		intro = "Der letzte Schritt: Deine Produktion läuft auf Hochtouren, deine Kunden zahlen Bestpreise, "
+			.. "und in deiner Garage steht ein Traumwagen. Dann kennt die ganze Stadt deinen Namen – Mega-Verkäufer!",
+		Missions = {
+			{ id = "c5_m1", title = "Produktion auf Stufe 4", kind = "build", typ = "produktion", stage = 4, target = 4, minutes = 30,
+				text = "Bau deine Produktion bis Stufe 4 aus. Ab dann rollt alle paar Stunden ein Auto-Gutschein vom Band.",
+				reward = { credits = 20000 } },
+			{ id = "c5_m2", title = "Zehn Verkäufe zum Bestpreis", kind = "sell", target = 10, tier = 3, minutes = 15,
+				text = "Verkauf am Kiesplatz zehn Autos zur Preisstufe „teuer“. Nur erfolgreiche Verhandlungen zählen.",
+				reward = { credits = 15000 } },
+			{ id = "c5_m3", title = "Der Traumwagen", kind = "own", cars = { "aureon", "elys", "aureon_nero", "elys_proto" }, target = 1, minutes = 30,
+				text = "Besitze einen Vektor Aureon V12 oder einen Nord Elys E9 (auch als Sondermodell). Dann bist du der Mega-Verkäufer!",
+				reward = { credits = 25000, cosmetic = "wrap_mega", title = "Mega-Verkäufer" } },
+		},
+	},
+}
+
+---------------------------------------------------------------- Kiesplatz-Verkauf (story_sell {offer, price}; price = Preisstufe 1..3)
+-- Der Spieler kauft den Gebrauchtwagen gedanklich aus dem Erlös: gutgeschrieben wird nur der Reingewinn (profit) je Stufe,
+-- skaliert mit dem Level (×(1 + LevelFactor × (Level − 1)), Deckel LevelFactorCap) und bei Sondermodell-Kunden ×SpecialMultiplier.
+-- Stufe 1 klappt immer, Stufe 2 meistens, Stufe 3 verhandelt der Kunde: Erfolg, wenn der beim Angebot festgelegte
+-- Zufallswurf (Seed, Server) unter chance liegt. Kein Wurf je Klick – wer denselben Kunden zweimal fragt, bekommt dieselbe Antwort.
+Story.Sale = {
+	FirstOfferDelay = 2, -- Sekunden nach dem Beitritt bis zum ersten Kunden
+	OfferInterval = 45, -- Sekunden bis zum nächsten Kunden nach einem Verkauf
+	FailInterval = 20, -- Sekunden bis zum nächsten Kunden nach einer geplatzten Verhandlung
+	Patience = 180, -- Sekunden, die ein Kunde wartet, bevor er weiterzieht
+	Range = 45, -- Studs: so nah muss die Figur an City.Stations.kiesplatz sein (ohne Station keine Prüfung)
+	LevelFactor = 0.04,
+	LevelFactorCap = 3, -- höchstens ×3 (ab Level 51)
+	SpecialMultiplier = 3,
+	SpecialChapter = 4, -- ab diesem Kapitel kommen Sondermodell-Kunden (jeder dritte Kunde)
+	SpecialEvery = 3,
+	Xp = { 8, 12, 20 }, -- XP je gelungenem Verkauf nach Preisstufe
+	Tiers = {
+		{ tier = 1, label = "günstig", profit = 40, chance = 1, hint = "Sicherer Verkauf, kleiner Gewinn." },
+		{ tier = 2, label = "fair", profit = 75, chance = 0.85, hint = "Klappt meistens." },
+		{ tier = 3, label = "teuer", profit = 130, chance = 0.5, hint = "Der Kunde feilscht – mit etwas Glück ein dicker Gewinn." },
+	},
+	-- Fiktiver Verkaufspreis je Karosserie (nur Anzeige: Preis = Basis + Gewinn); Gewinn ist das, was wirklich ankommt
+	BasePrice = { compact = 3200, sedan = 5800, sport = 14000, super = 60000, electric = 42000 },
+	Bodies = { compact = "Kompaktwagen", sedan = "Limousine", sport = "Sportwagen", super = "Supersportwagen", electric = "Elektroauto" },
+	Customers = {
+		{ name = "Lena", wants = "compact", line = "Ich brauche was Kleines für die Stadt. Was soll der kosten?" },
+		{ name = "Familie Berg", wants = "sedan", line = "Wir sind zu fünft – da muss schon eine Limousine her!" },
+		{ name = "Jonas", wants = "sport", line = "Hauptsache, er ist schnell. Nenn mir deinen Preis!" },
+		{ name = "Oma Hilde", wants = "compact", line = "Zum Einkaufen und zum Enkel fahren – mehr brauch ich nicht." },
+		{ name = "Mia", wants = "electric", line = "Ich will was mit Stecker. Was kostet mich das?" },
+		{ name = "Herr Kowalski", wants = "sedan", line = "Für die Arbeit, bequem und zuverlässig. Und der Preis?" },
+		{ name = "Tarek", wants = "sport", line = "Ich hab lange gespart. Mach mir ein faires Angebot!" },
+		{ name = "Frau Özdemir", wants = "compact", line = "Mein erstes eigenes Auto! Was muss ich hinlegen?" },
+		{ name = "Ben und Paul", wants = "sedan", line = "Wir teilen uns das Auto. Was rufst du auf?" },
+		{ name = "Sofia", wants = "electric", line = "Leise, sauber, schick. Was verlangst du dafür?" },
+		{ name = "Herr Vogt", wants = "super", line = "Ich sammle Besonderes. Geld spielt keine Rolle – fast.", special = true },
+		{ name = "Lady Amara", wants = "sport", line = "Etwas Seltenes für meine Garage, bitte. Ihr Preis?", special = true },
+		{ name = "Dr. Quint", wants = "electric", line = "Ein Prototyp? Das wäre mein Traum. Was kostet er?", special = true },
+	},
+	Texts = {
+		sold = { "%s nickt: „Abgemacht!“ Du verdienst %s.", "„Super Preis!“ freut sich %s. Gewinn: %s.", "%s schlägt ein. Dein Gewinn: %s." },
+		failed = { "%s schüttelt den Kopf: „Das ist mir zu teuer.“ Der nächste Kunde kommt gleich.", "„Nee, so viel nicht“, sagt %s und geht weiter." },
+		gone = "%s hatte keine Lust mehr zu warten. Der nächste Kunde kommt gleich.",
+		noOffer = "Gerade ist kein Kunde da. Der nächste kommt in Kürze.",
+		wrongOffer = "Dieser Kunde ist schon weg. Schau dir den aktuellen an.",
+		badTier = "Wähle eine Preisstufe: günstig, fair oder teuer.",
+		notHere = "Zum Verkaufen geh an den Kiesplatz am Stadtrand.",
+		notOpenWorld = "Der Kiesplatz liegt in der Open World.",
+	},
+}
+
+---------------------------------------------------------------- Nebenmissionen (§7: täglich 3 aus dem Pool; dazu der Strang „Werkstatt-Legende“)
+Story.Side = {
+	Daily = 3, -- Nebenmissionen je UTC-Tag (deterministisch wie GoalRules.DailyGoals)
+	DailyLimit = 3, -- Tageslimit abgeholter Nebenmissionen
+	LevelScale = 0.03, -- Credits × (1 + LevelScale × (Level − 1)), Deckel LevelScaleCap
+	LevelScaleCap = 3,
+	TimeTrialTarget = 75, -- Sekunden: Zeitfahren unter dieser Zeit
+	Delivery = {
+		Routes = 3, -- City.Missions.Delivery_1..3 (Start/Ziel-Teile, Attribut Role = "start" | "end")
+		TimeLimit = 240, -- Sekunden vom Start bis zum Ziel
+		Slack = 6, -- Studs Zugabe auf die halbe Teilgröße (Berührung des Fahrzeugrumpfs)
+		Texts = {
+			started = "Lieferung %d gestartet! Fahr mit deinem Auto zum Ziel – du hast %d Sekunden.",
+			done = "Lieferung %d abgeliefert! Das war in %d Sekunden.",
+			expired = "Die Lieferung hat zu lange gedauert. Fahr noch einmal zum Start.",
+		},
+	},
+	Pool = {
+		{ id = "s_delivery", title = "Lieferung", kind = "event", event = "delivery", target = 1, credits = 150,
+			text = "Fahr mit deinem Auto zum Lieferstart in der Stadt (Schild „Lieferung“) und bring es rechtzeitig zum Ziel." },
+		{ id = "s_timetrial", title = "Zeitfahren unter Zielzeit", kind = "event", event = "track_finish", maxTime = 75, target = 1, credits = 150,
+			text = "Fahr auf der Teststrecke ein Zeitfahren unter 75 Sekunden." },
+		{ id = "s_arcade", title = "Dreimal Spielhalle", kind = "event", event = "arcade_round", target = 3, credits = 120,
+			text = "Spiel in der Spielhalle drei Runden an den Automaten." },
+		{ id = "s_dismantle", title = "Fünf Fahrzeuge zerlegen", kind = "stat", stat = "dismantled", target = 5, credits = 150,
+			text = "Zerlege auf dem Schrottplatz fünf Fahrzeuge in Altteile." },
+		{ id = "s_auction", title = "Zweimal mitbieten", kind = "event", event = "action:mini_auction_bid", target = 2, credits = 120,
+			text = "Gib im Auktionshaus zwei Gebote ab – gewinnen musst du nicht." },
+		{ id = "s_wash", title = "Autowäsche", kind = "event", event = "action:mini_carwash", target = 1, credits = 80,
+			text = "Fahr mit deinem Auto durch die Waschstraße." },
+		{ id = "s_press", title = "Zehn Schrott-Tauschgeschäfte", kind = "event", event = "action:mini_press_exchange", target = 10, credits = 120,
+			text = "Tausche an der Schrottpresse zehnmal Schrott beim Händler." },
+		{ id = "s_tune", title = "Ein Auto tunen", kind = "event", event = "action:mini_car_tune", target = 1, credits = 120,
+			text = "Verbessere in deiner Garage ein Teil an einem deiner Autos." },
+		{ id = "s_quiz", title = "Fünf Quizfragen", kind = "stat", stat = "quizCorrect", target = 5, credits = 100,
+			text = "Beantworte im Mechaniker-Quiz fünf Fragen richtig." },
+		{ id = "s_parking", title = "Drei Parkrätsel", kind = "stat", stat = "parkingSolved", target = 3, credits = 100,
+			text = "Löse drei Rätsel im Parkplatz-Chaos." },
+		{ id = "s_jobs", title = "Drei Aufträge", kind = "stat", stat = "jobsDone", target = 3, credits = 150,
+			text = "Rechne in deiner Werkstatt drei Aufträge ab." },
+	},
+	-- Zweiter Strang „Werkstatt-Legende“: dauerhaft, einmal abholbar, Fortschritt aus dem Profil (nicht täglich)
+	Legend = {
+		{ id = "l_jobs100", title = "Werkstatt-Legende: 100 Aufträge", kind = "stat", stat = "jobsDone", absolute = true, target = 100, credits = 5000, xp = 400,
+			text = "Rechne insgesamt 100 Aufträge in deiner Werkstatt ab." },
+		{ id = "l_equipment", title = "Werkstatt-Legende: Alle Geräte", kind = "own", equipmentAll = true, target = 8, credits = 8000, xp = 600,
+			text = "Besitze jedes Gerät der Werkstatt mindestens einmal." },
+		{ id = "l_bays4", title = "Werkstatt-Legende: Vier Bühnen", kind = "own", bays = 4, target = 4, credits = 6000, xp = 500,
+			text = "Bau deine Werkstatt auf vier Hebebühnen aus." },
+	},
+}
+
+---------------------------------------------------------------- Co-op (§7)
+-- Geteilte Missionsarten: Fortschritt eines Party-Mitglieds zählt für alle Mitglieder mit derselben aktiven Mission.
+-- Bedingungen am eigenen Profil (own, build) teilt niemand. Nebenmissionen sind persönlich.
+Story.Coop = { SharedKinds = { stat = true, event = true, sell = true }, Text = "Party: %s hat „%s“ weitergebracht (%d/%d)." }
+
+---------------------------------------------------------------- Balance (§7: Missions-Belohnung ≤ 40 % der Werkstatt-Einnahme/Minute)
+-- Werkstatt-Credits je Minute nach docs/BALANCE.md (Zeile „Werkstatt (2.4.0-Aufträge)“), dazwischen linear, darüber fortgesetzt
+Story.Balance = { Share = 0.4, WorkshopPerMinute = { { 1, 214 }, { 5, 531 }, { 10, 803 }, { 20, 1468 }, { 30, 2850 }, { 40, 5765 } } }
+
+---------------------------------------------------------------- Texte
+Story.Texts = {
+	unknown = "Diese Mission gibt es nicht.",
+	finished = "Du hast die ganze Story geschafft – Mega-Verkäufer!",
+	locked = "Kapitel %d „%s“ gibt es ab Level %d. Bis dahin: Aufträge und Nebenmissionen bringen XP!",
+	notCurrent = "Erst kommt „%s“ dran – die Story geht der Reihe nach.",
+	alreadyActive = "Du bist schon bei „%s“. Erledige sie zuerst.",
+	alreadyDone = "Die hast du schon geschafft.",
+	notActive = "Starte die Mission zuerst im Tab „Story“.",
+	notDone = "Noch nicht geschafft: %d von %d.",
+	started = "Mission gestartet: „%s“. %s",
+	claimed = "Mission geschafft: „%s“ – +%s und %d XP!",
+	chapterDone = "Kapitel %d abgeschlossen: „%s“! +%d XP. Weiter geht's mit Kapitel %d ab Level %d.",
+	storyDone = "Du bist jetzt offiziell Mega-Verkäufer! Die ganze Stadt kennt deinen Namen.",
+	passive = "Im Passiv-Modus ruht die Story. Schalte ihn in den Einstellungen (Lobby) aus, wenn du weiterspielen willst.",
+	sideUnknown = "Diese Nebenmission gibt es heute nicht.",
+	sideNotDone = "Noch nicht geschafft: %d von %d.",
+	sideClaimed = "Nebenmission geschafft: „%s“ – +%s und %d XP!",
+	sideAlready = "Schon abgeholt.",
+	sideLimit = "Für heute hast du alle Nebenmissionen abgeholt. Morgen gibt es neue!",
+	coop = "Party: %s hat „%s“ weitergebracht (%d/%d).",
+}
+GameConfig.Story = Story
+
+---------------------------------------------------------------- Spätere Meilensteine (leer, nichts liest daraus; Tycoon/OW/Story siehe oben)
 GameConfig.Shop = {} -- wird in Meilenstein 8 gefüllt (Produkte, DLC-Autos, Kosmetik, Game Passes)
 
 ---------------------------------------------------------------- Nachschlagetabellen
@@ -477,6 +790,24 @@ for i, u in ipairs(GameConfig.Unlocks) do
 	local last = GameConfig.UnlockLevels[#GameConfig.UnlockLevels]
 	if last ~= u.level then
 		table.insert(GameConfig.UnlockLevels, u.level)
+	end
+end
+
+GameConfig.OW.TypeSet = {}
+GameConfig.OW.BuildingList = {} -- in Reihenfolge von Types
+for _, typ in ipairs(GameConfig.OW.Types) do
+	GameConfig.OW.TypeSet[typ] = true
+	local b = GameConfig.OW.Buildings[typ]
+	if b then
+		b.typ = typ
+		table.insert(GameConfig.OW.BuildingList, b)
+		for i, st in ipairs(b.Stages) do
+			st.stage = i
+			if st.level == nil then
+				local e = b.unlock and GameConfig.UnlockByKey[b.unlock] or nil
+				st.level = e and e.level or 1
+			end
+		end
 	end
 end
 

@@ -4,7 +4,7 @@
 -- Alle Funktionen sind nil-sicher: der Client ruft R.Reward auf state.data auf, und Profile ohne
 -- games (oder ein fehlendes d) ergeben neutrale Werte (1 bzw. 0).
 -- Ausbaustufe 4 (docs/PHASE4_CONTRACT.md §4, §8): Prestige-Einnahmenbonus (PrestigeIncome), Tycoon-Durchläufe
--- (TycoonWorkshop), Open-World-Perks (OWPerk, Platzhalter bis Meilenstein 6). Gedeckelt (GameConfig.WorkshopRewardCap,
+-- (TycoonWorkshop), Open-World-Perks (OWPerk: Werkstatt-Bühnen, Autohaus, Schrottplatz, Produktion). Gedeckelt (GameConfig.WorkshopRewardCap,
 -- Standard ×1,6) ist NUR der Ausbaustufe-4-Faktor Tycoon × OW-Perk (CareerCapped); die 2.4.0/3.x-Querboni
 -- (Presse, Tuning-Abteilung, Kundenbonus) bleiben wie bisher ungedeckelt, sonst sänken die Einnahmen bestehender
 -- Profile. Der Prestige-Bonus (+2 % je Rang, Deckel +30 %) gilt auf alle Einnahmen (MiniRules.AddIncome) und wird
@@ -12,6 +12,7 @@
 local MiniConfig = require(script.Parent:WaitForChild("MiniConfig"))
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules"))
+local C = require(script.Parent.Parent:WaitForChild("Config")) -- MaxBays (rein, ohne Rückbezug)
 
 local CrossBonus = {}
 
@@ -175,10 +176,43 @@ function CrossBonus.TycoonScrap(d: any): number
 	return 1 + CrossBonus.TycoonBonus(d, "schrottplatz")
 end
 
--- Open-World-Perk eines Karrierewegs (GameConfig.OW.Perks, Meilenstein 6): Platzhalter, wirkt neutral.
--- typ: werkstatt | autohaus | schrottplatz | produktion
+-- Open-World-Perk eines Karrierewegs (GameConfig.OW.Perks, Meilenstein 6; Vertrag §7): Faktor ≥ 1,
+-- 1 + min(cap, PerkCap, n × per). n = fertig gebaute Stufe (d.games.ow.buildings[typ].built, nie die Baustelle);
+-- werkstatt zählt die Hebebühnen über der ersten (d.bays − 1). Dieselbe Formel wie OWRules.Perk (OWRules wird hier
+-- bewusst nicht geladen: OWRules lädt MiniRules, MiniRules lädt CrossBonus). Nil-sicher: ohne d/games/ow -> 1.
+-- typ: werkstatt (Auftragswert) | autohaus (Händlerrabatt-Anteil) | schrottplatz (Schrott) | produktion (Tuning-Tempo)
 function CrossBonus.OWPerk(d: any, typ: string?): number
-	return 1
+	local ow = GameConfig.OW
+	local perks = type(ow) == "table" and ow.Perks or nil
+	local p = type(perks) == "table" and type(typ) == "string" and perks[typ] or nil
+	if type(p) ~= "table" or not finite(p.per) or not finite(p.cap) then
+		return 1
+	end
+	local n = 0
+	if p.perBay then
+		local bays = type(d) == "table" and d.bays or nil
+		if finite(bays) then
+			local maxBays = finite(C.MaxBays) and C.MaxBays or 4
+			n = math.clamp(math.floor(bays), 1, maxBays) - 1
+		end
+	else
+		local o = sub(d, "ow")
+		local list = o and o.buildings
+		local b = type(list) == "table" and list[typ] or nil
+		local built = type(b) == "table" and b.built or nil
+		n = finite(built) and built or 0
+	end
+	local hard = finite(ow.PerkCap) and ow.PerkCap or 0.25
+	local bonus = math.min(p.cap, hard, math.max(0, n) * p.per)
+	if not finite(bonus) or bonus < 0 then
+		return 1
+	end
+	return 1 + bonus
+end
+
+-- Händlerrabatt-Anteil aus dem Autohaus (0..0,12): CarRules.DealerPrice addiert ihn zu Prestige- und Tycoon-Rabatt
+function CrossBonus.OWDealerDiscount(d: any): number
+	return math.min(0.9, CrossBonus.OWPerk(d, "autohaus") - 1)
 end
 
 -- Faktor der Ausbaustufe 4 (Prestige × Tycoon × Open-World-Perk), ungedeckelt (für Anzeigen)

@@ -82,3 +82,21 @@ Was die automatischen Tests nicht abdecken können: Rendering, echtes Netzwerk, 
 - [ ] Spieler-Auktion (2 Spieler, veröffentlichtes Spiel mit Speichern): einliefern, bieten, Übergabe von Auto und Credits; Verkäufer verlässt → Auktion abgebrochen.
 - [ ] Jeder der 8 Automaten startet, reagiert flüssig auf Maus/Touch und zahlt nach Leistung; Tageslimit greift.
 - [ ] Credit-Center öffnet den Credits-Shop (Robux-Produkte erst mit eingetragenen IDs).
+
+## Open World: Gebäude und Passiv-Modus (Ausbaustufe 4, Meilenstein 6)
+
+- [ ] Tab „Gebäude“ (M → Gebäude): vier Karten (Werkstatt = Bühnen, Autohaus, Schrottplatz, Produktion), gesperrte Stufen zeigen „Ab Level n“.
+- [ ] Auf Level 10 mit ≥ 12.000 Credits: „Bauen“ beim Autohaus → Credits weg, auf dem eigenen Grundstück (Ostseite neben der Halle) steht eine Baustelle mit Bautafel, deren Countdown jede Sekunde läuft; Tab zeigt Restzeit und Balken.
+- [ ] Nach 10 Minuten (oder nach Verlassen/Wiederkommen, Bauzeit läuft offline weiter): Baustelle wird zum Autohaus Stufe 1, Toast + Hinweis „ow_ready“, Neon/Tür/Fahne am Gebäude bewegen sich.
+- [ ] „Abholen“ nach einer Weile: Credits gutgeschrieben (25 Cr/Min); zweites Abholen sofort → „nichts abzuholen“. Nach > 12 Std. nur 12 Std. Ertrag.
+- [ ] Händlerpreise im Autohaus sind nach dem Bau 3 % günstiger; Tuning-Projekte mit Produktion kürzer; Schrottplatz-Gebäude erhöht Schrott beim Zerlegen und an der Presse (jeweils ≤ +25 %).
+- [ ] Passiv-Modus (Schalter im Tab „Gebäude“ oder Lobby-Einstellungen): Story-Start, Kiesplatz-Verkauf und Auktionen antworten mit dem freundlichen Hinweis; Gebäude und Tuning verdienen weiter; Schalter aus → alles wieder offen. Einstellung bleibt nach Neustart.
+
+## Story und Missionen (Meilenstein 7)
+
+- [ ] Tutorial endet jetzt am Kiesplatz (Schritt 11): Schnellreise „Kiesplatz“, E an der Hütte öffnet den Tab „Story“, Belohnung einmalig.
+- [ ] Kapitel 1: Mission „Drei Gebrauchtwagen verkaufen“ starten; am Kiesplatz steht ein Kunde (NPC-Figuren wippen leicht), Karte mit Wunsch und drei Preisknöpfen; „günstig“ klappt immer, „teuer“ platzt manchmal (gleicher Kunde = gleiche Antwort), Gewinn wird gutgeschrieben, nächster Kunde nach 45 s. Weit weg vom Kiesplatz: Hinweis, kein Verkauf.
+- [ ] Mission „Werkstatt kennenlernen“ wird durch eine echte Abrechnung erledigt; „1.000 Credits“ durch den Kontostand; Abholen gibt Credits + XP, Kapitel 2 ab Level 5 (gesperrt: „Ab Level 5“).
+- [ ] Welt-Marker (▼) über dem Ziel der aktiven Mission (Kiesplatz/Empfang/Autohaus …), Missions-Karte oben bei Fortschritt, Kapitel-Intro beim neuen Kapitel.
+- [ ] Nebenmissionen: täglich 3 (UTC), z. B. Lieferung: mit dem eigenen Auto auf das Start-Feld „Lieferung“ fahren, Timer läuft, Ziel erreichen → erledigt; Tageslimit 3, am nächsten Tag neue Auswahl. „Werkstatt-Legende“ dauerhaft.
+- [ ] Co-op (2 Spieler, Party in der Lobby): beide starten dieselbe Mission, ein Verkauf des einen zählt für beide (Hinweis „Party: … hat … weitergebracht“), jeder holt selbst ab; passives Mitglied bekommt nichts.

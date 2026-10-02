@@ -33,6 +33,8 @@ MiniClient.Number = MiniLocale and MiniLocale.Number or nil
 local PAGES = {
 	lobby = "LobbyUI",
 	tycoon = "TycoonUI",
+	buildings = "BuildingsUI", -- Meilenstein 6: Open-World-Gebäude, Passiv-Modus
+	story = "StoryUI", -- Meilenstein 7: Story, Kiesplatz-Verkauf, Nebenmissionen
 	unlocks = "UnlocksUI",
 	prestige = "PrestigeUI",
 	overview = "OverviewUI",
@@ -58,6 +60,7 @@ local UI, Remote, Effects, City
 local Drive -- DriveClient (Fahren: Tacho, Fahrregler, Nitro)
 local Tutorial -- TutorialUI (Ausbaustufe 4: Tutorial-Karte, Beginner-Hinweise; kein Tab)
 local Tycoon -- TycoonClient (Meilenstein 4: Bargeld-Abzeichen, Pad-Blitz, Produzenten-Animationen; kein Tab)
+local Mission -- MissionClient (Meilenstein 7: Welt-Marker, Missions-/Kapitel-Karten, NPC-Kunden; eigener Heartbeat, kein Tab)
 local Unlocks -- GarageShared.Mini.Unlocks (repliziert): Sperrhinweis je Tab
 local Modules = {}
 local LockNotes = {} -- [tab] = TextLabel „Ab Level n: …“ über dem Bereich (Bereiche bleiben sichtbar, nur markiert)
@@ -206,6 +209,15 @@ local function onSnapshot(s)
 		if type(s.unlocks) == "table" and s.unlocks.list == nil and type(latest.unlocks) == "table" then
 			s.unlocks.list = latest.unlocks.list
 		end
+		-- story.missions/chapters (PHASE4_CONTRACT §11: sticky, nur bei vollen Snapshots)
+		if type(s.story) == "table" and type(latest.story) == "table" then
+			if s.story.missions == nil then
+				s.story.missions = latest.story.missions
+			end
+			if s.story.chapters == nil then
+				s.story.chapters = latest.story.chapters
+			end
+		end
 	end
 	latest, latestAt = s, os.clock()
 	if Modules.press and Modules.press.OnSnapshot then
@@ -220,6 +232,9 @@ local function onSnapshot(s)
 	end
 	if Tycoon then
 		call(Tycoon.OnSnapshot, s) -- Bargeld-Abzeichen im Modus tycoon, Blitz bei Stufenaufstieg
+	end
+	if Mission then
+		call(Mission.OnSnapshot, s) -- Missions-Marker, Kapitel-Intro bei neuem Kapitel
 	end
 	renderLockNotes(s)
 	renderHeader()
@@ -297,6 +312,14 @@ local function onNotice(data)
 	elseif kind == "tutorial" or kind == "hint" then
 		if Tutorial then
 			call(Tutorial.OnNotice, data)
+		end
+	elseif kind == "ow_ready" or kind == "ow_build" or kind == "ow_collect" or kind == "ow_passive" then
+		call(Modules.buildings and Modules.buildings.OnNotice, data) -- Gebäude: Karten neu, Countdown, Passiv-Schalter
+	elseif kind == "story" or kind == "mission" then
+		-- Story: Verkauf, Mission gestartet/geschafft/abgeholt, Lieferung, Co-op-Fortschritt (Tab + Welt-Karten)
+		call(Modules.story and Modules.story.OnNotice, data)
+		if Mission then
+			call(Mission.OnNotice, data)
 		end
 	end
 end
@@ -388,6 +411,16 @@ function MiniClient.Start(o)
 	if not okTy then
 		Tycoon = nil
 		warnOnce("tycoon", "Schnelles Spiel nicht geladen: " .. tostring(errTy))
+	end
+
+	-- Story-Missionen in der Welt (eigene ScreenGui "Missionen", eigener Heartbeat – MiniClient ruft Step nicht auf)
+	local okM, errM = pcall(function()
+		Mission = require(folder:WaitForChild("MissionClient", 10))
+		Mission.Start(ctx)
+	end)
+	if not okM then
+		Mission = nil
+		warnOnce("mission", "Missionen nicht geladen: " .. tostring(errM))
 	end
 
 	UI.OnTabShown = function(key)

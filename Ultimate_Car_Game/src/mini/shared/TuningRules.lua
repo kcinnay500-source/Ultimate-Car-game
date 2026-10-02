@@ -78,8 +78,9 @@ function TuningRules.Start(d, id, now)
 		return false, "Nicht genug Credits."
 	end
 	MiniRules.AddMoney(d, -cost)
-	-- Tycoon-Durchläufe „Produktion“ verkürzen die Projektdauer (CrossBonus.TycoonTuningSpeed, Deckel +15 %)
-	local speed = CrossBonus.TycoonTuningSpeed(d)
+	-- Tycoon-Durchläufe „Produktion“ (CrossBonus.TycoonTuningSpeed, Deckel +15 %) und die Open-World-Produktion
+	-- (CrossBonus.OWPerk produktion, Deckel +20 %) verkürzen die Projektdauer
+	local speed = CrossBonus.TycoonTuningSpeed(d) * CrossBonus.OWPerk(d, "produktion")
 	local duration = math.max(1, math.floor(def.minutes * 60 / math.max(1, speed) + 0.5))
 	table.insert(d.games.tuning.projects, { slot = slot, id = def.id, startedAt = now, duration = duration })
 	MiniRules.AddStat(d, "tuningStarted", 1, now)

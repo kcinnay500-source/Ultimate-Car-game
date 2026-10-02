@@ -842,6 +842,9 @@ function AuctionService.Register(Actions, a)
 		end
 		S.lastConsign[uid] = t
 		addLot(lot)
+		if type(api.event) == "function" then
+			pcall(api.event, ms, "auction_consigned", { lot = lot.id, carId = car.id }) -- Story-Mission „Unter dem Hammer“
+		end
 		toast(ms, "Dein " .. lot.name .. " ist jetzt in der Auktion: Startgebot " .. credits(start) .. ", "
 			.. math.floor(duration / 60) .. " Min. Gebühr beim Verkauf: 5 %.")
 		flushPublic(t)

@@ -1720,6 +1720,9 @@ local function consider(inst, root)
 	if kind == "conveyor" or kind == "stamp" then
 		return -- Tycoon-Produzenten (Förderband, Stempelpresse) animiert TycoonClient
 	end
+	if kind == "npc_idle" then
+		return -- NPC-Kunden am Kiesplatz (City.Animated.Kiesplatz.Kunde_N) animiert MissionClient
+	end
 	local fn = Kinds[kind]
 	if not fn then
 		warnOnce("kind_" .. kind, "Unbekannte Animation Anim='" .. kind .. "' (z. B. " .. inst:GetFullName() .. ") – wird nicht animiert")
@@ -1902,6 +1905,24 @@ function CityClient.Start()
 		whenChild(city, "PlotSlots", function(slots)
 			attach(slots)
 		end)
+	end)
+	-- Meilenstein 6: Open-World-Gebäude der Spieler (OWService klont ServerStorage.OWBuildings nach
+	-- workspace.PlayerWorkshops.Plot_<UserId>.OWBuildings) tragen dieselben Anim-Attribute (Neon, Türen, Drehteller,
+	-- Presse, Fahnen, Warnlicht); der Ordner entsteht erst nach dem Grundstück, darum je Grundstück abwarten
+	whenChild(workspace, "PlayerWorkshops", function(folder)
+		local function plot(p)
+			whenChild(p, "OWBuildings", function(buildings)
+				local okB, errB = pcall(attach, buildings)
+				if not okB then
+					warnOnce("ow_attach", "Gebäude: " .. tostring(errB))
+				end
+				refreshActivity()
+			end)
+		end
+		for _, p in ipairs(folder:GetChildren()) do
+			plot(p)
+		end
+		folder.ChildAdded:Connect(plot)
 	end)
 	-- Ausbaustufe 4: Lobby-Halle und Tycoon-Gelände tragen dieselben Anim-Attribute (Neon, Türen, Drehteller,
 	-- Fahnen; Tycoon-Schilder mit Anim=pylon unter Tycoon.Plots.Slot_N)

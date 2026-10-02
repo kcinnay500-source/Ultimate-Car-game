@@ -13,6 +13,9 @@ local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
 local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
 -- Meilenstein 4: Schnelles Spiel (games.tycoon); TycoonRules braucht nur GameConfig, PrestigeRules und Config
 local TycoonRules = require(script.Parent:WaitForChild("TycoonRules"))
+-- Meilensteine 6–7: Open-World-Gebäude (games.ow) und Story (games.story); beide laden MiniRules erst beim Aufruf
+local OWRules = require(script.Parent:WaitForChild("OWRules"))
+local StoryRules = require(script.Parent:WaitForChild("StoryRules"))
 local CrossBonus = require(script.Parent:WaitForChild("CrossBonus"))
 
 local MiniRules = {}
@@ -133,6 +136,8 @@ function MiniRules.DefaultGames()
 	CarRules.ApplyDefault(g) -- cars = {}, carSerial = 0, activeCar = 0
 	MetaRules.ApplyDefault(g) -- meta, prestige (Ausbaustufe 4)
 	TycoonRules.ApplyDefault(g) -- tycoon (Meilenstein 4)
+	OWRules.ApplyDefault(g) -- ow (Meilenstein 6)
+	StoryRules.ApplyDefault(g) -- story (Meilenstein 7)
 	return g
 end
 
@@ -179,6 +184,8 @@ function MiniRules.LoadGames(raw, d, now)
 	CarRules.ApplyLoad(g, raw, d, now)
 	MetaRules.ApplyLoad(g, raw, d, now)
 	TycoonRules.ApplyLoad(g, raw, d, now) -- gespeicherter Durchlauf (Fortsetzen), runsDone, rebirths
+	OWRules.ApplyLoad(g, raw, d, now) -- Gebäude (offline fertige Bauten), Passiv-Modus
+	StoryRules.ApplyLoad(g, raw, d, now) -- Kapitel/Missionen aus done, Nebenmissionen, Verkäufe
 	g.parts = loadInt(raw.parts, g.parts, 0, MAX_SAFE)
 	for _, u in ipairs(MiniConfig.Upgrades) do
 		g[u.key] = loadInt(raw[u.key], u.start, u.start, u.max)
@@ -328,6 +335,11 @@ function MiniRules.EnsureDay(d, now)
 	return false
 end
 
+-- Statistik-Hook (Server): MiniService setzt MiniRules.StatHook = function(d, key, amount, now, passive) und
+-- leitet jede Erhöhung an Story-/Nebenmissionen (StoryService.OnStat) und Beginner-Hinweise weiter. Rein bleibt
+-- AddStat trotzdem: ohne Hook (Client, reine Tests) passiert nichts weiter; Fehler im Hook brechen nie die Statistik.
+MiniRules.StatHook = nil
+
 -- Zählt eine Statistik hoch und führt den Tages-Fortschritt mit.
 -- passive = true (Maschinen): zählt für Ziele, gilt aber nicht als "heute gespielt".
 function MiniRules.AddStat(d, key, amount, now, passive)
@@ -339,6 +351,13 @@ function MiniRules.AddStat(d, key, amount, now, passive)
 		dl.progress[key] = (dl.progress[key] or 0) + amount
 		if not passive then
 			dl.active = true
+		end
+	end
+	local hook = MiniRules.StatHook
+	if hook then
+		local ok, err = pcall(hook, d, key, amount, now, passive)
+		if not ok then
+			warn("[Minispiele] Statistik-Hook " .. tostring(key) .. ": " .. tostring(err))
 		end
 	end
 end

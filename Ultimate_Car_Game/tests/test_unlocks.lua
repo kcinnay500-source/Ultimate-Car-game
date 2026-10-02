@@ -556,9 +556,11 @@ return {
 			end
 			T.check(GC.HintsByWhen[h.when] ~= nil, "HintsByWhen " .. h.when)
 		end
-		for _, k in ipairs({ "OW", "Story", "Shop" }) do
+		for _, k in ipairs({ "Shop" }) do
 			T.check(type(GC[k]) == "table" and next(GC[k]) == nil, k .. " ist ein leerer Platzhalter")
 		end
+		T.check(type(GC.OW) == "table" and #GC.OW.Types == 4 and GC.OW.MaxStage == 4 and type(GC.OW.Perks) == "table", "GameConfig.OW gefüllt (Meilenstein 6)")
+		T.check(type(GC.Story) == "table" and #GC.Story.Chapters == 5 and type(GC.Story.Side) == "table" and type(GC.Story.Sale) == "table", "GameConfig.Story gefüllt (Meilenstein 7)")
 		T.check(type(GC.Tycoon) == "table" and #GC.Tycoon.Types == 4 and GC.Tycoon.MaxStage == 5, "GameConfig.Tycoon gefüllt (Meilenstein 4)")
 		T.check(MiniRules.IsClean(GC.Unlocks) and MiniRules.IsClean(GC.Prestige.Rewards) and MiniRules.IsClean(GC.Tutorial.Steps) and MiniRules.IsClean(GC.Hints), "Konfiguration ohne NaN/Instanzen")
 		for _, list in ipairs({ GC.Hints, GC.Tutorial.Steps }) do

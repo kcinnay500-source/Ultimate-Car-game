@@ -40,6 +40,8 @@ STATIONS = {
     "scrapyard": ("scrapyard", "Zerlegeplatz", (-262, 3, -191), "N", -0.85, {}),        # auf der Fahrzeugwaage
     "carwash": ("carwash", "Waschstraße", (304, 3, 218), "N", -1.0, {}),   # Spec 209: s. parking_misc
     "track": ("track", "Teststrecke", (0, 3, 224), "N", -0.5, {}),
+    # Kiesplatz (PHASE4_CONTRACT §7, Story Kapitel 1): Verkaufsfenster der Hütte, Spieler steht östlich davor
+    "kiesplatz": ("story", "Kiesplatz · Gebrauchtwagen", (301.5, 2, 306), "E", -1.0, {}),
 }
 ARCADE_GAMES = [
     ("arcade_1", "BLITZ-REAKTION", (-121, 3, -60), "E"),
@@ -72,6 +74,7 @@ ARRIVALS = {
     "track": (0, -0.5, 218, "S"),
     "scrapyard_gate": (-168, -0.95, -201, "W"),   # liegt in der Schrott-Tor-Absenkung (-0.95)
     "park": (-186, -1, 165, "W"),
+    "kiesplatz": (327, -1, 296, "S"),            # Kiesplatz-Einfahrt (Kies -1.0), Blick nach Süden auf den Platz
 }
 CITY_SPAWN = (0, 0.1, -201)
 

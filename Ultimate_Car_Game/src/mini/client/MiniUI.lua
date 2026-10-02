@@ -41,6 +41,8 @@ UI.FontBig = Enum.Font.GothamBlack
 UI.Tabs = {
 	{ key = "lobby", label = "Lobby" },
 	{ key = "tycoon", label = "Schnelles Spiel" },
+	{ key = "story", label = "Story" },
+	{ key = "buildings", label = "Gebäude" },
 	{ key = "overview", label = "Übersicht" },
 	{ key = "press", label = "Schrottpresse" },
 	{ key = "tuning", label = "Tuning" },
@@ -62,6 +64,8 @@ UI.Tabs = {
 UI.TabTitles = {
 	lobby = "Lobby",
 	tycoon = "Schnelles Spiel · Tycoon",
+	story = "Story · Vom Kiesplatzhändler zum Mega-Verkäufer",
+	buildings = "Gebäude · Grundstück",
 	unlocks = "Freischaltungen",
 	prestige = "Level & Prestige",
 	overview = "Minispiele · Übersicht",

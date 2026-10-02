@@ -134,8 +134,9 @@ function SideGameRules.Dismantle(d, rng, now)
 			parts += MiniConfig.ScrapyardRareParts
 		end
 	end
-	-- Tycoon-Durchläufe „Schrottplatz“: +3 % Schrott je Durchlauf (Deckel +15 %, CrossBonus.TycoonScrap)
-	local scrap = math.floor(found * MiniConfig.ScrapyardScrapPerPart * CrossBonus.TycoonScrap(d) + 0.5)
+	-- Tycoon-Durchläufe „Schrottplatz“: +3 % Schrott je Durchlauf (Deckel +15 %, CrossBonus.TycoonScrap); dazu der
+	-- eigene Open-World-Schrottplatz (CrossBonus.OWPerk schrottplatz, +5 % je Stufe, Deckel +20 %)
+	local scrap = math.floor(found * MiniConfig.ScrapyardScrapPerPart * CrossBonus.TycoonScrap(d) * CrossBonus.OWPerk(d, "schrottplatz") + 0.5)
 	g.parts = math.min(2 ^ 53, g.parts + parts)
 	local credits = MiniRules.AddIncome(d, rng:NextInteger(0, 90))
 	g.press.scrap += scrap

@@ -12,11 +12,11 @@ apply() liefert eine Zusammenfassung (Parts und Lichter je Ordner/Zone) als Stri
 """
 import importlib
 
-from . import contract, ground_roads, lobby, plots, tycoon, vehicles
+from . import contract, ground_roads, lobby, ow_buildings, plots, tycoon, vehicles
 from .lib import Lib, child, children, is_basepart, name_of
 from .districts import ORDER as DISTRICTS
 
-TOP = ["Ground", "Roads", "Lights", "Districts", "Stations", "Arrivals", "Animated", "PlotSlots"]
+TOP = ["Ground", "Roads", "Lights", "Districts", "Stations", "Arrivals", "Animated", "PlotSlots", "Missions"]
 PART_BUDGET = 12000
 LIGHT_BUDGET = 120
 PLACES = ("all", "lobby", "openworld", "tycoon")
@@ -67,6 +67,8 @@ def apply(tree, new_referent, place="all"):
                 plot_log = plots.trim_template(wk, lib)
             with lib.section("Fahrzeuge (unsichtbar)"):
                 vehicles.build_plot_spawn(wk, lib)
+    # Vorlagen der Open-World-Gebäude (ServerStorage.OWBuildings; in jedem Place, da das Grundstück überall steht)
+    ow_buildings.build(tree, lib)
     zones = []
     if "lobby" in wanted:
         zones.append(lobby.build(ws, lib, tree))

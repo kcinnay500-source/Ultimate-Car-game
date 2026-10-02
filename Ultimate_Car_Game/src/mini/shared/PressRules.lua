@@ -45,16 +45,26 @@ local function bonuses(d)
 	return click, machine
 end
 
+-- Presse-Bonus des eigenen Open-World-Schrottplatzes (PHASE4_CONTRACT §7: +5 % je fertiger Stufe, Deckel +20 %);
+-- wirkt auf Klick und Maschinen (Schrott), nie auf Geld. Ohne Gebäude 1.
+function PressRules.OWMultiplier(d)
+	local ok, f = pcall(CrossBonus.OWPerk, d, "schrottplatz")
+	if ok and type(f) == "number" and f == f and f >= 1 then
+		return f
+	end
+	return 1
+end
+
 -- Grundertrag pro Klick ohne Combo und ohne gekaufte Multiplikatoren (HTML clickPowerTotal)
 function PressRules.ClickPower(d)
 	local click = bonuses(d)
-	return math.max(1, (MiniConfig.PressBaseClick + click) * PressRules.GlobalMultiplier(d) * PressRules.RebirthMultiplier(d))
+	return math.max(1, (MiniConfig.PressBaseClick + click) * PressRules.GlobalMultiplier(d) * PressRules.RebirthMultiplier(d) * PressRules.OWMultiplier(d))
 end
 
 -- Grundertrag der Maschinen pro Sekunde (HTML autoPowerTotal)
 function PressRules.MachinePower(d)
 	local _, machine = bonuses(d)
-	return math.max(0, (MiniConfig.PressBaseMachine + machine) * PressRules.GlobalMultiplier(d) * PressRules.RebirthMultiplier(d))
+	return math.max(0, (MiniConfig.PressBaseMachine + machine) * PressRules.GlobalMultiplier(d) * PressRules.RebirthMultiplier(d) * PressRules.OWMultiplier(d))
 end
 
 -- Gekaufte Multiplikatoren (wirken auf das Guthaben, nie auf den Bestenlistenwert)

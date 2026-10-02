@@ -31,6 +31,16 @@ Prüfungen:
     schwebende Teile, bekannte Anim-Arten ohne verschachtelte bewegte Animationen, und - am Anker von Slot_1 (Rot 0)
     und Slot_3 (Rot 180) eingesetzt - keine Überschneidung mit StartPad/CollectPad/Sign/Kanten/Hecke des Grundstücks,
     CollectPad genau unter der CashDisplay
+  * Open World (PHASE4_CONTRACT §7, ow_buildings.py / plots.py / districts/kiesplatz.py): Plot-Vorlage mit
+    OWAnchors.autohaus|produktion|schrottplatz (unsichtbar, auf plots.OW_ANCHORS); Vorlagen ServerStorage.OWBuildings
+    (baustelle, <typ>_1..4): Root als PrimaryPart bei (0, 0.5, 0), Attribute OWType/OWStage, verankert, innerhalb der
+    Grundfläche (Width x Depth) und Y 0..18, Budget 250 Parts / 4 Lichter, keine Überschneidungen / Z-Fighting /
+    schwebenden Teile, bekannte Anim-Arten, Drehteile ohne Konflikt, Baustelle mit TextLabel "Countdown" - und an
+    allen 8 Slots eingesetzt (jede Vorlage an ihrem Anker, die Baustelle an allen drei) innerhalb der Plot-Fläche
+    ohne Überschneidung mit Stadt-Parts und der Vorlage mit Vollausbau; City.Missions.Delivery_1..3 (Start/Ziel
+    unsichtbar, CanCollide false, CanTouch true, auf Asphalt -0.95, 300..600 Studs auseinander); Kiesplatz mit
+    Spots.Spot_1..3 (+ Auto), Kunden (Anim npc_idle, Spot) unter City.Animated.Kiesplatz, Preistafel "PriceBoard"
+    mit Line1..3, Station kiesplatz (MiniTab story) und Ankunft kiesplatz
   Ohne Workspace.City (Place lobby/tycoon) laufen nur die Zonen-Prüfungen (+ Vorlagen).
 Exit-Code 1 bei Fehlern (Warnungen nicht).
 """
@@ -59,9 +69,10 @@ DISTRICT_BUDGET = {
     "Stadtpark": (410, 3),           # D12
     "Meile": (120, 0),               # Haltestellen, Gassen-Portale, Bänke, Eimer
     "Stadtrand": (640, 0),           # Wäldchen in den leeren Ecken
+    "Kiesplatz": (900, 8),           # D14 Kiesplatz (Story Kapitel 1)
 }
 FOLDER_BUDGET = {"Ground": (250, 0), "Roads": (610, 0), "Lights": (220, 52), "PlotSlots": (300, 0),
-                 "Animated": (2260, 0), "CarSpawns": (12, 0), "Track": (14, 0)}
+                 "Animated": (2300, 0), "CarSpawns": (12, 0), "Track": (14, 0), "Missions": (6, 0)}
 TOTAL_BUDGET = 12000   # Gesamtobergrenze aller Stadt-Parts inkl. Autos und Verkehr (Merge-Vorgabe)
 LIGHT_BUDGET = 120
 
@@ -467,6 +478,7 @@ def main(argv):
         info.append("Workspace.City fehlt (Place lobby/tycoon?) - nur Zonen-Prüfungen")
         zone_checks(tree, [], errors, warns, info, verbose)
         template_checks(tree, errors, warns, info, verbose)
+        ow_checks(tree, [], errors, warns, info, verbose)
         return _report(errors, warns, info)
     # 1) verankert / zu tief
     unanch = [p.path for p in parts if not p.anchored]
@@ -687,6 +699,10 @@ def main(argv):
     zone_checks(tree, parts, errors, warns, info, verbose)
     # 10) Stufen-Vorlagen des Schnellen Spiels (ServerStorage.TycoonTemplates)
     template_checks(tree, errors, warns, info, verbose)
+    # 11) Open World: Plot-Anker, Gebäude-Vorlagen an allen Slots, Lieferrouten, Kiesplatz
+    ow_checks(tree, parts, errors, warns, info, verbose)
+    mission_checks(city, parts, errors, warns, info)
+    kiesplatz_checks(city, errors, warns, info)
     return _report(errors, warns, info)
 
 
@@ -1331,6 +1347,294 @@ def template_checks(tree, errors, warns, info, verbose=False):
         info.append("  Vorlagen Parts/Lichter: " + ", ".join(rows))
     else:
         info.append("  größte: " + ", ".join(sorted(rows, key=lambda r: -int(r.split()[1].split("/")[0]))[:4]))
+
+
+# ---------------------------------------------------------------- Open World (PHASE4_CONTRACT §7)
+def _ow_anchor_checks(tree, errors):
+    """Plot.OWAnchors.<typ> in der Vorlage: unsichtbar, verankert, CanCollide false, auf plots.OW_ANCHORS."""
+    from worldgen.plots import OW_TYPES, ow_anchor_cf
+    ws = scan.workspace(tree)
+    wk = child(ws, "Werkstatt")
+    anchors = child(wk, "OWAnchors") if wk is not None else None
+    if anchors is None:
+        errors.append("Plot-Vorlage: Ordner OWAnchors fehlt")
+        return
+    for typ in OW_TYPES:
+        a = child(anchors, typ)
+        if a is None or a.get("class") != "Part":
+            errors.append("Plot-Vorlage: OWAnchors.%s fehlt (Part)" % typ)
+            continue
+        rec = scan.record(a, "Werkstatt.OWAnchors." + typ)
+        if rec.collide or rec.transp < 1 or not rec.anchored or _bool_prop(a, "CanTouch", True):
+            errors.append("OWAnchors.%s: muss unsichtbar, verankert, CanCollide/CanTouch false sein" % typ)
+        want = ow_anchor_cf(typ)
+        if any(abs(x - y) > 1e-3 for x, y in zip(rec.cf.p, want.p)) or \
+                any(abs(x - y) > 1e-3 for x, y in zip(rec.cf.look, want.look)):
+            errors.append("OWAnchors.%s: liegt nicht auf plots.OW_ANCHORS (%s statt %s)" %
+                          (typ, tuple(round(v, 2) for v in rec.cf.p), tuple(round(v, 2) for v in want.p)))
+        if get_attrs(a).get("OWType") != typ:
+            errors.append("OWAnchors.%s: Attribut OWType fehlt" % typ)
+
+
+def _ow_template_structure(model, name, who, errors):
+    from worldgen import ow_buildings as OB
+    root = child(model, "Root")
+    pp = get_prop(model, "PrimaryPart")
+    if root is None or root.get("class") != "Part":
+        errors.append("%s: Part Root fehlt" % who)
+    else:
+        if pp is None or pp.text != root.get("referent"):
+            errors.append("%s: PrimaryPart ist nicht Root" % who)
+        rec = scan.record(root, who + ".Root")
+        if any(abs(a - b) > 1e-6 for a, b in zip(rec.cf.p, (0.0, OB.ROOT_Y, 0.0))) or \
+                any(abs(v) > 1e-6 for v in (rec.cf.look[0], rec.cf.look[1], rec.cf.look[2] + 1)):
+            errors.append("%s: Root muss unverdreht bei (0, %g, 0) liegen" % (who, OB.ROOT_Y))
+        if rec.collide or rec.transp < 1:
+            errors.append("%s: Root muss unsichtbar und CanCollide=false sein" % who)
+    a = get_attrs(model)
+    typ, stage = ("baustelle", 0) if name == "baustelle" else (name.rsplit("_", 1)[0], int(name.rsplit("_", 1)[1]))
+    if a.get("OWType") != typ or a.get("OWStage") != stage:
+        errors.append("%s: Attribute OWType=%r / OWStage=%r erwartet" % (who, typ, stage))
+    if name == "baustelle":
+        labels = {name_of(x) for x in model.iter("Item") if x.get("class") == "TextLabel"}
+        if "Countdown" not in labels:
+            errors.append("%s: TextLabel 'Countdown' fehlt (OWService schreibt die Restzeit hinein)" % who)
+    anim_items = []
+    for it in model.iter("Item"):
+        at = get_attrs(it)
+        if "Anim" in at:
+            if at["Anim"] not in OB.ANIM_KINDS:
+                errors.append("%s: unbekannte Anim=%r an %s" % (who, at["Anim"], name_of(it)))
+            anim_items.append((it, at["Anim"]))
+        if "TycoonAnim" in at:
+            if at["TycoonAnim"] not in OB.TYCOON_ANIM_KINDS:
+                errors.append("%s: unbekannte TycoonAnim=%r an %s" % (who, at["TycoonAnim"], name_of(it)))
+            anim_items.append((it, at["TycoonAnim"]))
+    moving = {id(it) for it, kind in anim_items if kind in OB.MOVING}
+    parent_of = {id(c): p for p in model.iter("Item") for c in p.findall("Item")}
+    for it, kind in anim_items:
+        if kind not in OB.MOVING:
+            continue
+        p = parent_of.get(id(it))
+        while p is not None and p is not model:
+            if id(p) in moving:
+                errors.append("%s: bewegte Animation %s (%s) innerhalb von %s" % (who, name_of(it), kind, name_of(p)))
+                break
+            p = parent_of.get(id(p))
+
+
+def ow_checks(tree, city_parts, errors, warns, info, verbose=False):
+    """Plot-Anker + Vorlagen ServerStorage.OWBuildings (ow_buildings.py) - einzeln und an allen 8 Slots eingesetzt."""
+    from worldgen import ow_buildings as OB
+    from worldgen.plots import OW_TYPES, RECT, SLOTS, loc2world, ow_anchor_cf, slot_cf
+    from worldgen.lib import CF
+    _ow_anchor_checks(tree, errors)
+    tpls = OB.templates_of(tree)
+    if not tpls:
+        errors.append("ServerStorage.OWBuildings fehlt im Place")
+        return
+    for name in OB.template_names():
+        if name not in tpls:
+            errors.append("OWBuildings.%s fehlt" % name)
+    # Grundstücks-Teile (Vorlage mit Vollausbau) und Stadt-Teile für die Einsetz-Prüfung
+    plot_parts = [p for p in scan.plot_parts(tree) + _stage_parts(tree) if p.transp < 0.95]
+    city_sel = [p for p in city_parts if ".Vacant." not in p.path and p.name != "Grasplatte" and p.transp < 0.95]
+    grid = defaultdict(list)
+    for p in city_sel + plot_parts:
+        b = p.aabb()
+        for gx in range(int(b[0] // 32), int(b[1] // 32) + 1):
+            for gz in range(int(b[4] // 32), int(b[5] // 32) + 1):
+                grid[(gx, gz)].append((p, b))
+    total_p = total_l = 0
+    rows = []
+    for name, model in sorted(tpls.items()):
+        who = "OWBuildings." + name
+        if model.get("class") != "Model":
+            errors.append("%s muss ein Model sein" % who)
+            continue
+        _ow_template_structure(model, name, who, errors)
+        w, d = OB.footprint(name)
+        parts = scan.walk(model, who)
+        n = len(parts)
+        nl = sum(1 for x in model.iter("Item") if x.get("class") in ("PointLight", "SpotLight", "SurfaceLight"))
+        total_p += n
+        total_l += nl
+        rows.append("%s %d/%d" % (name, n, nl))
+        if n > OB.BUDGET[0]:
+            errors.append("%s: Part-Budget überschritten: %d > %d" % (who, n, OB.BUDGET[0]))
+        if nl > OB.BUDGET[1]:
+            errors.append("%s: Licht-Budget überschritten: %d > %d" % (who, nl, OB.BUDGET[1]))
+        unanch = [p.path for p in parts if not p.anchored]
+        if unanch:
+            errors.append("%s: %d Parts nicht verankert: %s" % (who, len(unanch), unanch[:5]))
+        out = []
+        for p in parts:
+            if p.name == "Root":
+                continue
+            b = p.aabb()
+            if b[0] < -w / 2 - 0.01 or b[1] > w / 2 + 0.01 or b[4] < -d / 2 - 0.01 or b[5] > d / 2 + 0.01 \
+                    or b[2] < -0.001 or b[3] > OB.MAX_H:
+                out.append((p.path[len(who) + 1:], tuple(round(v, 2) for v in b)))
+        if out:
+            errors.append("%s: %d Parts außerhalb der Grundfläche %g x %g bzw. Y 0..%g: %s" %
+                          (who, len(out), w, d, OB.MAX_H, out[:4]))
+        walls = [p.path for p in parts if p.collide and p.transp >= 0.95 and p.name != "Root"]
+        if walls:
+            errors.append("%s: unsichtbare kollidierende Parts: %s" % (who, walls[:5]))
+        ov = _pair_overlaps(parts)
+        if ov:
+            errors.append("%s: %d Überschneidungen (AABB): " % (who, len(ov)))
+            for a, b in ov[: (200 if verbose else 10)]:
+                errors.append("   %s <-> %s" % (a.path[len(who) + 1:], b.path[len(who) + 1:]))
+        cv = _car_overlaps(parts)
+        if cv:
+            errors.append("%s: %d Auto-Überschneidungen: %s" % (who, len(cv),
+                                                               [(a.path[len(who) + 1:], b.path[len(who) + 1:])
+                                                                for a, b in cv[:4]]))
+        sw = _sweep_conflicts(model, parts, who)
+        if sw:
+            errors.append("%s: %d Teile im Schwenkbereich drehender Modelle: %s" %
+                          (who, len(sw), [(a.path[len(who) + 1:], b.path[len(who) + 1:]) for a, b in sw[:6]]))
+        hits = zfight(parts)
+        if hits:
+            errors.append("%s: %d Z-Fighting-Kandidaten" % (who, len(hits)))
+            for a, b, ar, key in hits[: (200 if verbose else 8)]:
+                errors.append("   %s <-> %s  Fläche %.2f" % (a.path[len(who) + 1:], b.path[len(who) + 1:], ar))
+        nc = near_coplanar(parts)
+        if nc:
+            errors.append("%s: %d fast koplanare Flächenpaare" % (who, len(nc)))
+            for a, b, ar, dd, nrm in sorted(nc, key=lambda h: -h[2])[: (200 if verbose else 8)]:
+                errors.append("   %s <-> %s  Fläche %.1f  Abstand %.3f" % (a.path[len(who) + 1:],
+                                                                          b.path[len(who) + 1:], ar, dd))
+        fl = _floating(parts, lambda p, b: b[2] <= 0.02)
+        if fl:
+            errors.append("%s: %d schwebende Gruppen" % (who, len(fl)))
+            for comp in fl[: (200 if verbose else 8)]:
+                y0 = min(p.aabb()[2] for p in comp)
+                errors.append("   %s (+%d) Unterkante %.2f bei (%.1f, %.1f)" % (comp[0].path[len(who) + 1:],
+                                                                             len(comp) - 1, y0, comp[0].cf.p[0],
+                                                                             comp[0].cf.p[2]))
+        # an allen 8 Slots eingesetzt: innerhalb der Plot-Fläche, keine Durchdringung mit Stadt/Grundstück
+        if not city_parts:
+            continue
+        typs = OW_TYPES if name == "baustelle" else (name.rsplit("_", 1)[0],)
+        for typ in typs:
+            for slot, house, px, pz, rot in SLOTS:
+                anchor = slot_cf(px, pz, rot) * ow_anchor_cf(typ)
+                xf = anchor * CF(0, OB.ROOT_Y, 0).inverse()
+                tparts = [p for p in scan.walk(model, who, False, xf) if p.transp < 0.95 and not p.attrs.get("Pierce")]
+                fa = loc2world(px, pz, rot, RECT[0], RECT[2])
+                fb = loc2world(px, pz, rot, RECT[1], RECT[3])
+                fx0, fx1 = min(fa[0], fb[0]), max(fa[0], fb[0])
+                fz0, fz1 = min(fa[1], fb[1]), max(fa[1], fb[1])
+                bad = []
+                for p in tparts:
+                    a = p.aabb()
+                    if a[0] < fx0 - 0.01 or a[1] > fx1 + 0.01 or a[4] < fz0 - 0.01 or a[5] > fz1 + 0.01:
+                        bad.append("%s außerhalb der Plot-Fläche" % p.path[len(who) + 1:])
+                    seen = set()
+                    for gx in range(int(a[0] // 32), int(a[1] // 32) + 1):
+                        for gz in range(int(a[4] // 32), int(a[5] // 32) + 1):
+                            for q, b in grid.get((gx, gz), ()):
+                                if id(q) in seen:
+                                    continue
+                                seen.add(id(q))
+                                if _pen(a, b, 0.02):
+                                    bad.append("%s <-> %s" % (p.path[len(who) + 1:], q.path))
+                if bad:
+                    errors.append("%s an Slot_%d (Anker %s): %d Konflikte: %s" % (who, slot, typ, len(bad), bad[:4]))
+    info.append("OWBuildings: %d Vorlagen, %d Parts, %d Lichter (Budget je Vorlage %d / %d)"
+                % (len(tpls), total_p, total_l, *OB.BUDGET))
+    if verbose:
+        info.append("  Vorlagen Parts/Lichter: " + ", ".join(rows))
+    else:
+        info.append("  größte: " + ", ".join(sorted(rows, key=lambda r: -int(r.split()[1].split("/")[0]))[:4]))
+
+
+def mission_checks(city, parts, errors, warns, info):
+    """City.Missions.Delivery_<n>: Model mit Parts Start/Ziel (Role start/end), unsichtbar, CanCollide false,
+    CanTouch true, Attribut Route, Unterkante auf Asphalt (-0.95), Start-Ziel 300..600 Studs."""
+    from worldgen.ground_roads import Y_ROAD
+    folder = child(city, "Missions")
+    if folder is None:
+        errors.append("City.Missions fehlt")
+        return
+    roads = [(p, p.aabb()) for p in parts if p.collide and p.transp < 1 and abs(p.top - Y_ROAD) < 1e-3]
+    n = 0
+    for m in children(folder):
+        nm = name_of(m)
+        if not nm.startswith("Delivery_"):
+            continue
+        n += 1
+        who = "City.Missions." + nm
+        if m.get("class") != "Model" or get_attrs(m).get("Route") is None:
+            errors.append("%s: Model mit Attribut Route erwartet" % who)
+        pts = {}
+        for pn, role in (("Start", "start"), ("Ziel", "end")):
+            it = child(m, pn)
+            if it is None or it.get("class") != "Part":
+                errors.append("%s: Part %s fehlt" % (who, pn))
+                continue
+            rec = scan.record(it, who + "." + pn)
+            a = get_attrs(it)
+            if rec.collide or rec.transp < 1 or not rec.anchored or not _bool_prop(it, "CanTouch", True):
+                errors.append("%s.%s: unsichtbar, verankert, CanCollide false, CanTouch true erwartet" % (who, pn))
+            if a.get("Role") != role or a.get("Route") is None:
+                errors.append("%s.%s: Attribute Role=%r / Route erwartet" % (who, pn, role))
+            b = rec.aabb()
+            if abs(b[2] - Y_ROAD) > 0.05:
+                errors.append("%s.%s: Unterkante %.2f statt auf der Fahrbahn %.2f" % (who, pn, b[2], Y_ROAD))
+            x, z = rec.cf.p[0], rec.cf.p[2]
+            if not any(bb[0] <= x <= bb[1] and bb[4] <= z <= bb[5] for p, bb in roads):
+                errors.append("%s.%s: (%.0f, %.0f) liegt nicht auf Asphalt" % (who, pn, x, z))
+            pts[pn] = (x, z)
+        if len(pts) == 2:
+            dist = math.dist(pts["Start"], pts["Ziel"])
+            if not 300 <= dist <= 600:
+                errors.append("%s: Start-Ziel %.0f Studs (soll 300..600)" % (who, dist))
+    if n < 3:
+        errors.append("City.Missions: %d Lieferrouten (Delivery_1..3 erwartet)" % n)
+    info.append("Lieferrouten: %d" % n)
+
+
+def kiesplatz_checks(city, errors, warns, info):
+    """Kiesplatz (districts/kiesplatz.py): Spots mit Auto, NPC-Kunden unter Animated, Preistafel, Station/Ankunft."""
+    districts = child(city, "Districts")
+    dm = child(districts, "Kiesplatz") if districts is not None else None
+    if dm is None:
+        errors.append("City.Districts.Kiesplatz fehlt")
+        return
+    spots = child(dm, "Spots")
+    for n in (1, 2, 3):
+        sp = child(spots, "Spot_%d" % n) if spots is not None else None
+        if sp is None or sp.get("class") != "Part" or get_attrs(sp).get("Spot") != n:
+            errors.append("Kiesplatz.Spots.Spot_%d fehlt oder ohne Attribut Spot=%d" % (n, n))
+        cars = [x for x in children(spots) if x.get("class") == "Model" and get_attrs(x).get("Spot") == n and
+                "Body" in get_attrs(x)] if spots is not None else []
+        if len(cars) != 1:
+            errors.append("Kiesplatz.Spots: %d Autos für Spot %d (1 erwartet)" % (len(cars), n))
+    anim = child(child(city, "Animated"), "Kiesplatz")
+    if anim is None:
+        errors.append("City.Animated.Kiesplatz fehlt")
+    else:
+        for n in (1, 2, 3):
+            k = child(anim, "Kunde_%d" % n)
+            a = get_attrs(k) if k is not None else {}
+            if k is None or a.get("Anim") != "npc_idle" or a.get("Spot") != n:
+                errors.append("Animated.Kiesplatz.Kunde_%d: Model mit Anim=npc_idle und Spot=%d erwartet" % (n, n))
+            elif get_prop(k, "PrimaryPart") is None or child(k, "Head") is None or child(k, "Torso") is None:
+                errors.append("Animated.Kiesplatz.Kunde_%d: PrimaryPart, Head und Torso erwartet" % n)
+    board = next((g for g in dm.iter("Item") if g.get("class") == "SurfaceGui" and name_of(g) == "PriceBoard"), None)
+    labels = {name_of(x) for x in board.iter("Item") if x.get("class") == "TextLabel"} if board is not None else set()
+    if {"Line1", "Line2", "Line3"} - labels:
+        errors.append("Kiesplatz: SurfaceGui PriceBoard mit TextLabels Line1..3 fehlt")
+    st = child(child(city, "Stations"), "kiesplatz")
+    if st is None or get_attrs(st).get("MiniTab") != "story":
+        errors.append("Station kiesplatz mit MiniTab=story fehlt")
+    if child(child(city, "Arrivals"), "kiesplatz") is None:
+        errors.append("Arrival kiesplatz fehlt")
+    info.append("Kiesplatz: %d Parts" % sum(1 for x in dm.iter("Item") if x.get("class") in
+                                           ("Part", "WedgePart", "CornerWedgePart", "TrussPart")))
 
 
 # ---------------------------------------------------------------- Fahrzeuge (PHASE2_CONTRACT §3)
