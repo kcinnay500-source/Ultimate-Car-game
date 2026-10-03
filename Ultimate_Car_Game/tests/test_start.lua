@@ -496,10 +496,14 @@ return {
 		T.eq(ids("werkstatt"), "c1_ws1,c1_ws2,c1_ws3,c1_ws4,c1_ws5,c1_m3", "Werkstatt: Ölwechsel, Check mit Anruf, Teile …")
 		T.eq(ids("produktion"), "c1_m1_produktion,c1_pr2,c1_pr3,c1_pr4,c1_pr5,c1_m3", "Herstellung: Pakete, Lieferungen, Teile")
 		T.eq(ids("schrottplatz"), "c1_m1_schrottplatz,c1_sc2,c1_sc3,c1_sc4,c1_sc5,c1_m3", "Schrottplatz: Minispiele + Teile an die Große Werkstatt")
-		T.eq(SR.Mission("c1_ah3").event, "pw_repair", "Reparatur in der Großen Werkstatt (pw_repair)")
+		-- 3.x: Große-Werkstatt-Missionen lesen das Profil (own/pwStat), damit frühere Reparaturen/Verkäufe zählen
+		T.eq(SR.Mission("c1_ah3").pwStat, "repairs", "Reparatur in der Großen Werkstatt (pw.repairs)")
 		T.eq(SR.Mission("c1_ah4").repaired, true, "reparierten Wagen teurer verkaufen")
-		T.eq(SR.Mission("c1_sc2").event, "pw_parts_sold", "Teile an die Große Werkstatt (pw_parts_sold)")
-		T.eq(SR.Mission("c1_pr3").event, "pw_parts_sold", "Herstellung: Teile an die Große Werkstatt")
+		T.eq(SR.Mission("c1_sc2").pwStat, "partsSold", "Teile an die Große Werkstatt (pw.partsSold)")
+		T.eq(SR.Mission("c1_pr3").pwStat, "partsSold", "Herstellung: Teile an die Große Werkstatt")
+		T.eq(SR.TargetOf(SR.Mission("c1_sc2")).key, "teileankauf", "Schrottplatz: Ziel Teile-Ankauf (City.Stations.teileankauf)")
+		T.eq(SR.TargetOf(SR.Mission("c1_pr3")).travel, "teileankauf", "Herstellung: Schnellreise zum Teile-Ankauf")
+		T.eq(SR.TargetOf({ kind = "event", event = "pw_parts_sold" }).key, "teileankauf", "pw_parts_sold: Teile-Ankauf")
 		T.eq(SR.Mission("c1_ws1").event, "settle:oil", "Ölwechsel")
 		T.eq(SR.Mission("c1_ws2").event, "settle:inspection", "Fahrzeug-Check mit Anruf")
 		T.eq(SR.Mission("c1_ws3").event, "parts_bought", "Teile kaufen")
@@ -566,7 +570,14 @@ return {
 				T.eq(select(1, SR.Claim(d, def.id, NOW)), false, typ .. ": " .. def.id .. " nicht vor dem Ziel")
 				-- Ereignisse wie im Spiel (Server meldet sie)
 				local target = SR.Target(def)
-				if def.kind == "own" and def.owTyp then
+				if def.kind == "own" and def.pwStat then
+					-- Große Werkstatt (PublicWorkshopService zählt im Profil; pw_repair merkt den Kiesplatz-Bonus)
+					d.games.pw = type(d.games.pw) == "table" and d.games.pw or { cars = {}, repairs = 0, partsSold = 0 }
+					d.games.pw[def.pwStat] = math.max(d.games.pw[def.pwStat] or 0, target)
+					if def.pwStat == "repairs" then
+						SR.OnEvent(d, "pw_repair", { car = "1", gain = 100 }, NOW)
+					end
+				elseif def.kind == "own" and def.owTyp then
 					local e = OWR.Entry(d, def.owTyp)
 					e[def.owStat] = math.max(e[def.owStat] or 0, target)
 				elseif def.kind == "own" and def.money then
@@ -619,7 +630,40 @@ return {
 		d.games.story = SR.Load({ layout = SR.Layout, done = { c1_ah1 = true, c1_m1 = true, c1_m2 = true, c1_ah5 = true, c1_ah3 = true } }, d, NOW)
 		T.eq(SR.AutoStart(d, NOW, 0).id, "c1_ah4", "Mission „teurer verkaufen“")
 		T.eq(#SR.OnSale(d, 3, false, NOW, false), 0, "ohne Reparatur zählt der Verkauf nicht")
-		T.eq(#SR.OnEvent(d, "action:mini_car_sell", {}, NOW), 1, "Verkauf eines eigenen (reparierten) Autos zählt auch")
+		-- 3.x: Händler-Verkauf (CarService car_sold { repaired }): nur ein reparierter Wagen zählt
+		T.eq(#SR.OnEvent(d, "action:mini_car_sell", {}, NOW), 0, "Aktion allein zählt nicht mehr")
+		T.eq(#SR.OnEvent(d, "car_sold", { repaired = false }, NOW), 0, "unreparierter Wagen beim Händler zählt nicht")
+		T.eq(#SR.OnEvent(d, "car_sold", {}, NOW), 0, "ohne Angabe zählt nicht")
+		T.eq(#SR.OnEvent(d, "car_sold", { repaired = true }, NOW), 1, "reparierter Wagen beim Händler zählt")
+		-- 3.x: Große Werkstatt früher genutzt (Mission davor noch nicht abgeholt): zählt trotzdem (Profil, nicht Ereignis)
+		for _, case in ipairs({
+			{ path = "schrottplatz", done = {}, first = "c1_m1_schrottplatz", id = "c1_sc2", stat = "partsSold", key = "teileankauf" },
+			{ path = "produktion", done = { c1_m1_produktion = true }, first = "c1_pr2", id = "c1_pr3", stat = "partsSold", key = "teileankauf" },
+			{ path = "autohaus", done = { c1_ah1 = true, c1_m1 = true, c1_m2 = true }, first = "c1_ah5", id = "c1_ah3", stat = "repairs", key = "grosswerkstatt" },
+		}) do
+			local dp = profile(g, 5)
+			MR.SetStartPath(dp, case.path)
+			dp.games.story = SR.Load({ layout = SR.Layout, done = case.done }, dp, NOW)
+			T.eq(SR.AutoStart(dp, NOW, 0, 5).id, case.first, case.path .. ": " .. case.first .. " läuft")
+			-- jetzt schon Teile verkauft / repariert (PublicWorkshopService zählt im Profil, das Ereignis geht ins Leere)
+			dp.games.pw = { cars = {}, day = "", sold = 0, refund = 0, repairs = 0, partsSold = 0 }
+			dp.games.pw[case.stat] = 2
+			SR.OnEvent(dp, case.stat == "repairs" and "pw_repair" or "pw_parts_sold", { count = 2 }, NOW)
+			-- Mission davor erledigen und abholen: die Werkstatt-Mission ist sofort erfüllt
+			local done2 = table.clone(case.done)
+			done2[case.first] = true
+			dp.games.story = SR.Load({ layout = SR.Layout, done = done2 }, dp, NOW)
+			local nxt = SR.AutoStart(dp, NOW + 1, 0, 5)
+			T.eq(nxt and nxt.id, case.id, case.path .. ": " .. case.id .. " startet")
+			T.eq(SR.ProgressOf(dp, SR.Mission(case.id)), 1, case.path .. ": frühere Werkstatt-Nutzung zählt")
+			T.eq(select(1, SR.Claim(dp, case.id, NOW + 2)), true, case.path .. ": sofort abholbar")
+			T.eq(SR.TargetOf(SR.Mission(case.id)).key, case.key, case.path .. ": Marker am richtigen Schalter")
+		end
+		-- reparierter Wagen in der Garage (pw.cars[id].b > 0) zählt für c1_ah3 auch ohne Zähler
+		local dr = profile(g, 5)
+		dr.games.pw = { cars = { ["3"] = { b = 20 } }, repairs = 0, partsSold = 0 }
+		T.eq(SR.PwStat(dr, "repairs"), 1, "repariertes Auto zählt als Reparatur")
+		T.eq(SR.PwStat({ games = {} }, "partsSold"), 0, "ohne Werkstatt-Daten 0")
 		-- Ereignis „settle“ allein erfüllt den Ölwechsel nicht, „settle:oil“ schon
 		local dw = profile(g)
 		MR.SetStartPath(dw, "werkstatt")

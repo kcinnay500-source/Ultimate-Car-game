@@ -13,8 +13,8 @@ mit Lobby, Story, einem Tycoon-Modus und einem fairen Shop.
 - **Prestige-Ränge** ab Level 100 **ohne Reset**: Titel, Kosmetik, kleine Boni; Level, Credits und Autos bleiben.
 - **Open World**: eigene Gebäude auf dem Grundstück (Autohaus, Schrottplatz, Produktion) mit Bauzeit, passiven
   Einnahmen und Vorteilen in der Stadt; **Passiv-Modus** zum entspannten Spielen.
-- **Story** „Vom Kiesplatzhändler zum Mega-Verkäufer“: 5 Kapitel, Start am **Kiesplatz** (Gebrauchtwagen an
-  NPC-Kunden verkaufen), dazu täglich 3 **Nebenmissionen** (u. a. Lieferfahrt) und der Strang „Werkstatt-Legende“.
+- **Story** „Vom Kiesplatzhändler zum Mega-Verkäufer“: 5 Kapitel, Kapitel 1 je Startweg (z. B. am
+  **Kiesplatz** Gebrauchtwagen an NPC-Kunden verkaufen), dazu täglich 3 **Nebenmissionen** (u. a. Lieferfahrt) und der Strang „Werkstatt-Legende“.
   Missionen laufen in einer Party gemeinsam (Co-op).
 - **Tycoon**: Gebäude wählen (Werkstatt, Autohaus, Produktion, Schrottplatz), mit **Bargeld** über
   Kaufpads bis Stufe 5 ausbauen, mit anderen Spielern handeln, **Rebirth** – jede fertige Runde gibt einen dauerhaften
@@ -22,6 +22,24 @@ mit Lobby, Story, einem Tycoon-Modus und einem fairen Shop.
 - **Shop**: Kosmetik (Folierungen, Felgen, Hupen, Reifenspuren), DLC-Autos mit den gleichen Fahrwerten wie ihr
   Basismodell, kosmetische Pässe. Alles auch mit Credits oder als Belohnung erreichbar, **keine Zufallsboxen,
   kein Pay-to-win**. Alle Produkt-IDs sind Platzhalter – nichts ist veröffentlicht.
+
+## Spielermeile-Update (3.x, neu)
+
+- **Story ab dem ersten Moment**: In der Open World wählst du sofort, womit du startest – **Werkstatt**,
+  **Verkaufshaus**, **Herstellung** oder **Schrottplatz**. Kapitel 1 hat für jeden Weg eigene Missionen; dein Gebäude
+  steht schon auf deinem Grundstück an der **Spielermeile** (so heißt die Hauptstraße jetzt).
+- **Große Werkstatt** am Westende der Spielermeile: eigene Autos reparieren (verkaufen sich danach teurer, bis ×1,35)
+  und Altteile verkaufen – passt zu Verkaufshaus und Schrottplatz.
+- **Flitzer**: winziges, schnelles Startauto für alle. Rufen mit **G** oder Handy → „Auto rufen“.
+- **Neue Teststrecke**: großer Grand-Prix-Kurs mit S-Kurve, Haarnadel und 12 Checkpoints.
+- **Welt**: Hügelkette mit Bäumen und Felsen als natürlicher Weltrand (niemand fällt herunter), Hochhaus-Skyline am
+  Horizont.
+- **Verkehr**: weiches Bremsen, mehr Abstand, Autos halten vor der Haltelinie, man läuft nicht mehr durch Autos; die
+  Ampeln schalten Grün → Gelb → Rot mit Fußgängerampeln.
+- **Entwickler-Menü** (nur für dich): Chat **/dev** oder **Strg+Umschalt+D** → Level, XP, Credits und Tycoon-Bargeld
+  setzen, Startweg zurücksetzen. Geht in Studio immer; im veröffentlichten Spiel für den Ersteller und für die UserIds
+  in `src/mini/shared/GameConfig.lua` → `GameConfig.Dev.AllowedUserIds = { 123456789 }` (deine UserId steht in der
+  Adresse deines Roblox-Profils).
 
 ## Werkstatt-Update (3.x)
 
@@ -34,7 +52,7 @@ mit Lobby, Story, einem Tycoon-Modus und einem fairen Shop.
 - **Handy** mit den Apps Kunden, Nachrichten, Aufträge, Karte, Konto und Einstellungen.
 
 **Steuerung:** E = benutzen/arbeiten · F = Hebebühne · H = Motorhaube · 1 = freie Hand · 2–6 = Werkzeuge ·
-P = Handy · M = Menü · TAB = Tablet.
+P = Handy · G = Auto rufen · M = Menü · TAB = Tablet · /dev bzw. Strg+Umschalt+D = Entwickler-Menü.
 
 ## Stadt und Minispiele (3.0)
 

@@ -74,10 +74,10 @@ DISTRICT_BUDGET = {
     "Grosswerkstatt": (900, 4),      # D15 Große Werkstatt (3.x: 4 Hallen, Teile-Ankauf, Vorplatz, Zufahrt)
 }
 # 3.0: Ground mit Naturrand (Hügel/Felsen/Bäume, horizon.build_edge) 800, Horizon (Fernboden + Skyline) 700,
-# Track 13 Checkpoints + Ziel
+# Track 13 Checkpoints + Ziel; 3.x: Horizon +220 für den Naturrand um Lobby/Tycoon (nur im Place "all")
 FOLDER_BUDGET = {"Ground": (800, 0), "Roads": (610, 0), "Lights": (220, 52), "PlotSlots": (300, 0),
                  "Animated": (2300, 0), "CarSpawns": (12, 0), "Track": (16, 0), "Missions": (6, 0),
-                 "Horizon": (700, 0)}
+                 "Horizon": (920, 0)}
 # Gesamtobergrenze aller Stadt-Parts inkl. Autos und Verkehr (Merge-Vorgabe 12000; 3.0: +1000 für Naturrand,
 # Skyline und Grand-Prix-Kurs, gebaut ~12650 - Reserve für die übrigen 3.0-Teams), Lichter unverändert 120
 TOTAL_BUDGET = 13000
@@ -792,6 +792,53 @@ def edge_checks(tree, city, parts, errors, warns, info, n_dir=32, step=2.0, r_ma
             continue
         ok += 1
     info.append("Weltrand: %d / %d Richtungen mit Naturrand + Grenze, Boden bis dahinter" % (ok, n_dir))
+    zone_edge_checks(tree, parts, floor, walls, natural, hit, touch, errors, info, n_dir, step)
+
+
+def zone_edge_checks(tree, parts, floor, walls, natural, hit, touch, errors, info, n_dir=32, step=2.0):
+    """3.x: Lobby/Tycoon im Place "all" (neben der Stadt auf dem Fernboden): vom Zonen-Spawn aus in n_dir Richtungen
+    trifft man nach Verlassen der Zonenfläche auf Boden, dann auf einen sichtbaren, kollidierenden Naturrand (Hecke/
+    Fels/Stamm, <= 150 Studs vor der Grenze) und auf eine unsichtbare Grenze, hinter der der Boden noch >= 50 weitergeht
+    - niemand läuft auf den Fernboden hinaus oder durch die Skyline bis ins Nichts."""
+    from worldgen import lobby, tycoon
+    from worldgen.lib import aabb, is_basepart
+    for zn, spawn in (("Lobby", lobby.SPAWN), ("Tycoon", tycoon.SPAWN)):
+        zm, zparts = scan.zone_parts(tree, zn)
+        if zm is None:
+            continue
+        bb = [aabb(it) for it in zm.iter("Item") if is_basepart(it)]
+        rect = (min(b[0] for b in bb), max(b[1] for b in bb), min(b[4] for b in bb), max(b[5] for b in bb))
+        ok = 0
+        for k in range(n_dir):
+            a = 2 * math.pi * k / n_dir
+            ux, uz = math.cos(a), math.sin(a)
+            who = "%s-Rand Richtung %d° " % (zn, round(math.degrees(a)))
+            r, first_wall, bad = 0.0, None, None
+            while r < 1200.0:
+                x, z = spawn[0] + ux * r, spawn[2] + uz * r
+                inside = rect[0] <= x <= rect[1] and rect[2] <= z <= rect[3]
+                if not inside and hit(floor, x, z, -1.2, -1.2) is None:
+                    bad = "Boden endet bei r %.0f vor/kurz hinter der Grenze" % r
+                    break
+                if first_wall is None and hit(walls, x, z, 0.0, 100.0) is not None:
+                    first_wall = r
+                if first_wall is not None and r >= first_wall + 50:
+                    break
+                r += step
+            if bad is None and first_wall is None:
+                bad = "keine Grenze"
+            if bad is None:
+                nat, rr = None, first_wall
+                while rr > first_wall - 150 and nat is None:
+                    nat = touch(natural, spawn[0] + ux * rr, spawn[2] + uz * rr, 0.5, 6.0)
+                    rr -= step
+                if nat is None:
+                    bad = "kein natürliches Hindernis vor der Grenze (r %.0f)" % first_wall
+            if bad:
+                errors.append(who + bad)
+            else:
+                ok += 1
+        info.append("%s-Rand: %d / %d Richtungen mit Naturrand + Grenze, Boden bis dahinter" % (zn, ok, n_dir))
 
 
 def _report(errors, warns, info):

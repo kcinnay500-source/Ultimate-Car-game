@@ -30,7 +30,7 @@ export type Mission = {
 	stat: string?, absolute: boolean?, event: string?, events: { string }?, maxTime: number?,
 	tier: number?, special: boolean?, typ: string?, stage: number?, money: number?, bays: number?, cars: { string }?,
 	equipmentAll: boolean?, credits: number?, xp: number?, chapter: number?, index: number?, side: boolean?, legend: boolean?,
-	unlock: string?, needsCar: boolean?, owTyp: string?, owStat: string?, minLevel: number?, repaired: boolean?,
+	unlock: string?, needsCar: boolean?, owTyp: string?, owStat: string?, pwStat: string?, minLevel: number?, repaired: boolean?,
 }
 export type Chapter = {
 	id: number, title: string, intro: string, unlockLevel: number, Missions: { Mission },
@@ -687,13 +687,36 @@ local function buildingStage(d: any, typ: string): number
 	return type(b) == "table" and finite(b.stage) and b.stage or 0
 end
 
+-- 3.x: Lebenszeit-Zähler der Großen Werkstatt (d.games.pw, PublicWorkshopService): partsSold = verkaufte Teile,
+-- repairs = fertige Reparaturen (zählt auch ein Auto, das schon repariert in der Garage steht: pw.cars[id].b > 0).
+-- So zählen Verkäufe/Reparaturen auch, wenn sie vor dem Start der Mission passiert sind.
+local function pwStat(d: any, stat: string): number
+	local pw = type(d) == "table" and type(d.games) == "table" and d.games.pw or nil
+	if type(pw) ~= "table" then
+		return 0
+	end
+	local v = finite(pw[stat]) and math.max(0, pw[stat]) or 0
+	if stat == "repairs" and v < 1 and type(pw.cars) == "table" then
+		for _, rec in pairs(pw.cars) do
+			if type(rec) == "table" and finite(rec.b) and rec.b > 0 then
+				return 1
+			end
+		end
+	end
+	return v
+end
+StoryRules.PwStat = pwStat
+
 -- Fortschritt aus dem Profil (Bedingungsarten) – für own/build und Legende (absolute Statistik)
 local function conditionProgress(d: any, def: Mission): number?
 	local target = StoryRules.Target(def)
 	if def.kind == "build" then
 		return math.min(target, buildingStage(d, def.typ or ""))
 	elseif def.kind == "own" then
-		if type(def.owTyp) == "string" and type(def.owStat) == "string" then
+		if type(def.pwStat) == "string" then
+			-- 3.x: Große Werkstatt (Teile verkauft / Auto repariert), aus dem Profil statt aus Live-Ereignissen
+			return math.min(target, pwStat(d, def.pwStat))
+		elseif type(def.owTyp) == "string" and type(def.owStat) == "string" then
 			-- Lebenszeit-Zähler eines Open-World-Gebäudes (OWRules: packs, partsTotal, collects)
 			local ow = type(d) == "table" and type(d.games) == "table" and d.games.ow or nil
 			local b = type(ow) == "table" and type(ow.buildings) == "table" and ow.buildings[def.owTyp] or nil
@@ -914,6 +937,10 @@ local function matchesEvent(def: Mission, event: string, data: any): boolean
 		end
 	end
 	if not hit then
+		return false
+	end
+	-- 3.x: "reparierten Wagen verkaufen" zählt nur Verkäufe reparierter Wagen (CarService meldet car_sold {repaired})
+	if def.repaired and not (type(data) == "table" and data.repaired == true) then
 		return false
 	end
 	if finite(def.maxTime) then
@@ -1267,6 +1294,9 @@ function StoryRules.Sell(d: any, offer: Offer, tier: any, now: number): SellResu
 	if repaired then
 		st.sales.repaired -= 1
 		profit = math.floor(profit * (S.RepairedBonus or 1) + 0.5)
+		-- 3.x: eine Reparatur wird nur einmal belohnt – entweder hier (Kiesplatz ×RepairedBonus) oder beim Händler
+		-- (Wertbonus des Autos): der Wertbonus eines reparierten Autos ist damit verbraucht
+		StoryRules.UseRepairedCar(d)
 	end
 	local credits = M.AddIncome(d, profit)
 	local xp = finite(S.Xp[tier]) and S.Xp[tier] or 0
@@ -1280,6 +1310,38 @@ function StoryRules.Sell(d: any, offer: Offer, tier: any, now: number): SellResu
 	end
 	return { sold = true, credits = credits, xp = xp, tier = tier, special = offer.special, changed = changed, repaired = repaired,
 		text = text }
+end
+
+-- 3.x: Kiesplatz-Bonus verbraucht: das reparierte Auto mit der kleinsten Id, dessen Wertbonus noch offen ist
+-- (d.games.pw.cars[id].b > 0, ohne k), bekommt k = 1 – der Händler zahlt dafür keinen Wertbonus mehr
+-- (PublicWorkshopService.ValueBonus), und eine zweite Reparatur gibt es auch nicht. Rückgabe: Id oder nil.
+function StoryRules.UseRepairedCar(d: any): string?
+	local pw = type(d) == "table" and type(d.games) == "table" and d.games.pw or nil
+	local cars = type(pw) == "table" and pw.cars or nil
+	if type(cars) ~= "table" then
+		return nil
+	end
+	local best = nil
+	for k, rec in pairs(cars) do
+		if type(k) == "string" and tonumber(k) and type(rec) == "table" and finite(rec.b) and rec.b > 0 and not rec.k then
+			if best == nil or tonumber(k) < tonumber(best) then
+				best = k
+			end
+		end
+	end
+	if best then
+		cars[best].k = 1
+	end
+	return best
+end
+
+-- 3.x: Händler hat ein repariertes Auto (Wertbonus offen) gekauft: ein wartender Kiesplatz-Bonus derselben Reparatur
+-- verfällt (eine Reparatur, eine Belohnung)
+function StoryRules.DropRepairedToken(d: any)
+	local st = StoryRules.Data(d)
+	if st and st.sales.repaired > 0 then
+		st.sales.repaired -= 1
+	end
 end
 
 -- Kunde weg ohne Verkauf (Geduld zu Ende, Moduswechsel): die laufende Nummer rückt vor, damit der nächste Kunde ein
@@ -1349,7 +1411,11 @@ local TARGETS = {
 	["owTyp:produktion"] = { ANCHOR, "produktion", "HERSTELLUNG", "", "deine Herstellung" },
 	["owTyp:schrottplatz"] = { ANCHOR, "schrottplatz", "SCHROTTPLATZ", "", "dein Schrottplatz" },
 	pw_repair = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
-	pw_parts_sold = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
+	-- 3.x: Teile kauft nur der Teile-Ankauf (City.Stations.teileankauf), nicht das Reparatur-Terminal
+	pw_parts_sold = { CITY, "teileankauf", "TEILE-ANKAUF", "teileankauf", "Teile-Ankauf der Großen Werkstatt" },
+	["pwStat:partsSold"] = { CITY, "teileankauf", "TEILE-ANKAUF", "teileankauf", "Teile-Ankauf der Großen Werkstatt" },
+	["pwStat:repairs"] = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
+	car_sold = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },
 	car_bought = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },
 	cars = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },
 	auction_won = { CITY, "auction", "AUKTIONSHAUS", "auction", "Auktionshaus" },
@@ -1390,7 +1456,9 @@ function StoryRules.TargetOf(def: any): any
 	elseif def.kind == "build" then
 		table.insert(keys, "build")
 	elseif def.kind == "own" then
-		if type(def.owTyp) == "string" then
+		if type(def.pwStat) == "string" then
+			table.insert(keys, "pwStat:" .. def.pwStat)
+		elseif type(def.owTyp) == "string" then
 			table.insert(keys, "owTyp:" .. def.owTyp)
 		elseif def.bays then
 			table.insert(keys, "bays")

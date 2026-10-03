@@ -5,8 +5,9 @@ Was nur Roblox Studio zeigen kann – Grafik, Licht, echte Physik beim Fahren, N
 Handy-Bedienung – steht hier. Einfach von oben nach unten abhaken. Du brauchst keine Programmierkenntnisse.
 
 **So liest du die Liste:** `[ ]` = ausprobieren und abhaken. „Ab Level n“ heißt: Dieser Punkt geht erst, wenn deine
-Figur so weit ist. In Studio fängt jeder Test mit Level 1 an (es wird nichts gespeichert, siehe unten). Punkte mit hohem
-Level darfst du überspringen und später im veröffentlichten Spiel nachholen.
+Figur so weit ist. In Studio fängt jeder Test mit Level 1 an (es wird nichts gespeichert, siehe unten). Mit dem
+**Entwickler-Menü** (Abschnitt 16: Chat **/dev** oder **Strg+Umschalt+D**) setzt du Level und Credits sofort hoch –
+so kannst du auch Punkte mit hohem Level gleich prüfen.
 
 ---
 
@@ -73,9 +74,7 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 ## 3. Tutorial und Beginner-Hinweise
 
 - [ ] Erster Wechsel in die Open World mit neuem Profil: die **Startwahl** „Wie willst du starten?“ (vier Karten).
-      **„Später entscheiden“** blendet sie aus; sie kommt wieder, wenn du das nächste Mal in der Spielermeile ankommst
-      (z. B. nach einem Respawn) oder im Handy unter **Einstellungen → „Startweg wählen“** – auch nachdem du schon
-      Werkstatt-Aufträge abgerechnet hast.
+      Die Wahl ist Pflicht – es gibt keinen Knopf zum Verschieben (Einzelheiten in Abschnitt 17).
 - [ ] Nach der Wahl „Werkstatt“: Tutorial-Karte erscheint (Schritt 1 von 11). Du stehst in deiner Werkstatt.
 - [ ] Die Schritte der Reihe nach: laufen → Menü öffnen (M) → Empfang (E) → Auftrag annehmen → OBD-Tester (bei Fehlern
       Kunde per Handy anrufen) → Reparatur nur mit E →
@@ -164,7 +163,8 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 - [ ] Taste **P** oder der Handy-Knopf am rechten Rand öffnet/schließt das Handy (fährt unten rechts hoch).
 - [ ] Apps: **Kunden** (wer auf eine Freigabe wartet, „Anrufen“), **Nachrichten** (die letzten Hinweise und Anrufe),
       **Aufträge** (laufende Aufträge mit Phase), **Karte** (öffnet den Stadtplan), **Konto** (Credits, Level, Rang),
-      **Einstellungen** (Beginner-/Passiv-Modus; solange offen: „Startweg wählen“). Alle Symbole sind gezeichnet.
+      **Auto rufen** (Flitzer oder Lieblingsauto, Abschnitt 19), **Einstellungen** (Beginner-/Passiv-Modus).
+      Alle Symbole sind gezeichnet.
 - [ ] Am Handy (hoch und quer): „Anrufen“, „Fertig“, Zurück, Home, Schließen, die Schalter und der Platz **„Hand“** sind gut
       mit dem Finger zu treffen (mindestens fingerbreit).
 - [ ] Das Handy verdeckt weder die Werkzeugleiste noch die E/F/H-Knöpfe und blendet sich bei Tablet, OBD-Tester, QTE,
@@ -210,7 +210,8 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 - [ ] Tuning-Zentrum: Motorstufe kaufen, während man im Auto sitzt → wirkt sofort; Lack/Felgen/Unterbodenlicht/Spoiler
       ändern sich sichtbar.
 - [ ] Probefahrt: 60 s, danach verschwindet das Auto. Waschstraße (ab Level 8): Glanz-Effekt.
-- [ ] Teststrecke (ab Level 8): Zeitfahren starten, Checkpoints zählen, Bestzeit und Belohnung.
+- [ ] Teststrecke (ab Level 8): Zeitfahren starten, Checkpoints zählen, Bestzeit und Belohnung (die neue, größere
+      Strecke prüfst du in Abschnitt 20).
 
 ## 8. Auktionshaus (ab Level 12)
 
@@ -227,10 +228,10 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 
 ## 10. Open-World-Gebäude und Passiv-Modus
 
-- [ ] Tab **„Gebäude“**: vier Karten (Werkstatt = Hebebühnen, Autohaus, Schrottplatz, Produktion). Gesperrte zeigen „Ab Level n“.
-- [ ] (Ab Level 10, mit 12.000 Credits, **nur mit Speichern**) „Bauen“ beim Autohaus → Credits weg, auf deinem Grundstück
+- [ ] Tab **„Gebäude“**: vier Karten (Werkstatt = Hebebühnen, Verkaufshaus, Schrottplatz, Herstellung). Gesperrte zeigen „Ab Level n“.
+- [ ] (Ab Level 10, mit 12.000 Credits, **nur mit Speichern**) „Bauen“ beim Verkaufshaus → Credits weg, auf deinem Grundstück
       (Ostseite neben der Halle) steht eine Baustelle mit Bautafel und Countdown; der Tab zeigt Restzeit und Balken.
-- [ ] Nach 10 Minuten (auch offline): Baustelle wird zum Autohaus Stufe 1, Hinweis „fertig gebaut“, Neon/Tür/Fahne bewegen sich.
+- [ ] Nach 10 Minuten (auch offline): Baustelle wird zum Verkaufshaus Stufe 1, Hinweis „fertig gebaut“, Neon/Tür/Fahne bewegen sich.
 - [ ] „Abholen“ nach einer Weile: Credits gutgeschrieben; sofort noch einmal → „nichts abzuholen“.
 - [ ] Händlerpreise im Autohaus sind danach etwas günstiger; Produktion verkürzt Tuning-Projekte; eigener Schrottplatz
       bringt mehr Schrott (jeweils höchstens +25 %).
@@ -239,18 +240,21 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 - [ ] **Passiv-Modus** (Schalter im Tab „Gebäude“ oder in der Lobby): Story-Start, Kiesplatz-Verkauf und Auktionen antworten
       mit dem Passiv-Hinweis; Tuning und Gebäude verdienen weiter; Abholen geht. Schalter aus → alles wieder offen.
 
-## 11. Story Kapitel 1 am Kiesplatz, Nebenmissionen, Lieferfahrt
+## 11. Kiesplatz-Verkauf, Nebenmissionen, Lieferfahrt
 
-- [ ] Stadtplan → **Kiesplatz** (Stadtrand) → **E** an der Hütte öffnet den Tab **„Story“**: Kapitel 1 „Der Kiesplatz“.
-- [ ] Mission **„Drei Gebrauchtwagen verkaufen“** starten. Am Kiesplatz steht ein Kunde (Figur wippt leicht); eine Karte
+Kapitel 1 beginnt jetzt direkt nach der Startwahl (Abschnitt 17). Hier geht es um den Verkauf am Kiesplatz – den
+spielst du am schnellsten mit dem Startweg **Verkaufshaus**.
+
+- [ ] Stadtplan → **Kiesplatz** (Stadtrand) → **E** an der Hütte öffnet den Tab **„Story“**.
+- [ ] Mission **„Drei Gebrauchtwagen verkaufen“** läuft (beim Verkaufshaus-Weg startet sie von selbst nach Mission 1). Am Kiesplatz steht ein Kunde (Figur wippt leicht); eine Karte
       zeigt Name, Wunsch und drei Preisknöpfe (günstig/fair/teuer).
 - [ ] „Günstig“ klappt immer; „teuer“ platzt manchmal – derselbe Kunde gibt immer dieselbe Antwort. Gewinn wird
       gutgeschrieben, der nächste Kunde kommt nach etwa 45 s.
 - [ ] Die Preistafel neben der Hütte zeigt die drei Preise des aktuellen Kunden.
 - [ ] Weit weg vom Kiesplatz: Hinweis, kein Verkauf. In der Werkstatt kommt keine Meldung „hatte keine Lust mehr“.
 - [ ] Nach einem Verkauf bringt Lobby-hin-und-zurück keinen früheren Kunden (Wartezeit bleibt).
-- [ ] Mission **„Zurück in die Werkstatt“**: wird durch eine echte Abrechnung erledigt.
-- [ ] Mission **„Die ersten 2.500 Credits“**: erledigt durch den Kontostand. **„Abholen“** gibt Credits + XP.
+- [ ] Mission **„Zurück in die Werkstatt“**: wird durch eine echte Abrechnung erledigt. **„Abholen“** gibt Credits + XP,
+      danach startet die nächste Mission von selbst.
 - [ ] Kapitel 2 zeigt „Ab Level 5“, solange das Level fehlt.
 - [ ] Welt-Marker (▼) über dem Ziel der aktiven Mission; Missions-Karte oben bei Fortschritt; Kapitel-Intro beim neuen Kapitel.
 - [ ] **Nebenmissionen** (im Tab „Story“): täglich 3, nur solche, die dein Level schon erlaubt. Ein abgelehnter
@@ -315,3 +319,129 @@ Mit Speichern:
 - [ ] Desktop-Fenster klein und groß ziehen: das Menü bleibt nutzbar.
 - [ ] Menü offen lassen und die Figur zurücksetzen (Reset Character) → Oberfläche bleibt, nichts doppelt.
 - [ ] Schnell zwischen Bereichen und Modi wechseln, Menü öffnen/schließen → keine hängenden Dialoge.
+
+## 16. Entwickler-Menü (nur für dich)
+
+Mit dem Entwickler-Menü setzt du Level, XP, Credits und Tycoon-Bargeld – in der Open World **und** im Tycoon. Alle
+anderen Spieler merken davon nichts.
+
+**Wer darf es öffnen?** In Roblox Studio immer. Im veröffentlichten Spiel nur der Ersteller des Spiels (bei einem
+Gruppenspiel: der Gruppenbesitzer) und alle UserIds, die in `src/mini/shared/GameConfig.lua` unter
+`GameConfig.Dev.AllowedUserIds` stehen, z. B. `AllowedUserIds = { 123456789 },`. Deine UserId ist die Zahl in der
+Adresse deines Roblox-Profils (`roblox.com/users/<UserId>/profile`). Danach einmal neu bauen.
+
+- [ ] Open World: im Chat **/dev** schreiben → das Fenster **„Entwickler-Menü“** öffnet sich (lila Rahmen, über allem).
+- [ ] Fenster schließen (× oder „Schließen“), dann **Strg+Umschalt+D** drücken → es öffnet sich wieder.
+- [ ] Oben stehen Level, XP, Credits, Prestige-Rang und „Startweg: … · Modus: …“.
+- [ ] **Level setzen**: z. B. `10` eintippen → „Level setzen“ → Level im HUD springt auf 10, die Karten
+      **„Neu freigeschaltet“** erscheinen. Ein großer Sprung (z. B. auf `90`) zeigt eine Sammel-Meldung statt vieler Karten.
+- [ ] **XP setzen**: XP im aktuellen Level; eine Zahl über der Schwelle lässt dich wie gewohnt aufsteigen.
+- [ ] **Credits setzen** (z. B. `50000`) und **„+10.000 Credits“**: der Kontostand im HUD stimmt sofort.
+- [ ] Buchstaben oder leeres Feld → „Bitte eine ganze Zahl eingeben.“, nichts ändert sich.
+- [ ] **Tycoon**: in den Tycoon wechseln, einen Durchlauf starten, **/dev** → die Zeile **„Bargeld setzen“** ist da →
+      z. B. `100000` → das Bargeld im Tycoon-HUD stimmt, Kaufpads werden grün. Ohne Durchlauf steht dort
+      „Bargeld: kein Durchlauf aktiv“.
+- [ ] **„Startweg zurücksetzen“**: die Startwahl erscheint wieder (in der Open World), Kapitel 1 beginnt von vorn,
+      geschenkte Gebäude bleiben stehen. Gut, um alle vier Startwege nacheinander zu testen.
+- [ ] Ausgabe-Fenster: jede Änderung steht als **„[Dev] …“** im Server-Log, keine roten Fehler.
+- [ ] Zwei Spieler (Test → Clients und Server): in Studio darf jeder das Menü öffnen. Im veröffentlichten Spiel sieht
+      ein fremder Spieler bei **/dev** gar nichts (kein Fenster, keine Meldung).
+
+## 17. Startwahl und Story Kapitel 1 je Startweg
+
+- [ ] Neues Profil (in Studio: einfach Play) → Open World: die Karten **„Wie willst du starten?“** erscheinen sofort:
+      **Werkstatt**, **Verkaufshaus**, **Herstellung**, **Schrottplatz**. Es gibt keinen Knopf zum Verschieben – du musst wählen.
+- [ ] Solange nicht gewählt ist: Tutorial „Überspringen“ antwortet „Wähle zuerst, womit du startest …“. Tablet,
+      Werkstatt-Dialog oder Menü schieben die Karten nur kurz weg, danach sind sie wieder da.
+- [ ] Nach der Wahl: „Super! Du startest mit: …“, die Karte **„Deine Story beginnt“** und oben links die Karte
+      **„Deine Mission“** mit Ort und Knopf **„Hinreisen“**. Bei Verkaufshaus, Herstellung und Schrottplatz steht
+      Stufe 1 des Gebäudes schon fertig auf deinem Grundstück an der **Spielermeile**.
+- [ ] Jede abgeholte Mission startet die nächste von selbst (Tab „Story“). Je Startweg gibt es 6 Missionen in Kapitel 1:
+  - [ ] **Werkstatt** („Die ersten Kunden“): erster Ölwechsel → Fahrzeug-Check mit Kundenanruf → Ersatzteile kaufen →
+        drei Aufträge abrechnen → neues Werkstattgerät (ab Level 2) → die ersten 2.500 Credits.
+  - [ ] **Verkaufshaus** („Der Kiesplatz“): Einnahmen im Tab „Gebäude“ abholen → drei Gebrauchtwagen am Kiesplatz
+        verkaufen → ein Werkstatt-Auftrag → ersten Gebrauchtwagen beim Händler kaufen → in der **Großen Werkstatt**
+        reparieren → den reparierten Wagen teurer verkaufen.
+  - [ ] **Herstellung** („Die kleine Fabrik“): zwei Bauteil-Pakete abholen → erste Lieferfahrt mit dem Flitzer →
+        Bauteile an die Große Werkstatt verkaufen → zwei Lieferfahrten → ein Werkstatt-Auftrag → …
+  - [ ] **Schrottplatz** („Schrott ist Gold“): Altteile vom Schrottplatz → Teile an die Große Werkstatt verkaufen →
+        20 Klicks an der Schrottpresse → erstes Unfallauto zerlegen → Schrott gegen Credits → …
+- [ ] Alle vier Wege nacheinander: im Entwickler-Menü **„Startweg zurücksetzen“** und neu wählen.
+- [ ] Die Hauptstraße heißt überall **Spielermeile** (Schilder, Stadtplan, Texte) – nirgends mehr „Werkstattmeile“.
+
+## 18. Große Werkstatt (Autos reparieren, Teile verkaufen)
+
+Die Große Werkstatt steht am **Westende der Spielermeile** (hinter dem Kreisel West). Stadtplan → **„Große Werkstatt“**.
+
+- [ ] Gebäude: große Halle mit vier offenen Toren, Schild „GROSSE WERKSTATT“, Vorplatz mit Zufahrt vom Kreisel,
+      daneben der Anbau **„TEILE-ANKAUF“**. Mit dem Auto durch die Zufahrt bis in eine Halle fahren klappt ohne Hängenbleiben.
+- [ ] **Auto reparieren** (am besten Startweg Verkaufshaus): Mit dem Entwickler-Menü Level 3 und genug Credits setzen,
+      beim Händler ein Auto kaufen, damit zur Großen Werkstatt fahren, am Annahme-Terminal **E** → Tab
+      **„Große Werkstatt“** zeigt deine Autos mit Zustand (z. B. 62 %), Reparaturpreis und Mehrwert.
+- [ ] „Reparieren“ → Credits sinken einmal, ein Balken läuft ca. 8 Sekunden. Weggehen (weiter als die Halle) →
+      „Reparatur unterbrochen …“; zurückkommen und noch einmal „Reparieren“ → „Reparatur geht weiter … schon bezahlt“
+      (kein zweites Bezahlen). Danach Zustand **100 %**, Hinweis „… ist repariert! Beim Verkauf bekommst du jetzt +… %“.
+- [ ] Dasselbe Auto noch einmal reparieren → „Dieses Auto ist schon top in Schuss …“. Den **Flitzer** kann man nicht
+      reparieren („Dein Startauto ist immer top in Schuss …“).
+- [ ] Verkauf beim Händler (Menü M → Tab „Autohaus“ → „Meine Autos“ → Verkaufen): der Preis ist höher als vor der
+      Reparatur (höchstens ×1,35). Reparieren kostet immer weniger, als es beim Verkauf bringt – aber Kaufen,
+      Reparieren und Verkaufen bringt zusammen keinen Gewinn (kein Geld-Trick).
+- [ ] **Teile verkaufen** (am besten Startweg Schrottplatz oder Herstellung): Altteile sammeln (Schrottplatz-Gebäude
+      abholen oder ein Auto zerlegen), am Teile-Ankauf **E** → Anzahl wählen → „Verkaufen“ → Credits steigen, die
+      Altteile im Lager sinken. Mehr verkaufen als vorhanden geht nicht; nach 200 Teilen am Tag kommt ein Hinweis.
+- [ ] Beim Startweg Schrottplatz gibt es beim Teile-Ankauf +10 %, beim Startweg Werkstatt −10 % auf Reparaturen.
+- [ ] Die passenden Story-Missionen (Abschnitt 17) werden dabei erledigt.
+
+## 19. Flitzer (dein Startauto)
+
+- [ ] Kurz nach der Startwahl fährt dein **Flitzer** vor (Hinweis „Dein Flitzer! Ruf ihn jederzeit …“): ein sehr
+      kleines, wendiges Auto, das schnell beschleunigt.
+- [ ] Einsteigen und durch die Stadt fahren: deutlich schneller als zu Fuß, gute Lenkung, kein Nitro
+      („Der Flitzer hat kein Nitro – dafür ist er super wendig!“).
+- [ ] Taste **G** (oder Handy **P** → App **„Auto rufen“**) → das Auto steht an der nächsten Straße bzw. direkt neben
+      dir, nie mitten in einer Verkehrsspur, nie in einer Wand. Gleich noch einmal G → „Dein Auto ist gleich wieder
+      rufbar (noch … s)“.
+- [ ] In der Lobby oder im Tycoon: „Auto rufen geht nur in der Open World.“ Während des Zeitfahrens, einer Probefahrt
+      oder einer Lieferfahrt kommt der passende Hinweis statt eines zweiten Autos.
+- [ ] Der Flitzer belegt keinen Garagenplatz; Verkaufen, Tuning, Lackieren und Versteigern sind gesperrt (freundlicher
+      Hinweis, z. B. „Den Flitzer kannst du nicht verkaufen – er bleibt immer bei dir.“).
+- [ ] Handy → **„Auto rufen“** → Garage: der Flitzer steht ganz oben, darunter deine gekauften Autos. Ein Auto als
+      **Lieblingsauto** wählen → ab jetzt bringt G dieses Auto; Flitzer wieder wählen → G bringt wieder den Flitzer.
+- [ ] Am Handy (Device Emulator) ist der Knopf „Auto rufen“ gut zu treffen.
+
+## 20. Neue Teststrecke
+
+- [ ] Stadtplan → **Teststrecke** (südlich vom Autohaus): ein großer **Grand-Prix-Kurs** mit Start/Ziel-Gerade,
+      **Kurve 1**, **S-Kurve**, schneller Kurve, langer Gerade, **Haarnadel** und Zielkurve; Kerbs, Kies-Auslauf,
+      Leitplanken und Schilder an den Kurven.
+- [ ] (Ab Level 8 – mit dem Entwickler-Menü setzen) Mit einem Auto aus dem Autohaus **Zeitfahren** starten:
+      Startampel zählt herunter, alle **12 Checkpoints** werden der Reihe nach gezählt, im Ziel Zeit und Bestzeit.
+- [ ] Abkürzen (Checkpoints auslassen) zählt nicht. Eine neue Bestzeit bringt Credits, eine langsamere nicht.
+- [ ] Mit dem Flitzer: „… der Flitzer fährt außer Konkurrenz.“ – Fahren auf der Strecke geht trotzdem.
+- [ ] Jede Kurve ist mit normalem Tempo fahrbar, nirgends bleibt man an Kanten hängen oder fällt durch den Boden.
+
+## 21. Weltrand und Horizont
+
+- [ ] In jede Richtung bis ans Ende der Stadt fahren und laufen: Am Rand steigt eine **Hügelkette mit Bäumen und
+      Felsen** an. Man kommt nicht darüber und fällt nirgends aus der Welt – keine sichtbare Wand, kein Absturz.
+- [ ] Auch mit Vollgas (Nitro) gegen den Hügel: das Auto bleibt in der Stadt, überschlägt sich höchstens und lässt
+      sich wieder aufrichten.
+- [ ] Am Westende hinter der Großen Werkstatt: Hecke und Bäume, kein Loch im Rand.
+- [ ] Im Horizont sieht man rundherum eine **Skyline aus Hochhäusern** (Stadt-Gefühl); nachts leuchten deren Fenster,
+      hohe Türme haben ein rotes Warnlicht. Zwischen Stadt und Skyline ist durchgehend Gras (kein schwarzer Abgrund).
+- [ ] Lobby und Tycoon-Gelände (in der Datei „alles in einem“): auch dort führt eine Hecke mit Bäumen um die Fläche,
+      man läuft nicht hinaus auf das Gras dahinter.
+
+## 22. Verkehr und Ampeln
+
+- [ ] An einer Ampelkreuzung der Spielermeile eine Minute zuschauen: **Grün → Gelb (3 s) → Rot**, dann kurz Rot für
+      alle, dann bekommt die Querstraße Grün. Die Fußgängerampeln zeigen Grün nur, wenn die Autos, die den Zebrastreifen kreuzen, Rot haben.
+- [ ] Verkehrsautos halten bei Rot **vor der Haltelinie** (nicht darauf, nicht dahinter) und fahren bei Grün wieder an.
+      Bei Gelb kurz vor der Linie fahren sie noch durch, sonst halten sie an.
+- [ ] Bremsen ist weich: die Autos rollen langsam aus, kein ruckartiger Stopp. Kolonnen halten **deutlich Abstand**
+      (etwa eine halbe Autolänge im Stand, mehr in Fahrt).
+- [ ] In Kreiseln und Kurven werden die Autos vorher langsamer.
+- [ ] Vor einem Verkehrsauto auf die Straße stellen: es bremst rechtzeitig und wartet; zur Seite gehen → es fährt weiter.
+- [ ] **Durch Autos laufen geht nicht**: gegen ein Verkehrsauto laufen → die Figur stößt an.
+- [ ] Ein leeres Auto in der Spur abstellen: der Verkehr wartet kurz und fährt dann vorsichtig vorbei.
+- [ ] Am Zebrastreifen mit Fußgänger: das Auto hält vor dem Streifen.

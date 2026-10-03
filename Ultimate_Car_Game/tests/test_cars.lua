@@ -19,7 +19,7 @@ end
 local function setup(H)
 	local g = H.Garage()
 	local CS = g:MiniServer("CarService")
-	local log = { notices = {}, toasts = {}, changed = 0, moves = {} }
+	local log = { notices = {}, toasts = {}, changed = 0, moves = {}, events = {} }
 	local handlers = {}
 	local fakeApi = {
 		now = function()
@@ -40,6 +40,10 @@ local function setup(H)
 		end,
 		alive = function()
 			return true
+		end,
+		-- 3.x: Story-Ereignisse der Dienste (car_sold { repaired })
+		event = function(ms, name, data)
+			table.insert(log.events, { player = ms.player, name = name, data = data })
 		end,
 	}
 	CS.Register({
@@ -907,6 +911,41 @@ return {
 		T.eq(#d.games.cars, 0, "verkauft")
 		T.eq(S.car(pl), nil, "verkauftes Auto verschwindet")
 		T.check(d.money > money, "Erlös")
+		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+	end },
+
+	{ "3.x CarService: Händler-Verkauf meldet car_sold { repaired } – nur ein reparierter Wagen zählt für c1_ah4", function(T, H)
+		local S = setup(H)
+		local g = S.g
+		local pl = S.join(4711, "Verkauf")
+		local d = g:D(pl)
+		local CR = g:MiniShared("CarRules")
+		local SR = g:MiniShared("StoryRules")
+		g:Activate()
+		local plain = CR.GrantModel(d, "komet", g:Now())
+		local fixed = CR.GrantModel(d, "komet", g:Now())
+		T.check(plain ~= nil and fixed ~= nil, "zwei Autos")
+		d.games.pw = type(d.games.pw) == "table" and d.games.pw or {}
+		d.games.pw.cars = d.games.pw.cars or {}
+		d.games.pw.cars[tostring(fixed.id)] = { b = 20, g = 300 }
+		local base = CR.SellValue(fixed)
+		S.act(pl, "mini_car_sell", { id = plain.id })
+		T.eq(#S.log.events, 1, "ein Ereignis")
+		T.eq(S.log.events[1].name, "car_sold", "car_sold")
+		T.eq(S.log.events[1].data.repaired, false, "unrepariert")
+		local money = d.money
+		S.act(pl, "mini_car_sell", { id = fixed.id })
+		T.eq(S.log.events[2] and S.log.events[2].data.repaired, true, "repariert")
+		T.eq(d.money - money, base + 300, "Händler zahlt Wert + festen Werkstatt-Gewinn")
+		-- Mission c1_ah4 zählt nur den reparierten Verkauf
+		local def = SR.Mission("c1_ah4")
+		T.eq(def.events[1], "car_sold", "c1_ah4 hört auf car_sold")
+		T.check(def.text:find("Tab „Autohaus“", 1, true) ~= nil, "Text nennt den richtigen Tab")
+		local dp = { level = 5, money = 0, games = { story = SR.Load({ layout = SR.Layout, done = { c1_ah1 = true, c1_m1 = true, c1_m2 = true, c1_ah5 = true, c1_ah3 = true } }) } }
+		g:MiniShared("MetaRules").SetStartPath(dp, "autohaus")
+		T.eq(SR.AutoStart(dp, g:Now(), 0, 5).id, "c1_ah4", "c1_ah4 läuft")
+		T.eq(#SR.OnEvent(dp, "car_sold", S.log.events[1].data, g:Now()), 0, "unreparierter Verkauf zählt nicht")
+		T.eq(#SR.OnEvent(dp, "car_sold", S.log.events[2].data, g:Now()), 1, "reparierter Verkauf zählt")
 		T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
 	end },
 

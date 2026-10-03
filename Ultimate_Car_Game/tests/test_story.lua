@@ -320,7 +320,9 @@ return {
 		-- Co-op: nur geteilte Arten, nur dieselbe aktive Mission
 		T.eq(SR.CoopShared(SR.Mission("c1_m1")), true, "sell geteilt")
 		T.eq(SR.CoopShared(SR.Mission("c1_m3")), false, "own nicht geteilt")
-		T.eq(SR.CoopShared(SR.Mission("c1_ah3")), true, "event (Große Werkstatt) geteilt")
+		-- 3.x: c1_ah3 liest das Profil (own/pwStat) – Profil-Bedingungen werden nicht geteilt; Ereignisse schon
+		T.eq(SR.CoopShared(SR.Mission("c1_ah3")), false, "own (Große Werkstatt, Profil) nicht geteilt")
+		T.eq(SR.CoopShared(SR.Mission("c1_ah5")), true, "event (Autokauf) geteilt")
 		-- 3.x: Ziele je Mission (Marker, Schnellreise)
 		T.eq(SR.TargetOf(SR.Mission("c1_m1")).key, "kiesplatz", "Kiesplatz-Ziel")
 		T.eq(SR.TargetOf(SR.Mission("c2_m1")).key, "workshop", "Aufträge: Empfang der eigenen Werkstatt")
@@ -479,12 +481,17 @@ return {
 		T.eq(S.story(pl).active.progress, 1, "Autokauf gezählt")
 		S.act(pl, "story_claim", { id = "c1_ah5" })
 		T.eq(S.story(pl).active.id, "c1_ah3", "nächste Mission: Große Werkstatt")
-		-- c1_ah3: Gebrauchtwagen in der Großen Werkstatt repariert (PublicWorkshopService -> api.storyEvent -> OnEvent)
+		-- c1_ah3: Gebrauchtwagen in der Großen Werkstatt repariert. 3.x: kind own/pwStat – der Fortschritt kommt aus dem
+		-- Profil (d.games.pw.repairs, PublicWorkshopService), das Ereignis pw_repair merkt den Kiesplatz-Bonus
 		m = g:Mark()
+		local SRm = S.SR
+		d.games.pw = type(d.games.pw) == "table" and d.games.pw or { cars = {}, day = "", sold = 0, refund = 0, repairs = 0, partsSold = 0 }
+		d.games.pw.partsSold = (d.games.pw.partsSold or 0) + 1
 		SS.OnEvent(ms, d, "pw_parts_sold", { part = "x", count = 1, value = 10 })
-		T.eq(S.story(pl).active.progress, 0, "Teileverkauf ist keine Reparatur")
+		T.eq(SRm.ProgressOf(d, SRm.Mission("c1_ah3")), 0, "Teileverkauf ist keine Reparatur")
+		d.games.pw.repairs = (d.games.pw.repairs or 0) + 1
 		SS.OnEvent(ms, d, "pw_repair", { car = "1", gain = 1.25 })
-		T.eq(S.story(pl).active.progress, 1, "Reparatur gezählt")
+		T.eq(SRm.ProgressOf(d, SRm.Mission("c1_ah3")), 1, "Reparatur gezählt")
 		T.eq(S.story(pl).sales.repaired, 1, "reparierter Wagen wartet am Kiesplatz")
 		T.check(g:HasToast(pl, "50 % mehr Gewinn", m), "Hinweis: nächster Verkauf bringt mehr")
 		S.act(pl, "story_claim", { id = "c1_ah3" })

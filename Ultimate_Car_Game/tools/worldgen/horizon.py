@@ -14,6 +14,9 @@
     Skyline  ferne Hochhäuser in zwei versetzten Reihen rundum (60..260 hoch): Körper, Glasfront zur Stadt
              (NightNeon für die Nachtschaltung), 2 Gesimsbänder, Dachaufbau, bei hohen Türmen Antenne + Warnlicht.
              Alle Parts CanCollide/CanTouch/CanQuery/CastShadow false; Lobby- und Tycoon-Fläche bleiben frei.
+    Naturrand  (3.x, nur wenn Lobby/Tycoon im Place stehen) je Zone ein geschlossener Ring knapp außerhalb ihrer
+             Fläche: Hecke (sichtbar, kollidierend, 8 hoch), Bäume und Felsen davor/dahinter, dahinter 4 unsichtbare
+             "Grenze"-Wände - niemand läuft von der Lobby/dem Tycoon-Gelände auf den Fernboden und durch die Skyline
 Höhen: Grasplatte/Fernboden -1.10, Hügel/Felsen/Bäume stehen auf dem Gras.
 """
 import math
@@ -362,6 +365,79 @@ def _tower(lib, parent, i, t):
     return m
 
 
+# ---------------------------------------------------------------- 3.x: Naturrand um Lobby/Tycoon (Place "all")
+ZONE_HEDGE_GAP = 1.0          # Hecke beginnt so weit außerhalb der Zonenfläche
+ZONE_HEDGE_T = 3.0            # Heckendicke
+ZONE_HEDGE_TOP = 6.9          # Oberkante (8 über dem Gras, höher als ein Sprung)
+ZONE_WALL_OUT = 12.0          # Grenze: Innenkante so weit außerhalb der Zonenfläche
+HEDGE_GREENS = [(52, 92, 50), (58, 100, 54), (48, 86, 46)]
+
+
+def zone_edge_rects(rect):
+    """(Hecken-Rechtecke, Grenz-Rechtecke) um eine Zonenfläche (x0, x1, z0, z1), je 4 Seiten, Ecken geschlossen."""
+    x0, x1, z0, z1 = rect
+
+    def ring(off, t):
+        a0, a1, b0, b1 = x0 - off - t, x1 + off + t, z0 - off - t, z1 + off + t
+        return [(a0, a1, b0, b0 + t), (a0, a1, b1 - t, b1), (a0, a0 + t, b0 + t, b1 - t), (a1 - t, a1, b0 + t, b1 - t)]
+    return ring(ZONE_HEDGE_GAP, ZONE_HEDGE_T), ring(ZONE_WALL_OUT, 2.0)
+
+
+def build_zone_edges(parent, lib, zone_rects):
+    """Naturrand je Zone: Heckenring (Stücke <= 48 lang), Bäume außen an der Hecke, Felsen an den Ecken, Grenze."""
+    if not zone_rects:
+        return None
+    rng = random.Random(4207)
+    edge = lib.model(parent, "Naturrand")
+    for zi, rect in enumerate(zone_rects):
+        zm = lib.model(edge, "Zone_%d" % (zi + 1))
+        hedges, walls = zone_edge_rects(rect)
+        hm = lib.model(zm, "Hecke")
+        for hi, (a0, a1, b0, b1) in enumerate(hedges):
+            along_x = (a1 - a0) >= (b1 - b0)
+            ln = (a1 - a0) if along_x else (b1 - b0)
+            n = max(1, int(math.ceil(ln / 48.0)))
+            for k in range(n):
+                if along_x:
+                    s0, s1 = a0 + ln * k / n, a0 + ln * (k + 1) / n
+                    lib.box(hm, "Hecke", s0, s1, Y_GRASS, ZONE_HEDGE_TOP, b0, b1,
+                            HEDGE_GREENS[(hi + k) % len(HEDGE_GREENS)], "Grass")
+                else:
+                    s0, s1 = b0 + ln * k / n, b0 + ln * (k + 1) / n
+                    lib.box(hm, "Hecke", a0, a1, Y_GRASS, ZONE_HEDGE_TOP, s0, s1,
+                            HEDGE_GREENS[(hi + k) % len(HEDGE_GREENS)], "Grass")
+        # Bäume zwischen Hecke und Grenze (außen), alle ~40 Studs
+        tm = lib.model(zm, "Baeume")
+        x0, x1, z0, z1 = rect
+        mid = (ZONE_HEDGE_GAP + ZONE_HEDGE_T + ZONE_WALL_OUT) / 2
+        ox0, ox1, oz0, oz1 = x0 - mid, x1 + mid, z0 - mid, z1 + mid
+        sides = [((ox0, oz0), (ox1, oz0)), ((ox1, oz0), (ox1, oz1)), ((ox1, oz1), (ox0, oz1)), ((ox0, oz1), (ox0, oz0))]
+        for si, (a, b) in enumerate(sides):
+            ln = math.dist(a, b)
+            n = max(1, int(ln // 40))
+            for k in range(n):
+                f = (k + 0.5) / n
+                x = a[0] + (b[0] - a[0]) * f
+                z = a[1] + (b[1] - a[1]) * f
+                _tree(lib, tm, x, Y_GRASS - 0.3, z, rng.uniform(0.9, 1.25), CROWNS[(si + k) % len(CROWNS)],
+                      two=(k % 4 == 0), name="Zonenbaum")
+        # Felsgruppen an den vier Ecken (außen)
+        fm = lib.model(zm, "Felsen")
+        for ci, (cx, cz) in enumerate(((ox0, oz0), (ox1, oz0), (ox1, oz1), (ox0, oz1))):
+            # nach außen (weg von der Zonenfläche), damit kein Fels in die Zone ragt
+            sx, sz_ = (-1 if cx < x0 else 1), (-1 if cz < z0 else 1)
+            for k in range(2):
+                size = (rng.uniform(5, 8), rng.uniform(4, 6), rng.uniform(5, 8)) if k == 0 else \
+                    (rng.uniform(3, 5), rng.uniform(3, 4), rng.uniform(3, 5))
+                rot = (rng.uniform(-0.3, 0.3), rng.uniform(0, math.pi), rng.uniform(-0.3, 0.3))
+                _rock(lib, fm, cx + sx * (2 + k * 5), cz + sz_ * (2 + k * 3), size, rot, ROCKS[(ci + k) % len(ROCKS)])
+        gm = lib.model(zm, "Grenzen")
+        for a0, a1, b0, b1 in walls:
+            lib.box(gm, "Grenze", a0, a1, Y_GRASS, WALL_TOP, b0, b1, (61, 100, 65), "SmoothPlastic", transparency=1,
+                    cast_shadow=False, query=False, touch=False)
+    return edge
+
+
 def build(city, lib, zone_rects=()):
     """Fernboden (ohne die Flächen der Zonen im Place) und Skyline unter City.Horizon."""
     hz = lib.model(city, "Horizon", attrs={"Skyline": True})
@@ -376,4 +452,7 @@ def build(city, lib, zone_rects=()):
             if lib.counts.get("Horizont (Skyline)", 0) - n0 + 8 > SKY_BUDGET:
                 break
             _tower(lib, sk, i, t)
+    # 3.x: Lobby/Tycoon im selben Place: eigener Naturrand + Grenze (sonst läuft man auf den Fernboden hinaus)
+    with lib.section("Horizont (Zonenrand)"):
+        build_zone_edges(hz, lib, list(zone_rects))
     return hz

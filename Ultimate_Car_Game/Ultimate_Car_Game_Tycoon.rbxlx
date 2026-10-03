@@ -173311,13 +173311,15 @@ return ArcadeRules
 --           startedAt, endsAt, hardEnd, changedAt, state = "open" | "closing" | "sold" | "unsold" | "canceled",
 --           bids = { {userId, name, amount, at, npc = &lt;Index in npcs&gt; | nil}, ... }  (streng steigend),
 --           npcs = { {name, style, limit, think}, ... }, skipped = { [userId] = Grund }, result, endedAt, reason }
--- Profil (d.games.auction): { won = &lt;int&gt;, sold = &lt;int&gt;, partners = { {u = &lt;userId&gt;, at = &lt;unix&gt;} }, received = { &lt;tid&gt; } }
---   partners: Handelspartner der letzten 24 h (Käufer ↔ Verkäufer), received: zuletzt erhaltene Übergaben (tid)
+-- Profil (d.games.auction): { won = &lt;int&gt;, sold = &lt;int&gt;, partners = { {u = &lt;userId&gt;, at = &lt;unix&gt;} }, received = { &lt;tid&gt; },
+--                             doneAt = &lt;unix&gt; }
+--   partners: Handelspartner der letzten 24 h (Käufer ↔ Verkäufer), received: zuletzt erhaltene Übergaben (tid),
+--   doneAt: Marke „alle Übergaben bis zu diesem Zeitpunkt sind erledigt“ (Zeit der jüngsten aus received verdrängten tid)
 --
 -- Schutz gegen Scheingebote: beim Bieten zählt nur das freie Guthaben (Guthaben − eigene Höchstgebote auf anderen
 -- Losen). Fällt das Höchstgebot beim Zuschlag weg (nicht gedeckt, Bieter weg), läuft das Los ReopenSeconds weiter,
 -- damit NPCs und andere Spieler wieder bieten können (höchstens MaxReopens-mal); wer nicht zahlen konnte, darf
--- DropBanSeconds nicht bieten. Geldschieben: zwischen zwei Konten höchstens eine Übergabe je 24 h (beide Richtungen).
+-- DropBanSeconds nicht bieten. Wessen Gebot beim Zuschlag gestrichen wurde (lot.skipped), bietet auf diesem Los nicht mehr. Geldschieben: zwischen zwei Konten höchstens eine Übergabe je 24 h (beide Richtungen).
 -- Übergaben: AuctionService schreibt jede Übergabe zusätzlich in ein Auktionsbuch (AuctionLedger); ReconcileSeller/
 -- ReconcileBuyer gleichen beim Laden ab, falls nur eines der beiden Profile gespeichert wurde.
 --
@@ -173394,6 +173396,7 @@ local TEXT = {
 	money = "Nicht genug Credits für dieses Gebot.",
 	committed = "Nicht genug freie Credits: Deine Höchstgebote auf anderen Losen sind schon verplant.",
 	partner = "Mit diesem Verkäufer hast du in den letzten 24 Stunden schon gehandelt. Bieten ist erst danach wieder möglich.",
+	struck = "Dein Gebot für dieses Los wurde beim Zuschlag gestrichen. Auf dieses Los kannst du nicht mehr bieten.",
 }
 AuctionRules.Text = TEXT
 
@@ -173465,7 +173468,25 @@ end
 
 ---------------------------------------------------------------- Profil (d.games.auction)
 function AuctionRules.Default()
-	return { won = 0, sold = 0, partners = {}, received = {} }
+	return { won = 0, sold = 0, partners = {}, received = {}, doneAt = 0 }
+end
+
+-- Zeitpunkt einer Übergabe aus ihrer Kennung (TransferId: "&lt;Verkäufer&gt;_&lt;Auto&gt;_&lt;Zeit&gt;")
+local function tidTime(tid)
+	if type(tid) ~= "string" then
+		return nil
+	end
+	return tonumber(string.match(tid, "_(%d+)$"))
+end
+
+-- Eine tid fällt aus dem received-Fenster: Marke nachziehen. Was so alt ist wie eine verdrängte Übergabe (oder älter),
+-- gilt als erledigt – sonst hielte ReconcileBuyer einen Buch-Eintrag, den received nicht mehr kennt, bei jedem Laden
+-- erneut für „nicht gespeichert“ (Buch und received sind zwei unabhängig gekürzte Fenster).
+local function markDone(st, tid)
+	local at = tidTime(tid)
+	if at and at &gt; (finite(st.doneAt) and st.doneAt or 0) then
+		st.doneAt = math.floor(math.min(at, MAX_SAFE))
+	end
 end
 
 -- raw = gespeichertes d.games.auction (auch das ganze games-Table wird erkannt). Idempotent, NaN/negativ -&gt; 0.
@@ -173479,6 +173500,7 @@ function AuctionRules.Load(raw, d, now)
 	end
 	out.won = loadInt(raw.won)
 	out.sold = loadInt(raw.sold)
+	out.doneAt = loadInt(raw.doneAt)
 	if type(raw.partners) == "table" then
 		for _, e in ipairs(raw.partners) do
 			if type(e) == "table" and finite(e.u) and e.u &gt;= 1 and finite(e.at) and e.at &gt;= 0 then
@@ -173498,8 +173520,22 @@ function AuctionRules.Load(raw, d, now)
 				table.insert(out.received, tid)
 			end
 		end
+		-- Profil von vor der Marke (Feld fehlt) mit vollem Fenster: ältere Übergaben können schon verdrängt sein -&gt;
+		-- alles vor der ältesten gemerkten Übergabe gilt als erledigt
+		if raw.doneAt == nil and #out.received &gt;= AuctionRules.MaxReceived then
+			local oldest
+			for _, tid in ipairs(out.received) do
+				local at = tidTime(tid)
+				if at and (oldest == nil or at &lt; oldest) then
+					oldest = at
+				end
+			end
+			if oldest and oldest &gt;= 1 then
+				out.doneAt = math.floor(math.min(oldest - 1, MAX_SAFE))
+			end
+		end
 		while #out.received &gt; AuctionRules.MaxReceived do
-			table.remove(out.received, 1)
+			markDone(out, table.remove(out.received, 1))
 		end
 	end
 	return out
@@ -173516,6 +173552,9 @@ function AuctionRules.Stats(d)
 	end
 	if type(st.received) ~= "table" then
 		st.received = {}
+	end
+	if not finite(st.doneAt) or st.doneAt &lt; 0 then
+		st.doneAt = 0
 	end
 	return st
 end
@@ -173580,6 +173619,8 @@ end
 
 -- Käufer: fehlt die Übergabe (tid) in received, wurde sein Speichern nicht geschrieben -&gt; Auto hinzufügen, Preis
 -- abziehen (höchstens bis 0). Garage voll: Übergabe gilt als erledigt, nichts wird abgezogen.
+-- Einträge bis zur Marke doneAt sind erledigt, auch wenn received sie nicht mehr kennt (verdrängt): eine erledigte
+-- Übergabe wird nie erneut nachgeholt, egal wie Buch und received gekürzt wurden.
 function AuctionRules.ReconcileBuyer(d, entries)
 	local n = 0
 	if type(d) ~= "table" or type(d.games) ~= "table" or type(entries) ~= "table" then
@@ -173591,7 +173632,9 @@ function AuctionRules.ReconcileBuyer(d, entries)
 		seen[tid] = true
 	end
 	for _, e in ipairs(entries) do
-		if type(e) == "table" and type(e.tid) == "string" and not seen[e.tid] then
+		local at = type(e) == "table" and (tidTime(e.tid) or (finite(e.at) and e.at)) or nil
+		local done = st.doneAt &gt; 0 and at ~= nil and at &lt;= st.doneAt
+		if type(e) == "table" and type(e.tid) == "string" and not seen[e.tid] and not done then
 			seen[e.tid] = true
 			AuctionRules.NoteReceived(d, e.tid)
 			local car = CarRules.AddCar(d, e.car)
@@ -173606,10 +173649,11 @@ function AuctionRules.ReconcileBuyer(d, entries)
 end
 
 function AuctionRules.NoteReceived(d, tid)
-	local list = AuctionRules.Stats(d).received
+	local st = AuctionRules.Stats(d)
+	local list = st.received
 	table.insert(list, tid)
 	while #list &gt; AuctionRules.MaxReceived do
-		table.remove(list, 1)
+		markDone(st, table.remove(list, 1))
 	end
 end
 
@@ -173795,6 +173839,11 @@ end
 function AuctionRules.CheckBid(lot, bidder, amount, now)
 	if not AuctionRules.IsOpen(lot, now) then
 		return false, TEXT.ended
+	end
+	-- Beim Zuschlag gestrichen (Garage voll, Level, Profil …): auf diesem Los kein neues Gebot. PickWinner übergeht
+	-- Gestrichene; dürften sie wieder bieten, sperrte ihr Gebot am Höchstbetrag alle anderen aus und fiele dann still weg.
+	if type(lot.skipped) == "table" and lot.skipped[bidder.userId] then
+		return false, TEXT.struck
 	end
 	if lot.kind == "player" then
 		if bidder.userId == lot.sellerId then
@@ -175538,7 +175587,8 @@ GameConfig.Modes = { "lobby", "openworld", "tycoon" } -- p.mode, d.games.meta.la
 GameConfig.DefaultMode = "lobby" -- allererster Beitritt im all-Place
 GameConfig.SimulationNotice = "Studio-Simulation: Ortswechsel ohne Teleport"
 -- TeleportData (nur Strings/Zahlen/Booleans, geprüft): erlaubte Schlüssel und Längen
-GameConfig.TeleportDataKeys = { mode = "string", single = "boolean", party = "string" }
+-- leader (B-016): UserId des Party-Leiters beim Gruppen-Teleport – wirkt nur innerhalb der Party mit demselben Code
+GameConfig.TeleportDataKeys = { mode = "string", single = "boolean", party = "string", leader = "number" }
 GameConfig.TeleportDataMaxLength = 32
 -- Profil-Sperre beim Laden (Profiles.Load): nach einem Ortswechsel gibt der alte Server die Sperre erst beim
 -- Verlassen frei – so oft (je ProfileLockRetryWait Sekunden) erneut versuchen, bevor die Sitzung nur temporär läuft
@@ -175660,6 +175710,7 @@ GameConfig.Party = {
 	CodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", -- ohne I, O, 0, 1 (Verwechslung)
 	CodeTries = 20, -- Versuche für einen freien Code
 	InviteSeconds = 120, -- Beitrittsangebot (Code) gültig, danach muss der Leiter neu einladen
+	LeaderWaitSeconds = 120, -- B-016: so lange nach der Ankunft des Ersten kann der ursprüngliche Leiter noch übernehmen
 	TravelOfferSeconds = 30, -- Reiseangebot des Leiters an die Mitglieder (lobby_go)
 	CreateCooldown = 3,
 	JoinCooldown = 2,
@@ -176213,6 +176264,7 @@ GameConfig.OW = {
 --   Neue Ereignisse 3.x: "settle:&lt;auftragsart&gt;" (abgerechneter 2.4.0-Auftrag dieser Art; "settle:inspection" = ein
 --   abgerechneter Fahrzeug-Check, auch mit freigegebenem Befund), "parts_bought" (Ersatzteile gekauft),
 --   "equipment_bought" (Werkstattgerät gekauft), "pw_repair" / "pw_parts_sold" (Große Werkstatt, PublicWorkshopService).
+--   kind = "own" mit pwStat (3.x): Lebenszeit-Zähler der Großen Werkstatt (d.games.pw.partsSold / repairs).
 --   kind = "own" mit owTyp/owStat: Lebenszeit-Zähler eines Open-World-Gebäudes (d.games.ow.buildings[owTyp][owStat],
 --   OWRules: packs = abgeholte Bauteil-Pakete, partsTotal = abgeholte Altteile, collects = Abholungen mit Ertrag)
 local Story = {}
@@ -176253,11 +176305,13 @@ Story.Chapters = {
 			{ id = "c1_ah5", title = "Dein erster Gebrauchtwagen", kind = "event", event = "car_bought", target = 1, minutes = 6,
 				text = "Spar deine Credits und kauf beim Händler im „Autohaus“ der Stadt (Stadtplan) deinen ersten Gebrauchtwagen, zum Beispiel den Komet C1. Dein Verkaufshaus gibt dir dort Rabatt.",
 				reward = { credits = 250, xp = 80 } },
-			{ id = "c1_ah3", title = "Ab in die Große Werkstatt", kind = "event", event = "pw_repair", target = 1, minutes = 5,
+			-- 3.x: kind own/pwStat (Profil d.games.pw): auch eine Reparatur vor dem Start der Mission zählt
+			{ id = "c1_ah3", title = "Ab in die Große Werkstatt", kind = "own", pwStat = "repairs", target = 1, minutes = 5,
 				text = "Fahr deinen Gebrauchtwagen in die „Große Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und lass ihn dort reparieren. Repariert bringt er beim Verkauf mehr.",
 				reward = { credits = 200, xp = 80 } },
-			{ id = "c1_ah4", title = "Den reparierten Wagen teurer verkaufen", kind = "sell", target = 1, repaired = true, events = { "action:mini_car_sell" }, minutes = 4,
-				text = "Verkauf jetzt teurer: Am „Kiesplatz (Gebrauchtwagen)“ bringt dein nächster Verkauf nach der Reparatur 50 % mehr Gewinn – oder verkauf deinen reparierten Wagen beim Händler (Garage im Menü M) zum höheren Preis.",
+			-- 3.x: Händler-Verkauf meldet CarService als car_sold { repaired } – nur reparierte Wagen zählen
+			{ id = "c1_ah4", title = "Den reparierten Wagen teurer verkaufen", kind = "sell", target = 1, repaired = true, events = { "car_sold" }, minutes = 4,
+				text = "Verkauf jetzt teurer: Am „Kiesplatz (Gebrauchtwagen)“ bringt dein nächster Verkauf nach der Reparatur 50 % mehr Gewinn – oder verkauf deinen reparierten Wagen beim Händler: Menü M → Tab „Autohaus“ → „Meine Autos“ → Verkaufen.",
 				reward = { credits = 150, xp = 80 } },
 		},
 		PathInfo = {
@@ -176302,8 +176356,9 @@ Story.Chapters = {
 				{ id = "c1_pr2", title = "Die erste Lieferfahrt", kind = "event", event = "delivery", target = 1, minutes = 5,
 					text = "Hol dir deinen Flitzer (dein kleines Startauto) und fahr zum blauen Marker „LIEFERUNG · START“ an der Straße. Bring die Lieferung dann rechtzeitig zum grünen Ziel-Marker.",
 					reward = { credits = 200, xp = 80 } },
-				{ id = "c1_pr3", title = "Bauteile für die Große Werkstatt", kind = "event", event = "pw_parts_sold", target = 1, minutes = 4,
-					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und verkauf dort Teile aus deiner Herstellung.",
+				-- 3.x: kind own/pwStat: auch Teile, die vor dem Start der Mission verkauft wurden, zählen
+				{ id = "c1_pr3", title = "Bauteile für die Große Werkstatt", kind = "own", pwStat = "partsSold", target = 1, minutes = 4,
+					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Teile-Ankauf (Große Werkstatt)“) und verkauf dort am Teile-Ankauf Teile aus deiner Herstellung.",
 					reward = { credits = 150, xp = 80 } },
 				{ id = "c1_pr4", title = "Zwei Lieferfahrten", kind = "event", event = "delivery", target = 2, minutes = 8,
 					text = "Deine Kunden warten! Fahr mit dem Flitzer noch zwei Lieferungen – vom blauen Start-Marker zum grünen Ziel-Marker.",
@@ -176317,8 +176372,8 @@ Story.Chapters = {
 				{ id = "c1_m1_schrottplatz", title = "Altteile vom Schrottplatz", kind = "own", owTyp = "schrottplatz", owStat = "partsTotal", target = 2, minutes = 4,
 					text = "Dein Schrottplatz hat schon Schrott und Altteile gesammelt. Drück M, öffne den Tab „Gebäude“ und tipp beim Schrottplatz auf „Abholen“.",
 					reward = { credits = 150, xp = 80 } },
-				{ id = "c1_sc2", title = "Teile an die Große Werkstatt", kind = "event", event = "pw_parts_sold", target = 1, minutes = 4,
-					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und verkauf dort deine Altteile.",
+				{ id = "c1_sc2", title = "Teile an die Große Werkstatt", kind = "own", pwStat = "partsSold", target = 1, minutes = 4,
+					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Teile-Ankauf (Große Werkstatt)“) und verkauf dort am Teile-Ankauf deine Altteile.",
 					reward = { credits = 150, xp = 80 } },
 				{ id = "c1_sc3", title = "Ran an die Schrottpresse", kind = "stat", stat = "clicks", target = 20, minutes = 3,
 					text = "Reise mit dem Stadtplan zur „Schrottpresse“, drück dort E und klick 20-mal auf die Presse.",
@@ -176941,6 +176996,8 @@ GameConfig.StarterCar = {
 	CallCooldown = 5, -- Sekunden zwischen zwei car_call eines Spielers
 	SearchRadius = 300, -- Studs: so weit sucht der Server die nächste Fahrbahn (City.Roads, Asphalt / CarRoad)
 	RoadMargin = 5, -- Abstand der Wagenmitte zum Fahrbahnrand
+	CarHalfWidth = 3.25, -- 3.x: halbe Breite eines gerufenen Autos (Verkehrsspur-Abstand)
+	LaneGap = 1, -- 3.x: Luft zwischen gerufenem Auto und Verkehr: nie in einer Verkehrsspur abstellen
 	RoadCandidates = 8, -- so viele nächstgelegene Fahrbahnstücke werden geprüft
 	SlideStep = 9, -- belegt (Laterne, Ampel, Auto): so weit entlang der Fahrbahn ausweichen
 	IntroDelay = 2, -- Sekunden in der Open World nach der Startwahl, bis der Begrüßungs-Flitzer kommt
@@ -178039,6 +178096,7 @@ MiniNet.Actions = {
 	-- (field = level | xp | credits | credits_add | cash | start_reset; value wird gerundet und gedeckelt)
 	dev_open = {},
 	dev_set = { field = "string", value = "number" },
+	phone_hangup = {}, -- Auflegen während des Klingelns: Anruf wird nicht ausgewertet (reine Absicht)
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -178089,7 +178147,7 @@ MiniNet.Cooldowns = {
 	side_claim = 0.5,
 	shop_prompt = 3,
 	start_choose = 1,
-	phone_call = 1, -- PhoneService prüft zusätzlich 3 s je Spieler
+	phone_call = 1, -- PhoneService prüft zusätzlich 2 s je Spieler (kürzer als die Klingelzeit)
 	car_call = 1, -- CarService prüft zusätzlich GameConfig.StarterCar.CallCooldown (5 s) je Spieler
 	car_favourite = 0.3,
 	pw_open = 1,
@@ -178775,7 +178833,7 @@ return MiniSnapshot
 --   built       = fertig gebaute Stufe (≤ stage); nur sie zählt für Erträge und Perks. Nur Settle(d, now) hebt built auf
 --                 stage, sobald readyAt erreicht ist – auch für offline fertig gewordene Bauten: Load lässt built wie
 --                 gespeichert, der Dienst ruft Settle beim Beitritt (dann gibt es ow_ready + Toast) und im Tick.
---   collectedAt = Beginn des laufenden Ertragszeitraums (unix); carAt = Beginn des Gutschein-Zeitraums (Produktion 4)
+--   collectedAt = Beginn des laufenden Ertragszeitraums (unix, mit Nachkommastellen – nie abrunden, B-001); carAt = Beginn des Gutschein-Zeitraums (Produktion 4)
 --   partsCarry  = angebrochener Altteil-Rest (0 ≤ x &lt; 1) aus partsPerHour, damit häufiges Abholen keine Teile verliert
 --   packs/partsTotal/collects = Lebenszeit-Zähler (abgeholte Bauteil-Pakete, abgeholte Altteile, Abholungen mit Ertrag)
 --                 für Story-Missionen (kind own, owTyp/owStat); gift = Stufe 1 kam aus der Startwahl (GrantStart)
@@ -178821,6 +178879,15 @@ local function loadInt(v: any, default: number, min: number, max: number): numbe
 		return default
 	end
 	return math.floor(math.min(v, max))
+end
+
+-- Zeitpunkt mit Nachkommastellen (Serverzeit): wird NICHT abgerundet – ein abgerundeter Beginn des Ertragszeitraums
+-- würde den schon bezahlten Sekundenbruchteil beim nächsten Abholen noch einmal auszahlen (B-001).
+local function loadTime(v: any, default: number, min: number, max: number): number
+	if not finite(v) or v &lt; min then
+		return default
+	end
+	return math.min(v, max)
 end
 
 local function nowOr(now: any): number
@@ -178896,7 +178963,7 @@ function OWRules.Load(raw: any, d: any, _now: any): OW
 			b.readyAt = 0
 			b.built = 0
 		end
-		b.collectedAt = loadInt(src.collectedAt, 0, 0, MAX_SAFE)
+		b.collectedAt = loadTime(src.collectedAt, 0, 0, MAX_SAFE)
 		b.carAt = loadInt(src.carAt, 0, 0, MAX_SAFE)
 		local carry = src.partsCarry
 		b.partsCarry = finite(carry) and carry &gt;= 0 and carry &lt; 1 and carry or 0
@@ -179266,9 +179333,11 @@ function OWRules.Collect(d: any, typ: any, now: any, opts: { skipCar: boolean? }
 		local capped = math.min(math.max(0, t - e.collectedAt), capHours() * HOUR)
 		local packs = math.floor(capped / (st.partsEveryHours * HOUR))
 		local leftover = capped - packs * st.partsEveryHours * HOUR
-		e.collectedAt = math.floor(t - leftover)
+		-- nie abrunden und nie zurück: der neue Zeitraum beginnt frühestens am alten Beginn (B-001)
+		e.collectedAt = math.max(e.collectedAt, t - leftover)
 	else
-		e.collectedAt = math.floor(t)
+		-- bezahlt ist genau bis t (Serverzeit mit Nachkommastellen); floor(t) würde den Bruchteil doppelt zahlen (B-001)
+		e.collectedAt = t
 	end
 	if a.car then
 		e.carAt = math.floor(t)
@@ -180948,7 +181017,7 @@ export type Mission = {
 	stat: string?, absolute: boolean?, event: string?, events: { string }?, maxTime: number?,
 	tier: number?, special: boolean?, typ: string?, stage: number?, money: number?, bays: number?, cars: { string }?,
 	equipmentAll: boolean?, credits: number?, xp: number?, chapter: number?, index: number?, side: boolean?, legend: boolean?,
-	unlock: string?, needsCar: boolean?, owTyp: string?, owStat: string?, minLevel: number?, repaired: boolean?,
+	unlock: string?, needsCar: boolean?, owTyp: string?, owStat: string?, pwStat: string?, minLevel: number?, repaired: boolean?,
 }
 export type Chapter = {
 	id: number, title: string, intro: string, unlockLevel: number, Missions: { Mission },
@@ -181605,13 +181674,36 @@ local function buildingStage(d: any, typ: string): number
 	return type(b) == "table" and finite(b.stage) and b.stage or 0
 end
 
+-- 3.x: Lebenszeit-Zähler der Großen Werkstatt (d.games.pw, PublicWorkshopService): partsSold = verkaufte Teile,
+-- repairs = fertige Reparaturen (zählt auch ein Auto, das schon repariert in der Garage steht: pw.cars[id].b &gt; 0).
+-- So zählen Verkäufe/Reparaturen auch, wenn sie vor dem Start der Mission passiert sind.
+local function pwStat(d: any, stat: string): number
+	local pw = type(d) == "table" and type(d.games) == "table" and d.games.pw or nil
+	if type(pw) ~= "table" then
+		return 0
+	end
+	local v = finite(pw[stat]) and math.max(0, pw[stat]) or 0
+	if stat == "repairs" and v &lt; 1 and type(pw.cars) == "table" then
+		for _, rec in pairs(pw.cars) do
+			if type(rec) == "table" and finite(rec.b) and rec.b &gt; 0 then
+				return 1
+			end
+		end
+	end
+	return v
+end
+StoryRules.PwStat = pwStat
+
 -- Fortschritt aus dem Profil (Bedingungsarten) – für own/build und Legende (absolute Statistik)
 local function conditionProgress(d: any, def: Mission): number?
 	local target = StoryRules.Target(def)
 	if def.kind == "build" then
 		return math.min(target, buildingStage(d, def.typ or ""))
 	elseif def.kind == "own" then
-		if type(def.owTyp) == "string" and type(def.owStat) == "string" then
+		if type(def.pwStat) == "string" then
+			-- 3.x: Große Werkstatt (Teile verkauft / Auto repariert), aus dem Profil statt aus Live-Ereignissen
+			return math.min(target, pwStat(d, def.pwStat))
+		elseif type(def.owTyp) == "string" and type(def.owStat) == "string" then
 			-- Lebenszeit-Zähler eines Open-World-Gebäudes (OWRules: packs, partsTotal, collects)
 			local ow = type(d) == "table" and type(d.games) == "table" and d.games.ow or nil
 			local b = type(ow) == "table" and type(ow.buildings) == "table" and ow.buildings[def.owTyp] or nil
@@ -181685,7 +181777,8 @@ end
 
 -- Heutige Auswahl (deterministisch je UTC-Tag wie GoalRules.DailyGoals): Side.Daily verschiedene Ids aus dem Teil des
 -- Pools, den der Spieler auf diesem Level schon kann (level nil = ganzer Pool). s_jobs ist immer dabei, darum gibt es
--- jeden Tag mindestens eine machbare Nebenmission; mit einem Levelaufstieg kann die Auswahl am selben Tag wechseln.
+-- jeden Tag mindestens eine machbare Nebenmission; mit einem Levelaufstieg kann die Auswahl am selben Tag wechseln
+-- (heute schon angefangene/erfüllte Missionen bleiben trotzdem gelistet, siehe todaysDefs).
 function StoryRules.DailyIds(day: string, level: any): { string }
 	local ix = index()
 	local pool = {}
@@ -181792,8 +181885,31 @@ local function bumpSide(d: any, st: Story, def: Mission, delta: number, now: num
 end
 
 -- Heutige Nebenmissionen des Spielers als Definitionsliste (Auswahl nach Tag und Level)
+-- Dazu bleiben Missionen, die heute schon Fortschritt haben oder abgeholt sind (Eintrag in st.side mit dem heutigen Tag –
+-- den gibt es nur für Missionen, die heute schon einmal in der Auswahl waren), bis zum Tageswechsel gelistet: wechselt
+-- die Auswahl durch einen Levelaufstieg, verschwindet so keine erfüllte Nebenmission vor dem Abholen (B-008). Das
+-- Tageslimit (Side.DailyLimit) zählt weiter über alle Einträge des Tages.
 local function todaysDefs(d: any, now: number, level: any): { Mission }
-	return StoryRules.DailyDefs(dayKey(now), levelOf(d, level))
+	local today = dayKey(now)
+	local out = StoryRules.DailyDefs(today, levelOf(d, level))
+	local st = StoryRules.Data(d)
+	if not st then
+		return out
+	end
+	local have = {}
+	for _, def in ipairs(out) do
+		have[def.id] = true
+	end
+	for _, id in ipairs(index().poolIds) do
+		local e = st.side[id]
+		if not have[id] and type(e) == "table" and e.day == today and (e.claimed == true or (finite(e.n) and e.n &gt; 0)) then
+			local def = StoryRules.SideDef(id)
+			if def and not def.legend then
+				table.insert(out, def)
+			end
+		end
+	end
+	return out
 end
 
 ---------------------------------------------------------------- Ereignisse (Statistik, Ereignis, Verkauf)
@@ -181808,6 +181924,10 @@ local function matchesEvent(def: Mission, event: string, data: any): boolean
 		end
 	end
 	if not hit then
+		return false
+	end
+	-- 3.x: "reparierten Wagen verkaufen" zählt nur Verkäufe reparierter Wagen (CarService meldet car_sold {repaired})
+	if def.repaired and not (type(data) == "table" and data.repaired == true) then
 		return false
 	end
 	if finite(def.maxTime) then
@@ -182161,6 +182281,9 @@ function StoryRules.Sell(d: any, offer: Offer, tier: any, now: number): SellResu
 	if repaired then
 		st.sales.repaired -= 1
 		profit = math.floor(profit * (S.RepairedBonus or 1) + 0.5)
+		-- 3.x: eine Reparatur wird nur einmal belohnt – entweder hier (Kiesplatz ×RepairedBonus) oder beim Händler
+		-- (Wertbonus des Autos): der Wertbonus eines reparierten Autos ist damit verbraucht
+		StoryRules.UseRepairedCar(d)
 	end
 	local credits = M.AddIncome(d, profit)
 	local xp = finite(S.Xp[tier]) and S.Xp[tier] or 0
@@ -182174,6 +182297,38 @@ function StoryRules.Sell(d: any, offer: Offer, tier: any, now: number): SellResu
 	end
 	return { sold = true, credits = credits, xp = xp, tier = tier, special = offer.special, changed = changed, repaired = repaired,
 		text = text }
+end
+
+-- 3.x: Kiesplatz-Bonus verbraucht: das reparierte Auto mit der kleinsten Id, dessen Wertbonus noch offen ist
+-- (d.games.pw.cars[id].b &gt; 0, ohne k), bekommt k = 1 – der Händler zahlt dafür keinen Wertbonus mehr
+-- (PublicWorkshopService.ValueBonus), und eine zweite Reparatur gibt es auch nicht. Rückgabe: Id oder nil.
+function StoryRules.UseRepairedCar(d: any): string?
+	local pw = type(d) == "table" and type(d.games) == "table" and d.games.pw or nil
+	local cars = type(pw) == "table" and pw.cars or nil
+	if type(cars) ~= "table" then
+		return nil
+	end
+	local best = nil
+	for k, rec in pairs(cars) do
+		if type(k) == "string" and tonumber(k) and type(rec) == "table" and finite(rec.b) and rec.b &gt; 0 and not rec.k then
+			if best == nil or tonumber(k) &lt; tonumber(best) then
+				best = k
+			end
+		end
+	end
+	if best then
+		cars[best].k = 1
+	end
+	return best
+end
+
+-- 3.x: Händler hat ein repariertes Auto (Wertbonus offen) gekauft: ein wartender Kiesplatz-Bonus derselben Reparatur
+-- verfällt (eine Reparatur, eine Belohnung)
+function StoryRules.DropRepairedToken(d: any)
+	local st = StoryRules.Data(d)
+	if st and st.sales.repaired &gt; 0 then
+		st.sales.repaired -= 1
+	end
 end
 
 -- Kunde weg ohne Verkauf (Geduld zu Ende, Moduswechsel): die laufende Nummer rückt vor, damit der nächste Kunde ein
@@ -182243,7 +182398,11 @@ local TARGETS = {
 	["owTyp:produktion"] = { ANCHOR, "produktion", "HERSTELLUNG", "", "deine Herstellung" },
 	["owTyp:schrottplatz"] = { ANCHOR, "schrottplatz", "SCHROTTPLATZ", "", "dein Schrottplatz" },
 	pw_repair = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
-	pw_parts_sold = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
+	-- 3.x: Teile kauft nur der Teile-Ankauf (City.Stations.teileankauf), nicht das Reparatur-Terminal
+	pw_parts_sold = { CITY, "teileankauf", "TEILE-ANKAUF", "teileankauf", "Teile-Ankauf der Großen Werkstatt" },
+	["pwStat:partsSold"] = { CITY, "teileankauf", "TEILE-ANKAUF", "teileankauf", "Teile-Ankauf der Großen Werkstatt" },
+	["pwStat:repairs"] = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
+	car_sold = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },
 	car_bought = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },
 	cars = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },
 	auction_won = { CITY, "auction", "AUKTIONSHAUS", "auction", "Auktionshaus" },
@@ -182284,7 +182443,9 @@ function StoryRules.TargetOf(def: any): any
 	elseif def.kind == "build" then
 		table.insert(keys, "build")
 	elseif def.kind == "own" then
-		if type(def.owTyp) == "string" then
+		if type(def.pwStat) == "string" then
+			table.insert(keys, "pwStat:" .. def.pwStat)
+		elseif type(def.owTyp) == "string" then
 			table.insert(keys, "owTyp:" .. def.owTyp)
 		elseif def.bays then
 			table.insert(keys, "bays")
@@ -183133,6 +183294,24 @@ function TutorialRules.PendingPassiveEvent(d: any): string?
 	end
 	local m = MetaRules.Meta(d)
 	return m ~= nil and m.passive == true and step.event or nil
+end
+
+-- Schritt „Abholen“ des Startwegs (action:ow_collect), dessen geschenktes Gebäude schon einmal mit Ertrag abgeholt
+-- wurde (Lebenszeit-Zähler collects &gt; 0, z. B. gleich im Schritt „Gebäude ansehen“): -&gt; sein Ereignis. Sonst müsste
+-- der Spieler bis zum nächsten Ertrag warten (Herstellung: 6 Std.). Der Zähler steigt nur bei gelungenem Abholen und
+-- bleibt gespeichert (gilt auch nach einem Rejoin). Liest d.games.ow direkt (wie CrossBonus), ohne OWRules zu laden.
+local COLLECT_EVENT = "action:ow_collect"
+function TutorialRules.PendingCollectEvent(d: any): string?
+	local step = TutorialRules.Current(d)
+	if not step or step.event ~= COLLECT_EVENT then
+		return nil
+	end
+	local g = type(d) == "table" and d.games or nil
+	local ow = type(g) == "table" and g.ow or nil
+	local buildings = type(ow) == "table" and ow.buildings or nil
+	local b = type(buildings) == "table" and buildings[TutorialRules.Path(d)] or nil
+	local n = type(b) == "table" and b.collects or nil
+	return finite(n) and n &gt; 0 and step.event or nil
 end
 
 ---------------------------------------------------------------- Beginner-Hinweise (je einmal, nur Beginner)
@@ -184090,8 +184269,18 @@ function Profiles.Save(profile, release)
     -- damit die Sitzungssperre danach freigegeben wird; ein Autosave wartet wie bisher nicht.
     if profile.saving or profile.receiptPending then
         if not release then return false end
-        local deadline = os.clock() + 12
-        while (profile.saving or profile.receiptPending) and profile.writable and os.clock() &lt; deadline do task.wait(0.1) end -- 3.0: auch auf eine offene Quittung warten
+        -- 3.0: Ein laufendes Speichern (z. B. ein langsamer Autosave) endet immer von selbst (höchstens 3 Versuche);
+        -- 3.0: darauf wird ohne Frist gewartet, sonst bliebe sein älterer Stand der letzte und die Sperre hinge bis zum
+        -- 3.0: Ablauf. Die 12-s-Frist gilt nur noch für eine offene Quittung, die niemand mehr auflöst.
+        -- 3.0: (BindToClose begrenzt die Wartezeit selbst; nach einer verlorenen Sperre endet die Schleife über writable.)
+        local deadline
+        while (profile.saving or profile.receiptPending) and profile.writable do -- 3.0: auch auf eine offene Quittung warten
+            if not profile.saving then
+                deadline = deadline or os.clock() + 12
+                if os.clock() &gt;= deadline then break end
+            end
+            task.wait(0.1)
+        end
         if profile.saving or profile.receiptPending then return false end
     end
     -- Another concurrent close/save may have released the lease while we waited.
@@ -184145,6 +184334,7 @@ end
 -- Geld-/Auto-Änderungen so lange an). Rückgabe wie GrantCredits: granted, new.
 --   apply(data: table) -&gt; boolean   false = Kauf jetzt nicht anwendbar (Deckel, Garage voll): nichts geschrieben,
 --                                    Roblox wiederholt den Beleg später (NotProcessedYet)
+--   Dritter Rückgabewert "busy" (nur bei granted=false): ein anderes Speichern lief nach 10 s noch.
 --   receiptPending = { id, snapshot, amount? } bleibt bis zur Auflösung (Save/Autosave warten; Purchases wiederholt).
 function Profiles.GrantReceipt(profile,purchaseId,apply,commit)
     if not profile.writable or not store or type(purchaseId)~="string" or #purchaseId&gt;160 or type(apply)~="function" then return false end
@@ -184152,6 +184342,9 @@ function Profiles.GrantReceipt(profile,purchaseId,apply,commit)
     if profile.receiptPending and profile.receiptPending.id~=purchaseId then return false end
     local deadline=os.clock()+10
     while profile.saving and os.clock()&lt;deadline do task.wait(0.1) end
+    -- 3.0: Dritter Rückgabewert "busy": ein anderes Speichern läuft noch (langsamer DataStore). Nichts wurde
+    -- 3.0: geschrieben und receiptPending ist nicht gesetzt – Purchases wiederholt die Quittung in der Sitzung.
+    if profile.saving and profile.writable then return false,nil,"busy" end
     if profile.saving or not profile.writable then return false end
     if profile.receipts and profile.receipts[purchaseId] then return true,false end
     if not profile.receiptPending then
@@ -184294,13 +184487,14 @@ function Purchases.Init(getSession,onGranted,onDeferred)
     local function grant(session,receipt,product)
         local granted,new,result -- 3.0: result = ApplyReceipt-Ergebnis
         local deferred=nil -- 3.0: Grund, wenn ApplyReceipt die Quittung (noch) nicht anwenden konnte
+        local busy -- 3.0: "busy" = ein anderes Speichern lief noch (langsamer DataStore), nichts geschrieben
         if Purchases.Kind(product)=="credits" then
-            granted,new=Profiles.GrantCredits(session.profile,receipt.PurchaseId,product.credits)
+            granted,new,busy=Profiles.GrantCredits(session.profile,receipt.PurchaseId,product.credits)
         else
             -- 3.0: DLC-Auto/Kosmetik/Bündel: ShopRules.ApplyReceipt auf dem Schnappschuss, atomar mit der Quittung
             local rules=shop()
             if not rules then return false end
-            granted,new=Profiles.GrantReceipt(session.profile,receipt.PurchaseId,function(snapshot)
+            granted,new,busy=Profiles.GrantReceipt(session.profile,receipt.PurchaseId,function(snapshot)
                 local ok,res=rules.ApplyReceipt(snapshot,product,os.time()) -- 3.0: Ergebnis/Grund merken
                 if ok==true then result=res;deferred=nil else deferred=type(res)=="string" and res or "nicht anwendbar" end
                 return ok==true
@@ -184316,20 +184510,22 @@ function Purchases.Init(getSession,onGranted,onDeferred)
             if not ok then warn("[Purchases] onDeferred: "..tostring(err)) end
         end
         if granted then told[receipt.PurchaseId]=nil end -- 3.0
-        return granted,deferred~=nil -- 3.0: aufgeschoben (nicht anwendbar)?
+        return granted,deferred~=nil,busy=="busy" -- 3.0: aufgeschoben (nicht anwendbar)? Speicher beschäftigt?
     end
     Marketplace.ProcessReceipt=function(receipt)
         local product=Purchases.ByProduct(receipt.ProductId)
         local player=Players:GetPlayerByUserId(receipt.PlayerId)
         local session=player and getSession(player)
         if not product or not session or session.closing or type(receipt.PurchaseId)~="string" then return Enum.ProductPurchaseDecision.NotProcessedYet end
-        local granted,deferred=grant(session,receipt,product) -- 3.0
+        local granted,deferred,busy=grant(session,receipt,product) -- 3.0
         if granted then return Enum.ProductPurchaseDecision.PurchaseGranted end
         -- Roblox also retries receipts on rejoin. Resolve ambiguous store writes while
         -- the owner remains present so they do not have to spend Robux a second time.
         -- 3.0: auch aufgeschobene Shop-Quittungen (Garage voll) in der Sitzung wiederholen, damit ein frei
         -- gewordener Platz die Quittung sofort auflöst (nicht erst beim nächsten Beitritt).
-        if not retries[receipt.PurchaseId] and (session.profile.receiptPending or (deferred and session.profile.writable)) then
+        -- 3.0: ebenso, wenn GrantReceipt nur wegen eines noch laufenden (langsamen) Speicherns aufgegeben hat: dann ist
+        -- kein receiptPending gesetzt, und ohne Wiederholung bliebe der bezahlte Kauf bis zur nächsten Zustellung offen.
+        if not retries[receipt.PurchaseId] and (session.profile.receiptPending or ((deferred or busy) and session.profile.writable)) then
             retries[receipt.PurchaseId]=true
             local _,config=shop()
             local every=config and type(config.ReceiptRetrySeconds)=="number" and config.ReceiptRetrySeconds or 8 -- 3.0
@@ -185242,6 +185438,14 @@ local function callCustomer(p,jobId)
     end)
     return true,nil
 end
+-- 3.0: Auflegen während des Klingelns bricht den Anruf ab: keine Auswertung, der Auftrag bleibt in der Freigabe.
+local function hangUpCall(p)
+    local call=p.calling
+    if not call then return false end
+    p.calling=nil -- der Klingel-Timer erkennt den Abbruch an p.calling~=call
+    emit(p,"call",{job=call.job,state="ended"});push(p)
+    return true
+end
 local function token(p,key,job)
     p.confirm={token=Http:GenerateGUID(false),key=key,job=job,expires=now()+30}
     emit(p,"confirm",p.confirm)
@@ -185265,7 +185469,12 @@ local function expansionQuote(p)
 end
 local function act(p,action,a)
     local d=p.profile.data
-    if action=="hello" then Mini.Hello(p);return push(p) end -- 3.0: Minispiel-Snapshot und Bestenliste
+    if action=="hello" then
+        -- 3.0: Ein hello, das beim ersten state noch unterwegs war, begrüßt nicht ein zweites Mal (siehe join)
+        if p.helloAtJoin and now()-p.helloAtJoin&lt;2 then p.helloAtJoin=nil;return push(p) end
+        p.helloAtJoin=nil
+        Mini.Hello(p);return push(p) -- 3.0: Minispiel-Snapshot und Bestenliste
+    end
     if action=="travel" then
         if not C.StationNames[a.key] then return end
         if a.key=="shop" then resetInteraction(p);emit(p,"page","shop");return push(p) end
@@ -185471,7 +185680,11 @@ local function act(p,action,a)
     end
 end
 local function request(player,action,a)
-    local p=sessions[player];if not p or p.closing or type(action)~="string" or #action&gt;32 then return end
+    local p=sessions[player]
+    -- 3.0: hello während des Ladens (Sitzungssperre, langsamer DataStore) nicht verlieren: der Client hört schon zu,
+    -- 3.0: sendet aber nach dem ersten state nichts mehr. join holt die Begrüßung nach, sobald die Sitzung steht.
+    if not p and action=="hello" and joining[player] then joining[player]="hello" end
+    if not p or p.closing or type(action)~="string" or #action&gt;32 then return end
     if p.profile.transacting and action~="hello" and action~="abortInteraction" then
         if action=="mini_press_click" then return end -- 3.0: Klickpakete still verwerfen (der Client wiederholt sie), kein Toast 2×/s
         return toast(p,"Dein Kauf wird sicher gespeichert. Bitte einen Moment warten.")
@@ -185495,7 +185708,8 @@ local function request(player,action,a)
 end
 -- 3.0: Minispiele an dieselben Wege anbinden (ein Eingang, ein Profil, keine neuen Remotes).
 Mini.Init({emit=emit,toast=toast,changed=changed,push=push,getSession=function(player) return sessions[player] end,moveTo=moveTo,now=now,
-    callCustomer=callCustomer}) -- 3.0: Handy-Anruf beim Kunden (Fahrzeug-Check)
+    callCustomer=callCustomer, -- 3.0: Handy-Anruf beim Kunden (Fahrzeug-Check)
+    hangUpCall=hangUpCall}) -- 3.0: Auflegen während des Klingelns
 Command.OnServerEvent:Connect(request)
 Purchases.Init(function(player) return sessions[player] end,function(p,product,result)
     emit(p,"purchaseFX",Purchases.FX(product)) -- 3.0: Titel je Art (Credits/Auto/Optik/Paket)
@@ -185524,6 +185738,7 @@ local function join(player)
     end)
     if not p.world then joining[player]=nil;P.Save(profile,true);player:Kick("Alle Werkstätten sind belegt. Bitte nutze einen anderen Server.");return end
     sessions[player]=p
+    local helloEarly=joining[player]=="hello" -- 3.0: der Client hat schon während des Ladens hello gesendet
     joining[player]=nil
     local stats=Instance.new("Folder");stats.Name="leaderstats";stats.Parent=player
     for _,name in ipairs({"Credits","Level"}) do local n=Instance.new("NumberValue");n.Name=name;n.Parent=stats end
@@ -185542,6 +185757,7 @@ local function join(player)
     end
     player.CharacterAdded:Connect(character)
     if player.Character then task.spawn(character,player.Character) end
+    if helloEarly and sessions[player]==p and not p.closing then p.helloAtJoin=now();Mini.Hello(p) end -- 3.0: verpasste Begrüßung nachholen
     push(p)
 end
 Players.PlayerAdded:Connect(join)
@@ -185550,8 +185766,12 @@ Players.PlayerRemoving:Connect(function(player)
     local p=sessions[player];if not p then return end
     advanceDays(p,now());p.closing=true;p.pending=nil
     Mini.OnLeave(p,p.profile.writable) -- 3.0: vor P.Save (Save gibt writable frei); blockiert nicht
+    -- 3.0: Werkstatt sofort abbauen, nicht erst nach dem Speichern: P.Save kann Sekunden dauern (zweiter Versuch,
+    -- 3.0: langsamer DataStore, laufender Autosave) – so lange blieb der Slot belegt und ein Nachrücker wurde gekickt.
+    -- 3.0: Die Sitzung bleibt bis nach dem Speichern eingetragen (closing), damit BindToClose darauf wartet.
+    W.Destroy(player)
     local saved=P.Save(p.profile,true);Mini.OnSaved(p,saved) -- 3.0: Bestenliste nur nach gelungenem Speichern
-    sessions[player]=nil;W.Destroy(player)
+    sessions[player]=nil
 end)
 task.spawn(function()
     while true do
@@ -185865,6 +186085,8 @@ return ArcadeService
 --   * Verkäufer-Profil ohne die Übergabe gespeichert (Auto noch da): Auto entfernen, Auszahlung gutschreiben.
 --   * Käufer-Profil ohne die Übergabe gespeichert (tid fehlt in received): Auto hinzufügen, Preis abziehen.
 -- Beides ist idempotent (Auto-Id + Modell + Kaufzeit bzw. tid). Je Liste höchstens AuctionRules.MaxReceived Einträge.
+-- Buch und received werden unabhängig gekürzt (fehlgeschlagener Schreibversuch, andere Schreibreihenfolge): Einträge,
+-- die das Profil schon aus received verdrängt hat, erkennt ReconcileBuyer an der Marke d.games.auction.doneAt.
 -- Restrisiko: Absturz zwischen Übergabe im Speicher und Schreiben des Buchs, wenn in genau diesem Moment ein
 -- Autosave eines der beiden Profile landet (Millisekunden; siehe PHASE2_CONTRACT §6).
 local DataStoreService = game:GetService("DataStoreService")
@@ -187838,7 +188060,74 @@ local function spotFree(cf)
 	return not ok or not blocked
 end
 
--- Ziel-CFrame (Boden unter den Reifen) auf der nächsten freien Fahrbahnstelle neben dem Spieler, oder nil
+-- 3.x: Fahrspuren des Stadtverkehrs (City.Animated.TrafficLoops.*.Waypoints) einmal lesen. Ein gerufenes Auto darf
+-- nicht in einer Spur stehen, sonst wartet die ganze Schleife dahinter. Je Schleife: Segmente und die halbe Breite des
+-- breitesten Verkehrsfahrzeugs (Attribut Width der Modelle unter City.Animated.Verkehr, Bus 8,3).
+local laneCache = nil
+local function trafficLanes()
+	if laneCache and laneCache.folder ~= nil and laneCache.folder.Parent ~= nil then
+		return laneCache.segs
+	end
+	local segs = {}
+	local c = city()
+	local anim = c and c:FindFirstChild("Animated")
+	local loops = anim and anim:FindFirstChild("TrafficLoops")
+	local widths = {}
+	local verkehr = anim and anim:FindFirstChild("Verkehr")
+	if verkehr then
+		for _, m in ipairs(verkehr:GetChildren()) do
+			local key, w = m:GetAttribute("Loop"), m:GetAttribute("Width")
+			if type(key) == "string" and type(w) == "number" then
+				widths[key] = math.max(widths[key] or 0, w)
+			end
+		end
+	end
+	if loops then
+		for _, f in ipairs(loops:GetChildren()) do
+			local wp = f:GetAttribute("Waypoints")
+			if type(wp) == "string" then
+				local key = string.gsub(f.Name, "^Loop_", "")
+				local half = (widths[key] or 8.3) / 2
+				local pts = {}
+				for x, y, z in string.gmatch(wp, "(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+)") do
+					table.insert(pts, Vector3.new(tonumber(x), tonumber(y), tonumber(z)))
+				end
+				for i = 1, #pts do
+					table.insert(segs, { a = pts[i], b = pts[i % #pts + 1], half = half })
+				end
+			end
+		end
+	end
+	-- ohne TrafficLoops-Ordner (z. B. Tests ohne Stadt) wird beim nächsten Mal neu gelesen
+	laneCache = { folder = loops, segs = segs }
+	return segs
+end
+CarService._resetLanes = function()
+	laneCache = nil
+end
+
+-- Liegt die Wagenmitte so nah an einer Verkehrsspur, dass Verkehr dort anhalten müsste?
+-- Abstand zur Spurmitte &lt; halbe Verkehrsbreite + halbe Autobreite (StarterCar.CarHalfWidth) + LaneGap
+function CarService.InTrafficLane(spot)
+	local extra = (starterCfg("CarHalfWidth") or 3.25) + (starterCfg("LaneGap") or 1)
+	for _, sg in ipairs(trafficLanes()) do
+		local a, b = sg.a, sg.b
+		if math.abs(spot.Y - a.Y) &lt; 12 then
+			local abx, abz = b.X - a.X, b.Z - a.Z
+			local len2 = abx * abx + abz * abz
+			local t = len2 &gt; 1e-6 and math.clamp(((spot.X - a.X) * abx + (spot.Z - a.Z) * abz) / len2, 0, 1) or 0
+			local dx, dz = spot.X - (a.X + abx * t), spot.Z - (a.Z + abz * t)
+			local lim = sg.half + extra
+			if dx * dx + dz * dz &lt; lim * lim then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- Ziel-CFrame (Boden unter den Reifen) auf der nächsten freien Fahrbahnstelle neben dem Spieler, oder nil.
+-- 3.x: nie in einer Verkehrsspur (CarService.InTrafficLane); quer zur Fahrbahn wird auch der Randstreifen probiert.
 function CarService.RoadSpot(cs, pos, look)
 	local margin = starterCfg("RoadMargin")
 	local radius = starterCfg("SearchRadius")
@@ -187860,7 +188149,11 @@ function CarService.RoadSpot(cs, pos, look)
 	end)
 	local step = starterCfg("SlideStep")
 	local P = CarCatalog.Physics
-	for i = 1, math.min(#cands, starterCfg("RoadCandidates")) do
+	local tried = 0
+	for i = 1, #cands do
+		if tried &gt;= starterCfg("RoadCandidates") then
+			break
+		end
 		local c = cands[i]
 		local axis = c.axis
 		if look and axis:Dot(look) &lt; 0 then
@@ -187868,22 +188161,40 @@ function CarService.RoadSpot(cs, pos, look)
 		end
 		local cf0 = c.part.CFrame
 		local localAxis = cf0:VectorToObjectSpace(c.axis)
-		for _, k in ipairs({ 0, 1, -1, 2, -2, 3, -3 }) do
-			-- entlang der Fahrbahn verschieben, im Stück bleiben
-			local x = math.clamp(c.info.x + localAxis.X * k * step, -c.info.mx, c.info.mx)
-			local z = math.clamp(c.info.z + localAxis.Z * k * step, -c.info.mz, c.info.mz)
-			local at = cf0:PointToWorldSpace(Vector3.new(x, c.info.top, z))
-			if k == 0 or (at - c.world).Magnitude &gt; 1 then
-				local y = groundY(at) or at.Y
-				if math.abs(y - at.Y) &gt; 3 then
-					y = at.Y -- Strahl traf etwas anderes (Dach, Brücke): Fahrbahnhöhe nehmen
-				end
-				local spot = Vector3.new(at.X, y + P.spawnLift, at.Z)
-				local cf = CFrame.lookAt(spot, spot + axis)
-				if not occupied(spot) and spotFree(cf) then
-					return cf, c.dist
+		-- Querlage: nächster Punkt, dann die beiden Randstreifen (Wagenmitte RoadMargin vom Rand)
+		local crossX = math.abs(localAxis.X) &lt; 0.5
+		local base = { { x = c.info.x, z = c.info.z } }
+		if crossX then
+			table.insert(base, { x = (c.info.x &gt;= 0) and c.info.mx or -c.info.mx, z = c.info.z })
+			table.insert(base, { x = (c.info.x &gt;= 0) and -c.info.mx or c.info.mx, z = c.info.z })
+		else
+			table.insert(base, { x = c.info.x, z = (c.info.z &gt;= 0) and c.info.mz or -c.info.mz })
+			table.insert(base, { x = c.info.x, z = (c.info.z &gt;= 0) and -c.info.mz or c.info.mz })
+		end
+		local any = false
+		for _, b0 in ipairs(base) do
+			for _, k in ipairs({ 0, 1, -1, 2, -2, 3, -3 }) do
+				-- entlang der Fahrbahn verschieben, im Stück bleiben
+				local x = math.clamp(b0.x + localAxis.X * k * step, -c.info.mx, c.info.mx)
+				local z = math.clamp(b0.z + localAxis.Z * k * step, -c.info.mz, c.info.mz)
+				local at = cf0:PointToWorldSpace(Vector3.new(x, c.info.top, z))
+				if (k == 0 or math.abs(x - b0.x) + math.abs(z - b0.z) &gt; 1) and not CarService.InTrafficLane(at) then
+					any = true
+					local y = groundY(at) or at.Y
+					if math.abs(y - at.Y) &gt; 3 then
+						y = at.Y -- Strahl traf etwas anderes (Dach, Brücke): Fahrbahnhöhe nehmen
+					end
+					local spot = Vector3.new(at.X, y + P.spawnLift, at.Z)
+					local cf = CFrame.lookAt(spot, spot + axis)
+					if not occupied(spot) and spotFree(cf) then
+						local dx, dz = spot.X - pos.X, spot.Z - pos.Z
+						return cf, math.max(c.dist, math.sqrt(dx * dx + dz * dz))
+					end
 				end
 			end
+		end
+		if any then
+			tried += 1 -- Stücke, die ganz in Verkehrsspuren liegen, zählen nicht als Versuch
 		end
 	end
 	return nil
@@ -187917,7 +188228,8 @@ function CarService.BesideSpot(pos, look)
 		if y and y &lt;= pos.Y and y &gt;= pos.Y - 9 then
 			local spot = Vector3.new(at.X, y + P.spawnLift, at.Z)
 			local cf = CFrame.lookAt(spot, spot + look)
-			if not occupied(spot) and spotFree(cf) and skyClear(spot) then
+			-- 3.x: nie in eine Verkehrsspur (Spieler steht auf der Straße)
+			if not occupied(spot) and not CarService.InTrafficLane(spot) and spotFree(cf) and skyClear(spot) then
 				return cf
 			end
 		end
@@ -188164,11 +188476,21 @@ function CarService.Register(Actions, a)
 		if cs.car and cs.car.carId == data.id then
 			despawn(cs, "car", "sold")
 		end
+		-- 3.x: repariert (Wertbonus der Großen Werkstatt offen)? Vor dem Verkauf lesen – danach ist der Eintrag weg
+		local repaired = false
+		if car and type(CarRules.SaleBonus) == "function" then
+			local okB, f = pcall(CarRules.SaleBonus, d, data.id)
+			repaired = okB and type(f) == "number" and f &gt; 1
+		end
 		local ok, value, sold = CarRules.Sell(d, data.id)
 		if ok then
 			cs.shine[data.id] = nil
 			toast(cs, CarCatalog.Model(sold.model).name .. " verkauft: +" .. credits(value))
-			return true -- 3.x: gelungener Verkauf -&gt; Story-Ereignis action:mini_car_sell (Verkaufshaus c1_ah4)
+			-- 3.x: Story-Ereignis car_sold { repaired } (Verkaufshaus c1_ah4 zählt nur reparierte Wagen)
+			if api and type(api.event) == "function" then
+				pcall(api.event, ms, "car_sold", { repaired = repaired })
+			end
+			return true -- gelungener Verkauf -&gt; außerdem action:mini_car_sell (Nebenmissionen)
 		elseif value then
 			toast(cs, value)
 		end
@@ -189523,6 +189845,13 @@ function LeaderboardService.Write(ms, force, writable)
 	return ok
 end
 
+-- B-017: Nur echte Namen kommen dauerhaft in den Cache. Schlägt GetNameFromUserIdAsync fehl, gilt der Ersatztext
+-- „Spieler &lt;id&gt;“ nur vorläufig: frühestens nach NAME_RETRY_FIRST Sekunden wird erneut gefragt, bei jedem weiteren
+-- Fehlschlag verdoppelt sich der Abstand bis NAME_RETRY_MAX (dauerhaft fehlschlagende IDs kosten so kaum Budget).
+local NAME_RETRY_FIRST = 240
+local NAME_RETRY_MAX = 3600
+LeaderboardService.NameFailures = {} -- [userId] = { tries = n, retryAt = Zeit }
+
 local function nameFor(userId)
 	local cached = LeaderboardService.Names[userId]
 	if cached then
@@ -189531,14 +189860,28 @@ local function nameFor(userId)
 	local player = Players:GetPlayerByUserId(userId)
 	if player then
 		LeaderboardService.Names[userId] = player.DisplayName
+		LeaderboardService.NameFailures[userId] = nil
 		return player.DisplayName
+	end
+	local fallback = "Spieler " .. tostring(userId)
+	local now = LeaderboardService.Now()
+	local failed = LeaderboardService.NameFailures[userId]
+	if failed and now &lt; failed.retryAt then
+		return fallback
 	end
 	local ok, name = pcall(function()
 		return Players:GetNameFromUserIdAsync(userId)
 	end)
-	local result = (ok and type(name) == "string") and name or ("Spieler " .. tostring(userId))
-	LeaderboardService.Names[userId] = result
-	return result
+	if ok and type(name) == "string" and name ~= "" then
+		LeaderboardService.Names[userId] = name
+		LeaderboardService.NameFailures[userId] = nil
+		return name
+	end
+	local tries = (failed and failed.tries or 0) + 1
+	local wait = math.min(NAME_RETRY_MAX, NAME_RETRY_FIRST * 2 ^ (tries - 1))
+	-- Zeit nach dem Aufruf (er kann warten)
+	LeaderboardService.NameFailures[userId] = { tries = tries, retryAt = LeaderboardService.Now() + wait }
+	return fallback
 end
 
 function LeaderboardService.RefreshDue(now)
@@ -189682,7 +190025,8 @@ local PlaceRouter = require(script.Parent:WaitForChild("PlaceRouter"))
 
 local LobbyService = {}
 
-export type Party = { code: string, leader: Player, members: { Player }, createdAt: number }
+-- expectLeader (B-016): UserId des ursprünglichen Leiters, solange nach einem Gruppen-Teleport ein Mitglied vorläufig führt
+export type Party = { code: string, leader: Player, members: { Player }, createdAt: number, expectLeader: number? }
 
 LobbyService.Parties = {} :: { [string]: Party } -- [code] = Party (serverlokal)
 LobbyService.MemberOf = setmetatable({}, { __mode = "k" }) :: { [Player]: Party }
@@ -189878,6 +190222,38 @@ local function removeFromParty(player: Player, reason: string)
 	return party
 end
 
+-- B-016: Ankunft des ursprünglichen Leiters nach einem Gruppen-Teleport. Übernimmt nur, wenn die Party auf genau ihn
+-- wartet (expectLeader, gesetzt vom Ersten am Ziel) und die Wartezeit läuft; danach gibt es keine zweite Übergabe.
+-- Die eigene Angabe des Ankömmlings zählt nicht – so kann niemand per TeleportData eine geführte Party übernehmen.
+local function takeOverLeader(party: Party, player: Player, t: number): boolean
+	if party.expectLeader ~= player.UserId then
+		return false
+	end
+	party.expectLeader = nil
+	if party.leader == player or t - party.createdAt &gt; (GameConfig.Party.LeaderWaitSeconds or 120) then
+		return false
+	end
+	local i = memberIndex(party, player)
+	if not i then
+		return false
+	end
+	local previous = party.leader
+	table.remove(party.members, i)
+	table.insert(party.members, 1, player) -- Leiter vorn (Teleport-Reihenfolge, Nachrücken beim Verlassen)
+	party.leader = player
+	notifyParty(party, { event = "leader", userId = player.UserId, name = playerName(player) }, player)
+	local leaderMs = msOf(player)
+	if leaderMs then
+		toast(leaderMs, TEXT.partyLeaderYou)
+		dirty(leaderMs)
+	end
+	local previousMs = msOf(previous)
+	if previousMs then
+		dirty(previousMs)
+	end
+	return true
+end
+
 -- Mitglieder, die noch im Spiel sind (für Teleport/Simulation)
 local function livingMembers(party: Party): { Player }
 	local out = {}
@@ -189943,7 +190319,10 @@ local function travel(ms: any, mode: string, fromAction: string): boolean
 		partyCode = LobbyService.PartyOf(ms.player).code
 	end
 	local members = party and livingMembers(party) or nil
-	local ok, res = PlaceRouter.Go(p, mode, { single = settings.single, party = partyCode, players = members })
+	-- B-016: Leiter-Kennung reist mit (am Ziel führt sonst, wer zuerst geladen hat)
+	local codeParty = partyCode and LobbyService.Parties[partyCode] or nil
+	local leaderId = codeParty and codeParty.leader and codeParty.leader.UserId or nil
+	local ok, res = PlaceRouter.Go(p, mode, { single = settings.single, party = partyCode, players = members, leader = leaderId })
 	if not ok then
 		if type(res) == "string" then
 			toast(ms, res)
@@ -190201,9 +190580,15 @@ function LobbyService.OnJoin(ms: any, d: any, t: number?)
 		if party then
 			if joinParty(party, ms.player) then
 				notifyParty(party, { event = "joined", userId = ms.player.UserId, name = playerName(ms.player) })
+				takeOverLeader(party, ms.player, t) -- B-016: der ursprüngliche Leiter übernimmt vom vorläufigen
 			end
 		else
-			createParty(ms.player, code, t)
+			local created = createParty(ms.player, code, t)
+			-- B-016: Wer zuerst lädt und einen anderen als Leiter nennt, führt nur vorläufig. Die Kennung kommt aus
+			-- TeleportData (manipulierbar) und gilt deshalb nur für diese eine, eben von ihm selbst angelegte Party.
+			if created and finite(info.leader) and info.leader ~= ms.player.UserId then
+				created.expectLeader = info.leader
+			end
 		end
 	end
 	dirty(ms)
@@ -190373,6 +190758,51 @@ local function owns(userId, passId)
 	return ok and result == true
 end
 
+-- B-019: Besitz nach einem Kaufereignis beim Server bestätigen. PromptGamePassPurchaseFinished(purchased = true)
+-- allein ist kein Beleg (manipulierte Clients können das Signal auslösen). onOwned() läuft nur, wenn
+-- UserOwnsGamePassAsync den Besitz bestätigt; wegen des Besitz-Caches bis zu ConfirmTries Versuche mit Pause.
+-- Läuft in einem eigenen Task (blockiert den Ereignis-Handler nicht). Je Spieler und Pass höchstens eine laufende
+-- Prüfung: weitere Ereignisse hängen sich an, statt neue Abfragen auszulösen (Budget).
+MiniPasses.ConfirmTries = 3
+MiniPasses.ConfirmWait = 2 -- Sekunden zwischen den Versuchen
+
+local confirming = {} -- ["&lt;userId&gt;:&lt;passId&gt;"] = { onOwned, ... }
+
+function MiniPasses.Confirm(userId, passId, onOwned)
+	if type(userId) ~= "number" or type(passId) ~= "number" or passId &lt;= 0 then
+		return
+	end
+	local key = userId .. ":" .. passId
+	if confirming[key] then
+		table.insert(confirming[key], onOwned)
+		return
+	end
+	confirming[key] = { onOwned }
+	task.spawn(function()
+		local owned = false
+		for try = 1, MiniPasses.ConfirmTries do
+			if owns(userId, passId) then
+				owned = true
+				break
+			end
+			if try &lt; MiniPasses.ConfirmTries then
+				task.wait(MiniPasses.ConfirmWait)
+			end
+		end
+		local waiting = confirming[key]
+		confirming[key] = nil
+		if not owned then
+			return
+		end
+		for _, fn in ipairs(waiting) do
+			local ok, err = pcall(fn)
+			if not ok then
+				warn("[Game Passes] Gutschrift nach Kauf: " .. tostring(err))
+			end
+		end
+	end)
+end
+
 -- Kann warten (UserOwnsGamePassAsync); ohne eingetragene IDs kehrt es sofort zurück.
 function MiniPasses.Check(userId)
 	local passes = { doubleScrap = false, pressPlus = false }
@@ -190382,7 +190812,8 @@ function MiniPasses.Check(userId)
 	return passes
 end
 
--- onPurchased(player, field) wird nach einem erfolgreichen Kauf in dieser Sitzung aufgerufen.
+-- onPurchased(player, field) wird nach einem erfolgreichen Kauf in dieser Sitzung aufgerufen –
+-- erst nachdem der Server den Besitz bestätigt hat (B-019, MiniPasses.Confirm).
 function MiniPasses.Init(onPurchased)
 	local ok, err = pcall(function()
 		MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
@@ -190392,7 +190823,9 @@ function MiniPasses.Init(onPurchased)
 			for name, field in pairs(MiniPasses.Fields) do
 				local id = MiniConfig.GamePasses[name].id
 				if id &gt; 0 and id == passId then
-					onPurchased(player, field)
+					MiniPasses.Confirm(player.UserId, id, function()
+						onPurchased(player, field)
+					end)
 				end
 			end
 		end)
@@ -190644,8 +191077,10 @@ local function storyEventOf(kind, data)
 		return "track_finish"
 	elseif kind == "auction_won" then
 		return "auction_won"
-	elseif kind == "arcade_result" and not data.replay and not data.expired and not data.aborted and not data.rejected then
-		return "arcade_round" -- nur zu Ende gespielte, gewertete Runden (kein Sofort-Abbruch mit 0 Punkten)
+	elseif kind == "arcade_result" and not data.replay and not data.expired and not data.aborted then
+		-- nur zu Ende gespielte, gewertete Runden (kein Sofort-Abbruch mit 0 Punkten). data.rejected ist KEIN Ablehnungs-
+		-- Kennzeichen, sondern der Zähler gedrosselter Eingaben der Runde (meist 0, in Luau wahr) – er entscheidet hier nichts
+		return "arcade_round"
 	elseif kind == "ow_build" then
 		return "ow_built:" .. tostring(data.typ)
 	end
@@ -190782,6 +191217,13 @@ function api.callCustomer(p, id)
 		return ctx.callCustomer(p, id)
 	end
 	return false, nil
+end
+-- Handy: laufenden Anruf abbrechen (GarageServer.hangUpCall). Rückgabe true, wenn ein Anruf lief
+function api.hangUpCall(p)
+	if ctx and type(ctx.hangUpCall) == "function" then
+		return ctx.hangUpCall(p)
+	end
+	return false
 end
 -- Eingeliefertes Auto von der Straße holen
 function api.releaseCar(ms, id)
@@ -192221,7 +192663,8 @@ function OWService.ModelOf(player: Player, typ: string): Instance?
 end
 
 return OWService
-</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000040"><Properties><string name="Name">PhoneService</string><ProtectedString name="Source">-- PhoneService: das Handy auf dem Server. Eine Aktion: phone_call {id} – der Spieler ruft den Kunden eines
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000040"><Properties><string name="Name">PhoneService</string><ProtectedString name="Source">-- PhoneService: das Handy auf dem Server. Aktionen: phone_hangup {} (Auflegen während des Klingelns: der Anruf wird
+-- nicht ausgewertet, der Auftrag bleibt in der Freigabe) und phone_call {id} – der Spieler ruft den Kunden eines
 -- Fahrzeug-Checks an, dessen OBD-Tester Fehler im Fehlerspeicher gefunden hat (2.4.0-Phase "approval").
 -- Der Server prüft die Nutzlast (String, Länge, Zeichen), eine Abklingzeit je Spieler und ruft dann
 -- api.callCustomer(p, id) – das ist GarageServer.callCustomer (über MiniService ctx/api durchgereicht). Ob der Kunde
@@ -192231,9 +192674,13 @@ return OWService
 --
 --   Register(Actions, api)   Aktion phone_call registrieren. api = MiniService-api (toast, now …) plus
 --                            api.callCustomer(p, id) -&gt; ok: boolean, msg: string?
+--                            api.hangUpCall(p) -&gt; boolean (true = ein Anruf lief und ist beendet)
 local PhoneService = {}
 
-PhoneService.Cooldown = 3 -- Sekunden zwischen zwei Anrufen eines Spielers (MiniNet.Cooldowns.phone_call ≤ dieser Wert)
+-- Sekunden zwischen zwei Anruf-STARTS eines Spielers (MiniNet.Cooldowns.phone_call ≤ dieser Wert). B-023: muss kürzer
+-- sein als die Klingelzeit (Config.Inspection.RingSeconds = 2,5 s), sonst wird der nächste Kunde direkt nach der Antwort
+-- abgelehnt. Parallele Anrufe verhindert GarageServer (p.calling).
+PhoneService.Cooldown = 2
 PhoneService.MaxIdLength = 64
 
 PhoneService.Text = {
@@ -192307,9 +192754,24 @@ function PhoneService.Call(ms: any, data: any, d: any, now: any): boolean?
 	return true
 end
 
+-- Auflegen (reine Absicht, keine Nutzlast): bricht den klingelnden Anruf ab. Ohne laufenden Anruf passiert nichts.
+function PhoneService.HangUp(ms: any, _data: any, _d: any, _now: any): boolean?
+	local fn = api and api.hangUpCall
+	if type(fn) ~= "function" or not ms or not ms.p then
+		return nil
+	end
+	local ok, ended = pcall(fn, ms.p)
+	if not ok then
+		warn("[Handy] Auflegen fehlgeschlagen: " .. tostring(ended))
+		return nil
+	end
+	return ended == true or nil
+end
+
 function PhoneService.Register(Actions: any, a: any)
 	api = a
 	Actions.Register("phone_call", PhoneService.Call)
+	Actions.Register("phone_hangup", PhoneService.HangUp)
 end
 
 -- Nur für Tests: api ohne Actions setzen
@@ -192368,7 +192830,7 @@ local CityService = require(script.Parent:WaitForChild("CityService"))
 
 local PlaceRouter = {}
 
-export type GoData = { single: boolean?, party: string?, players: { Player }? }
+export type GoData = { single: boolean?, party: string?, players: { Player }?, leader: number? }
 export type GoResult = { mode: string, teleported: boolean, simulated: boolean, placeId: number?, message: string? }
 
 local TEXT = {
@@ -192460,8 +192922,38 @@ function PlaceRouter.OnTeleportInitFailed(player: any, result: any, message: any
 	end
 end
 
+-- B-020: Zonen-Spawn der eigenen Variante von Beginn an aktiv. In den Places "lobby" und "tycoon" gibt es keine
+-- Stadt (kein CitySpawn), LobbySpawn/TycoonSpawn sind in der Welt abgeschaltet gebaut und der Plot-Spawn entsteht erst
+-- nach dem Laden des Profils – die Figur erschien bis dahin am Ursprung über dem Nichts. Gibt es einen aktiven
+-- CitySpawn (all-Place, Open World), bleibt er der einzige Erst-Spawn und hier ändert sich nichts.
+-- Rückgabe: der eingeschaltete SpawnLocation oder nil.
+function PlaceRouter.EnsureZoneSpawn(): Instance?
+	local kind = PlaceRouter.PlaceKind()
+	if kind ~= "lobby" and kind ~= "tycoon" then
+		return nil
+	end
+	local city = workspace:FindFirstChild("City")
+	local citySpawn = city and city:FindFirstChild("CitySpawn")
+	if citySpawn and citySpawn:IsA("SpawnLocation") and citySpawn.Enabled then
+		return nil
+	end
+	local zone = GameConfig.Zones[kind]
+	local model = zone and workspace:FindFirstChild(zone.model)
+	local spawn = model and zone.spawn and model:FindFirstChild(zone.spawn)
+	if spawn and spawn:IsA("SpawnLocation") then
+		spawn.Enabled = true
+		return spawn
+	end
+	warn("[Ortswechsel] Zonen-Spawn fehlt im Place " .. kind .. " – Figuren erscheinen am Ursprung")
+	return nil
+end
+
 function PlaceRouter.Init(c: any)
 	ctx = type(c) == "table" and c or nil
+	local okSpawn, errSpawn = pcall(PlaceRouter.EnsureZoneSpawn) -- B-020
+	if not okSpawn then
+		warn("[Ortswechsel] Zonen-Spawn: " .. tostring(errSpawn))
+	end
 	if failedConnection then
 		return
 	end
@@ -192548,7 +193040,7 @@ function PlaceRouter.SanitizeTeleportData(raw: any): { [string]: any }
 end
 
 -- Modus beim Beitritt (Vertrag §1). joinData = Player:GetJoinData() (oder nil). Setzt p.mode, p.single, p.partyCode.
--- Rückgabe: mode, info = { mode, single, party, source = "place" | "saved" | "teleport", placeKind }
+-- Rückgabe: mode, info = { mode, single, party, leader, source = "place" | "saved" | "teleport", placeKind }
 function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string, { [string]: any })
 	local kind = (type(placeKind) == "string" and GameConfig.PlaceKindSet[placeKind]) and placeKind or PlaceRouter.PlaceKind()
 	local d = p and p.profile and p.profile.data or nil
@@ -192577,6 +193069,12 @@ function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string
 	if type(td.party) == "string" then
 		party = string.upper(td.party)
 	end
+	-- B-016: Leiter-Kennung der Party (UserId). Unvertrauenswürdig wie der Party-Code: nur eine ganze positive Zahl,
+	-- und sie zählt nur zusammen mit einem Party-Code (LobbyService.OnJoin entscheidet, ob sie etwas bewirkt).
+	local leader = nil
+	if party and type(td.leader) == "number" and td.leader &gt; 0 and td.leader % 1 == 0 and td.leader &lt; 2 ^ 53 then
+		leader = td.leader
+	end
 	if p then
 		p.mode = mode
 		p.single = single
@@ -192585,7 +193083,7 @@ function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string
 	if d then
 		MetaRules.SetMode(d, mode)
 	end
-	return mode, { mode = mode, single = single, party = party, source = source, placeKind = kind }
+	return mode, { mode = mode, single = single, party = party, leader = leader, source = source, placeKind = kind }
 end
 
 ---------------------------------------------------------------- Zonen (Simulation)
@@ -192740,6 +193238,7 @@ local function teleport(p: any, kind: string, placeId: number, data: GoData)
 		mode = kind,
 		single = data.single == true,
 		party = type(data.party) == "string" and string.sub(data.party, 1, GameConfig.TeleportDataMaxLength) or "",
+		leader = (type(data.party) == "string" and finite(data.leader)) and data.leader or nil, -- B-016
 	})
 	local players = {}
 	local seen = {}
@@ -193120,7 +193619,9 @@ return PrestigeService
 --                                      beim Schrotthändler; füllt den Teile-Vorrat des Servers (Rabatt für alle)
 -- Story-Ereignisse über api.storyEvent (sonst api.event): "pw_repair" { car, gain }, "pw_parts_sold" { part, count, value }.
 --
--- Daten: d.games.pw = { cars = { ["&lt;Auto-Id&gt;"] = { b = Bonus in %, p = bezahlt (laufende Reparatur) } },
+-- Daten: d.games.pw = { cars = { ["&lt;Auto-Id&gt;"] = { b = Bonus in %, g = fester Wertgewinn in Credits (3.x),
+--                                                    k = 1: Bonus schon am Kiesplatz verbraucht (3.x),
+--                                                    p = bezahlt (laufende Reparatur) } },
 --                       day = "YYYY-MM-DD", sold = Teile heute, refund = Erstattung, repairs = n, partsSold = n }
 -- (Tiefe 3 unter games; Load ist eine Whitelist). Der Anfangszustand eines Autos ist nicht gespeichert, sondern fest
 -- aus Auto-Id und Modell berechnet (InitialCondition); erst die Reparatur speichert den Bonus.
@@ -193144,6 +193645,7 @@ local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 local CarCatalog = require(MiniShared:WaitForChild("CarCatalog"))
 local CarRules = require(MiniShared:WaitForChild("CarRules"))
 local MetaRules = require(MiniShared:WaitForChild("MetaRules"))
+local StoryRules = require(MiniShared:WaitForChild("StoryRules"))
 
 local PublicWorkshopService = {}
 
@@ -193163,6 +193665,7 @@ PublicWorkshopService.Text = {
 	excluded = "Dein Startauto ist immer top in Schuss – es braucht keine Reparatur.",
 	dlc = "Diese Sonderedition ist werkneu – sie braucht keine Reparatur.",
 	done = "Dieses Auto ist schon top in Schuss. Eine zweite Reparatur bringt nichts.",
+	usedKies = "Den Reparatur-Bonus dieses Autos hast du schon am Kiesplatz bekommen.",
 	small = "Eine Reparatur lohnt sich bei diesem Auto nicht.",
 	money = "Für die Reparatur fehlen dir %s.",
 	started = "Reparatur gestartet: %s (%s).",
@@ -193280,6 +193783,14 @@ function PublicWorkshopService.Load(raw: any, _d: any?, _now: number?): any
 					local e = {}
 					if b &gt; 0 then
 						e.b = b
+						-- 3.x: fester Wertgewinn (Credits) und „am Kiesplatz verbraucht“
+						local gain = clampInt(rec.g, 0, 0, MAX_SAFE)
+						if gain &gt; 0 then
+							e.g = gain
+						end
+						if rec.k == 1 or rec.k == true then
+							e.k = 1
+						end
 					end
 					if p &gt; 0 and b == 0 then
 						e.p = p
@@ -193366,7 +193877,22 @@ local function blockedReason(car: any): string?
 	return nil
 end
 
--- Faktor für den Verkaufspreis: 1 + Bonus, nur für reparierte Autos; nie unter 1, nie über MaxBonus.
+-- 3.x: fester Wertgewinn einer fertigen Reparatur in Credits: der bei der Reparatur gespeicherte Betrag (g); alte
+-- Einträge ohne g: Bonus nur auf den Grundwert ohne Tuning (CarRules.Value × SellShare). Später eingebautes Tuning
+-- bekommt so keinen unbezahlten Aufschlag.
+local function fixedGain(car: any, rec: any): number
+	if finite(rec.g) and rec.g &gt; 0 then
+		return rec.g
+	end
+	local okV, v = pcall(CarRules.Value, car)
+	if not okV or not finite(v) then
+		return 0
+	end
+	return math.floor(v * CarCatalog.SellShare * rec.b / 100)
+end
+
+-- Faktor für den Verkaufspreis (Händler: SellValue × Faktor): 1 + fester Wertgewinn / SellValue, nur für reparierte
+-- Autos, deren Bonus nicht schon am Kiesplatz verbraucht ist (k); nie unter 1, nie über MaxBonus.
 function PublicWorkshopService.ValueBonus(d: any, carId: any): number
 	local key = keyOf(carId)
 	local g = type(d) == "table" and d.games
@@ -193376,10 +193902,17 @@ function PublicWorkshopService.ValueBonus(d: any, carId: any): number
 	end
 	local rec = pw.cars[key]
 	local b = type(rec) == "table" and rec.b
-	if not finite(b) or b &lt;= 0 then
+	if not finite(b) or b &lt;= 0 or rec.k then
 		return 1
 	end
-	return math.clamp(1 + b / 100, 1, cfg().MaxBonus)
+	local car = CarRules.Find(d, tonumber(key))
+	local okB, base = pcall(CarRules.SellValue, car)
+	if not car or not okB or not finite(base) or base &lt;= 0 then
+		return 1
+	end
+	local maxF = cfg().MaxBonus
+	local extra = math.min(fixedGain(car, rec), base * (maxF - 1))
+	return math.clamp(1 + extra / base, 1, maxF)
 end
 
 function PublicWorkshopService.OnCarSold(d: any, carId: any)
@@ -193389,6 +193922,10 @@ function PublicWorkshopService.OnCarSold(d: any, carId: any)
 		local rec = pw.cars[key]
 		if rec and (rec.p or 0) &gt; 0 then
 			pw.refund = math.min(MAX_SAFE, pw.refund + rec.p)
+		end
+		-- 3.x: Händler hat den Wertbonus bezahlt -&gt; der Kiesplatz-Bonus derselben Reparatur verfällt
+		if rec and finite(rec.b) and rec.b &gt; 0 and not rec.k then
+			pcall(StoryRules.DropRepairedToken, d)
 		end
 		pw.cars[key] = nil
 	end
@@ -193424,8 +193961,12 @@ function PublicWorkshopService.Quote(d: any, car: any): any
 	local q = { key = key, name = m and m.name or tostring(car.model), value = value, cond = 100, bonus = 0, gain = 0, cost = 0 }
 	if rec and (rec.b or 0) &gt; 0 then
 		q.state = "repaired"
+		if rec.k then
+			q.reason = PublicWorkshopService.Text.usedKies
+			return q
+		end
 		q.bonus = rec.b
-		q.gain = math.floor(value * rec.b / 100)
+		q.gain = value &gt; 0 and math.floor(value * (PublicWorkshopService.ValueBonus(d, car.id) - 1) + 0.5) or 0
 		q.reason = PublicWorkshopService.Text.done
 		return q
 	end
@@ -193614,7 +194155,7 @@ function PublicWorkshopService.View(ms: any, d: any, t: number): any
 	end
 	local focus = "repair"
 	local nearP, nearR = nearParts(ms), nearRepair(ms)
-	if nearP or (path == "schrottplatz" and not s.job) then
+	if nearP or ((path == "schrottplatz" or path == "produktion") and not s.job) then
 		focus = "parts"
 	end
 	local pathDiscount = c.PathDiscount and c.PathDiscount[path] or 0
@@ -193808,7 +194349,7 @@ function PublicWorkshopService.Tick(ms: any, d: any, t: number): boolean
 	local bonus = job.bonus
 	local value = CarRules.SellValue(car)
 	local gain = math.floor(value * bonus / 100)
-	pw.cars[job.key] = { b = bonus }
+	pw.cars[job.key] = { b = bonus, g = gain } -- 3.x: fester Wertgewinn (Tuning danach bekommt keinen Aufschlag)
 	pw.repairs = math.min(MAX_SAFE, pw.repairs + 1)
 	toast(ms, string.format(T.finished, job.name, bonus, MiniLocale.Credits(gain)))
 	storyEvent(ms, "pw_repair", { car = job.key, gain = gain })
@@ -193895,7 +194436,8 @@ return QuizBank
 --                                    Pass-Schlüssel aus GameConfig.Shop.Passes; Id 0 -&gt; „noch nicht eingerichtet“,
 --                                    kein Prompt; sonst purchasePrompt {productId} über den 2.4.0-Weg bzw.
 --                                    PromptGamePassPurchase)
---   Init(ctx?)                       verbindet PromptGamePassPurchaseFinished (pcall); ctx.emit (MiniService-ctx) ist
+--   Init(ctx?)                       verbindet PromptGamePassPurchaseFinished (pcall; Gutschrift erst nach
+--                                    bestätigtem Besitz, MiniPasses.Confirm); ctx.emit (MiniService-ctx) ist
 --                                    optional – ohne ctx geht purchasePrompt direkt über GarageShared.Remotes.Event
 --   OnJoin(ms, d, now)               Sitzung merken, Game-Pass-Besitz prüfen (UserOwnsGamePassAsync in pcall, kann
 --                                    warten) und die Pass-Kosmetik idempotent gutschreiben (ShopRules.Grant)
@@ -193923,6 +194465,7 @@ local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 local ShopRules = require(MiniShared:WaitForChild("ShopRules"))
 local CarCatalog = require(MiniShared:WaitForChild("CarCatalog"))
 local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
+local MiniPasses = require(script.Parent:WaitForChild("MiniPasses")) -- B-019: Besitz-Bestätigung nach Kaufereignis
 
 local ShopService = {}
 
@@ -194145,6 +194688,14 @@ local function prompt(ms: any, data: any, d: any, t: number): boolean
 		end
 		return true
 	end
+	-- B-014: Sind Robux-Käufe hier gar nicht möglich (Studio, Profil nicht speicherbar – z. B. temporär nach einem
+	-- Ladefehler, dann immer Level 1), kommt dieser Hinweis vor Besitz- und Level-Riegel aus ShopRules.CanPrompt.
+	-- Unbekanntes Produkt und Platzhalter-Id 0 behalten ihre eigenen Hinweise (CanPrompt).
+	local known = ShopRules.Product(data.product)
+	if known and ShopRules.ProductId(known) &gt; 0 and (RunService:IsStudio() or not api.writable(ms)) then
+		toast(ms, TEXT_LOCAL.noRobux)
+		return false
+	end
 	local ok, msg, productId, product = ShopRules.CanPrompt(d, data.product)
 	if not ok then
 		toast(ms, msg)
@@ -194152,10 +194703,6 @@ local function prompt(ms: any, data: any, d: any, t: number): boolean
 	end
 	if ms.shopDeferred and ms.shopDeferred[product.key] then
 		toast(ms, string.format(TEXT.receiptWaiting, tostring(product.name or product.key)))
-		return false
-	end
-	if RunService:IsStudio() or not api.writable(ms) then
-		toast(ms, TEXT_LOCAL.noRobux)
 		return false
 	end
 	if product.kind == "credits" then
@@ -194199,10 +194746,18 @@ function ShopService.Init(c: any?)
 			if not pass or not ms or not alive(ms) then
 				return
 			end
-			local okA, errA = pcall(applyPass, ms, ms.p.profile.data, pass, true)
-			if not okA then
-				warn("[Shop] Game Pass " .. tostring(pass.key) .. ": " .. tostring(errA))
-			end
+			-- B-019: das Ereignis allein ist kein Beleg (von manipulierten Clients auslösbar) – Gutschrift erst,
+			-- wenn UserOwnsGamePassAsync den Besitz bestätigt (eigener Task, kurze Wiederholung wegen Cache)
+			MiniPasses.Confirm(player.UserId, id, function()
+				local cur = sessions[player]
+				if not cur or not alive(cur) then
+					return
+				end
+				local okA, errA = pcall(applyPass, cur, cur.p.profile.data, pass, true)
+				if not okA then
+					warn("[Shop] Game Pass " .. tostring(pass.key) .. ": " .. tostring(errA))
+				end
+			end)
 		end)
 	end)
 	if not ok then
@@ -194616,12 +195171,18 @@ end
 -- Ankunft in der Spielermeile (Figur erschienen, Mini.OnCharacter): ist die Wahl noch offen (z. B. nach ResetStart oder
 -- wenn der Client den ersten Hinweis verpasst hat), kommt das Angebot hier erneut (auch im kombinierten Place).
 function StartService.OnArrive(ms: any, d: any): boolean
-	if not ms or not inOpenWorld(ms) then
+	if not ms then
 		return false
 	end
-	if not ms.startArrived then
-		ms.startArrived = true -- erste Figur der Sitzung: OnJoin/OnMode hat die Wahl gerade schon angeboten
+	-- B-022: Die erste Figur der Sitzung zählt in JEDEM Modus. Sonst hielte der erste Respawn in der Open World nach
+	-- einem Beitritt in der Lobby als „erste Figur“ her und die Wahl käme erst beim übernächsten wieder.
+	local first = not ms.startArrived
+	ms.startArrived = true
+	if not inOpenWorld(ms) then
 		return false
+	end
+	if first then
+		return false -- erste Figur der Sitzung: OnJoin/OnMode hat die Wahl gerade schon angeboten
 	end
 	ms.startOffered = nil
 	return StartService.OnMode(ms, d, modeOf(ms))
@@ -195705,12 +196266,21 @@ local function grantReward(ms: any, d: any): boolean
 	return true
 end
 
-local function afterAdvance(ms: any, d: any, finished: boolean)
+local afterAdvance
+function afterAdvance(ms: any, d: any, finished: boolean)
 	if finished then
 		local again = TutorialRules.Rewarded(d) -- Belohnung gab es schon (Neustart am Kiosk): Endkarte ohne Belohnung
 		grantReward(ms, d)
 		stepNotice(ms, d, { finished = true, again = again })
 	else
+		-- Schritt „Abholen“ erreicht, das Geschenk ist aber schon abgeholt: gleich weiter (B-021)
+		local collected = TutorialRules.PendingCollectEvent(d)
+		if collected then
+			local advanced, done = TutorialRules.Advance(d, collected)
+			if advanced then
+				return afterAdvance(ms, d, done)
+			end
+		end
 		stepNotice(ms, d)
 	end
 end
@@ -195900,6 +196470,11 @@ function TutorialService.Tick(ms: any, d: any, now: number?): boolean
 	-- Passiv-Modus: Schritte, die er unmöglich macht (Kiesplatz-Verkauf), gelten als erledigt
 	local passiveEvent = TutorialRules.PendingPassiveEvent(d)
 	if passiveEvent and TutorialService.OnEvent(ms, d, passiveEvent) then
+		changed = true
+	end
+	-- Schritt „Abholen“, obwohl das Gebäude schon einmal abgeholt wurde (Profil stand vor B-021 dort): erledigt
+	local collectEvent = TutorialRules.PendingCollectEvent(d)
+	if collectEvent and TutorialService.OnEvent(ms, d, collectEvent) then
 		changed = true
 	end
 	return changed
@@ -199925,7 +200500,9 @@ local ArcadeUI = {}
 
 local ACTION = "UCG_ArcadeControls"
 local PRIORITY = 3500 -- über Figur/Kamera (2000) und der 2.4.0-Werkzeugleiste (3000), unter Tab (10000)
-local FINISH_RETRY = 4 -- Sekunden ohne Ergebnis, dann Abrechnung erneut anfragen
+local FINISH_RETRY = 4 -- Sekunden ohne Ergebnis, dann Abrechnung erneut anfragen (wiederholt, der Server zahlt je Token nur einmal)
+local FINISH_GIVEUP = 15 -- Sekunden ohne Ergebnis, dann zurück zur Übersicht (die Nachfrage läuft im Hintergrund weiter)
+local FINISH_STOP = 30 -- Sekunden ohne Ergebnis, dann endet auch die Nachfrage (ungültiges Token: Server antwortet nur per Toast)
 local START_GAP = 2.5
 
 local UI, Remote, Toast
@@ -201733,6 +202310,7 @@ finishRound = function()
 	end
 	cur.finishing = true
 	cur.finishAt = os.clock()
+	cur.retryAt = cur.finishAt
 	-- Tasten sofort freigeben: kommt die Auswertung nie an, bliebe die Figur sonst auf der Tastatur eingefroren
 	unbindKeys()
 	if cur.view then
@@ -201757,9 +202335,27 @@ local function onFrame()
 		finishRound()
 	end
 	if cur.finishing then
-		if not cur.result and os.clock() - cur.finishAt &gt; FINISH_RETRY and not cur.retried then
-			cur.retried = true
-			Remote.Send("mini_arcade_finish", { token = cur.token })
+		if not cur.result then
+			-- B-012: Bleibt das Ergebnis aus (Abrechnung verworfen), weiter nachfragen statt für immer „Auswertung …“
+			local c = os.clock()
+			local waited = c - cur.finishAt
+			if waited &gt; FINISH_STOP then
+				disconnect()
+				cur = nil
+				return
+			end
+			if c - cur.retryAt &gt; FINISH_RETRY then
+				cur.retryAt = c
+				Remote.Send("mini_arcade_finish", { token = cur.token })
+			end
+			if waited &gt; FINISH_GIVEUP and not cur.gaveUp then
+				cur.gaveUp = true
+				refs.count.Visible = false
+				if mode == "play" then
+					setMode("lobby")
+					renderHead()
+				end
+			end
 		end
 		return
 	end
@@ -201899,6 +202495,16 @@ local function onResult(data)
 	end
 	if cur.result then
 		return -- schon angezeigt (Wiederholung)
+	end
+	if cur.gaveUp then
+		-- Die Übersicht ist längst wieder frei: Anzeige nicht umreißen, nur das Ergebnis melden
+		cur = nil
+		stopRound()
+		renderHead()
+		if (num(data.credits) or 0) &gt; 0 then
+			Toast("Spielhalle: " .. (num(data.score) or 0) .. " Punkte, +" .. MiniLocale.Credits(num(data.credits) or 0))
+		end
+		return
 	end
 	cur.result = data
 	stopRound()
@@ -202176,10 +202782,12 @@ function ArcadeUI.Select(x)
 	if not def or not refs.intro then
 		return false
 	end
-	if cur and not cur.result then
+	if cur and not cur.result and not cur.gaveUp then
 		return false -- laufende Runde nicht unterbrechen
 	end
-	stopRound()
+	if not (cur and cur.gaveUp) then
+		stopRound() -- nach der Aufgabe (gaveUp) läuft nur noch die Nachfrage – die bleibt
+	end
 	selected = def.key
 	setMode("intro")
 	renderIntro()
@@ -202208,7 +202816,7 @@ function ArcadeUI.OnNotice(data)
 end
 
 function ArcadeUI.IsPlaying()
-	return cur ~= nil and cur.result == nil
+	return cur ~= nil and cur.result == nil and not cur.gaveUp
 end
 
 -- Laufende Runde (für Tests)
@@ -205192,6 +205800,10 @@ local LAT_ACCEL = 12 -- st/s² Querbeschleunigung in Kurven
 local PLAYER_GAP = 4 -- Studs zwischen Fahrzeugfront und Spielfigur/Spielerauto
 local ZEBRA_GAP = 2 -- Studs zwischen Fahrzeugfront und Zebraband
 local SCAN_STEP = 2 -- Studs: Abtastung der eigenen Spur nach Spielern
+-- 3.x: ein leeres, stehendes Spielerauto in der Spur hält ein Verkehrsauto höchstens so lange auf; danach fährt es
+-- weiter (sonst stünde die ganze Schleife bis zum Abräumen des Autos still)
+local PARK_WAIT = 4
+local MOVE_HOLD = 4 -- Sekunden: so lange gilt ein leeres Spielerauto nach der letzten Bewegung noch als fahrend
 local FAR_LOGIC = 0.5 -- s: Logiktakt jenseits der Sichtweite (nicht gezeichnet)
 local MEDIUM_RENDER = 0.1 -- s: Zeichentakt der übrigen sichtbaren Autos (10 Hz)
 local NEAR_PLAYER = 45 -- Studs: Autos so nah an einer Spielfigur werden in jedem Logiktakt gezeichnet
@@ -205405,6 +206017,7 @@ end
 -- Ein Spielerauto (workspace.PlayerCars.*) wird als 3 Kreise längs seiner Blickrichtung abgebildet.
 local actorCache, actorAt = {}, -math.huge
 local actorOverride = nil
+local carMotion = {} -- 3.x: Spielerauto -&gt; { pos, at } (letzte Bewegung, os.clock)
 local function actors()
 	if actorOverride then
 		return actorOverride()
@@ -205424,16 +206037,33 @@ local function actors()
 			end
 		end
 		local cars = workspace:FindFirstChild("PlayerCars")
+		local seen = {}
 		if cars then
 			for _, m in ipairs(cars:GetChildren()) do
 				if m:IsA("Model") then
 					local cf = m:GetPivot()
 					local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
 					look = look.Magnitude &gt; 1e-3 and look.Unit or Vector3.new(0, 0, -1)
+					-- 3.x: besetzt oder gerade bewegt = fahrendes Auto (Verkehr wartet); sonst "parked" (Verkehr wartet
+					-- höchstens PARK_WAIT Sekunden, siehe carStep)
+					local seat = m:FindFirstChildWhichIsA("VehicleSeat", true)
+					local occupied = seat ~= nil and seat.Occupant ~= nil
+					local mv = carMotion[m]
+					if not mv or (mv.pos - cf.Position).Magnitude &gt; 1 then
+						carMotion[m] = { pos = cf.Position, at = (mv and c) or -math.huge }
+						mv = carMotion[m]
+					end
+					seen[m] = true
+					local parked = not occupied and c - mv.at &gt; MOVE_HOLD
 					for _, k in ipairs({ -5, 0, 5 }) do
-						table.insert(list, { pos = cf.Position + look * k, r = 3.5 })
+						table.insert(list, { pos = cf.Position + look * k, r = 3.5, parked = parked or nil })
 					end
 				end
+			end
+		end
+		for m in pairs(carMotion) do
+			if not seen[m] then
+				carMotion[m] = nil
 			end
 		end
 	end)
@@ -205721,9 +206351,16 @@ local function carStep(r, t, dt, acts)
 	-- Spielfiguren und Spielerautos in der eigenen Spur (vor der Fahrzeugmitte): anhalten und warten
 	if acts and #acts &gt; 0 then
 		local pos = r.pos
+		local parkedAhead = false
+		local ignoreParked = (r.parkWaited or 0) &gt;= PARK_WAIT
 		for _, a in ipairs(acts) do
 			local dp = a.pos - pos
-			if math.abs(dp.Y) &lt; 8 and Vector3.new(dp.X, 0, dp.Z).Magnitude &lt; look + a.r + 4 then
+			if a.parked and ignoreParked then
+				-- 3.x: schon PARK_WAIT gewartet: am leeren Auto vorbei (nur merken, dass es noch da ist)
+				if math.abs(dp.Y) &lt; 8 and Vector3.new(dp.X, 0, dp.Z).Magnitude &lt; look + a.r + 4 then
+					parkedAhead = true
+				end
+			elseif math.abs(dp.Y) &lt; 8 and Vector3.new(dp.X, 0, dp.Z).Magnitude &lt; look + a.r + 4 then
 				-- Spur abtasten: an jedem Punkt längs (al) und quer (lat) zur Fahrtrichtung zerlegen
 				local lane = r.width / 2 + a.r + 0.6
 				local k = 0
@@ -205735,13 +206372,24 @@ local function carStep(r, t, dt, acts)
 					if math.abs(al) &lt;= SCAN_STEP / 2 + 0.01 then
 						local lx, lz = rx - dir.X * al, rz - dir.Z * al
 						if lx * lx + lz * lz &lt; lane * lane then
-							stopIn(k + al - r.front - a.r - PLAYER_GAP, "player")
+							stopIn(k + al - r.front - a.r - PLAYER_GAP, a.parked and "parked" or "player")
+							if a.parked then
+								parkedAhead = true
+							end
 							break
 						end
 					end
 					k += SCAN_STEP
 				end
 			end
+		end
+		-- Wartezeit vor einem leeren Spielerauto zählen (nur im Stand); kein leeres Auto mehr voraus: zurücksetzen
+		if parkedAhead then
+			if ignoreParked or r.v &lt; 0.5 then
+				r.parkWaited = (r.parkWaited or 0) + dt
+			end
+		else
+			r.parkWaited = 0
 		end
 		-- Zebrastreifen: jemand auf dem Band vor uns -&gt; davor halten
 		for _, c in ipairs(crossingsFor(path)) do
@@ -206253,6 +206901,11 @@ CityClient._test = {
 	CarAdvance = carAdvance,
 	Sample = sample,
 	-- fn() -&gt; { { pos = Vector3, r = Radius, char = true|nil } } statt der echten Spieler/Spielerautos; nil = echt
+	-- 3.x: echte Akteure sofort neu lesen (ohne 0,1-s-Puffer)
+	Actors = function()
+		actorAt = -math.huge
+		return actors()
+	end,
 	SetActors = function(fn)
 		actorOverride = fn
 	end,
@@ -213631,6 +214284,10 @@ function PhoneUI.HangUp()
 		PhoneUI.Close()
 		return
 	end
+	-- B-024: Auflegen beim Wählen/Klingeln bricht den Anruf auch auf dem Server ab (sonst wertet er ihn trotzdem aus)
+	if cs and (cs.state == "dialing" or cs.state == "ringing") and ctx and ctx.Remote and ctx.Remote.Send then
+		ctx.Remote.Send("phone_hangup", {})
+	end
 	callState = nil
 	app = "home"
 	PhoneUI.Render(true)
@@ -215327,8 +215984,12 @@ function QuizUI.Render(s)
 		end
 	elseif not view and shownToken then
 		shownToken = nil
-		for _, b in ipairs(refs.answers) do
-			b.Visible = false
+		-- B-015: Der Server nimmt die Frage beim Beantworten aus dem Snapshot. Nach einer Antwort bleiben die Knöpfe
+		-- gesperrt und gefärbt (OnResult) stehen, bis eine neue Frage kommt; nur eine unbeantwortete Frage verschwindet.
+		if not answered then
+			for _, b in ipairs(refs.answers) do
+				b.Visible = false
+			end
 		end
 	end
 	refs.next.Text = (view and not answered) and "Andere Frage" or "Neue Frage"
@@ -219550,8 +220211,13 @@ local UI, Remote, T, ctx
 local refs = {}
 local latest = nil
 local pendingChoice = nil -- lokal gewählter Typ, bis der Snapshot den Durchlauf zeigt
+local pendingAt = 0 -- os.clock beim Senden der Wahl
 local trade = { to = nil, toName = nil, item = nil, qty = 1, price = 0, priceTouched = false, listOpen = false }
 local marketOffers = {} -- letzte Marktplatz-Angebote (mini_notice tycoon_market), auch als Spielerquelle
+
+-- B-011: Der Server lehnt eine Wahl nur per Toast ab (transacting, Rate-Budget, alle Grundstücke belegt) – ohne
+-- Durchlauf im Snapshot und ohne Hinweis. Die Sperre gilt deshalb höchstens so lange (Schutz vor Doppelklick).
+TycoonUI.PendingSeconds = 4
 
 TycoonUI.MaxQty = TY.TradeMaxQty or 999
 TycoonUI.MinPrice = TY.TradeMinPrice or 1
@@ -219721,8 +220387,15 @@ local function typeCard(parent, typ: string, order: number)
 			return
 		end
 		pendingChoice = typ
+		pendingAt = os.clock()
 		Remote.Send("tycoon_choose", { building = typ })
 		TycoonUI.Render(latest)
+		local sentAt = pendingAt
+		task.delay(TycoonUI.PendingSeconds + 0.05, function()
+			if pendingChoice ~= nil and pendingAt == sentAt then
+				TycoonUI.Render(latest) -- keine Antwort: Karten wieder freigeben
+			end
+		end)
 	end, { Name = "Choose_" .. typ, LayoutOrder = order, Size = UDim2.new(1, 0, 0, 120), AutomaticSize = Enum.AutomaticSize.Y, Text = "" })
 	local inner = UI.Frame(button, { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0) })
 	UI.Padding(inner, 14, 12)
@@ -220280,7 +220953,7 @@ function TycoonUI.Render(s)
 	local mode = latest and latest.mode or nil
 	local here = inTycoon()
 	local r = run()
-	if r then
+	if r or (pendingChoice ~= nil and os.clock() - pendingAt &gt;= TycoonUI.PendingSeconds) then
 		pendingChoice = nil
 	end
 	refs.where.Text = r and ("Dein Durchlauf: " .. tostring(r.name or (TY.Buildings[r.building] and TY.Buildings[r.building].name) or r.building) .. ", Stufe " .. tostring(r.stage) .. "/" .. tostring(TY.MaxStage) .. ".")

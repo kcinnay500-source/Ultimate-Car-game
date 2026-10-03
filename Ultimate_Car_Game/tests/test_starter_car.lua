@@ -321,7 +321,22 @@ return {
 		local pos = m:GetPivot().Position
 		T.check(horizontal(pos, stand) < 40, "neben dem Spieler (" .. string.format("%.1f", horizontal(pos, stand)) .. " Studs)")
 		T.check(onRoad(CS, pos) ~= nil, "steht auf einer Fahrbahn")
-		T.check(math.abs(pos.Z) <= 13, "auf der Spielermeile (Z " .. string.format("%.1f", pos.Z) .. ")")
+		-- 3.x: an der Spielermeile, aber nie in der Spur der Meile-Schleife (Z ±6,5): Absenkung/Randstreifen
+		T.check(math.abs(pos.Z) <= 25, "an der Spielermeile (Z " .. string.format("%.1f", pos.Z) .. ")")
+		T.eq(CS.InTrafficLane(pos), false, "nicht in einer Verkehrsspur (Z " .. string.format("%.1f", pos.Z) .. ")")
+		-- Spuren aus City.Animated.TrafficLoops: Meile-Schleife Z ±6,5, Innenstadtring X ±145,5 / ±158,5
+		T.eq(CS.InTrafficLane(Vector3.new(-300, -0.5, 6.5)), true, "Spur Meile ostwärts erkannt")
+		T.eq(CS.InTrafficLane(Vector3.new(-300, -0.5, -8)), true, "neben der Spur (Auto ragt hinein) erkannt")
+		T.eq(CS.InTrafficLane(Vector3.new(-300, -0.5, 18)), false, "Gehweg/Absenkung frei")
+		T.eq(CS.InTrafficLane(Vector3.new(145.5, -0.5, -100)), true, "Innenstadtring erkannt")
+		-- auch mitten auf der Meile stehend: der Flitzer landet nie in einer Spur
+		for _, at in ipairs({ Vector3.new(-200, 3, 0), Vector3.new(60, 3, 6), Vector3.new(300, 3, -9) }) do
+			g:Activate()
+			local spot = CS.RoadSpot(CS.States[pl], at, Vector3.new(1, 0, 0))
+			if spot then
+				T.eq(CS.InTrafficLane(spot.Position), false, "RoadSpot von " .. tostring(at) .. " nicht in einer Spur")
+			end
+		end
 		local look = m:GetPivot().LookVector
 		T.check(math.abs(look.Y) < 0.01 and math.abs(math.abs(look.X) - 1) < 0.01, "Nase entlang der Straße")
 		-- Spieler wurde zum Sitz gebracht (seat:Sit setzt ihn in Roblox hinein)
@@ -516,7 +531,17 @@ return {
 		local m = carModel(g, pl)
 		T.check(m ~= nil and m:GetAttribute("Model") == "flitzer", "Begrüßungs-Flitzer steht da")
 		if m then
-			T.check(horizontal(m:GetPivot().Position, g:Root(pl).Position) < 60, "neben dem Spieler")
+			-- 3.x: nach der Startwahl steht man auf dem eigenen Grundstück: der Flitzer kommt auf den eigenen Parkplatz
+			-- (CarSpawn) oder auf eine verkehrsfreie Stelle in der Nähe – nie in eine Verkehrsspur
+			local CSi = g:MiniServer("CarService")
+			local cs = CSi.States[pl]
+			local sp = g:Plot(pl) and g:Plot(pl):FindFirstChild("CarSpawn", true)
+			local at = m:GetPivot().Position
+			-- (die Spuren der Marktstraße sind tabu: nächste freie Stelle ist die Ecke an der Meile, ~66 Studs)
+			local nearPlayer = horizontal(at, g:Root(pl).Position) < 72
+			local atParking = sp ~= nil and horizontal(at, sp.Position) < 12
+			T.check(nearPlayer or atParking, "neben dem Spieler oder auf dem eigenen Parkplatz " .. tostring(at))
+			T.eq(CSi.InTrafficLane(at), false, "nicht in einer Verkehrsspur")
 			T.check(m.DriverSeat.Occupant == nil, "nicht eingesetzt")
 		end
 		T.check(g:HasToast(pl, GC.StarterCar.Text.intro), "Toast „Dein Flitzer! …“")

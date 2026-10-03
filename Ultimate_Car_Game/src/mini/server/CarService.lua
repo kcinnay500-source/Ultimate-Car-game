@@ -1351,11 +1351,21 @@ function CarService.Register(Actions, a)
 		if cs.car and cs.car.carId == data.id then
 			despawn(cs, "car", "sold")
 		end
+		-- 3.x: repariert (Wertbonus der Großen Werkstatt offen)? Vor dem Verkauf lesen – danach ist der Eintrag weg
+		local repaired = false
+		if car and type(CarRules.SaleBonus) == "function" then
+			local okB, f = pcall(CarRules.SaleBonus, d, data.id)
+			repaired = okB and type(f) == "number" and f > 1
+		end
 		local ok, value, sold = CarRules.Sell(d, data.id)
 		if ok then
 			cs.shine[data.id] = nil
 			toast(cs, CarCatalog.Model(sold.model).name .. " verkauft: +" .. credits(value))
-			return true -- 3.x: gelungener Verkauf -> Story-Ereignis action:mini_car_sell (Verkaufshaus c1_ah4)
+			-- 3.x: Story-Ereignis car_sold { repaired } (Verkaufshaus c1_ah4 zählt nur reparierte Wagen)
+			if api and type(api.event) == "function" then
+				pcall(api.event, ms, "car_sold", { repaired = repaired })
+			end
+			return true -- gelungener Verkauf -> außerdem action:mini_car_sell (Nebenmissionen)
 		elseif value then
 			toast(cs, value)
 		end

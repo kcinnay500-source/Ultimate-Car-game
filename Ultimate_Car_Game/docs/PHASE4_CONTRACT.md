@@ -488,3 +488,79 @@ Sticky (nur bei full): `unlocks.list`, `shop.catalog`, `story.missions`.
 - `tools/validate.py` bleibt bei 0 Fehlern/0 Warnungen; `tools/economy_sim.py --check` erweitert um Tycoon-Rundendauer,
   Level-90-Zeit, Missions-Anteil.
 - `STUDIO_TESTS.md` bekommt eine Prüfliste je neuem System (Milestone 9).
+
+## 14. Nachtrag 3.x: Spielermeile-Update (verbindlich)
+
+Die Hauptstraße heißt **Spielermeile** (vorher „Werkstattmeile“). Alles unten läuft über das bestehende
+MiniService-Muster (`Register/Init/OnJoin/Tick/OnLeave/OnCharacter/OnMode/OnEvent/SnapshotFields`), die beiden
+Remotes `GarageShared.Remotes.Command/Event` (MiniNet/MiniRemote) und `GameConfig` für alle Zahlen. Keine neuen Remotes.
+
+**Neue Aktionen (MiniNet, flach):**
+
+| Aktion | Nutzlast | Dienst | Prüfung im Server |
+|---|---|---|---|
+| `dev_open` | `{}` | `DevService` | `IsDev(player)`; sonst stumm (keine Antwort, kein Toast) |
+| `dev_set` | `{field, value}` | `DevService` | `IsDev` bei **jedem** Aufruf; `field` ∈ `level`, `xp`, `credits`, `credits_add`, `cash`, `start_reset`; `value` endlich, ganzzahlig, gedeckelt (`GameConfig.Dev.Max*`); `cash` nur im Modus `tycoon` mit Durchlauf. Einzige Aktion, bei der der Client Beträge sendet. |
+| `pw_open` | `{}` | `PublicWorkshopService` | Open World, Reichweite der Station |
+| `pw_repair` | `{car = "<Auto-Id>"}` | `PublicWorkshopService` | eigenes Auto, nicht Flitzer/DLC/Auktion, `RepairRange`, Credits reichen, einmal je Auto |
+| `pw_sell_parts` | `{part, count}` | `PublicWorkshopService` | `part` aus `GameConfig.PublicWorkshop.Parts`, `count` 1..`MaxSellCount` (Absicht), Lager, `DailyPartsLimit` |
+| `car_call` | `{}` | `CarService` | nur Open World, `StarterCar.CallCooldown`, nicht bei Zeitfahren/Probefahrt/Spielhalle/Reparatur/Lieferfahrt |
+| `car_favourite` | `{id}` | `CarService` | Flitzer (`CarCatalog.StarterCarId`) oder eigene Auto-Id |
+
+**`mini_notice`-Arten:** `dev` (`event` = `open` \| `update`, Werte für das Menü), `pw` (`event` = `open` \|
+`started` \| `resumed` \| `paused` \| `aborted` \| `done` \| `sold` \| `rejected`, Ansicht des Panels), `car_spawned`, `start` (unverändert).
+
+**Story-Ereignisse:** `api.storyEvent(ms, name, data)` → `StoryService.OnEvent`: `pw_repair {car, gain}`,
+`pw_parts_sold {part, count, value}`, `car_sold {repaired}` (Händler-Verkauf), dazu die bestehenden (`settle`,
+`settle:<auftrag>`, `delivery`, `car_bought`, `parts_bought`, `equipment_bought`, `action:<aktion>` …).
+
+**Dienste und Oberflächen:**
+
+- `DevService` (Server) / `DevUI` (Client, ScreenGui `DevMenu`, DisplayOrder 45, kein Tab). Öffnen: Chat
+  `GameConfig.Dev.Command` („/dev“; `TextChatCommand` + `Player.Chatted`) oder Strg+Umschalt+D (`dev_open`).
+  Berechtigt: `RunService:IsStudio()`, `GameConfig.Dev.AllowedUserIds`, Ersteller (`CreatorType User`) bzw.
+  Gruppenbesitzer. Jede Änderung: `print("[Dev] …")`, `api.worldChanged`, `api.dirty`. `start_reset` →
+  `StartService.ResetStart(ms, d)` (§6a).
+- `StartService` / `StartUI` (§6a): Wahl ist Pflicht, Story Kapitel 1 startet sofort (`StoryService.OnStartChosen`),
+  je Weg 6 Missionen (`GameConfig.Story.Chapters[1].Paths[typ]`, Verkaufshaus = `Missions`).
+- `PublicWorkshopService` / `PublicWorkshopUI` (Tab `grosswerkstatt`): Stationen `grosswerkstatt` (Annahme-Terminal)
+  und `teileankauf` (Theke) in `tools/worldgen/contract.py` (`STATIONS`/`ARRIVALS`), Welt
+  `Workspace.City.Districts.Grosswerkstatt` (`tools/worldgen/districts/grosswerkstatt.py`, Gelände X −640..−500,
+  Z −70..+70, Zufahrt über die Westmündung des Kreisels West). `PublicWorkshopService.ValueBonus(d, carId)` → Faktor
+  1..`MaxBonus` (1,35), den `CarRules.SalePrice`/`CarRules.Sell` in den Händler-Erlös multipliziert. Kosten immer
+  ≥ `MinCostShare` × Wertgewinn (kein Gewinn aus Kauf + Reparatur + Verkauf). Startweg-Boni:
+  `PathDiscount.werkstatt` −10 % Reparatur, `PathPartsBonus.schrottplatz` +10 % Teile-Ankauf.
+- `CarService` (Flitzer): `CarCatalog.Starter` (Id `flitzer`, Auto-Id −1), unverkäuflich, ohne Tuning/Lack/Auktion,
+  kein Garagenplatz, Begrüßungs-Flitzer nach der Startwahl (`StarterCar.IntroDelay`). Client: Taste G
+  (`DriveClient`/`MiniClient`), Handy-App „Auto rufen“ mit Garage (`PhoneUI`).
+
+**Datenfelder (unter `d.games`, Load = Whitelist, Tiefe ≤ 5):**
+
+- `meta.startPath` (`""` = Wahl offen), `meta.startOffered` (bool).
+- `flitzer = { owned = true, fav = 0 | <Auto-Id>, due = bool, intro = bool }` (`CarRules.LoadStarter`).
+- `pw = { cars = { ["<Auto-Id>"] = { b, g, k, p } }, day, sold, refund, repairs, partsSold }`
+  (`PublicWorkshopService.Load` über `MiniRules.ExtraGames.pw`; höchstens 64 Einträge).
+- DevService speichert nichts.
+
+**Snapshot-Felder:** `favCar`, `starterCar {id, name}`, `spawnedStarter`; `start {path, pending, choices[]}`;
+Panel-Daten der Großen Werkstatt und des Entwickler-Menüs kommen nur als `mini_notice`.
+
+**GameConfig-Abschnitte:** `GameConfig.Start` (Wege, Texte), `GameConfig.Story.Chapters[1].Paths`,
+`GameConfig.Dev` (`AllowedUserIds`, `Command`, `MaxLevel`, `MaxCredits`, `MaxCash`, `MaxXP`, `AddCredits`,
+`MaxUnlockCards`, `OpenCooldown`), `GameConfig.PublicWorkshop`, `GameConfig.StarterCar`.
+
+**Welt (tools/worldgen, mit `checks.py` geprüft):**
+
+- Teststrecke (`districts/dealer_track.py`, Mittellinie aus `vehicles.py`): Grand-Prix-Kurs bis Z ≈ 560 mit
+  Start/Ziel-Gerade, Kurve 1, S-Kurve, schneller Kurve, langer Gerade, Haarnadel, Zielkurve; 12 Checkpoints + Ziel
+  (`TrackRules`, Mindestzeiten je Abschnitt).
+- Weltrand (`horizon.build_edge` → `City.Ground.Naturrand`): geschlossene Hügelkette (Kamm X ±735, Z −515..+635) mit
+  Felsen und Bäumen; dahinter als letzte Sicherung unsichtbare Teile **nur** mit dem Namen `Grenze`. Je Zone
+  (Lobby/Tycoon, wenn im Place) ein Heckenring mit Bäumen und Felsen (`build_zone_edges`).
+- Horizont (`horizon.build` → `City.Horizon`): Fernboden bis ±1500 und Skyline-Türme in zwei Reihen (ohne Kollision,
+  Glasfront mit `NightNeon`, Warnlicht auf hohen Türmen); Lobby- und Tycoon-Flächen bleiben frei.
+- Verkehr (`CityClient`, Anim `traffic`): kinematisch mit `ACCEL` 6, `DECEL` 5, `DECEL_MAX` 12 st/s², Mindestabstand
+  `MIN_GAP` 5,5 Studs, Zeitlücke 1,5 s, Halt 3,5 Studs vor der Haltelinie, Kurventempo über `LAT_ACCEL`; Verkehrsautos
+  bekommen eine kollidierende Hitbox (man läuft nicht hindurch). Ampeln (Anim `signal`): 32-s-Programm aus der
+  Serverzeit, Gelb 3 s, Alles-Rot 1,5 s, Fußgängerampeln (`PedPhase`); `ground_roads` prüft, dass jede Haltelinie
+  befahren wird und einen passenden Fahrzeugkopf hat.

@@ -69,7 +69,10 @@ local function collect(g)
 			if p.Name == "Grenze" and p.CanCollide then
 				table.insert(walls, p)
 			end
-			if p.CanCollide and p.Transparency < 0.95 and p:IsDescendantOf(city.Ground) and p.Name ~= "Grasplatte" then
+			-- 3.x: auch der Naturrand um Lobby/Tycoon (City.Horizon.Naturrand, Place "all")
+			local zoneEdge = city:FindFirstChild("Horizon") and city.Horizon:FindFirstChild("Naturrand")
+			if p.CanCollide and p.Transparency < 0.95 and p.Name ~= "Grasplatte"
+				and (p:IsDescendantOf(city.Ground) or (zoneEdge ~= nil and p:IsDescendantOf(zoneEdge))) then
 				table.insert(natural, p)
 			end
 		end
@@ -129,6 +132,56 @@ return {
 					rr -= 1
 				end
 				T.check(nat ~= nil, who .. "natürliches Hindernis vor der Grenze")
+			end
+		end
+	end },
+
+	{ "3.x Zonenrand (Place all): von Lobby- und Tycoon-Spawn aus erst Boden, dann Hecke/Baum/Fels, dann Grenze - kein Weg auf den Fernboden oder ins Nichts", function(T, H)
+		local g = H.Garage({ noServer = true })
+		local city, floorAt, wallAt, naturalAt = collect(g)
+		local edge = city:FindFirstChild("Horizon") and city.Horizon:FindFirstChild("Naturrand")
+		T.check(edge ~= nil, "City.Horizon.Naturrand")
+		local spawns = { Lobby = Vector3.new(0, 0, -676), Tycoon = Vector3.new(0, 0, 850) }
+		for zn, origin in pairs(spawns) do
+			local zone = g:Find("Workspace." .. zn)
+			if T.check(zone ~= nil, zn .. " im Place") then
+				local cf, size = zone:GetBoundingBox()
+				local function inZone(x, z)
+					return math.abs(x - cf.Position.X) <= size.X / 2 and math.abs(z - cf.Position.Z) <= size.Z / 2
+				end
+				for k = 0, 15 do
+					local a = 2 * math.pi * k / 16
+					local ux, uz = math.cos(a), math.sin(a)
+					local who = string.format("%s Richtung %d°: ", zn, math.floor(math.deg(a) + 0.5))
+					local r, firstWall, void = 0, nil, nil
+					while r < 1200 do
+						local x, z = origin.X + ux * r, origin.Z + uz * r
+						if not inZone(x, z) and not floorAt(Vector3.new(x, -1.2, z)) then
+							void = r
+							break
+						end
+						if not firstWall and wallAt(Vector3.new(x, 3, z)) and wallAt(Vector3.new(x, 12, z)) and wallAt(Vector3.new(x, 90, z)) then
+							firstWall = r
+						end
+						if firstWall and r >= firstWall + 50 then
+							break
+						end
+						r += STEP
+					end
+					T.check(void == nil, who .. "kein Bodenende vor der Grenze (" .. tostring(void) .. ")")
+					if T.check(firstWall ~= nil, who .. "Grenze vorhanden") then
+						T.check(firstWall < 260, who .. "Grenze dicht an der Zone (r " .. firstWall .. ")")
+						local nat
+						local rr = firstWall
+						while rr > firstWall - 30 and not nat do
+							for _, y in ipairs({ 1, 3, 5 }) do
+								nat = nat or naturalAt(Vector3.new(origin.X + ux * rr, y, origin.Z + uz * rr))
+							end
+							rr -= 1
+						end
+						T.check(nat ~= nil, who .. "Hecke/Baum/Fels vor der Grenze")
+					end
+				end
 			end
 		end
 	end },

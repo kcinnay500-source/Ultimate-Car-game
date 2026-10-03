@@ -705,6 +705,7 @@ GameConfig.OW = {
 --   Neue Ereignisse 3.x: "settle:<auftragsart>" (abgerechneter 2.4.0-Auftrag dieser Art; "settle:inspection" = ein
 --   abgerechneter Fahrzeug-Check, auch mit freigegebenem Befund), "parts_bought" (Ersatzteile gekauft),
 --   "equipment_bought" (Werkstattgerät gekauft), "pw_repair" / "pw_parts_sold" (Große Werkstatt, PublicWorkshopService).
+--   kind = "own" mit pwStat (3.x): Lebenszeit-Zähler der Großen Werkstatt (d.games.pw.partsSold / repairs).
 --   kind = "own" mit owTyp/owStat: Lebenszeit-Zähler eines Open-World-Gebäudes (d.games.ow.buildings[owTyp][owStat],
 --   OWRules: packs = abgeholte Bauteil-Pakete, partsTotal = abgeholte Altteile, collects = Abholungen mit Ertrag)
 local Story = {}
@@ -745,11 +746,13 @@ Story.Chapters = {
 			{ id = "c1_ah5", title = "Dein erster Gebrauchtwagen", kind = "event", event = "car_bought", target = 1, minutes = 6,
 				text = "Spar deine Credits und kauf beim Händler im „Autohaus“ der Stadt (Stadtplan) deinen ersten Gebrauchtwagen, zum Beispiel den Komet C1. Dein Verkaufshaus gibt dir dort Rabatt.",
 				reward = { credits = 250, xp = 80 } },
-			{ id = "c1_ah3", title = "Ab in die Große Werkstatt", kind = "event", event = "pw_repair", target = 1, minutes = 5,
+			-- 3.x: kind own/pwStat (Profil d.games.pw): auch eine Reparatur vor dem Start der Mission zählt
+			{ id = "c1_ah3", title = "Ab in die Große Werkstatt", kind = "own", pwStat = "repairs", target = 1, minutes = 5,
 				text = "Fahr deinen Gebrauchtwagen in die „Große Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und lass ihn dort reparieren. Repariert bringt er beim Verkauf mehr.",
 				reward = { credits = 200, xp = 80 } },
-			{ id = "c1_ah4", title = "Den reparierten Wagen teurer verkaufen", kind = "sell", target = 1, repaired = true, events = { "action:mini_car_sell" }, minutes = 4,
-				text = "Verkauf jetzt teurer: Am „Kiesplatz (Gebrauchtwagen)“ bringt dein nächster Verkauf nach der Reparatur 50 % mehr Gewinn – oder verkauf deinen reparierten Wagen beim Händler (Garage im Menü M) zum höheren Preis.",
+			-- 3.x: Händler-Verkauf meldet CarService als car_sold { repaired } – nur reparierte Wagen zählen
+			{ id = "c1_ah4", title = "Den reparierten Wagen teurer verkaufen", kind = "sell", target = 1, repaired = true, events = { "car_sold" }, minutes = 4,
+				text = "Verkauf jetzt teurer: Am „Kiesplatz (Gebrauchtwagen)“ bringt dein nächster Verkauf nach der Reparatur 50 % mehr Gewinn – oder verkauf deinen reparierten Wagen beim Händler: Menü M → Tab „Autohaus“ → „Meine Autos“ → Verkaufen.",
 				reward = { credits = 150, xp = 80 } },
 		},
 		PathInfo = {
@@ -794,8 +797,9 @@ Story.Chapters = {
 				{ id = "c1_pr2", title = "Die erste Lieferfahrt", kind = "event", event = "delivery", target = 1, minutes = 5,
 					text = "Hol dir deinen Flitzer (dein kleines Startauto) und fahr zum blauen Marker „LIEFERUNG · START“ an der Straße. Bring die Lieferung dann rechtzeitig zum grünen Ziel-Marker.",
 					reward = { credits = 200, xp = 80 } },
-				{ id = "c1_pr3", title = "Bauteile für die Große Werkstatt", kind = "event", event = "pw_parts_sold", target = 1, minutes = 4,
-					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und verkauf dort Teile aus deiner Herstellung.",
+				-- 3.x: kind own/pwStat: auch Teile, die vor dem Start der Mission verkauft wurden, zählen
+				{ id = "c1_pr3", title = "Bauteile für die Große Werkstatt", kind = "own", pwStat = "partsSold", target = 1, minutes = 4,
+					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Teile-Ankauf (Große Werkstatt)“) und verkauf dort am Teile-Ankauf Teile aus deiner Herstellung.",
 					reward = { credits = 150, xp = 80 } },
 				{ id = "c1_pr4", title = "Zwei Lieferfahrten", kind = "event", event = "delivery", target = 2, minutes = 8,
 					text = "Deine Kunden warten! Fahr mit dem Flitzer noch zwei Lieferungen – vom blauen Start-Marker zum grünen Ziel-Marker.",
@@ -809,8 +813,8 @@ Story.Chapters = {
 				{ id = "c1_m1_schrottplatz", title = "Altteile vom Schrottplatz", kind = "own", owTyp = "schrottplatz", owStat = "partsTotal", target = 2, minutes = 4,
 					text = "Dein Schrottplatz hat schon Schrott und Altteile gesammelt. Drück M, öffne den Tab „Gebäude“ und tipp beim Schrottplatz auf „Abholen“.",
 					reward = { credits = 150, xp = 80 } },
-				{ id = "c1_sc2", title = "Teile an die Große Werkstatt", kind = "event", event = "pw_parts_sold", target = 1, minutes = 4,
-					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und verkauf dort deine Altteile.",
+				{ id = "c1_sc2", title = "Teile an die Große Werkstatt", kind = "own", pwStat = "partsSold", target = 1, minutes = 4,
+					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Teile-Ankauf (Große Werkstatt)“) und verkauf dort am Teile-Ankauf deine Altteile.",
 					reward = { credits = 150, xp = 80 } },
 				{ id = "c1_sc3", title = "Ran an die Schrottpresse", kind = "stat", stat = "clicks", target = 20, minutes = 3,
 					text = "Reise mit dem Stadtplan zur „Schrottpresse“, drück dort E und klick 20-mal auf die Presse.",

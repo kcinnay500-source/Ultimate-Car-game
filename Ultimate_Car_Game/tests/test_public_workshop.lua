@@ -319,7 +319,11 @@ return {
 		T.eq(b, cv.bonus, "Bonus gespeichert")
 		T.eq(d.games.pw.cars[id].p, nil, "kein offener Betrag mehr")
 		local vb = PW.ValueBonus(d, car.id)
-		T.near(vb, 1 + b / 100, 1e-9, "ValueBonus = 1 + Bonus")
+		-- 3.x: fester Wertgewinn g (Credits) statt Faktor auf den späteren Wert
+		local gFix = d.games.pw.cars[id].g
+		T.check(type(gFix) == "number" and gFix > 0, "fester Wertgewinn gespeichert")
+		T.near(vb, 1 + gFix / S.CarRules.SellValue(car), 1e-9, "ValueBonus = 1 + Gewinn / Wert")
+		T.near(vb, 1 + b / 100, 0.01, "≈ 1 + Bonus")
 		T.check(vb > 1 and vb <= GC.MaxBonus, "ValueBonus gedeckelt")
 		T.near(PW.ValueBonus(d, id), vb, 1e-9, "ValueBonus auch mit Text-Id")
 		T.eq(#S.events, 1, "ein Story-Ereignis")
@@ -334,6 +338,88 @@ return {
 		-- Laden behält den Bonus
 		local reloaded = PW.Load(d.games.pw)
 		T.eq(reloaded.cars[id].b, b, "Bonus übersteht Laden")
+		S.g:Close()
+	end },
+
+	{ "3.x Große Werkstatt: eine Reparatur wird nur einmal belohnt (Händler ODER Kiesplatz), Tuning danach ohne Aufschlag, Load g/k", function(T, H)
+		local S = serverSetup(H, T)
+		local PW, d, GC = S.PW, S.d, S.GC
+		local CR = S.CarRules
+		local SR = S.g:MiniShared("StoryRules")
+		d.money = 1e7
+		d.level = math.max(d.level or 1, 10)
+		local function repair(model)
+			local car = S.Grant(model)
+			local id = tostring(car.id)
+			S.Go("grosswerkstatt")
+			S.events = {}
+			T.eq(S.Call("pw_repair", { car = id }), true, model .. ": Reparatur gestartet")
+			S.Tick(GC.RepairSeconds + 0.5)
+			T.check(d.games.pw.cars[id] and d.games.pw.cars[id].b > 0, model .. ": repariert")
+			-- Verkabelung wie MiniService: api.storyEvent -> StoryService.OnEvent -> StoryRules.OnEvent
+			for _, e in ipairs(S.events) do
+				SR.OnEvent(d, e.name, e.data, NOW)
+			end
+			return car, id
+		end
+		local function kiesSale(tag)
+			local offer = SR.NextSale(d, "seed:" .. tag, d.level)
+			return SR.Sell(d, offer, 1, NOW), offer
+		end
+		local st = SR.Data(d)
+		st.sales.repaired = 0
+		-- 1) Reparatur -> Händler: Wertbonus, der Kiesplatz-Bonus derselben Reparatur verfällt
+		local car1, id1 = repair("komet")
+		T.eq(st.sales.repaired, 1, "Reparatur wartet am Kiesplatz")
+		local g1 = d.games.pw.cars[id1].g
+		local base1 = CR.SellValue(car1)
+		local before = d.money
+		local ok, value = CR.Sell(d, car1.id)
+		T.eq(ok, true, "Händler kauft")
+		T.eq(value, base1 + g1, "Händler zahlt Wert + festen Gewinn")
+		T.eq(d.money - before, value, "gutgeschrieben")
+		T.eq(st.sales.repaired, 0, "Kiesplatz-Bonus verbraucht (eine Reparatur, eine Belohnung)")
+		local res = kiesSale("a")
+		T.check(res and res.sold == true and res.repaired == false, "nächster Kiesplatz-Verkauf ohne ×1,5")
+		-- 2) Reparatur -> Kiesplatz: ×1,5 dort, beim Händler danach nur der normale Wert
+		local car2, id2 = repair("komet")
+		T.eq(st.sales.repaired, 1, "zweite Reparatur wartet")
+		local res2, offer2 = kiesSale("b")
+		T.check(res2 and res2.repaired == true, "Kiesplatz ×1,5")
+		T.eq(d.games.pw.cars[id2].k, 1, "Wertbonus des reparierten Autos verbraucht (k)")
+		T.eq(PW.ValueBonus(d, car2.id), 1, "kein Wertbonus mehr beim Händler")
+		T.eq(CR.SalePrice(d, car2), CR.SellValue(car2), "Händlerpreis ohne Bonus")
+		S.Go("grosswerkstatt")
+		T.eq(S.Call("pw_repair", { car = id2 }), nil, "keine zweite Reparatur")
+		T.eq(PW.Quote(d, car2).state, "repaired", "Ansicht: repariert")
+		T.eq(PW.Quote(d, car2).gain, 0, "Ansicht: kein Gewinn mehr")
+		local ok2 = CR.Sell(d, car2.id)
+		T.eq(ok2, true, "verkauft")
+		T.eq(st.sales.repaired, 0, "kein negativer Bonus-Zähler")
+		-- 3) Tuning nach der Reparatur: Händler zahlt fürs Tuning nur den normalen Anteil (kein Aufschlag)
+		local car3, id3 = repair("komet")
+		local price0 = CR.SalePrice(d, car3)
+		local sell0 = CR.SellValue(car3)
+		local part = S.g:MiniShared("CarCatalog").TuneParts[1]
+		car3[part] = 3
+		local sell1 = CR.SellValue(car3)
+		T.check(sell1 > sell0, "Tuning erhöht den Wert")
+		T.eq(CR.SalePrice(d, car3) - price0, sell1 - sell0, "Tuning-Anteil ohne Werkstatt-Aufschlag")
+		T.check(PW.ValueBonus(d, car3.id) <= GC.MaxBonus, "Faktor gedeckelt")
+		-- 4) Load: g/k nur mit Bonus, Whitelist
+		local a = PW.Load({ cars = { ["5"] = { b = 20, g = 300, k = 1 }, ["6"] = { b = 20, g = -4, k = "x" }, ["7"] = { p = 9, g = 50, k = 1 } } })
+		T.eq(a.cars["5"].g, 300, "g bleibt")
+		T.eq(a.cars["5"].k, 1, "k bleibt")
+		T.eq(a.cars["6"].g, nil, "g negativ fällt weg")
+		T.eq(a.cars["6"].k, nil, "k ungültig fällt weg")
+		T.eq(a.cars["7"].g, nil, "ohne Bonus kein g")
+		T.eq(a.cars["7"].k, nil, "ohne Bonus kein k")
+		T.check(H.DeepEqual(a, PW.Load(a)), "Load idempotent")
+		-- alte Einträge ohne g: Bonus nur auf den Grundwert (ohne Tuning)
+		d.games.pw.cars[id3].g = nil
+		local legacy = PW.ValueBonus(d, car3.id)
+		local expect = math.floor(CR.Value(car3) * S.g:MiniShared("CarCatalog").SellShare * d.games.pw.cars[id3].b / 100)
+		T.near(legacy, 1 + expect / CR.SellValue(car3), 1e-9, "alter Eintrag: Bonus nur auf den Grundwert")
 		S.g:Close()
 	end },
 

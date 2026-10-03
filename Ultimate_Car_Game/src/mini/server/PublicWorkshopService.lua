@@ -12,7 +12,9 @@
 --                                      beim Schrotthändler; füllt den Teile-Vorrat des Servers (Rabatt für alle)
 -- Story-Ereignisse über api.storyEvent (sonst api.event): "pw_repair" { car, gain }, "pw_parts_sold" { part, count, value }.
 --
--- Daten: d.games.pw = { cars = { ["<Auto-Id>"] = { b = Bonus in %, p = bezahlt (laufende Reparatur) } },
+-- Daten: d.games.pw = { cars = { ["<Auto-Id>"] = { b = Bonus in %, g = fester Wertgewinn in Credits (3.x),
+--                                                    k = 1: Bonus schon am Kiesplatz verbraucht (3.x),
+--                                                    p = bezahlt (laufende Reparatur) } },
 --                       day = "YYYY-MM-DD", sold = Teile heute, refund = Erstattung, repairs = n, partsSold = n }
 -- (Tiefe 3 unter games; Load ist eine Whitelist). Der Anfangszustand eines Autos ist nicht gespeichert, sondern fest
 -- aus Auto-Id und Modell berechnet (InitialCondition); erst die Reparatur speichert den Bonus.
@@ -36,6 +38,7 @@ local MiniLocale = require(MiniShared:WaitForChild("MiniLocale"))
 local CarCatalog = require(MiniShared:WaitForChild("CarCatalog"))
 local CarRules = require(MiniShared:WaitForChild("CarRules"))
 local MetaRules = require(MiniShared:WaitForChild("MetaRules"))
+local StoryRules = require(MiniShared:WaitForChild("StoryRules"))
 
 local PublicWorkshopService = {}
 
@@ -55,6 +58,7 @@ PublicWorkshopService.Text = {
 	excluded = "Dein Startauto ist immer top in Schuss – es braucht keine Reparatur.",
 	dlc = "Diese Sonderedition ist werkneu – sie braucht keine Reparatur.",
 	done = "Dieses Auto ist schon top in Schuss. Eine zweite Reparatur bringt nichts.",
+	usedKies = "Den Reparatur-Bonus dieses Autos hast du schon am Kiesplatz bekommen.",
 	small = "Eine Reparatur lohnt sich bei diesem Auto nicht.",
 	money = "Für die Reparatur fehlen dir %s.",
 	started = "Reparatur gestartet: %s (%s).",
@@ -172,6 +176,14 @@ function PublicWorkshopService.Load(raw: any, _d: any?, _now: number?): any
 					local e = {}
 					if b > 0 then
 						e.b = b
+						-- 3.x: fester Wertgewinn (Credits) und „am Kiesplatz verbraucht“
+						local gain = clampInt(rec.g, 0, 0, MAX_SAFE)
+						if gain > 0 then
+							e.g = gain
+						end
+						if rec.k == 1 or rec.k == true then
+							e.k = 1
+						end
 					end
 					if p > 0 and b == 0 then
 						e.p = p
@@ -258,7 +270,22 @@ local function blockedReason(car: any): string?
 	return nil
 end
 
--- Faktor für den Verkaufspreis: 1 + Bonus, nur für reparierte Autos; nie unter 1, nie über MaxBonus.
+-- 3.x: fester Wertgewinn einer fertigen Reparatur in Credits: der bei der Reparatur gespeicherte Betrag (g); alte
+-- Einträge ohne g: Bonus nur auf den Grundwert ohne Tuning (CarRules.Value × SellShare). Später eingebautes Tuning
+-- bekommt so keinen unbezahlten Aufschlag.
+local function fixedGain(car: any, rec: any): number
+	if finite(rec.g) and rec.g > 0 then
+		return rec.g
+	end
+	local okV, v = pcall(CarRules.Value, car)
+	if not okV or not finite(v) then
+		return 0
+	end
+	return math.floor(v * CarCatalog.SellShare * rec.b / 100)
+end
+
+-- Faktor für den Verkaufspreis (Händler: SellValue × Faktor): 1 + fester Wertgewinn / SellValue, nur für reparierte
+-- Autos, deren Bonus nicht schon am Kiesplatz verbraucht ist (k); nie unter 1, nie über MaxBonus.
 function PublicWorkshopService.ValueBonus(d: any, carId: any): number
 	local key = keyOf(carId)
 	local g = type(d) == "table" and d.games
@@ -268,10 +295,17 @@ function PublicWorkshopService.ValueBonus(d: any, carId: any): number
 	end
 	local rec = pw.cars[key]
 	local b = type(rec) == "table" and rec.b
-	if not finite(b) or b <= 0 then
+	if not finite(b) or b <= 0 or rec.k then
 		return 1
 	end
-	return math.clamp(1 + b / 100, 1, cfg().MaxBonus)
+	local car = CarRules.Find(d, tonumber(key))
+	local okB, base = pcall(CarRules.SellValue, car)
+	if not car or not okB or not finite(base) or base <= 0 then
+		return 1
+	end
+	local maxF = cfg().MaxBonus
+	local extra = math.min(fixedGain(car, rec), base * (maxF - 1))
+	return math.clamp(1 + extra / base, 1, maxF)
 end
 
 function PublicWorkshopService.OnCarSold(d: any, carId: any)
@@ -281,6 +315,10 @@ function PublicWorkshopService.OnCarSold(d: any, carId: any)
 		local rec = pw.cars[key]
 		if rec and (rec.p or 0) > 0 then
 			pw.refund = math.min(MAX_SAFE, pw.refund + rec.p)
+		end
+		-- 3.x: Händler hat den Wertbonus bezahlt -> der Kiesplatz-Bonus derselben Reparatur verfällt
+		if rec and finite(rec.b) and rec.b > 0 and not rec.k then
+			pcall(StoryRules.DropRepairedToken, d)
 		end
 		pw.cars[key] = nil
 	end
@@ -316,8 +354,12 @@ function PublicWorkshopService.Quote(d: any, car: any): any
 	local q = { key = key, name = m and m.name or tostring(car.model), value = value, cond = 100, bonus = 0, gain = 0, cost = 0 }
 	if rec and (rec.b or 0) > 0 then
 		q.state = "repaired"
+		if rec.k then
+			q.reason = PublicWorkshopService.Text.usedKies
+			return q
+		end
 		q.bonus = rec.b
-		q.gain = math.floor(value * rec.b / 100)
+		q.gain = value > 0 and math.floor(value * (PublicWorkshopService.ValueBonus(d, car.id) - 1) + 0.5) or 0
 		q.reason = PublicWorkshopService.Text.done
 		return q
 	end
@@ -506,7 +548,7 @@ function PublicWorkshopService.View(ms: any, d: any, t: number): any
 	end
 	local focus = "repair"
 	local nearP, nearR = nearParts(ms), nearRepair(ms)
-	if nearP or (path == "schrottplatz" and not s.job) then
+	if nearP or ((path == "schrottplatz" or path == "produktion") and not s.job) then
 		focus = "parts"
 	end
 	local pathDiscount = c.PathDiscount and c.PathDiscount[path] or 0
@@ -700,7 +742,7 @@ function PublicWorkshopService.Tick(ms: any, d: any, t: number): boolean
 	local bonus = job.bonus
 	local value = CarRules.SellValue(car)
 	local gain = math.floor(value * bonus / 100)
-	pw.cars[job.key] = { b = bonus }
+	pw.cars[job.key] = { b = bonus, g = gain } -- 3.x: fester Wertgewinn (Tuning danach bekommt keinen Aufschlag)
 	pw.repairs = math.min(MAX_SAFE, pw.repairs + 1)
 	toast(ms, string.format(T.finished, job.name, bonus, MiniLocale.Credits(gain)))
 	storyEvent(ms, "pw_repair", { car = job.key, gain = gain })

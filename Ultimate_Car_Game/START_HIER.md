@@ -7,14 +7,24 @@
 2. **Test → Play** (F5). Du startest in der **Lobby**.
 3. Taste **M** (oder Knopf „Minispiele“) öffnet das Menü. Im Tab **Lobby** wählst du **Open World** oder
    **Tycoon** und drückst **„Los geht's“**. Du kannst auch zu einem der Portale in der Halle laufen und **E** drücken.
-4. In der Open World startet beim ersten Mal das Tutorial in deiner eigenen Werkstatt. Danach: Stationen in der Stadt
-   mit **E** öffnen, Schnellreise im Tab **Stadtplan**, die Story beginnt am **Kiesplatz**.
+4. In der Open World wählst du beim ersten Mal, womit du startest: **Werkstatt**, **Verkaufshaus**, **Herstellung**
+   oder **Schrottplatz**. Danach beginnt sofort Kapitel 1 deiner Story (Karte „Deine Mission“ oben links mit
+   „Hinreisen“) und dein **Flitzer** fährt vor – ein kleines, schnelles Startauto, das du jederzeit mit **G** (oder
+   Handy → „Auto rufen“) holst. Stationen in der Stadt öffnest du mit **E**, Schnellreise im Tab **Stadtplan**. Die
+   **Große Werkstatt** (Autos reparieren, Teile verkaufen) steht am Westende der **Spielermeile**.
 5. **Tasten in der Werkstatt:** **E** = am markierten Punkt arbeiten (Werkzeug, Hebebühne und Motorhaube kommen
    automatisch) · **1** = freie Hand (nichts in der Hand) · **2–6** = Werkzeuge · **P** = Handy (Kunden anrufen,
    Nachrichten, Aufträge, Karte, Konto, Einstellungen) · **F** = Hebebühne · **H** = Motorhaube · **TAB** = Tablet ·
    **M** = Menü. Findet der OBD-Tester beim Fahrzeug-Check Fehler, ruf den Kunden mit dem Handy an.
 6. Zu zweit testen: **Test → Clients und Server**, 2 Spieler, Start. In der Lobby eine Party erstellen und den Code
    beim zweiten Spieler eingeben.
+
+7. **Entwickler-Menü** (nur für dich): im Chat **/dev** schreiben oder **Strg+Umschalt+D** drücken. Dort setzt du
+   Level, XP und Credits (Open World und Tycoon), im Tycoon auch das Bargeld, und kannst den Startweg zurücksetzen.
+   In Studio geht das immer. Damit es auch im veröffentlichten Spiel für dich geht, trag deine Roblox-UserId in
+   `src/mini/shared/GameConfig.lua` ein: `GameConfig.Dev.AllowedUserIds = { 123456789 }` (deine UserId ist die Zahl
+   in der Adresse deines Roblox-Profils, `roblox.com/users/<UserId>/profile`) und baue die Place-Dateien neu (unten).
+   Der Ersteller des Spiels (bei Gruppenspielen der Gruppenbesitzer) darf es auch ohne Eintrag; alle anderen sehen nichts.
 
 Was du alles ausprobieren kannst, steht als Abhak-Liste in **[STUDIO_TESTS.md](STUDIO_TESTS.md)**.
 
