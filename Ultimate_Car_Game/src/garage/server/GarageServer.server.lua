@@ -339,7 +339,12 @@ local function expansionQuote(p)
 end
 local function act(p,action,a)
     local d=p.profile.data
-    if action=="hello" then Mini.Hello(p);return push(p) end -- 3.0: Minispiel-Snapshot und Bestenliste
+    if action=="hello" then
+        -- 3.0: Ein hello, das beim ersten state noch unterwegs war, begrüßt nicht ein zweites Mal (siehe join)
+        if p.helloAtJoin and now()-p.helloAtJoin<2 then p.helloAtJoin=nil;return push(p) end
+        p.helloAtJoin=nil
+        Mini.Hello(p);return push(p) -- 3.0: Minispiel-Snapshot und Bestenliste
+    end
     if action=="travel" then
         if not C.StationNames[a.key] then return end
         if a.key=="shop" then resetInteraction(p);emit(p,"page","shop");return push(p) end
@@ -545,7 +550,11 @@ local function act(p,action,a)
     end
 end
 local function request(player,action,a)
-    local p=sessions[player];if not p or p.closing or type(action)~="string" or #action>32 then return end
+    local p=sessions[player]
+    -- 3.0: hello während des Ladens (Sitzungssperre, langsamer DataStore) nicht verlieren: der Client hört schon zu,
+    -- 3.0: sendet aber nach dem ersten state nichts mehr. join holt die Begrüßung nach, sobald die Sitzung steht.
+    if not p and action=="hello" and joining[player] then joining[player]="hello" end
+    if not p or p.closing or type(action)~="string" or #action>32 then return end
     if p.profile.transacting and action~="hello" and action~="abortInteraction" then
         if action=="mini_press_click" then return end -- 3.0: Klickpakete still verwerfen (der Client wiederholt sie), kein Toast 2×/s
         return toast(p,"Dein Kauf wird sicher gespeichert. Bitte einen Moment warten.")
@@ -598,6 +607,7 @@ local function join(player)
     end)
     if not p.world then joining[player]=nil;P.Save(profile,true);player:Kick("Alle Werkstätten sind belegt. Bitte nutze einen anderen Server.");return end
     sessions[player]=p
+    local helloEarly=joining[player]=="hello" -- 3.0: der Client hat schon während des Ladens hello gesendet
     joining[player]=nil
     local stats=Instance.new("Folder");stats.Name="leaderstats";stats.Parent=player
     for _,name in ipairs({"Credits","Level"}) do local n=Instance.new("NumberValue");n.Name=name;n.Parent=stats end
@@ -616,6 +626,7 @@ local function join(player)
     end
     player.CharacterAdded:Connect(character)
     if player.Character then task.spawn(character,player.Character) end
+    if helloEarly and sessions[player]==p and not p.closing then p.helloAtJoin=now();Mini.Hello(p) end -- 3.0: verpasste Begrüßung nachholen
     push(p)
 end
 Players.PlayerAdded:Connect(join)
