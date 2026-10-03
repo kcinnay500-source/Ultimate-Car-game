@@ -14,7 +14,7 @@
 -- Schutz gegen Scheingebote: beim Bieten zählt nur das freie Guthaben (Guthaben − eigene Höchstgebote auf anderen
 -- Losen). Fällt das Höchstgebot beim Zuschlag weg (nicht gedeckt, Bieter weg), läuft das Los ReopenSeconds weiter,
 -- damit NPCs und andere Spieler wieder bieten können (höchstens MaxReopens-mal); wer nicht zahlen konnte, darf
--- DropBanSeconds nicht bieten. Geldschieben: zwischen zwei Konten höchstens eine Übergabe je 24 h (beide Richtungen).
+-- DropBanSeconds nicht bieten. Wessen Gebot beim Zuschlag gestrichen wurde (lot.skipped), bietet auf diesem Los nicht mehr. Geldschieben: zwischen zwei Konten höchstens eine Übergabe je 24 h (beide Richtungen).
 -- Übergaben: AuctionService schreibt jede Übergabe zusätzlich in ein Auktionsbuch (AuctionLedger); ReconcileSeller/
 -- ReconcileBuyer gleichen beim Laden ab, falls nur eines der beiden Profile gespeichert wurde.
 --
@@ -91,6 +91,7 @@ local TEXT = {
 	money = "Nicht genug Credits für dieses Gebot.",
 	committed = "Nicht genug freie Credits: Deine Höchstgebote auf anderen Losen sind schon verplant.",
 	partner = "Mit diesem Verkäufer hast du in den letzten 24 Stunden schon gehandelt. Bieten ist erst danach wieder möglich.",
+	struck = "Dein Gebot für dieses Los wurde beim Zuschlag gestrichen. Auf dieses Los kannst du nicht mehr bieten.",
 }
 AuctionRules.Text = TEXT
 
@@ -492,6 +493,11 @@ end
 function AuctionRules.CheckBid(lot, bidder, amount, now)
 	if not AuctionRules.IsOpen(lot, now) then
 		return false, TEXT.ended
+	end
+	-- Beim Zuschlag gestrichen (Garage voll, Level, Profil …): auf diesem Los kein neues Gebot. PickWinner übergeht
+	-- Gestrichene; dürften sie wieder bieten, sperrte ihr Gebot am Höchstbetrag alle anderen aus und fiele dann still weg.
+	if type(lot.skipped) == "table" and lot.skipped[bidder.userId] then
+		return false, TEXT.struck
 	end
 	if lot.kind == "player" then
 		if bidder.userId == lot.sellerId then
