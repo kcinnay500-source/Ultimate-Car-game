@@ -111,6 +111,13 @@ function LeaderboardService.Write(ms, force, writable)
 	return ok
 end
 
+-- B-017: Nur echte Namen kommen dauerhaft in den Cache. Schlägt GetNameFromUserIdAsync fehl, gilt der Ersatztext
+-- „Spieler <id>“ nur vorläufig: frühestens nach NAME_RETRY_FIRST Sekunden wird erneut gefragt, bei jedem weiteren
+-- Fehlschlag verdoppelt sich der Abstand bis NAME_RETRY_MAX (dauerhaft fehlschlagende IDs kosten so kaum Budget).
+local NAME_RETRY_FIRST = 240
+local NAME_RETRY_MAX = 3600
+LeaderboardService.NameFailures = {} -- [userId] = { tries = n, retryAt = Zeit }
+
 local function nameFor(userId)
 	local cached = LeaderboardService.Names[userId]
 	if cached then
@@ -119,14 +126,28 @@ local function nameFor(userId)
 	local player = Players:GetPlayerByUserId(userId)
 	if player then
 		LeaderboardService.Names[userId] = player.DisplayName
+		LeaderboardService.NameFailures[userId] = nil
 		return player.DisplayName
+	end
+	local fallback = "Spieler " .. tostring(userId)
+	local now = LeaderboardService.Now()
+	local failed = LeaderboardService.NameFailures[userId]
+	if failed and now < failed.retryAt then
+		return fallback
 	end
 	local ok, name = pcall(function()
 		return Players:GetNameFromUserIdAsync(userId)
 	end)
-	local result = (ok and type(name) == "string") and name or ("Spieler " .. tostring(userId))
-	LeaderboardService.Names[userId] = result
-	return result
+	if ok and type(name) == "string" and name ~= "" then
+		LeaderboardService.Names[userId] = name
+		LeaderboardService.NameFailures[userId] = nil
+		return name
+	end
+	local tries = (failed and failed.tries or 0) + 1
+	local wait = math.min(NAME_RETRY_MAX, NAME_RETRY_FIRST * 2 ^ (tries - 1))
+	-- Zeit nach dem Aufruf (er kann warten)
+	LeaderboardService.NameFailures[userId] = { tries = tries, retryAt = LeaderboardService.Now() + wait }
+	return fallback
 end
 
 function LeaderboardService.RefreshDue(now)

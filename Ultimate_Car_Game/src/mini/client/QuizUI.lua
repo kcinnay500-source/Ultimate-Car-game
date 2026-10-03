@@ -85,8 +85,12 @@ function QuizUI.Render(s)
 		end
 	elseif not view and shownToken then
 		shownToken = nil
-		for _, b in ipairs(refs.answers) do
-			b.Visible = false
+		-- B-015: Der Server nimmt die Frage beim Beantworten aus dem Snapshot. Nach einer Antwort bleiben die Knöpfe
+		-- gesperrt und gefärbt (OnResult) stehen, bis eine neue Frage kommt; nur eine unbeantwortete Frage verschwindet.
+		if not answered then
+			for _, b in ipairs(refs.answers) do
+				b.Visible = false
+			end
 		end
 	end
 	refs.next.Text = (view and not answered) and "Andere Frage" or "Neue Frage"

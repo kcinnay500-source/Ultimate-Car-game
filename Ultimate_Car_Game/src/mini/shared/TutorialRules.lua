@@ -300,6 +300,24 @@ function TutorialRules.PendingPassiveEvent(d: any): string?
 	return m ~= nil and m.passive == true and step.event or nil
 end
 
+-- Schritt „Abholen“ des Startwegs (action:ow_collect), dessen geschenktes Gebäude schon einmal mit Ertrag abgeholt
+-- wurde (Lebenszeit-Zähler collects > 0, z. B. gleich im Schritt „Gebäude ansehen“): -> sein Ereignis. Sonst müsste
+-- der Spieler bis zum nächsten Ertrag warten (Herstellung: 6 Std.). Der Zähler steigt nur bei gelungenem Abholen und
+-- bleibt gespeichert (gilt auch nach einem Rejoin). Liest d.games.ow direkt (wie CrossBonus), ohne OWRules zu laden.
+local COLLECT_EVENT = "action:ow_collect"
+function TutorialRules.PendingCollectEvent(d: any): string?
+	local step = TutorialRules.Current(d)
+	if not step or step.event ~= COLLECT_EVENT then
+		return nil
+	end
+	local g = type(d) == "table" and d.games or nil
+	local ow = type(g) == "table" and g.ow or nil
+	local buildings = type(ow) == "table" and ow.buildings or nil
+	local b = type(buildings) == "table" and buildings[TutorialRules.Path(d)] or nil
+	local n = type(b) == "table" and b.collects or nil
+	return finite(n) and n > 0 and step.event or nil
+end
+
 ---------------------------------------------------------------- Beginner-Hinweise (je einmal, nur Beginner)
 -- Alle noch nicht gezeigten Hinweise zu einem Auslöser ("station:<key>", "first:<stat>", "unlock:<key>");
 -- sie gelten danach als gesehen (meta.hintsSeen). Leer ohne Beginner-Modus oder beim zweiten Aufruf.

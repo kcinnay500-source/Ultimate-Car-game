@@ -71,8 +71,18 @@ function Profiles.Save(profile, release)
     -- damit die Sitzungssperre danach freigegeben wird; ein Autosave wartet wie bisher nicht.
     if profile.saving or profile.receiptPending then
         if not release then return false end
-        local deadline = os.clock() + 12
-        while (profile.saving or profile.receiptPending) and profile.writable and os.clock() < deadline do task.wait(0.1) end -- 3.0: auch auf eine offene Quittung warten
+        -- 3.0: Ein laufendes Speichern (z. B. ein langsamer Autosave) endet immer von selbst (höchstens 3 Versuche);
+        -- 3.0: darauf wird ohne Frist gewartet, sonst bliebe sein älterer Stand der letzte und die Sperre hinge bis zum
+        -- 3.0: Ablauf. Die 12-s-Frist gilt nur noch für eine offene Quittung, die niemand mehr auflöst.
+        -- 3.0: (BindToClose begrenzt die Wartezeit selbst; nach einer verlorenen Sperre endet die Schleife über writable.)
+        local deadline
+        while (profile.saving or profile.receiptPending) and profile.writable do -- 3.0: auch auf eine offene Quittung warten
+            if not profile.saving then
+                deadline = deadline or os.clock() + 12
+                if os.clock() >= deadline then break end
+            end
+            task.wait(0.1)
+        end
         if profile.saving or profile.receiptPending then return false end
     end
     -- Another concurrent close/save may have released the lease while we waited.
@@ -126,6 +136,7 @@ end
 -- Geld-/Auto-Änderungen so lange an). Rückgabe wie GrantCredits: granted, new.
 --   apply(data: table) -> boolean   false = Kauf jetzt nicht anwendbar (Deckel, Garage voll): nichts geschrieben,
 --                                    Roblox wiederholt den Beleg später (NotProcessedYet)
+--   Dritter Rückgabewert "busy" (nur bei granted=false): ein anderes Speichern lief nach 10 s noch.
 --   receiptPending = { id, snapshot, amount? } bleibt bis zur Auflösung (Save/Autosave warten; Purchases wiederholt).
 function Profiles.GrantReceipt(profile,purchaseId,apply,commit)
     if not profile.writable or not store or type(purchaseId)~="string" or #purchaseId>160 or type(apply)~="function" then return false end
@@ -133,6 +144,9 @@ function Profiles.GrantReceipt(profile,purchaseId,apply,commit)
     if profile.receiptPending and profile.receiptPending.id~=purchaseId then return false end
     local deadline=os.clock()+10
     while profile.saving and os.clock()<deadline do task.wait(0.1) end
+    -- 3.0: Dritter Rückgabewert "busy": ein anderes Speichern läuft noch (langsamer DataStore). Nichts wurde
+    -- 3.0: geschrieben und receiptPending ist nicht gesetzt – Purchases wiederholt die Quittung in der Sitzung.
+    if profile.saving and profile.writable then return false,nil,"busy" end
     if profile.saving or not profile.writable then return false end
     if profile.receipts and profile.receipts[purchaseId] then return true,false end
     if not profile.receiptPending then

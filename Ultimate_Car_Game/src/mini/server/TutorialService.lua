@@ -160,12 +160,21 @@ local function grantReward(ms: any, d: any): boolean
 	return true
 end
 
-local function afterAdvance(ms: any, d: any, finished: boolean)
+local afterAdvance
+function afterAdvance(ms: any, d: any, finished: boolean)
 	if finished then
 		local again = TutorialRules.Rewarded(d) -- Belohnung gab es schon (Neustart am Kiosk): Endkarte ohne Belohnung
 		grantReward(ms, d)
 		stepNotice(ms, d, { finished = true, again = again })
 	else
+		-- Schritt „Abholen“ erreicht, das Geschenk ist aber schon abgeholt: gleich weiter (B-021)
+		local collected = TutorialRules.PendingCollectEvent(d)
+		if collected then
+			local advanced, done = TutorialRules.Advance(d, collected)
+			if advanced then
+				return afterAdvance(ms, d, done)
+			end
+		end
 		stepNotice(ms, d)
 	end
 end
@@ -355,6 +364,11 @@ function TutorialService.Tick(ms: any, d: any, now: number?): boolean
 	-- Passiv-Modus: Schritte, die er unmöglich macht (Kiesplatz-Verkauf), gelten als erledigt
 	local passiveEvent = TutorialRules.PendingPassiveEvent(d)
 	if passiveEvent and TutorialService.OnEvent(ms, d, passiveEvent) then
+		changed = true
+	end
+	-- Schritt „Abholen“, obwohl das Gebäude schon einmal abgeholt wurde (Profil stand vor B-021 dort): erledigt
+	local collectEvent = TutorialRules.PendingCollectEvent(d)
+	if collectEvent and TutorialService.OnEvent(ms, d, collectEvent) then
 		changed = true
 	end
 	return changed

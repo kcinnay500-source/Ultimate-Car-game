@@ -7,7 +7,7 @@ return {
 	source = "base+worldgen",
 	sources = {
 		{path="base/Ultimate_Car_Game_2.4.0.rbxlx",size=5636778,hash="481beef3348e9985"},
-		{path="tools/build_place.py",size=13830,hash="039c7acf0c9d8a70"},
+		{path="tools/build_place.py",size=14839,hash="6f73d3283a4aeed7"},
 		{path="tools/worldgen/__init__.py",size=5641,hash="409a9db42c596b4e"},
 		{path="tools/worldgen/checks.py",size=99455,hash="3b10c1e915ae2305"},
 		{path="tools/worldgen/contract.py",size=7532,hash="71e7f7e4084a4f10"},

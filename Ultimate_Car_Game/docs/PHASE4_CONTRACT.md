@@ -238,7 +238,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   Zahlen in `C.Inspection` (FindingChance 0,6, ApproveChance 0,8, RingSeconds 2,5, Kundennamen).
 - **Anruf:** `GarageServer.callCustomer(p, jobId?)` → `ok, msg`. Wege: 2.4.0-Aktion `call {id?}` über
   `Remotes.Command` (GarageClient ohne Handy) und Mini-Aktion `phone_call {id}` (`PhoneService`, Abklingzeit 1 s im
-  Netz + 3 s je Spieler, ID-Whitelist `^[%w_%-]+$` ≤ 64, Auftrag muss in `d.jobs` stehen) über `ctx.callCustomer`
+  Netz + 2 s je Spieler, ID-Whitelist `^[%w_%-]+$` ≤ 64, Auftrag muss in `d.jobs` stehen) über `ctx.callCustomer`
   aus `Mini.Init`. Ereignis Server → Client `call`: `{job, state="ringing", customer, car, finding, findingName}`,
   nach `RingSeconds` `{job, state="answer", accepted, text, result, customer}`; `{job, state="ended"}` bei Respawn,
   Verlassen oder wenn der Auftrag nicht mehr wartet. Ein Anruf je Sitzung (`p.calling`).
@@ -397,6 +397,7 @@ phone_call {id}                                                     -- Handy: Ku
 car_call  car_favourite {id}                                        -- 3.x: Auto rufen (Flitzer/Lieblingsauto, nur Open World)
 pw_open  pw_repair {car}  pw_sell_parts {part, count}               -- 3.x: Große Werkstatt (count = Absicht 1..50)
 dev_open  dev_set {field, value}                                    -- 3.x: Entwickler-Menü, Server prüft DevService.IsDev
+phone_hangup                                                        -- Handy: Auflegen während des Klingelns (Anruf wird nicht ausgewertet)
 prestige_claim {rank}
 ow_build {typ}  ow_collect {typ}  ow_passive {on}
 story_start {id}  story_claim {id}  story_sell {offer, price}      -- price = Stufe 1..3 (Absicht)

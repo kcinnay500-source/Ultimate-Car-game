@@ -316,6 +316,14 @@ local function callCustomer(p,jobId)
     end)
     return true,nil
 end
+-- 3.0: Auflegen während des Klingelns bricht den Anruf ab: keine Auswertung, der Auftrag bleibt in der Freigabe.
+local function hangUpCall(p)
+    local call=p.calling
+    if not call then return false end
+    p.calling=nil -- der Klingel-Timer erkennt den Abbruch an p.calling~=call
+    emit(p,"call",{job=call.job,state="ended"});push(p)
+    return true
+end
 local function token(p,key,job)
     p.confirm={token=Http:GenerateGUID(false),key=key,job=job,expires=now()+30}
     emit(p,"confirm",p.confirm)
@@ -339,7 +347,12 @@ local function expansionQuote(p)
 end
 local function act(p,action,a)
     local d=p.profile.data
-    if action=="hello" then Mini.Hello(p);return push(p) end -- 3.0: Minispiel-Snapshot und Bestenliste
+    if action=="hello" then
+        -- 3.0: Ein hello, das beim ersten state noch unterwegs war, begrüßt nicht ein zweites Mal (siehe join)
+        if p.helloAtJoin and now()-p.helloAtJoin<2 then p.helloAtJoin=nil;return push(p) end
+        p.helloAtJoin=nil
+        Mini.Hello(p);return push(p) -- 3.0: Minispiel-Snapshot und Bestenliste
+    end
     if action=="travel" then
         if not C.StationNames[a.key] then return end
         if a.key=="shop" then resetInteraction(p);emit(p,"page","shop");return push(p) end
@@ -545,7 +558,11 @@ local function act(p,action,a)
     end
 end
 local function request(player,action,a)
-    local p=sessions[player];if not p or p.closing or type(action)~="string" or #action>32 then return end
+    local p=sessions[player]
+    -- 3.0: hello während des Ladens (Sitzungssperre, langsamer DataStore) nicht verlieren: der Client hört schon zu,
+    -- 3.0: sendet aber nach dem ersten state nichts mehr. join holt die Begrüßung nach, sobald die Sitzung steht.
+    if not p and action=="hello" and joining[player] then joining[player]="hello" end
+    if not p or p.closing or type(action)~="string" or #action>32 then return end
     if p.profile.transacting and action~="hello" and action~="abortInteraction" then
         if action=="mini_press_click" then return end -- 3.0: Klickpakete still verwerfen (der Client wiederholt sie), kein Toast 2×/s
         return toast(p,"Dein Kauf wird sicher gespeichert. Bitte einen Moment warten.")
@@ -569,7 +586,8 @@ local function request(player,action,a)
 end
 -- 3.0: Minispiele an dieselben Wege anbinden (ein Eingang, ein Profil, keine neuen Remotes).
 Mini.Init({emit=emit,toast=toast,changed=changed,push=push,getSession=function(player) return sessions[player] end,moveTo=moveTo,now=now,
-    callCustomer=callCustomer}) -- 3.0: Handy-Anruf beim Kunden (Fahrzeug-Check)
+    callCustomer=callCustomer, -- 3.0: Handy-Anruf beim Kunden (Fahrzeug-Check)
+    hangUpCall=hangUpCall}) -- 3.0: Auflegen während des Klingelns
 Command.OnServerEvent:Connect(request)
 Purchases.Init(function(player) return sessions[player] end,function(p,product,result)
     emit(p,"purchaseFX",Purchases.FX(product)) -- 3.0: Titel je Art (Credits/Auto/Optik/Paket)
@@ -598,6 +616,7 @@ local function join(player)
     end)
     if not p.world then joining[player]=nil;P.Save(profile,true);player:Kick("Alle Werkstätten sind belegt. Bitte nutze einen anderen Server.");return end
     sessions[player]=p
+    local helloEarly=joining[player]=="hello" -- 3.0: der Client hat schon während des Ladens hello gesendet
     joining[player]=nil
     local stats=Instance.new("Folder");stats.Name="leaderstats";stats.Parent=player
     for _,name in ipairs({"Credits","Level"}) do local n=Instance.new("NumberValue");n.Name=name;n.Parent=stats end
@@ -616,6 +635,7 @@ local function join(player)
     end
     player.CharacterAdded:Connect(character)
     if player.Character then task.spawn(character,player.Character) end
+    if helloEarly and sessions[player]==p and not p.closing then p.helloAtJoin=now();Mini.Hello(p) end -- 3.0: verpasste Begrüßung nachholen
     push(p)
 end
 Players.PlayerAdded:Connect(join)
@@ -624,8 +644,12 @@ Players.PlayerRemoving:Connect(function(player)
     local p=sessions[player];if not p then return end
     advanceDays(p,now());p.closing=true;p.pending=nil
     Mini.OnLeave(p,p.profile.writable) -- 3.0: vor P.Save (Save gibt writable frei); blockiert nicht
+    -- 3.0: Werkstatt sofort abbauen, nicht erst nach dem Speichern: P.Save kann Sekunden dauern (zweiter Versuch,
+    -- 3.0: langsamer DataStore, laufender Autosave) – so lange blieb der Slot belegt und ein Nachrücker wurde gekickt.
+    -- 3.0: Die Sitzung bleibt bis nach dem Speichern eingetragen (closing), damit BindToClose darauf wartet.
+    W.Destroy(player)
     local saved=P.Save(p.profile,true);Mini.OnSaved(p,saved) -- 3.0: Bestenliste nur nach gelungenem Speichern
-    sessions[player]=nil;W.Destroy(player)
+    sessions[player]=nil
 end)
 task.spawn(function()
     while true do

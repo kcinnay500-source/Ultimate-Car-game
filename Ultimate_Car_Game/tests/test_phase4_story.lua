@@ -535,9 +535,16 @@ return {
 				table.insert(daily, s.id)
 			end
 		end
-		T.eq(#daily, #wantIds, "drei Nebenmissionen des Tages")
+		-- B-008: die Tagesauswahl steht vorn; dahinter dürfen nur Missionen stehen, die heute schon Fortschritt haben
+		-- oder abgeholt sind (sie bleiben nach einem Levelaufstieg bis zum Tageswechsel abholbar).
+		T.check(#daily >= #wantIds, "drei Nebenmissionen des Tages (mindestens die Tagesauswahl)")
 		for i, id in ipairs(wantIds) do
 			T.eq(daily[i], id, "Tagesauswahl deterministisch " .. id)
+		end
+		for i = #wantIds + 1, #daily do
+			local e = d.games.story.side[daily[i]]
+			T.check(type(e) == "table" and e.day == today and (e.claimed == true or (tonumber(e.n) or 0) > 0),
+				"zusätzliche Nebenmission nur mit heutigem Fortschritt: " .. tostring(daily[i]))
 		end
 		-- s_jobs (3 Aufträge) ist im Pool: Fortschritt über echte Aufträge, falls heute dabei; sonst Legende prüfen
 		local hasJobs = false

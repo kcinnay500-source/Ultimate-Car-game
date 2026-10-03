@@ -6,6 +6,8 @@
 --   * Verkäufer-Profil ohne die Übergabe gespeichert (Auto noch da): Auto entfernen, Auszahlung gutschreiben.
 --   * Käufer-Profil ohne die Übergabe gespeichert (tid fehlt in received): Auto hinzufügen, Preis abziehen.
 -- Beides ist idempotent (Auto-Id + Modell + Kaufzeit bzw. tid). Je Liste höchstens AuctionRules.MaxReceived Einträge.
+-- Buch und received werden unabhängig gekürzt (fehlgeschlagener Schreibversuch, andere Schreibreihenfolge): Einträge,
+-- die das Profil schon aus received verdrängt hat, erkennt ReconcileBuyer an der Marke d.games.auction.doneAt.
 -- Restrisiko: Absturz zwischen Übergabe im Speicher und Schreiben des Buchs, wenn in genau diesem Moment ein
 -- Autosave eines der beiden Profile landet (Millisekunden; siehe PHASE2_CONTRACT §6).
 local DataStoreService = game:GetService("DataStoreService")

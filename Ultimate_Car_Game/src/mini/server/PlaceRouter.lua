@@ -48,7 +48,7 @@ local CityService = require(script.Parent:WaitForChild("CityService"))
 
 local PlaceRouter = {}
 
-export type GoData = { single: boolean?, party: string?, players: { Player }? }
+export type GoData = { single: boolean?, party: string?, players: { Player }?, leader: number? }
 export type GoResult = { mode: string, teleported: boolean, simulated: boolean, placeId: number?, message: string? }
 
 local TEXT = {
@@ -140,8 +140,38 @@ function PlaceRouter.OnTeleportInitFailed(player: any, result: any, message: any
 	end
 end
 
+-- B-020: Zonen-Spawn der eigenen Variante von Beginn an aktiv. In den Places "lobby" und "tycoon" gibt es keine
+-- Stadt (kein CitySpawn), LobbySpawn/TycoonSpawn sind in der Welt abgeschaltet gebaut und der Plot-Spawn entsteht erst
+-- nach dem Laden des Profils – die Figur erschien bis dahin am Ursprung über dem Nichts. Gibt es einen aktiven
+-- CitySpawn (all-Place, Open World), bleibt er der einzige Erst-Spawn und hier ändert sich nichts.
+-- Rückgabe: der eingeschaltete SpawnLocation oder nil.
+function PlaceRouter.EnsureZoneSpawn(): Instance?
+	local kind = PlaceRouter.PlaceKind()
+	if kind ~= "lobby" and kind ~= "tycoon" then
+		return nil
+	end
+	local city = workspace:FindFirstChild("City")
+	local citySpawn = city and city:FindFirstChild("CitySpawn")
+	if citySpawn and citySpawn:IsA("SpawnLocation") and citySpawn.Enabled then
+		return nil
+	end
+	local zone = GameConfig.Zones[kind]
+	local model = zone and workspace:FindFirstChild(zone.model)
+	local spawn = model and zone.spawn and model:FindFirstChild(zone.spawn)
+	if spawn and spawn:IsA("SpawnLocation") then
+		spawn.Enabled = true
+		return spawn
+	end
+	warn("[Ortswechsel] Zonen-Spawn fehlt im Place " .. kind .. " – Figuren erscheinen am Ursprung")
+	return nil
+end
+
 function PlaceRouter.Init(c: any)
 	ctx = type(c) == "table" and c or nil
+	local okSpawn, errSpawn = pcall(PlaceRouter.EnsureZoneSpawn) -- B-020
+	if not okSpawn then
+		warn("[Ortswechsel] Zonen-Spawn: " .. tostring(errSpawn))
+	end
 	if failedConnection then
 		return
 	end
@@ -228,7 +258,7 @@ function PlaceRouter.SanitizeTeleportData(raw: any): { [string]: any }
 end
 
 -- Modus beim Beitritt (Vertrag §1). joinData = Player:GetJoinData() (oder nil). Setzt p.mode, p.single, p.partyCode.
--- Rückgabe: mode, info = { mode, single, party, source = "place" | "saved" | "teleport", placeKind }
+-- Rückgabe: mode, info = { mode, single, party, leader, source = "place" | "saved" | "teleport", placeKind }
 function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string, { [string]: any })
 	local kind = (type(placeKind) == "string" and GameConfig.PlaceKindSet[placeKind]) and placeKind or PlaceRouter.PlaceKind()
 	local d = p and p.profile and p.profile.data or nil
@@ -257,6 +287,12 @@ function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string
 	if type(td.party) == "string" then
 		party = string.upper(td.party)
 	end
+	-- B-016: Leiter-Kennung der Party (UserId). Unvertrauenswürdig wie der Party-Code: nur eine ganze positive Zahl,
+	-- und sie zählt nur zusammen mit einem Party-Code (LobbyService.OnJoin entscheidet, ob sie etwas bewirkt).
+	local leader = nil
+	if party and type(td.leader) == "number" and td.leader > 0 and td.leader % 1 == 0 and td.leader < 2 ^ 53 then
+		leader = td.leader
+	end
 	if p then
 		p.mode = mode
 		p.single = single
@@ -265,7 +301,7 @@ function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string
 	if d then
 		MetaRules.SetMode(d, mode)
 	end
-	return mode, { mode = mode, single = single, party = party, source = source, placeKind = kind }
+	return mode, { mode = mode, single = single, party = party, leader = leader, source = source, placeKind = kind }
 end
 
 ---------------------------------------------------------------- Zonen (Simulation)
@@ -420,6 +456,7 @@ local function teleport(p: any, kind: string, placeId: number, data: GoData)
 		mode = kind,
 		single = data.single == true,
 		party = type(data.party) == "string" and string.sub(data.party, 1, GameConfig.TeleportDataMaxLength) or "",
+		leader = (type(data.party) == "string" and finite(data.leader)) and data.leader or nil, -- B-016
 	})
 	local players = {}
 	local seen = {}

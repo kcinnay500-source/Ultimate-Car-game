@@ -1,4 +1,5 @@
--- PhoneService: das Handy auf dem Server. Eine Aktion: phone_call {id} – der Spieler ruft den Kunden eines
+-- PhoneService: das Handy auf dem Server. Aktionen: phone_hangup {} (Auflegen während des Klingelns: der Anruf wird
+-- nicht ausgewertet, der Auftrag bleibt in der Freigabe) und phone_call {id} – der Spieler ruft den Kunden eines
 -- Fahrzeug-Checks an, dessen OBD-Tester Fehler im Fehlerspeicher gefunden hat (2.4.0-Phase "approval").
 -- Der Server prüft die Nutzlast (String, Länge, Zeichen), eine Abklingzeit je Spieler und ruft dann
 -- api.callCustomer(p, id) – das ist GarageServer.callCustomer (über MiniService ctx/api durchgereicht). Ob der Kunde
@@ -8,9 +9,13 @@
 --
 --   Register(Actions, api)   Aktion phone_call registrieren. api = MiniService-api (toast, now …) plus
 --                            api.callCustomer(p, id) -> ok: boolean, msg: string?
+--                            api.hangUpCall(p) -> boolean (true = ein Anruf lief und ist beendet)
 local PhoneService = {}
 
-PhoneService.Cooldown = 3 -- Sekunden zwischen zwei Anrufen eines Spielers (MiniNet.Cooldowns.phone_call ≤ dieser Wert)
+-- Sekunden zwischen zwei Anruf-STARTS eines Spielers (MiniNet.Cooldowns.phone_call ≤ dieser Wert). B-023: muss kürzer
+-- sein als die Klingelzeit (Config.Inspection.RingSeconds = 2,5 s), sonst wird der nächste Kunde direkt nach der Antwort
+-- abgelehnt. Parallele Anrufe verhindert GarageServer (p.calling).
+PhoneService.Cooldown = 2
 PhoneService.MaxIdLength = 64
 
 PhoneService.Text = {
@@ -84,9 +89,24 @@ function PhoneService.Call(ms: any, data: any, d: any, now: any): boolean?
 	return true
 end
 
+-- Auflegen (reine Absicht, keine Nutzlast): bricht den klingelnden Anruf ab. Ohne laufenden Anruf passiert nichts.
+function PhoneService.HangUp(ms: any, _data: any, _d: any, _now: any): boolean?
+	local fn = api and api.hangUpCall
+	if type(fn) ~= "function" or not ms or not ms.p then
+		return nil
+	end
+	local ok, ended = pcall(fn, ms.p)
+	if not ok then
+		warn("[Handy] Auflegen fehlgeschlagen: " .. tostring(ended))
+		return nil
+	end
+	return ended == true or nil
+end
+
 function PhoneService.Register(Actions: any, a: any)
 	api = a
 	Actions.Register("phone_call", PhoneService.Call)
+	Actions.Register("phone_hangup", PhoneService.HangUp)
 end
 
 -- Nur für Tests: api ohne Actions setzen

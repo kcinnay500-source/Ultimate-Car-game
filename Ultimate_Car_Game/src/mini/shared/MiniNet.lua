@@ -105,6 +105,7 @@ MiniNet.Actions = {
 	-- (field = level | xp | credits | credits_add | cash | start_reset; value wird gerundet und gedeckelt)
 	dev_open = {},
 	dev_set = { field = "string", value = "number" },
+	phone_hangup = {}, -- Auflegen während des Klingelns: Anruf wird nicht ausgewertet (reine Absicht)
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -155,7 +156,7 @@ MiniNet.Cooldowns = {
 	side_claim = 0.5,
 	shop_prompt = 3,
 	start_choose = 1,
-	phone_call = 1, -- PhoneService prüft zusätzlich 3 s je Spieler
+	phone_call = 1, -- PhoneService prüft zusätzlich 2 s je Spieler (kürzer als die Klingelzeit)
 	car_call = 1, -- CarService prüft zusätzlich GameConfig.StarterCar.CallCooldown (5 s) je Spieler
 	car_favourite = 0.3,
 	pw_open = 1,

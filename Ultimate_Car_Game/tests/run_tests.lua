@@ -432,40 +432,77 @@ function Garage:Send(player, action, args)
 end
 
 -- Position im Event-Verlauf (für Events(..., since))
+-- B-018: Der Mock behält nur die jüngsten Nachrichten (Mock.SentKeep) und zählt die verworfenen in sentBase –
+-- die Position ist fortlaufend (sentBase + Index), eine Marke bleibt also auch nach dem Kürzen gültig.
 function Garage:Mark()
-	local event = self:Remote("Event")
-	return #(event.__data.sent or {})
+	local d = self:Remote("Event").__data
+	return (d.sentBase or 0) + #(d.sent or {})
 end
 
--- Alle Event-Nachrichten `kind` an den Spieler (Nutzlast als Kopie zum Sendezeitpunkt)
+local function sentEntry(e, kind)
+	return kind and e.args[2] or { kind = e.args[1], data = e.args[2], t = e.t }
+end
+
+-- Alle Event-Nachrichten `kind` an den Spieler (Nutzlast als Kopie zum Sendezeitpunkt).
+-- Liegt der gefragte Bereich (ab `since`, ohne Angabe ab Beginn) teilweise schon außerhalb des Verlaufs, gibt es
+-- einen Fehler statt eines stillen Teilergebnisses: dann vorher eine Marke setzen (g:Mark()).
 function Garage:Events(player, kind, since)
-	local event = self:Remote("Event")
+	local d = self:Remote("Event").__data
 	local out = {}
-	local sent = event.__data.sent or {}
-	for i = (since or 0) + 1, #sent do
+	local sent = d.sent or {}
+	local base = d.sentBase or 0
+	since = since or 0
+	if since < base then
+		error(string.format("Garage:Events: Nachrichten %d..%d sind schon verworfen (Mock.SentKeep = %d) – Marke später setzen",
+			since + 1, base, Mock.SentKeep), 2)
+	end
+	for i = since - base + 1, #sent do
 		local e = sent[i]
 		if e.player == player and (kind == nil or e.args[1] == kind) then
-			table.insert(out, kind and e.args[2] or { kind = e.args[1], data = e.args[2], t = e.t })
+			table.insert(out, sentEntry(e, kind))
 		end
 	end
 	return out
 end
 
+-- Jüngste passende Nachricht (ab `since`). Sucht von hinten; nur wenn im behaltenen Verlauf nichts passt und der
+-- gefragte Bereich weiter zurückreicht, ist das Ergebnis unbekannt -> Fehler statt nil.
 function Garage:Last(player, kind, since)
-	local list = self:Events(player, kind, since)
-	return list[#list]
+	local d = self:Remote("Event").__data
+	local sent = d.sent or {}
+	local base = d.sentBase or 0
+	since = since or 0
+	for i = #sent, math.max(since - base, 0) + 1, -1 do
+		local e = sent[i]
+		if e.player == player and (kind == nil or e.args[1] == kind) then
+			return sentEntry(e, kind)
+		end
+	end
+	if since < base then
+		error(string.format("Garage:Last: Nachrichten %d..%d sind schon verworfen (Mock.SentKeep = %d) – Marke später setzen",
+			since + 1, base, Mock.SentKeep), 2)
+	end
+	return nil
 end
 
 function Garage:Toasts(player, since)
 	return self:Events(player, "toast", since)
 end
 
+-- B-018: Ein Treffer im behaltenen Verlauf gilt immer. Nur „nicht gefunden“ ist unbekannt, wenn der gefragte
+-- Bereich teilweise schon verworfen ist -> dann Fehler (über Garage:Events) statt false.
 function Garage:HasToast(player, pattern, since)
-	for _, msg in ipairs(self:Toasts(player, since)) do
-		if type(msg) == "string" and msg:find(pattern, 1, true) then
+	local d = self:Remote("Event").__data
+	local sent = d.sent or {}
+	local base = d.sentBase or 0
+	for i = math.max((since or 0) - base, 0) + 1, #sent do
+		local e = sent[i]
+		local msg = e.args[2]
+		if e.player == player and e.args[1] == "toast" and type(msg) == "string" and msg:find(pattern, 1, true) then
 			return true
 		end
 	end
+	self:Events(player, "toast", since) -- wirft, wenn der Bereich nicht mehr vollständig ist
 	return false
 end
 

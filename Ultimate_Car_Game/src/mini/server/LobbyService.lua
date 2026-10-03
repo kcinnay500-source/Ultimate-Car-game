@@ -30,7 +30,8 @@ local PlaceRouter = require(script.Parent:WaitForChild("PlaceRouter"))
 
 local LobbyService = {}
 
-export type Party = { code: string, leader: Player, members: { Player }, createdAt: number }
+-- expectLeader (B-016): UserId des ursprünglichen Leiters, solange nach einem Gruppen-Teleport ein Mitglied vorläufig führt
+export type Party = { code: string, leader: Player, members: { Player }, createdAt: number, expectLeader: number? }
 
 LobbyService.Parties = {} :: { [string]: Party } -- [code] = Party (serverlokal)
 LobbyService.MemberOf = setmetatable({}, { __mode = "k" }) :: { [Player]: Party }
@@ -226,6 +227,38 @@ local function removeFromParty(player: Player, reason: string)
 	return party
 end
 
+-- B-016: Ankunft des ursprünglichen Leiters nach einem Gruppen-Teleport. Übernimmt nur, wenn die Party auf genau ihn
+-- wartet (expectLeader, gesetzt vom Ersten am Ziel) und die Wartezeit läuft; danach gibt es keine zweite Übergabe.
+-- Die eigene Angabe des Ankömmlings zählt nicht – so kann niemand per TeleportData eine geführte Party übernehmen.
+local function takeOverLeader(party: Party, player: Player, t: number): boolean
+	if party.expectLeader ~= player.UserId then
+		return false
+	end
+	party.expectLeader = nil
+	if party.leader == player or t - party.createdAt > (GameConfig.Party.LeaderWaitSeconds or 120) then
+		return false
+	end
+	local i = memberIndex(party, player)
+	if not i then
+		return false
+	end
+	local previous = party.leader
+	table.remove(party.members, i)
+	table.insert(party.members, 1, player) -- Leiter vorn (Teleport-Reihenfolge, Nachrücken beim Verlassen)
+	party.leader = player
+	notifyParty(party, { event = "leader", userId = player.UserId, name = playerName(player) }, player)
+	local leaderMs = msOf(player)
+	if leaderMs then
+		toast(leaderMs, TEXT.partyLeaderYou)
+		dirty(leaderMs)
+	end
+	local previousMs = msOf(previous)
+	if previousMs then
+		dirty(previousMs)
+	end
+	return true
+end
+
 -- Mitglieder, die noch im Spiel sind (für Teleport/Simulation)
 local function livingMembers(party: Party): { Player }
 	local out = {}
@@ -291,7 +324,10 @@ local function travel(ms: any, mode: string, fromAction: string): boolean
 		partyCode = LobbyService.PartyOf(ms.player).code
 	end
 	local members = party and livingMembers(party) or nil
-	local ok, res = PlaceRouter.Go(p, mode, { single = settings.single, party = partyCode, players = members })
+	-- B-016: Leiter-Kennung reist mit (am Ziel führt sonst, wer zuerst geladen hat)
+	local codeParty = partyCode and LobbyService.Parties[partyCode] or nil
+	local leaderId = codeParty and codeParty.leader and codeParty.leader.UserId or nil
+	local ok, res = PlaceRouter.Go(p, mode, { single = settings.single, party = partyCode, players = members, leader = leaderId })
 	if not ok then
 		if type(res) == "string" then
 			toast(ms, res)
@@ -549,9 +585,15 @@ function LobbyService.OnJoin(ms: any, d: any, t: number?)
 		if party then
 			if joinParty(party, ms.player) then
 				notifyParty(party, { event = "joined", userId = ms.player.UserId, name = playerName(ms.player) })
+				takeOverLeader(party, ms.player, t) -- B-016: der ursprüngliche Leiter übernimmt vom vorläufigen
 			end
 		else
-			createParty(ms.player, code, t)
+			local created = createParty(ms.player, code, t)
+			-- B-016: Wer zuerst lädt und einen anderen als Leiter nennt, führt nur vorläufig. Die Kennung kommt aus
+			-- TeleportData (manipulierbar) und gilt deshalb nur für diese eine, eben von ihm selbst angelegte Party.
+			if created and finite(info.leader) and info.leader ~= ms.player.UserId then
+				created.expectLeader = info.leader
+			end
 		end
 	end
 	dirty(ms)

@@ -366,6 +366,7 @@ return {
 		local prompts = g.env.services.MarketplaceService.__data.prompts
 		T.eq(#prompts, 1, "eine Kaufaufforderung")
 		T.eq(prompts[1] and prompts[1].passId, 222, "richtige Pass-ID")
+		g.env.services.MarketplaceService.__data.owned["302:222"] = true -- B-019: echter Kauf = Besitz bestätigt
 		g.env.services.MarketplaceService.PromptGamePassPurchaseFinished:Fire(b, 222, true)
 		g:Flush()
 		T.eq(g:MiniState(b).passes.pressPlus, true, "Kauf wirkt sofort in der Sitzung")

@@ -6,7 +6,8 @@
 --                                    Pass-Schlüssel aus GameConfig.Shop.Passes; Id 0 -> „noch nicht eingerichtet“,
 --                                    kein Prompt; sonst purchasePrompt {productId} über den 2.4.0-Weg bzw.
 --                                    PromptGamePassPurchase)
---   Init(ctx?)                       verbindet PromptGamePassPurchaseFinished (pcall); ctx.emit (MiniService-ctx) ist
+--   Init(ctx?)                       verbindet PromptGamePassPurchaseFinished (pcall; Gutschrift erst nach
+--                                    bestätigtem Besitz, MiniPasses.Confirm); ctx.emit (MiniService-ctx) ist
 --                                    optional – ohne ctx geht purchasePrompt direkt über GarageShared.Remotes.Event
 --   OnJoin(ms, d, now)               Sitzung merken, Game-Pass-Besitz prüfen (UserOwnsGamePassAsync in pcall, kann
 --                                    warten) und die Pass-Kosmetik idempotent gutschreiben (ShopRules.Grant)
@@ -34,6 +35,7 @@ local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 local ShopRules = require(MiniShared:WaitForChild("ShopRules"))
 local CarCatalog = require(MiniShared:WaitForChild("CarCatalog"))
 local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
+local MiniPasses = require(script.Parent:WaitForChild("MiniPasses")) -- B-019: Besitz-Bestätigung nach Kaufereignis
 
 local ShopService = {}
 
@@ -256,6 +258,14 @@ local function prompt(ms: any, data: any, d: any, t: number): boolean
 		end
 		return true
 	end
+	-- B-014: Sind Robux-Käufe hier gar nicht möglich (Studio, Profil nicht speicherbar – z. B. temporär nach einem
+	-- Ladefehler, dann immer Level 1), kommt dieser Hinweis vor Besitz- und Level-Riegel aus ShopRules.CanPrompt.
+	-- Unbekanntes Produkt und Platzhalter-Id 0 behalten ihre eigenen Hinweise (CanPrompt).
+	local known = ShopRules.Product(data.product)
+	if known and ShopRules.ProductId(known) > 0 and (RunService:IsStudio() or not api.writable(ms)) then
+		toast(ms, TEXT_LOCAL.noRobux)
+		return false
+	end
 	local ok, msg, productId, product = ShopRules.CanPrompt(d, data.product)
 	if not ok then
 		toast(ms, msg)
@@ -263,10 +273,6 @@ local function prompt(ms: any, data: any, d: any, t: number): boolean
 	end
 	if ms.shopDeferred and ms.shopDeferred[product.key] then
 		toast(ms, string.format(TEXT.receiptWaiting, tostring(product.name or product.key)))
-		return false
-	end
-	if RunService:IsStudio() or not api.writable(ms) then
-		toast(ms, TEXT_LOCAL.noRobux)
 		return false
 	end
 	if product.kind == "credits" then
@@ -310,10 +316,18 @@ function ShopService.Init(c: any?)
 			if not pass or not ms or not alive(ms) then
 				return
 			end
-			local okA, errA = pcall(applyPass, ms, ms.p.profile.data, pass, true)
-			if not okA then
-				warn("[Shop] Game Pass " .. tostring(pass.key) .. ": " .. tostring(errA))
-			end
+			-- B-019: das Ereignis allein ist kein Beleg (von manipulierten Clients auslösbar) – Gutschrift erst,
+			-- wenn UserOwnsGamePassAsync den Besitz bestätigt (eigener Task, kurze Wiederholung wegen Cache)
+			MiniPasses.Confirm(player.UserId, id, function()
+				local cur = sessions[player]
+				if not cur or not alive(cur) then
+					return
+				end
+				local okA, errA = pcall(applyPass, cur, cur.p.profile.data, pass, true)
+				if not okA then
+					warn("[Shop] Game Pass " .. tostring(pass.key) .. ": " .. tostring(errA))
+				end
+			end)
 		end)
 	end)
 	if not ok then
