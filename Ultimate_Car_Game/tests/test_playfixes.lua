@@ -45,6 +45,11 @@ return {
 		T.eq(d.games.meta.lastMode, "openworld", "lastMode gespeichert")
 		local modeNotice = g:Notices(pl, "mode", m)[1]
 		T.check(modeNotice ~= nil and modeNotice.mode == "openworld", "mini_notice mode openworld")
+		-- neues Profil: zuerst die Startwahl, das Tutorial wartet so lange
+		T.eq(#g:Notices(pl, "tutorial", m), 0, "kein Tutorial vor der Startwahl")
+		T.check(g:MiniSnapshot(pl).start and g:MiniSnapshot(pl).start.pending == true, "Startwahl offen")
+		T.eq(g:Act(pl, "start_choose", { path = "werkstatt", rid = 901 }), "ok", "start_choose werkstatt")
+		g:Advance(0.6)
 		local started = g:Notices(pl, "tutorial", m)
 		T.check(#started >= 1 and started[1].started == true, "Pflicht-Tutorial gestartet")
 		T.eq(g:MiniSnapshot(pl).mode, "openworld", "Snapshot mode")

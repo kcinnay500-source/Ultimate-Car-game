@@ -8,10 +8,14 @@
 -- offene Mission). Zahlen und Texte: GameConfig.Story.
 -- Geld/XP ändern nur Claim, SideClaim und Sell (über MiniRules.AddMoney/AddIncome/GainXP); MiniRules wird erst beim
 -- Aufruf geladen (MiniRules lädt dieses Modul für Default/Load – kein Ring beim require).
+-- Startweg (meta.startPath, GameConfig.Start): ein Kapitel mit PathMissions ersetzt die Mission an Stelle PathSlot je Weg
+-- (MissionAt/Missions); ohne Weg gilt Missions[PathSlot]. Eine Stelle ist erledigt, sobald irgendeine ihrer Varianten in
+-- done steht; eine schon aktive Variante bleibt die Mission ihrer Stelle, bis sie abgeholt ist.
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local Unlocks = require(script.Parent:WaitForChild("Unlocks"))
 local C = require(script.Parent.Parent:WaitForChild("Config"))
 local MiniLocale = require(script.Parent:WaitForChild("MiniLocale"))
+local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
 
 local StoryRules = {}
 
@@ -21,9 +25,12 @@ export type Mission = {
 	stat: string?, absolute: boolean?, event: string?, events: { string }?, maxTime: number?,
 	tier: number?, special: boolean?, typ: string?, stage: number?, money: number?, bays: number?, cars: { string }?,
 	equipmentAll: boolean?, credits: number?, xp: number?, chapter: number?, index: number?, side: boolean?, legend: boolean?,
-	unlock: string?, needsCar: boolean?,
+	unlock: string?, needsCar: boolean?, owTyp: string?, owStat: string?,
 }
-export type Chapter = { id: number, title: string, intro: string, unlockLevel: number, Missions: { Mission } }
+export type Chapter = {
+	id: number, title: string, intro: string, unlockLevel: number, Missions: { Mission },
+	PathSlot: number?, PathMissions: { [string]: Mission }?,
+}
 export type Active = { id: string, progress: number, startedAt: number, party: number }
 export type SideEntry = { n: number, day: string, claimed: boolean }
 export type Story = {
@@ -97,13 +104,35 @@ local function index(): any
 	if cache and cache.S == S then
 		return cache
 	end
-	local ix = { S = S, missionById = {}, chapterOf = {}, sideById = {}, legendIds = {}, poolIds = {} }
+	local ix = { S = S, missionById = {}, chapterOf = {}, sideById = {}, legendIds = {}, poolIds = {}, variants = {} }
 	for ci, ch in ipairs(S.Chapters) do
+		ix.variants[ci] = {}
 		for mi, m in ipairs(ch.Missions) do
 			m.chapter = ci
 			m.index = mi
 			ix.missionById[m.id] = m
 			ix.chapterOf[m.id] = ci
+			ix.variants[ci][mi] = { m }
+		end
+		-- Varianten je Startweg (PathMissions) an Stelle PathSlot; dieselbe Tabelle wie Missions[slot] zählt nur einmal
+		local slot = type(ch.PathSlot) == "number" and ch.PathSlot or 1
+		if type(ch.PathMissions) == "table" and ix.variants[ci][slot] then
+			local list = ix.variants[ci][slot]
+			local keys = {}
+			for typ in pairs(ch.PathMissions) do
+				table.insert(keys, typ)
+			end
+			table.sort(keys)
+			for _, typ in ipairs(keys) do
+				local m = ch.PathMissions[typ]
+				if type(m) == "table" and not ix.missionById[m.id] then
+					m.chapter = ci
+					m.index = slot
+					ix.missionById[m.id] = m
+					ix.chapterOf[m.id] = ci
+					table.insert(list, m)
+				end
+			end
 		end
 	end
 	for _, m in ipairs(S.Side.Pool or {}) do
@@ -136,6 +165,76 @@ end
 
 function StoryRules.SideDef(id: any): Mission?
 	return type(id) == "string" and index().sideById[id] or nil
+end
+
+-- Alle Missionen eines Kapitels samt Startweg-Varianten (Prüfungen, Tests)
+function StoryRules.AllMissions(n: number): { Mission }
+	local out = {}
+	for _, list in ipairs(index().variants[n] or {}) do
+		for _, m in ipairs(list) do
+			table.insert(out, m)
+		end
+	end
+	return out
+end
+
+-- Ist die Stelle i von Kapitel n erledigt (irgendeine Variante in done)?
+local function slotDone(st: any, n: number, i: number): boolean
+	local list = index().variants[n] and index().variants[n][i] or nil
+	if not list then
+		return false
+	end
+	for _, m in ipairs(list) do
+		if st.done[m.id] then
+			return true
+		end
+	end
+	return false
+end
+StoryRules.SlotDone = slotDone
+
+-- Gehört die Mission zur Stelle i von Kapitel n?
+local function isVariantOf(def: any, n: number, i: number): boolean
+	return type(def) == "table" and def.chapter == n and def.index == i
+end
+
+-- Mission an Stelle i von Kapitel n für dieses Profil: eine aktive Variante dieser Stelle, sonst die Variante des
+-- Startwegs (PathMissions[startPath]), sonst Missions[i]
+function StoryRules.MissionAt(d: any, n: number, i: number): Mission?
+	local ch = StoryRules.Chapter(n)
+	if not ch then
+		return nil
+	end
+	local base = ch.Missions[i]
+	if not base then
+		return nil
+	end
+	local st = type(d) == "table" and type(d.games) == "table" and type(d.games.story) == "table" and d.games.story or nil
+	if st and type(st.active) == "table" then
+		local a = index().missionById[st.active.id]
+		if a and isVariantOf(a, n, i) then
+			return a
+		end
+	end
+	local slot = type(ch.PathSlot) == "number" and ch.PathSlot or 1
+	if i == slot and type(ch.PathMissions) == "table" then
+		local path = MetaRules.StartPath(d)
+		local v = path ~= "" and ch.PathMissions[path] or nil
+		if type(v) == "table" then
+			return v
+		end
+	end
+	return base
+end
+
+-- Missionen eines Kapitels für dieses Profil (Startweg-Variante an PathSlot)
+function StoryRules.Missions(d: any, n: number): { Mission }
+	local ch = StoryRules.Chapter(n)
+	local out = {}
+	for i = 1, ch and #ch.Missions or 0 do
+		table.insert(out, StoryRules.MissionAt(d, n, i) :: Mission)
+	end
+	return out
 end
 
 function StoryRules.Target(def: Mission): number
@@ -206,9 +305,9 @@ end
 -- Kapitel-Missionen, deren Voraussetzung über dem Kapitel-Level liegt (leer = alles erreichbar); für den Test
 function StoryRules.UnlockCheck(): { string }
 	local out = {}
-	for ci, ch in ipairs(config().Chapters) do
+	for ci, _ in ipairs(config().Chapters) do
 		local open = StoryRules.ChapterLevel(ci)
-		for _, m in ipairs(ch.Missions) do
+		for _, m in ipairs(StoryRules.AllMissions(ci)) do
 			local need = StoryRules.RequiredLevel(m)
 			if need > open then
 				table.insert(out, string.format("%s: braucht Level %d, Kapitel %d öffnet ab %d", m.id, need, ci, open))
@@ -232,8 +331,8 @@ local function recompute(st: Story)
 	local chapter = 1
 	while chapter < #S.Chapters do
 		local all = true
-		for _, m in ipairs(S.Chapters[chapter].Missions) do
-			if not st.done[m.id] then
+		for i = 1, #S.Chapters[chapter].Missions do
+			if not slotDone(st, chapter, i) then
 				all = false
 				break
 			end
@@ -246,8 +345,8 @@ local function recompute(st: Story)
 	st.chapter = chapter
 	local missions = S.Chapters[chapter].Missions
 	st.step = #missions + 1
-	for i, m in ipairs(missions) do
-		if not st.done[m.id] then
+	for i = 1, #missions do
+		if not slotDone(st, chapter, i) then
 			st.step = i
 			break
 		end
@@ -283,7 +382,7 @@ function StoryRules.Load(raw: any, d: any, now: any): Story
 	local a = r.active
 	if type(a) == "table" and type(a.id) == "string" then
 		local def = ix.missionById[a.id]
-		if def and def.chapter == st.chapter and not st.done[a.id] then
+		if def and def.chapter == st.chapter and not st.done[a.id] and not slotDone(st, def.chapter, def.index or 0) then
 			st.active = {
 				id = a.id,
 				progress = loadInt(a.progress, 0, 0, StoryRules.Target(def)),
@@ -331,7 +430,7 @@ function StoryRules.Current(d: any): any
 		return { chapter = 1, step = 1, active = false, mission = nil, finished = false }
 	end
 	local ch = StoryRules.Chapter(st.chapter)
-	local mission = ch and ch.Missions[st.step] or nil
+	local mission = ch and StoryRules.MissionAt(d, st.chapter, st.step) or nil
 	return {
 		chapter = st.chapter, step = st.step, active = st.active, mission = mission,
 		finished = ch ~= nil and st.chapter == StoryRules.ChapterCount() and mission == nil,
@@ -429,7 +528,13 @@ local function conditionProgress(d: any, def: Mission): number?
 	if def.kind == "build" then
 		return math.min(target, buildingStage(d, def.typ or ""))
 	elseif def.kind == "own" then
-		if finite(def.money) then
+		if type(def.owTyp) == "string" and type(def.owStat) == "string" then
+			-- Lebenszeit-Zähler eines Open-World-Gebäudes (OWRules: packs, partsTotal, collects)
+			local ow = type(d) == "table" and type(d.games) == "table" and d.games.ow or nil
+			local b = type(ow) == "table" and type(ow.buildings) == "table" and ow.buildings[def.owTyp] or nil
+			local v = type(b) == "table" and b[def.owStat] or nil
+			return math.min(target, finite(v) and math.max(0, v) or 0)
+		elseif finite(def.money) then
 			return math.min(target, finite(d.money) and math.max(0, d.money) or 0)
 		elseif finite(def.bays) then
 			return math.min(target, finite(d.bays) and d.bays or 0)
@@ -1079,15 +1184,15 @@ function StoryRules.View(d: any, now: number, level: any, extra: any, full: bool
 	}
 	if full then
 		local missions = {}
-		for _, m in ipairs(ch and ch.Missions or {}) do
+		for _, m in ipairs(ch and StoryRules.Missions(d, cur.chapter) or {}) do
 			table.insert(missions, StoryRules.MissionView(d, m, lvl))
 		end
 		view.missions = missions
 		local chapters = {}
 		for i, c in ipairs(S.Chapters) do
 			local all = true
-			for _, m in ipairs(c.Missions) do
-				if not (st and st.done[m.id]) then
+			for k = 1, #c.Missions do
+				if not (st and slotDone(st, i, k)) then
 					all = false
 				end
 			end
@@ -1118,9 +1223,9 @@ end
 function StoryRules.BalanceCheck(): { string }
 	local S = config()
 	local out = {}
-	for ci, ch in ipairs(S.Chapters) do
+	for ci, _ in ipairs(S.Chapters) do
 		local cap = S.Balance.Share * StoryRules.WorkshopPerMinute(StoryRules.ChapterLevel(ci))
-		for _, m in ipairs(ch.Missions) do
+		for _, m in ipairs(StoryRules.AllMissions(ci)) do
 			local minutes = finite(m.minutes) and m.minutes or 1
 			local perMin = ((m.reward and m.reward.credits) or 0) / minutes
 			if perMin > cap + 1e-9 then

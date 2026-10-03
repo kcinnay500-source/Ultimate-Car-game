@@ -8,6 +8,9 @@
 -- Lage der Karte: unter dem Abzeichen (PrestigeUI.OverlayTop – tatsächliche Lage, auch wenn es auf schmalen
 -- Bildschirmen auf y 60 rückt) und unter der Toast-Zone; bei jeder Größenänderung neu. Mehrere Freischaltungen auf
 -- einem Level (Level 3: Schrottplatz, Autohaus, Komet C1) laufen als Warteschlange nacheinander durch, je CardSeconds.
+-- Die Karte liegt UNTER dem 2.4.0-UI (DisplayOrder 18) und ist weg, solange Minispiel-Panel, 2.4.0-Tablet, QTE/Diagnose
+-- (ctx.IsBlocked) oder Tacho zu sehen sind (UnlocksUI.Refresh, von MiniClient bei jedem Wechsel und im Heartbeat);
+-- ihre Anzeigezeit läuft erst ab, wenn sie zu sehen war. Nie über der 2.4.0-HUD-Leiste/den Fahrzeugknöpfen.
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
@@ -21,7 +24,7 @@ UnlocksUI.CardWidth = 300
 UnlocksUI.CardTop = 62 + 60 + 8 -- Mindestabstand: unter der Toast-Zone (Toast y 62, 60 hoch); tatsächlich PrestigeUI.OverlayTop()
 UnlocksUI.CardSeconds = 6
 UnlocksUI.CardQueueMax = 8 -- mehr Karten am Stück zeigt niemand
-UnlocksUI.CardDisplayOrder = 21 -- über dem 2.4.0-HUD, unter dem Minispiel-Panel (30)
+UnlocksUI.CardDisplayOrder = 18 -- unter dem 2.4.0-UI (20): Dialoge, QTE und Tablet liegen immer darüber
 
 local KIND_NAMES = {
 	feature = "Bereich",
@@ -87,14 +90,15 @@ local function buildCard()
 		Size = UDim2.new(0, UnlocksUI.CardWidth, 0, 0), Visible = false,
 	})
 	UI.Corner(frame, 10)
-	UI.Padding(frame, 14, 10)
-	UI.List(frame, 4)
+	local padding = UI.Padding(frame, 14, 10)
+	local list = UI.List(frame, 4)
 	local stripe = UI.Frame(frame, { BackgroundColor3 = T.green, Size = UDim2.new(1, 0, 0, 3), AutomaticSize = Enum.AutomaticSize.None, LayoutOrder = 0 })
 	UI.Corner(stripe, 2)
 	card.stripe = stripe
 	card.frame = frame
 	card.title = UI.Label(frame, "", { Name = "Title", Font = UI.FontBold, TextSize = 16, LayoutOrder = 1 })
 	card.text = UI.Label(frame, "", { Name = "Text", TextSize = 14, TextColor3 = T.muted, LayoutOrder = 2 })
+	card.style = { padding = padding, list = list, title = card.title, text = card.text, titleSize = 16, textSize = 14, padX = 14, padY = 10, gap = 4 }
 	card.scale = Instance.new("UIScale")
 	card.scale.Scale = 1
 	card.scale.Parent = frame
@@ -103,8 +107,10 @@ local function buildCard()
 		if w > 0 then
 			frame.Size = UDim2.new(0, math.min(UnlocksUI.CardWidth, w - 32), 0, 0)
 		end
+		PrestigeUI.StyleCard(card.style, PrestigeUI.IsCompact(gui.AbsoluteSize.Y)) -- Handy quer: kompakt
 		UnlocksUI.PlaceCard()
 	end)
+	PrestigeUI.StyleCard(card.style, PrestigeUI.IsCompact(gui.AbsoluteSize.Y))
 	UnlocksUI.PlaceCard()
 end
 
@@ -120,7 +126,51 @@ end
 
 function UnlocksUI.PlaceCard()
 	if card.frame then
-		card.frame.Position = UDim2.new(1, -16, 0, UnlocksUI.CardTopNow())
+		local top = UnlocksUI.CardTopNow()
+		local gui = card.gui
+		local w, h = gui and gui.AbsoluteSize.X or 0, gui and gui.AbsoluteSize.Y or 0
+		local fw, fh = card.frame.AbsoluteSize.X, card.frame.AbsoluteSize.Y
+		if w > 0 and h > 0 and fh > 0 then
+			local _, y = PrestigeUI.FreeRect(w, h, w - 16 - fw, top, fw, fh) -- nie in HUD-Leiste/Fahrzeugknöpfe
+			top = y
+		end
+		card.frame.Position = UDim2.new(1, -16, 0, top)
+	end
+end
+
+-- Tacho sichtbar? (DriveClient: ScreenGui "Fahren", Enabled nur während der Fahrt)
+local function driveHudVisible(): boolean
+	local player = Players.LocalPlayer
+	local pg = player and player:FindFirstChild("PlayerGui")
+	local drive = pg and pg:FindFirstChild("Fahren")
+	return drive ~= nil and drive:IsA("LayerCollector") and drive.Enabled == true
+end
+
+-- Darf die Karte zu sehen sein? Nicht über Minispiel-Panel, 2.4.0-Tablet, QTE/Diagnose oder Tacho
+function UnlocksUI.OverlaysAllowed(): boolean
+	if UI and UI.IsOpen then
+		return false
+	end
+	if ctx and ctx.IsTabletOpen and ctx.IsTabletOpen() == true then
+		return false
+	end
+	if ctx and ctx.IsBlocked and ctx.IsBlocked() == true then
+		return false
+	end
+	return not driveHudVisible()
+end
+
+-- Sichtbarkeit sofort neu (MiniClient: bei jedem Wechsel von Dialog/Tablet/Panel und im Heartbeat)
+function UnlocksUI.Refresh()
+	if not card.frame then
+		return
+	end
+	local show = cardShowing and UnlocksUI.OverlaysAllowed()
+	if card.frame.Visible ~= show then
+		card.frame.Visible = show
+		if show then
+			UnlocksUI.PlaceCard()
+		end
 	end
 end
 
@@ -137,16 +187,22 @@ local function showNext()
 	card.text.Visible = entry.text ~= nil and entry.text ~= ""
 	card.stripe.BackgroundColor3 = entry.color or T.green
 	UnlocksUI.PlaceCard()
-	card.frame.Visible = true
+	card.frame.Visible = UnlocksUI.OverlaysAllowed()
 	card.scale.Scale = 0.85
 	TweenService:Create(card.scale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
-	task.delay(UnlocksUI.CardSeconds, function()
-		if serial == cardSerial and card.frame then
-			card.frame.Visible = false
-			cardShowing = false
-			showNext()
+	local function expire()
+		if serial ~= cardSerial or not card.frame then
+			return
 		end
-	end)
+		if not UnlocksUI.OverlaysAllowed() then
+			task.delay(UnlocksUI.CardSeconds, expire) -- verdeckt: erst zeigen, dann ablaufen lassen
+			return
+		end
+		card.frame.Visible = false
+		cardShowing = false
+		showNext()
+	end
+	task.delay(UnlocksUI.CardSeconds, expire)
 end
 
 -- Karte einreihen: erscheint sofort, wenn keine zu sehen ist, sonst nach der laufenden (je CardSeconds)

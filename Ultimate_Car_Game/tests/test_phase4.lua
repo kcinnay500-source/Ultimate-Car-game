@@ -108,6 +108,12 @@ return {
 		T.check(homeStation and (rootPos(g, pl) - homeStation.Position).Magnitude < 12, "Figur in der eigenen Werkstatt (Tutorial)")
 		g:Advance(1.1)
 		T.eq(g:MiniSnapshot(pl).mode, "openworld", "Snapshot mode openworld")
+		-- Startwahl zuerst (neues Profil): das Tutorial wartet, bis ein Startweg gewählt ist
+		T.eq(#g:Notices(pl, "tutorial", m), 0, "kein Tutorial vor der Startwahl")
+		T.check(#g:Notices(pl, "start", m) >= 1, "Startwahl angeboten (mini_notice start)")
+		T.check(g:MiniSnapshot(pl).start and g:MiniSnapshot(pl).start.pending == true, "Snapshot start.pending")
+		T.eq(g:Act(pl, "start_choose", { path = "werkstatt", rid = 60 }), "ok", "start_choose werkstatt")
+		g:Advance(0.6)
 		-- Pflicht-Tutorial beim ersten Open-World-Beitritt
 		local started = g:Notices(pl, "tutorial", m)
 		T.check(#started >= 1 and started[1].started == true and started[1].step == 1, "Tutorial gestartet (Schritt 1)")

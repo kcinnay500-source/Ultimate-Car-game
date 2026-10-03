@@ -117,6 +117,21 @@ local function memberRow(parent, i: number)
 end
 
 ---------------------------------------------------------------- Aufbau
+-- Tutorial-Schritte eines Startwegs (GameConfig.Tutorial.ByPath; "" / unbekannt = klassischer Weg)
+local function tutorialSteps(path: any): { any }
+	local tu = GameConfig.Tutorial
+	local list = type(path) == "string" and type(tu.ByPath) == "table" and tu.ByPath[path] or nil
+	return list or tu.Steps
+end
+
+local function stepsText(path: any): string
+	local steps = {}
+	for i, st in ipairs(tutorialSteps(path)) do
+		table.insert(steps, tostring(i) .. ". " .. tostring(st.text))
+	end
+	return table.concat(steps, "\n")
+end
+
 function LobbyUI.Build(page, c)
 	ctx = c
 	UI, Remote = c.UI, c.Remote
@@ -213,12 +228,9 @@ function LobbyUI.Build(page, c)
 	tutorial.Name = "TutorialCard"
 	UI.Title(tutorial, "Tutorial", 1)
 	refs.tutorialStatus = UI.Label(tutorial, "", { Font = UI.FontBold, TextSize = 15, LayoutOrder = 2, Name = "TutorialStatus" })
-	local steps = {}
-	for i, st in ipairs(GameConfig.Tutorial.Steps) do
-		table.insert(steps, tostring(i) .. ". " .. tostring(st.text))
-	end
-	local stepList = UI.Small(tutorial, table.concat(steps, "\n"), 3)
+	local stepList = UI.Small(tutorial, stepsText(nil), 3)
 	stepList.Name = "TutorialSteps"
+	refs.tutorialSteps = stepList
 	refs.tutorialRestart = UI.Button(tutorial, "Tutorial erneut starten", T.blue, function()
 		Remote.Send("tutorial_restart")
 	end, { Name = "TutorialRestart", LayoutOrder = 4 })
@@ -326,7 +338,13 @@ function LobbyUI.Render(s)
 		local meta = type(s.meta) == "table" and s.meta or {}
 		local tut = type(s.tutorial) == "table" and s.tutorial or {}
 		local done = meta.tutorialDone == true or tut.done == true
-		local count = #GameConfig.Tutorial.Steps
+		-- Schritte des gewählten Startwegs (snapshot.tutorial.path / meta.startPath; ohne Wahl der klassische Weg)
+		local path = type(tut.path) == "string" and tut.path or meta.startPath
+		local list = tutorialSteps(path)
+		local count = math.max(1, tonumber(tut.count) or #list)
+		if refs.tutorialSteps then
+			refs.tutorialSteps.Text = stepsText(path)
+		end
 		if done then
 			refs.tutorialStatus.Text = tut.skipped and "Du hast das Tutorial übersprungen." or "Du hast das Tutorial geschafft."
 			refs.tutorialHint.Text = tut.rewarded and "Noch einmal von vorn – die Belohnung hattest du schon."

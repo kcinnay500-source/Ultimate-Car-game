@@ -18,7 +18,13 @@
 --   ShouldStart(d, mode)                s. TutorialRules
 --   OnLeave(ms, d)                      zurückgehaltene Belohnung noch vor P.Save verbuchen
 --   Flush(ms)                           eingereihte Hinweise senden (sobald ms.greeted)
---   SnapshotFields(ms, d, now, full)    { tutorial = { step, count, text, target, zone, next, done, skipped, active } }
+--   SnapshotFields(ms, d, now, full)    { tutorial = { step, count, text, target, zone, next, done, skipped, active, path,
+--                                       waiting, openTab } }
+--   OnStartChosen(ms, d)                Startwahl getroffen (StartService): Tutorial des Wegs jetzt starten (Open World)
+-- Startwahl (GameConfig.Start): die Schritte hängen vom Startweg ab (TutorialRules.Steps(d)). Solange ein neues Profil
+-- in der Open World noch wählen muss, wartet das Tutorial (TutorialRules.Waiting: inaktiv, kein Start-Hinweis,
+-- tutorial_next abgelehnt); StartService ruft nach start_choose OnStartChosen. Schritte mit passiveSkip (Kiesplatz-
+-- Verkauf) erledigt der Tick im Passiv-Modus von selbst.
 -- Hinweise: mini_notice { kind = "tutorial", step, count, text, target, zone, next, done, skipped, finished?, started? }
 --           mini_notice { kind = "hint", id, text, trigger }
 -- Modus: das Tutorial läuft nur in der Open World (ms.p.mode == "openworld", Vertrag §6). In Lobby und Schnellem
@@ -41,6 +47,13 @@ local TEXT = {
 	finished = "Tutorial geschafft! +%s und +%d XP – viel Spaß in der Werkstattmeile!",
 	skipped = TutorialRules.Text.skipped,
 	started = "Willkommen! Das Tutorial zeigt dir die Werkstatt. Du kannst es jederzeit überspringen.",
+	-- je Startweg (werkstatt = started)
+	startedByPath = {
+		autohaus = "Willkommen! Das Tutorial zeigt dir dein Autohaus. Du kannst es jederzeit überspringen.",
+		produktion = "Willkommen! Das Tutorial zeigt dir deine Produktion. Du kannst es jederzeit überspringen.",
+		schrottplatz = "Willkommen! Das Tutorial zeigt dir deinen Schrottplatz. Du kannst es jederzeit überspringen.",
+	},
+	waiting = TutorialRules.Text.waiting,
 }
 TutorialService.Text = TEXT
 
@@ -105,7 +118,8 @@ local function stepNotice(ms: any, d: any, extra: { [string]: any }?)
 	local v = TutorialRules.View(d, modeOf(ms))
 	local data = {
 		step = v.step, count = v.count, id = v.id, text = v.text, target = v.target, zone = v.zone,
-		next = v.next, done = v.done, skipped = v.skipped, active = v.active,
+		next = v.next, done = v.done, skipped = v.skipped, active = v.active, path = v.path, waiting = v.waiting,
+		openTab = v.openTab,
 	}
 	for k, x in pairs(extra or {}) do
 		data[k] = x
@@ -218,6 +232,10 @@ end
 
 ---------------------------------------------------------------- Aktionen
 local function next_(ms: any, data: any, d: any)
+	if TutorialRules.Waiting(d, modeOf(ms)) then
+		api.toast(ms, TEXT.waiting) -- Startwahl offen: erst wählen
+		return
+	end
 	if TutorialRules.Active(d) and not activeHere(ms, d) then
 		api.toast(ms, TutorialRules.Text.notHere) -- Lobby/Tycoon: kein Fortschritt
 		return
@@ -242,6 +260,7 @@ end
 -- Tutorial-Kiosk in der Lobby: noch einmal von vorn (nur nach Ende/Überspringen); die Belohnung gibt es nicht
 -- noch einmal (meta.tutorialRewarded). In der Open World startet es sofort, sonst beim nächsten Betreten.
 local function restart(ms: any, _: any, d: any)
+	MetaRules.ResolveStartPath(d) -- beendet/übersprungen = Veteran: Weg festhalten, bevor tutorialDone zurückgesetzt wird
 	local ok, msg = TutorialRules.Restart(d)
 	if not ok then
 		if msg then
@@ -283,9 +302,19 @@ function TutorialService.Start(ms: any, d: any, mode: any): boolean
 	ms.tutorialStarted = true
 	stepNotice(ms, d, { started = true })
 	if api then
-		api.toast(ms, TEXT.started)
+		api.toast(ms, TEXT.startedByPath[TutorialRules.Path(d)] or TEXT.started)
 	end
 	return true
+end
+
+-- Startwahl getroffen (StartService nach start_choose): in der Open World startet das Tutorial des Wegs sofort
+-- (vorher hat Start wegen der offenen Wahl nichts getan). Rückgabe: true, wenn es gestartet wurde.
+function TutorialService.OnStartChosen(ms: any, d: any): boolean
+	if not ms or type(d) ~= "table" then
+		return false
+	end
+	local mode = modeOf(ms) or "openworld" -- ohne Lobby-Verkabelung gilt die Sitzung als Open World
+	return TutorialService.Start(ms, d, mode)
 end
 
 function TutorialService.OnJoin(ms: any, d: any, now: number?)
@@ -310,6 +339,11 @@ function TutorialService.Tick(ms: any, d: any, now: number?): boolean
 	end
 	local event = TutorialRules.PendingJobEvent(d)
 	if event and TutorialService.OnEvent(ms, d, event) then
+		changed = true
+	end
+	-- Passiv-Modus: Schritte, die er unmöglich macht (Kiesplatz-Verkauf), gelten als erledigt
+	local passiveEvent = TutorialRules.PendingPassiveEvent(d)
+	if passiveEvent and TutorialService.OnEvent(ms, d, passiveEvent) then
 		changed = true
 	end
 	return changed
@@ -337,6 +371,7 @@ function TutorialService.SnapshotFields(ms: any, d: any, now: number?, full: boo
 		tutorial = {
 			step = v.step, count = v.count, id = v.id, text = v.text, target = v.target, zone = v.zone,
 			next = v.next, done = v.done, skipped = v.skipped, active = v.active,
+			path = v.path, waiting = v.waiting, openTab = v.openTab,
 			rewarded = TutorialRules.Rewarded(d),
 			rewardPending = ms ~= nil and ms.tutorialRewardPending == true,
 		},

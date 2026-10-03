@@ -3,9 +3,13 @@
 -- OnSnapshot(s), OnNotice(data) und Step(dt) aus dem Heartbeat. Der Client zeigt nur an und sendet Absichten
 -- (tutorial_next {step} für „Weiter“-Schritte, tutorial_skip); den Fortschritt bestätigt der Server.
 --
--- Eigene ScreenGui "Tutorial" (DisplayOrder 21: über dem 2.4.0-HUD (20), unter dem Minispiel-Panel (30)):
+-- Eigene ScreenGui "Tutorial" (DisplayOrder 17: UNTER dem 2.4.0-UI (20) – Dialoge, QTE, Tablet und Fahrzeugknöpfe
+-- liegen immer darüber und bekommen jeden Klick; unter dem Minispiel-Panel (30)). Die Rahmen sind nicht Active, nur
+-- die Knöpfe schlucken Klicks; leere Kartenflächen lassen Weltklicks (GarageClient) durch.
 --   Card       unten Mitte über der 2.4.0-Leiste (Leiste 132 px hoch, 6 px Rand): Schritt-Text, „Schritt n von m“,
 --              Fortschrittsbalken, „Weiter“ (nur next-Schritte), „Überspringen“ (immer). Touch-Flächen 44 px.
+--              Überschneidet sie die Fahrzeugknöpfe E/F/H, rückt sie darüber; passt das nicht (Handy quer), steht sie
+--              rechts neben den Knöpfen (notfalls schmaler). Niedrige Bildschirme (< CompactHeight): kompakte Karte.
 --   Marker     BillboardGui am Zielteil (zone plot: PlayerWorkshops.Plot_<UserId>.Stations.<key>,
 --              zone city: workspace.City.Stations.<key>), AlwaysOnTop, leicht wippend.
 --   HintCard   Beginner-Hinweis oben rechts, unter dem ProgressHUD-Abzeichen und unter der Toast-Zone (tatsächliche Lage
@@ -14,7 +18,9 @@
 --              (je HintSeconds), damit keiner den anderen im selben Moment überschreibt.
 --   UnlockCard „Freigeschaltet: <Titel>“ bei mini_notice { kind = "unlock" } mit kurzem Effekt – nur, wenn nicht schon
 --              UnlocksUI (ScreenGui "UnlockCards") die Karte zeigt (sonst gäbe es sie doppelt).
--- Sichtbarkeit wie beim ProgressHUD: weg, solange Minispiel-Panel, 2.4.0-Tablet, QTE/Diagnose oder Tacho zu sehen sind.
+-- Sichtbarkeit wie beim ProgressHUD: weg, solange Minispiel-Panel, 2.4.0-Tablet, QTE/Diagnose oder Tacho zu sehen sind –
+-- das gilt für alle Karten (auch Hinweis/Freischaltung; deren Anzeigezeit läuft erst ab, wenn sie zu sehen waren).
+-- MiniClient ruft TutorialUI.Refresh() sofort, wenn sich 2.4.0-Dialog, Tablet oder Panel öffnen/schließen.
 -- Komfort: der Schritt „menu“ gilt als gelesen, sobald das Minispiel-Panel offen war; der Schritt „move“, sobald die
 -- Figur ein Stück gelaufen ist (beides sendet tutorial_next – der Server prüft den Schritt).
 local Players = game:GetService("Players")
@@ -26,9 +32,13 @@ local PrestigeUI = require(script.Parent:WaitForChild("PrestigeUI"))
 
 local TutorialUI = {}
 
-TutorialUI.DisplayOrder = 21
+TutorialUI.DisplayOrder = 17 -- unter dem 2.4.0-UI (20): dessen Dialoge/Knöpfe liegen immer darüber
 TutorialUI.CardWidth = 440
 TutorialUI.CardBottom = 150 -- Abstand zur Unterkante (2.4.0-Leiste: 132 px + 6 px Rand + Luft)
+TutorialUI.CardTopMin = 62 -- Oberkante nicht über die 2.4.0-Fortschrittsleiste (y 8..54)
+TutorialUI.CardMinWidth = 260 -- schmaler wird die Karte neben den Fahrzeugknöpfen nicht
+TutorialUI.CardMargin = 12
+TutorialUI.CompactHeight = PrestigeUI.CompactHeight -- darunter (Handy quer): kompakte Karte ohne Balken, kleinere Schrift
 TutorialUI.HintWidth = 300
 TutorialUI.HintTop = 62 + 60 + 8 -- Mindestabstand: unter der Toast-Zone; tatsächlich PrestigeUI.OverlayTop() (Abzeichen)
 TutorialUI.HintSeconds = 8
@@ -42,6 +52,9 @@ local TARGET_TITLES = {
 	map = "STADTPLAN",
 	dealer = "AUTOHAUS",
 	goals = "INFOTAFEL",
+	tuning = "TUNING-ZENTRUM",
+	press = "SCHROTTPRESSE",
+	kiesplatz = "KIESPLATZ",
 }
 
 local UI, Remote, T, ctx
@@ -87,16 +100,17 @@ local function buildCard()
 	local frame = UI.Frame(gui, {
 		Name = "Card", BackgroundColor3 = T.panel, AutomaticSize = Enum.AutomaticSize.Y,
 		AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -TutorialUI.CardBottom),
-		Size = UDim2.new(0, TutorialUI.CardWidth, 0, 0), Visible = false, Active = true,
+		Size = UDim2.new(0, TutorialUI.CardWidth, 0, 0), Visible = false, Active = false,
 	})
 	UI.Corner(frame, 12)
-	UI.Padding(frame, 16, 12)
-	UI.List(frame, 8)
+	card.padding = UI.Padding(frame, 16, 12)
+	card.list = UI.List(frame, 8)
 	card.frame = frame
 	card.progress = UI.Label(frame, "", { Name = "Progress", Font = UI.FontBold, TextSize = 14, TextColor3 = T.green, LayoutOrder = 1 })
 	card.text = UI.Label(frame, "", { Name = "Text", TextSize = 16, LayoutOrder = 2 })
 	local bar, fill = UI.Progress(frame, T.green, 3)
 	bar.Name = "Bar"
+	card.bar = bar
 	card.fill = fill
 	local buttons = UI.Frame(frame, { Name = "Buttons", BackgroundTransparency = 1, LayoutOrder = 4, Size = UDim2.new(1, 0, 0, UI.MinTouch), AutomaticSize = Enum.AutomaticSize.None })
 	local list = UI.List(buttons, 8, true)
@@ -139,13 +153,14 @@ local function buildHintCard()
 		Size = UDim2.new(0, TutorialUI.HintWidth, 0, 0), Visible = false,
 	})
 	UI.Corner(frame, 10)
-	UI.Padding(frame, 14, 10)
-	UI.List(frame, 4)
+	local padding = UI.Padding(frame, 14, 10)
+	local list = UI.List(frame, 4)
 	local stripe = UI.Frame(frame, { BackgroundColor3 = T.blue, Size = UDim2.new(1, 0, 0, 3), AutomaticSize = Enum.AutomaticSize.None, LayoutOrder = 0 })
 	UI.Corner(stripe, 2)
 	hint.frame = frame
 	hint.title = UI.Label(frame, "Tipp", { Name = "Title", Font = UI.FontBold, TextSize = 15, TextColor3 = T.blue, LayoutOrder = 1 })
 	hint.text = UI.Label(frame, "", { Name = "Text", TextSize = 14, LayoutOrder = 2 })
+	hint.style = { padding = padding, list = list, title = hint.title, text = hint.text, titleSize = 15, textSize = 14, padX = 14, padY = 10, gap = 4 }
 	hint.scale = Instance.new("UIScale")
 	hint.scale.Scale = 1
 	hint.scale.Parent = frame
@@ -158,13 +173,14 @@ local function buildUnlockCard()
 		Size = UDim2.new(0, TutorialUI.HintWidth, 0, 0), Visible = false,
 	})
 	UI.Corner(frame, 10)
-	UI.Padding(frame, 14, 10)
-	UI.List(frame, 4)
+	local padding = UI.Padding(frame, 14, 10)
+	local list = UI.List(frame, 4)
 	local stripe = UI.Frame(frame, { BackgroundColor3 = T.green, Size = UDim2.new(1, 0, 0, 3), AutomaticSize = Enum.AutomaticSize.None, LayoutOrder = 0 })
 	UI.Corner(stripe, 2)
 	unlock.frame = frame
 	unlock.title = UI.Label(frame, "", { Name = "Title", Font = UI.FontBold, TextSize = 16, LayoutOrder = 1 })
 	unlock.text = UI.Label(frame, "", { Name = "Text", TextSize = 14, TextColor3 = T.muted, LayoutOrder = 2 })
+	unlock.style = { padding = padding, list = list, title = unlock.title, text = unlock.text, titleSize = 16, textSize = 14, padX = 14, padY = 10, gap = 4 }
 	unlock.scale = Instance.new("UIScale")
 	unlock.scale.Scale = 1
 	unlock.scale.Parent = frame
@@ -201,16 +217,72 @@ function TutorialUI.CardBottomFor(w: number): number
 	return TutorialUI.CardBottom + h + 8
 end
 
+-- Höhe der Karte; vor dem ersten Layout grob aus dem Text geschätzt
+local function cardHeight(cw: number): number
+	local h = card.frame.AbsoluteSize.Y
+	if h > 0 then
+		return h
+	end
+	local size = card.text.TextSize
+	local text = tostring(card.text.Text or "")
+	local okLen, chars = pcall(utf8.len, text)
+	chars = okLen and chars or #text
+	local lines = math.max(1, math.ceil(chars * size * 0.5 / math.max(1, cw - 32)))
+	local pad = card.padding and card.padding.PaddingTop.Offset * 2 or 24
+	local bar = card.bar and card.bar.Visible and 16 or 0
+	return pad + 17 + 16 + lines * size * 1.2 + bar + UI.MinTouch
+end
+
+local function compact(h: number): boolean
+	return h > 0 and h < TutorialUI.CompactHeight
+end
+TutorialUI.Compact = compact
+
 local function placeCard()
 	if not gui or not card.frame then
 		return
 	end
-	local w = gui.AbsoluteSize.X
+	local w, h = gui.AbsoluteSize.X, gui.AbsoluteSize.Y
 	if w <= 0 then
 		return
 	end
+	local small = compact(h)
+	if card.small ~= small then
+		card.small = small
+		if card.bar then
+			card.bar.Visible = not small
+		end
+		card.text.TextSize = small and 14 or 16
+		if card.padding then
+			card.padding.PaddingTop = UDim.new(0, small and 8 or 12)
+			card.padding.PaddingBottom = UDim.new(0, small and 8 or 12)
+		end
+		if card.list then
+			card.list.Padding = UDim.new(0, small and 4 or 8)
+		end
+	end
+	local cw = math.min(TutorialUI.CardWidth, w - 2 * TutorialUI.CardMargin)
 	local bottom = TutorialUI.CardBottomFor(w)
-	local pos = UDim2.new(0.5, 0, 1, -bottom)
+	local right = false
+	if bottom > TutorialUI.CardBottom and h > 0 and h - bottom - cardHeight(cw) < TutorialUI.CardTopMin then
+		-- über den Fahrzeugknöpfen ist kein Platz (Handy quer): rechts daneben, notfalls schmaler
+		local _, _, zx1 = PrestigeUI.VehicleZone(w, h)
+		local avail = w - TutorialUI.CardMargin - (zx1 + PrestigeUI.GarageGap)
+		if avail >= TutorialUI.CardMinWidth then
+			cw = math.min(cw, avail)
+			bottom = TutorialUI.CardBottom
+			right = true
+		end
+	end
+	local size = UDim2.new(0, cw, 0, 0)
+	if card.frame.Size ~= size then
+		card.frame.Size = size
+	end
+	local anchor = Vector2.new(right and 1 or 0.5, 1)
+	if card.frame.AnchorPoint ~= anchor then
+		card.frame.AnchorPoint = anchor
+	end
+	local pos = right and UDim2.new(1, -TutorialUI.CardMargin, 1, -bottom) or UDim2.new(0.5, 0, 1, -bottom)
 	if card.frame.Position ~= pos then
 		card.frame.Position = pos
 	end
@@ -229,8 +301,11 @@ local function layout()
 	local hw = math.min(TutorialUI.HintWidth, w - 32)
 	hint.frame.Size = UDim2.new(0, hw, 0, 0)
 	unlock.frame.Size = UDim2.new(0, hw, 0, 0)
+	local small = compact(gui.AbsoluteSize.Y)
+	PrestigeUI.StyleCard(hint.style, small)
+	PrestigeUI.StyleCard(unlock.style, small)
 	-- Lage unter Abzeichen und Toast-Zone (Abzeichen rückt auf schmalen Bildschirmen auf y 60)
-	unlock.frame.Position = UDim2.new(1, -16, 0, TutorialUI.OverlayTop())
+	unlock.frame.Position = UDim2.new(1, -16, 0, TutorialUI.FreeTop(unlock.frame, TutorialUI.OverlayTop()))
 	TutorialUI.PlaceHintCard()
 	-- Handy hochkant: die Knöpfe teilen sich die Breite
 	local narrow = w < 480
@@ -387,6 +462,9 @@ local function apply(v: any, animate: boolean?)
 		skipped = v.skipped == true,
 		active = v.active == true and v.done ~= true,
 		rewarded = v.rewarded == true or (v.rewarded == nil and view ~= nil and view.rewarded == true),
+		openTab = type(v.openTab) == "string" and v.openTab or nil, -- Startweg: Öffnen dieses Tabs erledigt den Schritt
+		path = type(v.path) == "string" and v.path or nil,
+		waiting = v.waiting == true, -- Startwahl offen: noch keine Karte
 	}
 	if view.step ~= before then
 		sentNextFor = nil
@@ -420,6 +498,19 @@ end
 TutorialUI.Render = TutorialUI.OnSnapshot
 
 ---------------------------------------------------------------- Hinweis- und Freischaltungs-Karten
+-- Oberkante einer Karte oben rechts, die nicht in die 2.4.0-HUD-Leiste oder die Fahrzeugknöpfe ragt (gemessene Höhe)
+function TutorialUI.FreeTop(frame: GuiObject, top: number): number
+	if not gui then
+		return top
+	end
+	local w, h = gui.AbsoluteSize.X, gui.AbsoluteSize.Y
+	local fw, fh = frame.AbsoluteSize.X, frame.AbsoluteSize.Y
+	if w <= 0 or h <= 0 or fh <= 0 then
+		return top
+	end
+	local _, y = PrestigeUI.FreeRect(w, h, w - 16 - fw, top, fw, fh)
+	return y
+end
 -- Oberkante der Karten oben rechts: unter dem Abzeichen (tatsächliche Lage) und unter der Toast-Zone
 function TutorialUI.OverlayTop(): number
 	local top = TutorialUI.HintTop
@@ -447,13 +538,36 @@ local function placeHintCard()
 			top = math.max(top, TutorialUI.OverlayTop() + 80)
 		end
 	end
-	hint.frame.Position = UDim2.new(1, -16, 0, top)
+	hint.frame.Position = UDim2.new(1, -16, 0, TutorialUI.FreeTop(hint.frame, top))
 end
 TutorialUI.PlaceHintCard = placeHintCard
+
+-- Karte „Neu freigeschaltet“ (UnlocksUI oder eigene) gerade zu sehen?
+local function unlockCardVisible(): boolean
+	if unlock.frame and unlock.frame.Visible then
+		return true
+	end
+	local pg = playerGui()
+	local other = pg and pg:FindFirstChild("UnlockCards")
+	local otherCard = other and other:IsA("LayerCollector") and other.Enabled and other:FindFirstChild("UnlockCard")
+	return otherCard ~= nil and otherCard:IsA("GuiObject") and otherCard.Visible == true
+end
+
+-- Darf der Hinweis zu sehen sein? Wie alle Karten nicht über Dialog/Tablet/Panel; auf niedrigen Bildschirmen außerdem
+-- nicht gleichzeitig mit der Freischaltungs-Karte (beide passen nicht zwischen Toast-Zone und HUD-Leiste)
+local function hintAllowed(): boolean
+	if not overlaysAllowed() then
+		return false
+	end
+	return not (gui and compact(gui.AbsoluteSize.Y) and unlockCardVisible())
+end
 
 local function showNextHint()
 	if hintShowing or #hintQueue == 0 or not hint.frame then
 		return
+	end
+	if gui and compact(gui.AbsoluteSize.Y) and unlockCardVisible() then
+		return -- niedriger Bildschirm: wartet, bis die Freischaltungs-Karte weg ist (Refresh versucht es erneut)
 	end
 	local entry = table.remove(hintQueue, 1)
 	hintShowing = true
@@ -462,15 +576,21 @@ local function showNextHint()
 	hint.text.Text = entry.text
 	hint.frame:SetAttribute("hintId", entry.id or "")
 	placeHintCard()
-	hint.frame.Visible = true
+	hint.frame.Visible = hintAllowed()
 	pop(hint.scale)
-	task.delay(TutorialUI.HintSeconds, function()
-		if serial == hintSerial and hint.frame then
-			hint.frame.Visible = false
-			hintShowing = false
-			showNextHint()
+	local function expire()
+		if serial ~= hintSerial or not hint.frame then
+			return
 		end
-	end)
+		if not hintAllowed() then
+			task.delay(TutorialUI.HintSeconds, expire) -- verdeckt (Dialog/Tablet/Panel): später noch zeigen
+			return
+		end
+		hint.frame.Visible = false
+		hintShowing = false
+		showNextHint()
+	end
+	task.delay(TutorialUI.HintSeconds, expire)
 end
 
 -- Hinweis einreihen: sofort, wenn keiner zu sehen ist, sonst nach dem laufenden (je HintSeconds)
@@ -507,16 +627,22 @@ local function showNextUnlock()
 	unlock.title.Text = "Freigeschaltet: " .. entry.title
 	unlock.text.Text = entry.text or ""
 	unlock.text.Visible = entry.text ~= nil and entry.text ~= ""
-	unlock.frame.Position = UDim2.new(1, -16, 0, TutorialUI.OverlayTop())
-	unlock.frame.Visible = true
+	unlock.frame.Position = UDim2.new(1, -16, 0, TutorialUI.FreeTop(unlock.frame, TutorialUI.OverlayTop()))
+	unlock.frame.Visible = overlaysAllowed()
 	pop(unlock.scale)
-	task.delay(TutorialUI.UnlockSeconds, function()
-		if serial == unlockSerial and unlock.frame then
-			unlock.frame.Visible = false
-			unlockShowing = false
-			showNextUnlock()
+	local function expire()
+		if serial ~= unlockSerial or not unlock.frame then
+			return
 		end
-	end)
+		if not overlaysAllowed() then
+			task.delay(TutorialUI.UnlockSeconds, expire)
+			return
+		end
+		unlock.frame.Visible = false
+		unlockShowing = false
+		showNextUnlock()
+	end
+	task.delay(TutorialUI.UnlockSeconds, expire)
 end
 
 function TutorialUI.ShowUnlock(title: string, text: string?)
@@ -566,6 +692,12 @@ local function autoNext()
 			sentNextFor = view.step
 			Remote.Send("tutorial_next", { step = view.step })
 		end
+	elseif type(view.openTab) == "string" then
+		-- Startweg-Schritt „Tab öffnen“ (z. B. Gebäude): erledigt, sobald das Panel auf diesem Tab steht
+		if UI and UI.IsOpen and UI.CurrentTab == view.openTab then
+			sentNextFor = view.step
+			Remote.Send("tutorial_next", { step = view.step })
+		end
 	elseif view.id == "move" then
 		local player = Players.LocalPlayer
 		local ch = player and player.Character
@@ -597,8 +729,28 @@ function TutorialUI.Step(dt: number?)
 		warn("[Tutorial] " .. tostring(err))
 	end
 	stepTimer = 0
+	TutorialUI.Refresh()
+end
+
+-- Sichtbarkeit aller Karten sofort neu (Heartbeat alle 0,2 s und MiniClient.RefreshOverlays bei jedem Wechsel von
+-- 2.4.0-Dialog, Tablet oder Panel – damit nie eine Karte im selben Moment über einem Dialog liegt)
+function TutorialUI.Refresh()
+	if not gui then
+		return
+	end
 	renderCard()
 	updateMarker()
+	local allowed = overlaysAllowed()
+	if unlock.frame and unlock.frame.Visible ~= (unlockShowing and allowed) then
+		unlock.frame.Visible = unlockShowing and allowed
+	end
+	local hintOk = hintAllowed()
+	if hint.frame and hint.frame.Visible ~= (hintShowing and hintOk) then
+		hint.frame.Visible = hintShowing and hintOk
+	end
+	if not hintShowing and hintOk then
+		showNextHint()
+	end
 	if hint.frame and hint.frame.Visible then
 		placeHintCard()
 	end

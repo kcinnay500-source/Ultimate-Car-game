@@ -88,6 +88,8 @@ MiniNet.Actions = {
 	shop_buy = { item = "string" },
 	shop_equip = { slot = "string", item = "string" },
 	shop_prompt = { product = "string" },
+	-- Startwahl in der Open World (PHASE4_CONTRACT §10): path = einer der vier Startwege (GameConfig.Start.Order)
+	start_choose = { path = "string" },
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -137,6 +139,7 @@ MiniNet.Cooldowns = {
 	story_sell = 1,
 	side_claim = 0.5,
 	shop_prompt = 3,
+	start_choose = 1,
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",

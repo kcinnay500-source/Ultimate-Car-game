@@ -62,6 +62,12 @@ local function setup(H, opts)
 		local ms = g:MiniState(pl)
 		local d = g:D(pl)
 		ensureMeta(g, d)
+		-- Startwahl (StartService, test_start.lua): diese Tests prüfen den klassischen Weg; ein neues Profil wählt ihn
+		-- hier wie mit start_choose {path = "werkstatt"}, sonst wartet das Tutorial in der Open World auf die Wahl
+		local MR = g:MiniShared("MetaRules")
+		if MR.StartPending(d) then
+			MR.SetStartPath(d, "werkstatt")
+		end
 		ms.greeted = true
 		TS.OnJoin(ms, d, g:Now())
 		return pl, ms, d
@@ -243,6 +249,10 @@ return {
 		T.eq(i, 1, "Schritt 1")
 		T.eq(s and s.id, "move", "erster Schritt move")
 		T.check(TR.IsNextStep(s), "move ist Lese-Schritt")
+		-- neues Profil ohne Startweg: in der Open World wartet das Tutorial auf die Startwahl, danach Pflicht
+		T.check(TR.Waiting(d, "openworld") and not TR.ShouldStart(d, "openworld"), "wartet auf die Startwahl")
+		T.check(g:MiniShared("MetaRules").SetStartPath(d, "werkstatt"), "Startweg werkstatt")
+		T.check(not TR.Waiting(d, "openworld"), "Wahl getroffen: wartet nicht mehr")
 		T.check(TR.ShouldStart(d, "openworld"), "Pflicht in der Open World")
 		T.check(not TR.ShouldStart(d, "lobby"), "nicht in der Lobby")
 		T.check(not TR.ShouldStart(d, "tycoon"), "nicht im Tycoon")
@@ -643,6 +653,9 @@ return {
 		local d = g:D(pl)
 		ensureMeta(g, d)
 		T.eq(g:Act(pl, "tutorial_next", { step = "1" }), "invalid", "step muss number sein")
+		T.eq(g:Act(pl, "start_choose", { path = "werkstatt", rid = 100 }), "ok", "Startwahl werkstatt")
+		T.eq(g:MiniShared("MetaRules").StartPath(d), "werkstatt", "Startweg gespeichert")
+		g:Advance(0.2)
 		T.eq(g:Act(pl, "tutorial_next", { step = 1, rid = 1 }), "ok", "Weiter angenommen")
 		T.eq(step(g, d), 2, "Schritt 2")
 		g:Advance(0.5)
@@ -661,7 +674,7 @@ return {
 		local mod, MiniUI, state = buildUI(g, p, rec)
 		local gui = p.PlayerGui:FindFirstChild("Tutorial")
 		T.check(gui ~= nil and gui.ClassName == "ScreenGui", "ScreenGui Tutorial")
-		T.check(gui and gui.DisplayOrder > 20 and gui.DisplayOrder < 30, "zwischen 2.4.0-HUD und Minispiel-Panel")
+		T.check(gui and gui.DisplayOrder == 17, "DisplayOrder 17: unter dem 2.4.0-UI (20), damit Dialoge, Tablet und Fahrzeugknöpfe immer den Klick bekommen")
 		local cardFrame = byName(gui, "Card")
 		T.check(cardFrame ~= nil and cardFrame.Visible == false, "Karte anfangs unsichtbar")
 		if cardFrame then

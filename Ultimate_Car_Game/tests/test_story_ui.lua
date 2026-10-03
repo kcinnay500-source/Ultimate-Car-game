@@ -578,7 +578,7 @@ return {
 		end)
 		g:Advance(0.1)
 		local gui = p.PlayerGui:FindFirstChild("Missionen")
-		T.check(gui ~= nil and gui.ClassName == "ScreenGui" and gui.DisplayOrder == 21, "ScreenGui Missionen (DisplayOrder 21)")
+		T.check(gui ~= nil and gui.ClassName == "ScreenGui" and gui.DisplayOrder == 16, "ScreenGui Missionen (DisplayOrder 16, unter dem 2.4.0-UI)")
 		T.eq(mod.MarkerTarget(), nil, "ohne Snapshot kein Marker")
 		-- aktive Kiesplatz-Mission: Marker an City.Stations.kiesplatz, mit Kundenname
 		local s, _, offer = storySnapshot(g, { level = 2, sale = true, mutate = function(d, R)

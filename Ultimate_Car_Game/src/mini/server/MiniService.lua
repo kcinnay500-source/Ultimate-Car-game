@@ -58,6 +58,7 @@ local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenste
 local OWService = require(Server:WaitForChild("OWService")) -- Meilenstein 6: Open-World-Gebäude, Passiv-Modus
 local StoryService = require(Server:WaitForChild("StoryService")) -- Meilenstein 7: Story, Kiesplatz, Nebenmissionen, Co-op
 local ShopService = require(Server:WaitForChild("ShopService")) -- Meilenstein 8: Shop (Kosmetik, DLC-Autos, Pässe, Quittungen)
+local StartService = require(Server:WaitForChild("StartService")) -- Startwahl in der Open World (vier Startwege)
 local StoryRules = require(MiniShared:WaitForChild("StoryRules"))
 local Profiles = require(Server.Parent:WaitForChild("Profiles"))
 
@@ -147,6 +148,7 @@ local SNAPSHOT_EXTRAS = {
 	{ "Lobby", LobbyService.SnapshotFields },
 	{ "Prestige", PrestigeService.SnapshotFields },
 	{ "Tutorial", TutorialService.SnapshotFields },
+	{ "Start", StartService.SnapshotFields }, -- start { path, pending, choices[] }
 	{ "Tycoon", TycoonService.SnapshotFields }, -- tycoon { active, run, slot, offers, bonus, runsDone, rebirths, boost, plots }
 	{ "OW", OWService.SnapshotFields }, -- ow { buildings{}, passive, perks, capHours }
 	{ "Story", StoryService.SnapshotFields }, -- story { chapter, active, side[], sale, …; missions[]/chapters[] nur bei full }
@@ -479,6 +481,11 @@ local function checkMode(ms, d)
 	end
 	ms.modeSeen = mode
 	if mode == "openworld" then
+		-- Startwahl zuerst: ein neues Profil wählt seinen Startweg, das Tutorial wartet so lange (TutorialRules.Waiting)
+		local okSt, errSt = pcall(StartService.OnMode, ms, d, mode)
+		if not okSt then
+			warn("[Minispiele] Startwahl: " .. tostring(errSt))
+		end
 		local ok, err = pcall(TutorialService.Start, ms, d, mode)
 		if not ok then
 			warn("[Minispiele] Tutorial-Start: " .. tostring(err))
@@ -740,6 +747,7 @@ function Mini.OnJoin(p)
 		-- Ausbaustufe 4: Level/Rang merken, Tutorial-Stand, Anfangsmodus (PlaceKind, lastMode, TeleportData)
 		PrestigeService.OnJoin(ms, d, t)
 		local mode = LobbyService.OnJoin(ms, d, t) -- setzt p.mode (das Tutorial richtet sich danach)
+		StartService.OnJoin(ms, d, t) -- Veteranen ohne Startweg -> werkstatt, bevor das Tutorial den Weg liest
 		TutorialService.OnJoin(ms, d, t)
 		TycoonService.OnJoin(ms, d, t) -- Sitzung merken; im Modus tycoon sofort Grundstück + Modelle
 		OWService.OnJoin(ms, d, t) -- Gebäude am Grundstück, offline fertige Bauten
@@ -1087,6 +1095,7 @@ TycoonService.Register(Actions, api)
 OWService.Register(Actions, api)
 StoryService.Register(Actions, api)
 ShopService.Register(Actions, api)
+StartService.Register(Actions, api)
 
 for name in pairs(MiniNet.Actions) do
 	assert(Mini.Handlers[name], "Kein Handler für " .. name)
@@ -1133,6 +1142,7 @@ function Mini.Init(c)
 	OWService.Init(c)
 	StoryService.Init(c)
 	ShopService.Init(c) -- PromptGamePassPurchaseFinished; purchasePrompt über c.emit
+	StartService.Init(c)
 end
 
 return Mini

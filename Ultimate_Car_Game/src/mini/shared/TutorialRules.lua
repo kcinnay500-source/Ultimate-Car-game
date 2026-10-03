@@ -12,6 +12,10 @@
 --   "job:invoice"    ein Auftrag ist fertig und geprüft
 --   "settled"        Abrechnung (Mini.OnSettled)
 --   "action:<name>"  eine Mini-Aktion war erfolgreich (z. B. mini_travel)
+-- Startwahl (GameConfig.Start): die Schritte hängen vom Startweg ab (meta.startPath -> GameConfig.Tutorial.ByPath[typ];
+-- ohne Weg der klassische Weg werkstatt = GameConfig.Tutorial.Steps). Solange ein neues Profil in der Open World noch
+-- wählen muss (MetaRules.StartPending), wartet das Tutorial (Waiting: nicht aktiv, Karte verborgen). Steps/Count ohne
+-- Profil liefern den klassischen Weg (Abwärtskompatibilität).
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
 
@@ -20,7 +24,7 @@ local TutorialRules = {}
 export type Step = GameConfig.TutorialStep
 export type View = {
 	step: number, count: number, id: string?, text: string, target: string?, zone: string?, event: string?,
-	next: boolean, done: boolean, skipped: boolean, active: boolean,
+	next: boolean, done: boolean, skipped: boolean, active: boolean, path: string, waiting: boolean, openTab: string?,
 }
 
 -- Phasen eines 2.4.0-Auftrags (Rules.Accept/Diagnose/StartWork/Advance) -> erfüllte job:-Ereignisse
@@ -43,6 +47,7 @@ TutorialRules.Text = {
 	finishedAgain = "Tutorial noch einmal geschafft! Die Belohnung hattest du schon – viel Spaß in der Werkstattmeile!",
 	finished = "Tutorial geschafft! Du bekommst %d Credits und %d XP.",
 	progress = "Schritt %d von %d",
+	waiting = "Wähle zuerst, womit du startest – dann geht das Tutorial los.",
 }
 
 local function finite(v: any): boolean
@@ -50,12 +55,29 @@ local function finite(v: any): boolean
 end
 
 ---------------------------------------------------------------- Schritte
-function TutorialRules.Steps(): { Step }
-	return GameConfig.Tutorial.Steps
+-- Weg des Profils für das Tutorial (gewählter Startweg, sonst werkstatt); ohne Profil werkstatt
+function TutorialRules.Path(d: any?): string
+	if d == nil then
+		return GameConfig.Tutorial.DefaultPath or "werkstatt"
+	end
+	return MetaRules.EffectivePath(d)
 end
 
-function TutorialRules.Count(): number
-	return #GameConfig.Tutorial.Steps
+-- Schritte des Wegs (d = Profil oder nil = klassischer Weg)
+function TutorialRules.Steps(d: any?): { Step }
+	if d == nil then
+		return GameConfig.Tutorial.Steps
+	end
+	return MetaRules.TutorialSteps(TutorialRules.Path(d))
+end
+
+-- Schritte eines Wegs nach Id ("werkstatt" | "autohaus" | …); unbekannt = klassischer Weg
+function TutorialRules.StepsForPath(path: any): { Step }
+	return MetaRules.TutorialSteps(path)
+end
+
+function TutorialRules.Count(d: any?): number
+	return #TutorialRules.Steps(d)
 end
 
 function TutorialRules.Reward(): { credits: number, xp: number }
@@ -66,7 +88,7 @@ end
 -- Nummer des aktuellen Schritts (1..Count), auch nach Abschluss (dann der letzte Schritt)
 function TutorialRules.StepIndex(d: any): number
 	local m = MetaRules.Meta(d)
-	local n = TutorialRules.Count()
+	local n = TutorialRules.Count(d)
 	if not m or not finite(m.tutorialStep) then
 		return 1
 	end
@@ -89,10 +111,17 @@ function TutorialRules.AllowedIn(mode: any): boolean
 	return mode == nil or mode == "openworld"
 end
 
--- Läuft das Tutorial (meta vorhanden, nicht beendet, Modus passt)?
+-- Wartet das Tutorial auf die Startwahl? Nur in einer Open-World-Sitzung (mode == "openworld") eines neuen Profils
+-- ohne Startweg; ohne Modus (Sitzung ohne Lobby-Verkabelung, reine Regeln) wartet es nicht.
+function TutorialRules.Waiting(d: any, mode: any?): boolean
+	return mode == "openworld" and MetaRules.StartPending(d)
+end
+
+-- Läuft das Tutorial (meta vorhanden, nicht beendet, Modus passt, Startwahl getroffen)?
 function TutorialRules.Active(d: any, mode: any?): boolean
 	local m = MetaRules.Meta(d)
-	return m ~= nil and m.tutorialDone ~= true and TutorialRules.Count() > 0 and TutorialRules.AllowedIn(mode)
+	return m ~= nil and m.tutorialDone ~= true and TutorialRules.Count(d) > 0 and TutorialRules.AllowedIn(mode)
+		and not TutorialRules.Waiting(d, mode)
 end
 
 -- Aktueller Schritt (nil, wenn beendet, ohne meta oder außerhalb der Open World) und seine Nummer
@@ -101,7 +130,7 @@ function TutorialRules.Current(d: any, mode: any?): (Step?, number)
 	if not TutorialRules.Active(d, mode) then
 		return nil, i
 	end
-	return GameConfig.Tutorial.Steps[i], i
+	return TutorialRules.Steps(d)[i], i
 end
 
 -- Wurde die Belohnung schon einmal verbucht? (Neustart am Kiosk gibt sie nicht noch einmal.)
@@ -145,7 +174,7 @@ end
 
 -- Pflicht beim ersten Beitritt in der Open World: noch nicht beendet und Modus openworld
 function TutorialRules.ShouldStart(d: any, mode: any): boolean
-	return mode == "openworld" and TutorialRules.Active(d)
+	return mode == "openworld" and TutorialRules.Active(d, mode) -- wartet, solange die Startwahl offen ist
 end
 
 ---------------------------------------------------------------- Fortschritt (nur der Server ruft Advance/Next/Skip)
@@ -157,7 +186,7 @@ function TutorialRules.Advance(d: any, event: any): (boolean, boolean, Step?)
 	if not m or not step or not TutorialRules.Matches(step, event) then
 		return false, false, nil
 	end
-	local n = TutorialRules.Count()
+	local n = TutorialRules.Count(d)
 	if i >= n then
 		m.tutorialStep = n
 		m.tutorialDone = true
@@ -228,6 +257,17 @@ function TutorialRules.PendingJobEvent(d: any): string?
 	return TutorialRules.JobEvents(d)[step.event] and step.event or nil
 end
 
+-- Schritt, den der Passiv-Modus unmöglich macht (passiveSkip, z. B. Kiesplatz-Verkauf), bei aktivem Passiv-Modus:
+-- -> sein Ereignis (TutorialService.Tick erledigt ihn damit, sonst säße der Spieler fest)
+function TutorialRules.PendingPassiveEvent(d: any): string?
+	local step = TutorialRules.Current(d)
+	if not step or step.passiveSkip ~= true then
+		return nil
+	end
+	local m = MetaRules.Meta(d)
+	return m ~= nil and m.passive == true and step.event or nil
+end
+
 ---------------------------------------------------------------- Beginner-Hinweise (je einmal, nur Beginner)
 -- Alle noch nicht gezeigten Hinweise zu einem Auslöser ("station:<key>", "first:<stat>", "unlock:<key>");
 -- sie gelten danach als gesehen (meta.hintsSeen). Leer ohne Beginner-Modus oder beim zweiten Aufruf.
@@ -264,12 +304,13 @@ function TutorialRules.ProgressText(step: number, count: number): string
 	return string.format(TutorialRules.Text.progress, step, count)
 end
 
--- { step, count, id, text, target, zone, event, next, done, skipped, active } – flach, sendbar.
--- mode (optional): außerhalb der Open World ist active = false und der Schritt ohne Text/Ziel (die Karte ruht).
+-- { step, count, id, text, target, zone, event, next, done, skipped, active, path, waiting, openTab } – flach, sendbar.
+-- mode (optional): außerhalb der Open World ist active = false und der Schritt ohne Text/Ziel (die Karte ruht);
+-- waiting = true, solange die Startwahl offen ist (dann ebenfalls inaktiv, die Karte bleibt verborgen).
 function TutorialRules.View(d: any, mode: any?): View
 	local step, i = TutorialRules.Current(d, mode)
-	local n = TutorialRules.Count()
-	local s = step or GameConfig.Tutorial.Steps[i]
+	local n = TutorialRules.Count(d)
+	local s = step or TutorialRules.Steps(d)[i]
 	return {
 		step = i,
 		count = n,
@@ -282,6 +323,9 @@ function TutorialRules.View(d: any, mode: any?): View
 		done = TutorialRules.Done(d),
 		skipped = TutorialRules.Skipped(d),
 		active = step ~= nil,
+		path = TutorialRules.Path(d),
+		waiting = TutorialRules.Waiting(d, mode),
+		openTab = (s and step) and s.openTab or nil,
 	}
 end
 

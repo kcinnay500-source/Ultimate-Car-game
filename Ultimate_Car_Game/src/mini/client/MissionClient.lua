@@ -2,7 +2,9 @@
 -- MissionClient.Start(ctx), danach OnSnapshot(s) je Snapshot, OnNotice(data) je mini_notice und Step(dt) aus dem Heartbeat
 -- (wie TutorialUI/TycoonClient). Der Client zeigt nur an; nichts hier ist spielrelevant, alles läuft in pcall.
 --
--- Eigene ScreenGui "Missionen" (DisplayOrder 21: über dem 2.4.0-HUD (20), unter dem Minispiel-Panel (30)):
+-- Eigene ScreenGui "Missionen" (DisplayOrder 16: UNTER dem 2.4.0-UI (20) – Dialoge, QTE, Tablet und Fahrzeugknöpfe
+-- bekommen immer den Klick; Rahmen nicht Active, nur Knöpfe schlucken Klicks; Karten nie über der 2.4.0-HUD-Leiste oder
+-- den Fahrzeugknöpfen E/F/H (PrestigeUI.FreeRect)):
 --   Marker        BillboardGuis am Ziel der aktiven Mission (aus der Missionsdefinition: Kiesplatz, Werkstatt-Empfang,
 --                 Autohaus, Teststrecke, …; zone city: workspace.City.Stations.<key>, zone plot:
 --                 PlayerWorkshops.Plot_<UserId>.Stations.<key>) und an Start/Ziel der Lieferroute (City.Missions.Delivery_<n>,
@@ -19,17 +21,21 @@
 --                 Serverzeit, eigener Takt je Figur; nur bis 150 Studs von der Kamera). CityClient kennt die Art nicht und
 --                 soll sie überspringen (wie conveyor/stamp), sonst meldet er sie einmal als unbekannt.
 -- Alles verschwindet, solange das Minispiel-Panel, das 2.4.0-Tablet, QTE/Diagnose (ctx.IsBlocked) oder der Tacho
--- (ScreenGui "Fahren") zu sehen sind; Prüfung alle 0,2 s. Handy: Karten höchstens Bildschirmbreite − 24 px, Knöpfe 44 px.
+-- (ScreenGui "Fahren") zu sehen sind; Prüfung alle 0,2 s und sofort über MissionClient.Refresh (MiniClient). Handy: Karten höchstens Bildschirmbreite − 24 px, Knöpfe 44 px.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local MiniLocale = require(Mini:WaitForChild("MiniLocale"))
 local StoryRules = require(Mini:WaitForChild("StoryRules"))
+local PrestigeUI -- Freiraum-Regeln der 2.4.0-Oberfläche (FreeRect); optional
+pcall(function()
+	PrestigeUI = require(script.Parent:WaitForChild("PrestigeUI", 5))
+end)
 
 local MissionClient = {}
 
-MissionClient.DisplayOrder = 21
+MissionClient.DisplayOrder = 16 -- unter dem 2.4.0-UI (20)
 MissionClient.CardWidth = 420
 MissionClient.CardTop = 62 + 60 + 8 -- Mindestabstand: unter der Toast-Zone (Toast y 62, 60 hoch); tatsächlich UI.ToastTop()
 MissionClient.HintWidth = 300 -- Breite der Karten oben rechts (TutorialUI.HintWidth / UnlocksUI), für die Schmal-Prüfung
@@ -214,6 +220,43 @@ local function cardTop(): number
 	return top
 end
 
+-- Lage einer Karte (Ankerpunkt x 0.5) mit Wunsch-Oberkante top: nie in der 2.4.0-HUD-Leiste oder den Fahrzeugknöpfen
+-- (PrestigeUI.FreeRect); bleibt die Karte in der Mitte, bleibt auch die Position mittig (Skala 0.5)
+local function freePosition(frame: GuiObject, top: number, fallbackH: number): UDim2
+	local w, h = gui and gui.AbsoluteSize.X or 0, gui and gui.AbsoluteSize.Y or 0
+	if not PrestigeUI or w <= 0 or h <= 0 then
+		return UDim2.new(0.5, 0, 0, top)
+	end
+	local cw = frame.AbsoluteSize.X > 0 and frame.AbsoluteSize.X or math.min(MissionClient.CardWidth, w - 24)
+	local ch = frame.AbsoluteSize.Y > 0 and frame.AbsoluteSize.Y or fallbackH
+	local x0 = (w - cw) / 2
+	local ok, x, y = pcall(PrestigeUI.FreeRect, w, h, x0, top, cw, ch)
+	if not ok then
+		return UDim2.new(0.5, 0, 0, top)
+	end
+	if math.abs(x - x0) < 0.5 then
+		return UDim2.new(0.5, 0, 0, y)
+	end
+	return UDim2.new(0, x + cw / 2, 0, y)
+end
+
+local function placeCard()
+	if card.frame then
+		card.frame.Position = freePosition(card.frame, cardTop(), 80)
+	end
+end
+
+local function placeChapter()
+	if not chapter.frame or not gui then
+		return
+	end
+	local h = gui.AbsoluteSize.Y
+	local ch = chapter.frame.AbsoluteSize.Y > 0 and chapter.frame.AbsoluteSize.Y or 200
+	local pos = freePosition(chapter.frame, h * 0.42 - ch / 2, ch)
+	-- Ankerpunkt der Kapitel-Karte ist die Mitte (0.5, 0.5)
+	chapter.frame.Position = UDim2.new(pos.X.Scale, pos.X.Offset, 0, pos.Y.Offset + ch / 2)
+end
+
 local function buildCard()
 	local frame = UI.Frame(gui, {
 		Name = "MissionCard", BackgroundColor3 = T.panel, AutomaticSize = Enum.AutomaticSize.Y,
@@ -221,14 +264,15 @@ local function buildCard()
 		Size = UDim2.new(0, MissionClient.CardWidth, 0, 0), Visible = false,
 	})
 	UI.Corner(frame, 12)
-	UI.Padding(frame, 16, 12)
-	UI.List(frame, 4)
+	card.padding = UI.Padding(frame, 16, 12)
+	card.list = UI.List(frame, 4)
 	local stripe = UI.Frame(frame, { Name = "Stripe", BackgroundColor3 = T.green, Size = UDim2.new(1, 0, 0, 3), AutomaticSize = Enum.AutomaticSize.None, LayoutOrder = 0 })
 	UI.Corner(stripe, 2)
 	card.frame = frame
 	card.stripe = stripe
 	card.title = UI.Label(frame, "", { Name = "Title", Font = UI.FontBold, TextSize = 18, LayoutOrder = 1, TextXAlignment = Enum.TextXAlignment.Center })
 	card.text = UI.Label(frame, "", { Name = "Text", TextSize = 14, TextColor3 = T.muted, LayoutOrder = 2, TextXAlignment = Enum.TextXAlignment.Center })
+	card.style = { padding = card.padding, list = card.list, title = card.title, text = card.text, titleSize = 18, textSize = 14, padX = 16, padY = 12, gap = 4 }
 	card.scale = Instance.new("UIScale")
 	card.scale.Scale = 1
 	card.scale.Parent = frame
@@ -245,7 +289,7 @@ local function buildChapterCard()
 	local frame = UI.Frame(gui, {
 		Name = "ChapterCard", BackgroundColor3 = T.panel, AutomaticSize = Enum.AutomaticSize.Y,
 		AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.42, 0),
-		Size = UDim2.new(0, MissionClient.CardWidth, 0, 0), Visible = false, Active = true,
+		Size = UDim2.new(0, MissionClient.CardWidth, 0, 0), Visible = false, Active = false,
 	})
 	UI.Corner(frame, 14)
 	UI.Padding(frame, 20, 16)
@@ -270,8 +314,12 @@ local function layout()
 	end
 	local cw = math.min(MissionClient.CardWidth, w - 24)
 	card.frame.Size = UDim2.new(0, cw, 0, 0)
-	card.frame.Position = UDim2.new(0.5, 0, 0, cardTop())
+	if PrestigeUI and card.style then
+		pcall(PrestigeUI.StyleCard, card.style, PrestigeUI.IsCompact(gui.AbsoluteSize.Y)) -- Handy quer: kompakt
+	end
+	placeCard()
 	chapter.frame.Size = UDim2.new(0, cw, 0, 0)
+	placeChapter()
 end
 
 local function build()
@@ -497,8 +545,18 @@ local function updateMarkers()
 end
 
 ---------------------------------------------------------------- Karten
+-- Niedriger Bildschirm (Handy quer): zwischen Toast-Zone und HUD-Leiste passt nur eine Karte – solange oben rechts
+-- „Tipp“/„Neu freigeschaltet“ zu sehen ist, wartet die Missions-Karte
+local function shortAndBusy(): boolean
+	if not PrestigeUI or not gui or not PrestigeUI.IsCompact(gui.AbsoluteSize.Y) then
+		return false
+	end
+	local ok, bottom = pcall(rightCardsBottom)
+	return ok and type(bottom) == "number" and bottom > 0
+end
+
 local function showNextCard()
-	if cardShowing or #cardQueue == 0 or not card.frame or not overlaysAllowed() then
+	if cardShowing or #cardQueue == 0 or not card.frame or not overlaysAllowed() or shortAndBusy() then
 		return
 	end
 	local entry = table.remove(cardQueue, 1)
@@ -509,7 +567,7 @@ local function showNextCard()
 	card.text.Text = entry.text or ""
 	card.text.Visible = entry.text ~= nil and entry.text ~= ""
 	card.stripe.BackgroundColor3 = entry.color or T.green
-	card.frame.Position = UDim2.new(0.5, 0, 0, cardTop())
+	placeCard()
 	card.frame.Visible = true
 	card.scale.Scale = 0.8
 	TweenService:Create(card.scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
@@ -540,6 +598,7 @@ local function showChapterNow(entry: any)
 	chapter.title.Text = entry.title
 	chapter.text.Text = entry.text or ""
 	chapter.text.Visible = entry.text ~= nil and entry.text ~= ""
+	placeChapter()
 	chapter.frame.Visible = true
 	chapter.scale.Scale = 0.85
 	TweenService:Create(chapter.scale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
@@ -673,6 +732,38 @@ local function npcStep(dt: number)
 end
 
 ---------------------------------------------------------------- Schnittstelle
+-- Sichtbarkeit, wartende Karten und Marker sofort neu (Heartbeat alle 0,2 s; MiniClient.RefreshOverlays bei jedem
+-- Wechsel von 2.4.0-Dialog, Tablet oder Panel – damit keine Karte im selben Moment über einem Dialog liegt)
+function MissionClient.Refresh()
+	if not gui then
+		return
+	end
+	local allowed = overlaysAllowed()
+	if gui.Enabled ~= allowed then
+		gui.Enabled = allowed
+	end
+	if allowed then
+		if chapterPending then
+			local e = chapterPending
+			chapterPending = nil
+			showChapterNow(e)
+		end
+		showNextCard()
+		-- niedriger Bildschirm: taucht rechts eine Karte auf, weicht die Missions-Karte, bis sie weg ist
+		if card.frame and cardShowing then
+			local show = not shortAndBusy()
+			if card.frame.Visible ~= show then
+				card.frame.Visible = show
+			end
+		end
+		-- sichtbare Karte neu legen, falls rechts gerade eine Karte auf- oder abgetaucht ist (schmale Bildschirme)
+		if card.frame and card.frame.Visible then
+			placeCard()
+		end
+	end
+	updateMarkers()
+end
+
 function MissionClient.OnSnapshot(s: any)
 	if type(s) ~= "table" then
 		return
@@ -744,23 +835,7 @@ function MissionClient.Step(dt: number?)
 		stepTimer += d
 		if stepTimer >= 0.2 then
 			stepTimer = 0
-			local allowed = overlaysAllowed()
-			if gui.Enabled ~= allowed then
-				gui.Enabled = allowed
-			end
-			if allowed then
-				if chapterPending then
-					local e = chapterPending
-					chapterPending = nil
-					showChapterNow(e)
-				end
-				showNextCard()
-				-- sichtbare Karte neu legen, falls rechts gerade eine Karte auf- oder abgetaucht ist (schmale Bildschirme)
-				if card.frame and card.frame.Visible then
-					card.frame.Position = UDim2.new(0.5, 0, 0, cardTop())
-				end
-			end
-			updateMarkers()
+			MissionClient.Refresh()
 		end
 	end
 	npcStep(d)

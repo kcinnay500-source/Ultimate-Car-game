@@ -505,12 +505,13 @@ inputControl=InputController.new(player,{
 -- öffnet nicht während QTE/Diagnose, schließt beim Öffnen das Tablet, weicht dem Tablet; HUD blendet sich aus.
 task.spawn(function()
     local ok,err=pcall(MiniClient.Start,{
-        isBlocked=function() return overlay.Visible or (inputControl~=nil and inputControl.locked) end,
+        isBlocked=function() return overlay.Visible or (inputControl~=nil and inputControl.locked) or challenge~=nil or diagnosis~=nil end, -- 3.0: auch während QTE/Diagnose (Phase-4-Karten weichen)
         isTabletOpen=function() return visible end,
         closeTablet=function() visible=false;tablet.Visible=false;if protectCoreUI then protectCoreUI() end end,
         openTablet=function(key) showPage(key) end,
         hideHud=function() refresh();refreshVehicleActions();if protectCoreUI then protectCoreUI() end end, -- 3.0: Spielerliste sofort mitschalten
         toast=toast,
+        subscribe=function(fn) for _,o in ipairs({overlay,tablet,vehicleActions}) do o:GetPropertyChangedSignal("Visible"):Connect(fn) end end, -- 3.0: Dialog/Tablet/E-F-H auf oder zu -> Phase-4-Karten sofort neu
     })
     if not ok then warn("[3.0] Minispiele-Start fehlgeschlagen: "..tostring(err)) end
 end)

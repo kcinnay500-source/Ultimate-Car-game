@@ -8,7 +8,8 @@
 -- 2.4.0-Tablet, QTE/Diagnose (ctx.IsBlocked) oder der Tacho (ScreenGui "Fahren" aktiv) zu sehen sind.
 -- Lage: 2.4.0-CompactProgress liegt zentriert oben (310 × 46 bei y 8); das Abzeichen sitzt rechts mit 16 px Rand.
 -- Ist der Bildschirm dafür zu schmal (Handy hochkant), rückt es unter die Leiste (y 60). DisplayOrder 19: unter dem
--- 2.4.0-UI (20), damit Tablet und Toasts darüber liegen.
+-- 2.4.0-UI (20), damit Tablet, Dialoge und Toasts darüber liegen. Dazu die gemeinsamen Freiraum-Regeln (FreeRect) für
+-- alle Phase-4-Karten: nie über der 2.4.0-HUD-Leiste oder den Fahrzeugknöpfen E/F/H.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -364,6 +365,112 @@ function PrestigeUI.OverlayTop(): number
 		end
 	end
 	return math.max(top, toastTop + PrestigeUI.ToastHeight + PrestigeUI.CardGap)
+end
+
+---------------------------------------------------------------- Freiräume der 2.4.0-Oberfläche
+-- Alle Phase-4-Karten (Tutorial, Hinweise, Freischaltungen, Missionen) liegen UNTER dem 2.4.0-UI (DisplayOrder 16–19)
+-- und halten dessen Bedienelemente frei: die HUD-Leiste unten (GarageClient: 132 px hoch, 6 px Rand) und die
+-- Fahrzeugknöpfe E/F/H unten links (bis 3 Zeilen à 42 px, Unterkante 150 px über dem Rand, 360 px breit bei x 12).
+-- Koordinaten wie AbsolutePosition in einer ScreenGui mit IgnoreGuiInset = false (w × h = deren AbsoluteSize).
+PrestigeUI.GarageHud = 138
+PrestigeUI.GarageGap = 8
+PrestigeUI.VehicleLeft = 12
+PrestigeUI.VehicleWidth = 360
+PrestigeUI.VehicleBottom = 150
+PrestigeUI.VehicleRow = 42
+PrestigeUI.VehicleRows = 3
+PrestigeUI.ScreenMargin = 8
+
+-- Bereich der Fahrzeugknöpfe (immer in voller Höhe reserviert, damit eine Karte nicht erst nach dem Auftauchen weicht)
+function PrestigeUI.VehicleZone(w: number, h: number): (number, number, number, number)
+	local x0 = PrestigeUI.VehicleLeft
+	local x1 = x0 + math.min(PrestigeUI.VehicleWidth, math.max(0, w - 24))
+	local y1 = h - PrestigeUI.VehicleBottom
+	local y0 = y1 - PrestigeUI.VehicleRows * PrestigeUI.VehicleRow
+	return x0, y0, x1, y1
+end
+
+-- Unterste erlaubte Kante einer Karte (über der 2.4.0-HUD-Leiste)
+function PrestigeUI.FreeBottom(h: number): number
+	return h - PrestigeUI.GarageHud - PrestigeUI.GarageGap
+end
+
+-- Schneidet das Rechteck (x, y, cw × ch) die HUD-Leiste oder die Fahrzeugknöpfe?
+function PrestigeUI.HitsGarage(w: number, h: number, x: number, y: number, cw: number, ch: number): boolean
+	if y + ch > PrestigeUI.FreeBottom(h) + 0.5 then
+		return true
+	end
+	local g = PrestigeUI.GarageGap
+	local zx0, zy0, zx1, zy1 = PrestigeUI.VehicleZone(w, h)
+	return x < zx1 + g and x + cw > zx0 - g and y < zy1 + g and y + ch > zy0 - g
+end
+
+-- Verschiebt eine Karte (linke obere Ecke x, y; Größe cw × ch) so wenig wie möglich aus HUD-Leiste und Fahrzeugknöpfen:
+-- erst über die Leiste, dann rechts neben die Knöpfe, sonst darüber. Liefert x, y.
+function PrestigeUI.FreeRect(w: number, h: number, x: number, y: number, cw: number, ch: number): (number, number)
+	local m = PrestigeUI.ScreenMargin
+	local bottom = PrestigeUI.FreeBottom(h)
+	if y + ch > bottom then
+		y = math.max(m, bottom - ch)
+	end
+	if not PrestigeUI.HitsGarage(w, h, x, y, cw, ch) then
+		return x, y
+	end
+	local g = PrestigeUI.GarageGap
+	local _, zy0, zx1 = PrestigeUI.VehicleZone(w, h)
+	local rx = zx1 + g
+	if rx + cw <= w - PrestigeUI.VehicleLeft then
+		return math.max(x, rx), y
+	end
+	if zy0 - g - ch >= m then
+		return x, zy0 - g - ch
+	end
+	return math.max(rx, w - PrestigeUI.VehicleLeft - cw), y
+end
+
+-- Niedrige Bildschirme (Handy quer, ScreenGui-Höhe < CompactHeight): zwischen Toast-Zone (bis y 130) und HUD-Leiste
+-- bleiben ~80 px. Karten oben werden dann kompakt (kleinere Schrift, weniger Rand, Text höchstens 2 Zeilen) und
+-- stehen einzeln (eine wartet, solange die andere zu sehen ist).
+PrestigeUI.CompactHeight = 450
+PrestigeUI.CompactTextSize = 13
+PrestigeUI.CompactLines = 2
+
+function PrestigeUI.IsCompact(h: number): boolean
+	return h > 0 and h < PrestigeUI.CompactHeight
+end
+
+-- c = { padding = UIPadding, list = UIListLayout, title = TextLabel, text = TextLabel, titleSize, textSize, padX, padY, gap }
+function PrestigeUI.StyleCard(c: any, small: boolean)
+	if type(c) ~= "table" or not c.title or not c.text then
+		return
+	end
+	c.title.TextSize = small and math.max(14, c.titleSize - 2) or c.titleSize
+	c.text.TextSize = small and PrestigeUI.CompactTextSize or c.textSize
+	if c.padding then
+		c.padding.PaddingTop = UDim.new(0, small and 6 or c.padY)
+		c.padding.PaddingBottom = UDim.new(0, small and 6 or c.padY)
+		c.padding.PaddingLeft = UDim.new(0, small and 10 or c.padX)
+		c.padding.PaddingRight = UDim.new(0, small and 10 or c.padX)
+	end
+	if c.list then
+		c.list.Padding = UDim.new(0, small and 2 or c.gap)
+	end
+	if small then
+		c.text.AutomaticSize = Enum.AutomaticSize.None
+		c.text.Size = UDim2.new(1, 0, 0, math.ceil(PrestigeUI.CompactLines * PrestigeUI.CompactTextSize * 1.2))
+		c.text.TextTruncate = Enum.TextTruncate.AtEnd
+	else
+		c.text.AutomaticSize = Enum.AutomaticSize.Y
+		c.text.Size = UDim2.new(1, 0, 0, 0)
+		c.text.TextTruncate = Enum.TextTruncate.None
+	end
+end
+
+-- Sofort neu prüfen (MiniClient.RefreshOverlays: 2.4.0-Dialog/Tablet/Panel auf oder zu), nicht erst im nächsten Takt
+function PrestigeUI.Refresh()
+	if hud.gui then
+		hud.gui.Enabled = hudShouldShow()
+	end
 end
 
 return PrestigeUI

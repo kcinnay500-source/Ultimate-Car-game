@@ -54,7 +54,11 @@ Schlüssel, Tiefe ≤ 5). `MiniRules.DefaultGames/LoadGames` rufen sie auf. Nich
 ```
 d.games.meta     = { tutorialDone=bool, tutorialStep=int, tutorialSkipped=bool, tutorialRewarded=bool, beginner=bool,
                      passive=bool, single=bool, lastMode="lobby"|"openworld"|"tycoon", firstSeen=unix, playSeconds=int,
-                     hintsSeen={ [hintId]=true } }   -- tutorialRewarded: Belohnung verbucht (Neustart am Kiosk ohne zweite)
+                     hintsSeen={ [hintId]=true },
+                     startPath=""|"werkstatt"|"autohaus"|"produktion"|"schrottplatz" }
+                     -- tutorialRewarded: Belohnung verbucht (Neustart am Kiosk ohne zweite)
+                     -- startPath: Startwahl (§6a); "" = noch offen; Veteranen (d.completed > 0, Tutorial beendet/übersprungen,
+                     -- tutorialStep ≥ 2 oder ein OW-Gebäude mit Stufe > 0) bekommen beim Laden "werkstatt"
 d.games.prestige = { claimed={ [rank:int]=true }, titleRank=int }          -- Rang = PrestigeRules.RankFor(d.level)
 d.games.tycoon   = { runsDone={ werkstatt=int, autohaus=int, produktion=int, schrottplatz=int },
                      rebirths=int, xpStage=0..5,       -- xpStage: Stufen-XP dieses Durchlaufs schon vergeben (kein XP-Farmen)
@@ -62,7 +66,9 @@ d.games.tycoon   = { runsDone={ werkstatt=int, autohaus=int, produktion=int, sch
                                    startedAt=unix, lastTick=unix, produced=number, rebirthBoost=number,
                                    storage={ [item]=int }, itemAcc={ [item]=number } } }
                      -- container = Bargeld im Sammelbehälter (noch nicht eingesammelt), itemAcc = angebrochene Handelsware
-d.games.ow       = { buildings={ [typ]={ stage=int, built=int, readyAt=unix, collectedAt=unix, carAt=unix, partsCarry=number } },
+d.games.ow       = { buildings={ [typ]={ stage=int, built=int, readyAt=unix, collectedAt=unix, carAt=unix, partsCarry=number,
+                                        packs=int, partsTotal=int, collects=int, gift=bool } },
+                     -- packs/partsTotal/collects: Lebenszeit-Zähler (Story-Missionen der Startwege), gift: Startgeschenk
                      passive=bool, lastPassiveAt=unix }   -- typ: autohaus|produktion|schrottplatz (werkstatt = d.bays, nicht gespeichert);
                                                           -- stage = gekaufte Stufe, built = fertig gebaute Stufe (stage > built: Baustelle bis readyAt);
                                                           -- passive spiegelt meta.passive (eine Quelle: meta)
@@ -166,6 +172,32 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   HUD-Zeile „Nächste Freischaltung“. Beim Erreichen eines Levels mit Freischaltung: `mini_notice { kind="unlock" }`
   mit Titel (Client zeigt eine Karte mit Effekt).
 
+## 6a. Startwahl in der Open World (`StartService`, `StartUI`, `GameConfig.Start`)
+
+- Ein **neues** Profil (`meta.startPath == ""`) wählt beim ersten Betreten der Open World einen von vier Startwegen:
+  `werkstatt` (klassischer 2.4.0-Start), `autohaus`, `produktion`, `schrottplatz`. Aktion `start_choose {path}`
+  (Whitelist, einmalig, kein Geld/XP). Für die drei Gebäudewege schenkt `OWRules.GrantStart` Stufe 1 des Gebäudes
+  (ohne Preis/Level-Sperre, sofort fertig, Startertrag `yieldHours` wartet schon); `OWService.Tick` stellt das Modell
+  `<typ>_1` direkt am Anker auf und meldet `ow_ready`.
+- Bis zur Wahl **wartet das Tutorial** (`TutorialRules.Waiting`: inaktiv, keine Karte, `tutorial_next` mit Toast
+  abgelehnt). Danach startet das Tutorial des Wegs: Intro (laufen, Menü) → Mittelteil des Wegs
+  (`GameConfig.Tutorial.Paths[typ]`, Gebäude-Tab öffnen (`openTab`), Ertrag abholen, Station in der Stadt) → Ende
+  (Stadtplan, Kiesplatz). `GameConfig.Tutorial.ByPath[typ]` ist die fertige Liste; `Steps = ByPath.werkstatt`.
+- Story Kapitel 1, Mission an `PathSlot`: je Weg eine eigene erste Mission (`PathMissions`).
+- Client: ScreenGui `StartChoice` (DisplayOrder 40, voller Hintergrund), sichtbar solange `snapshot.start.pending`
+  und Modus `openworld`; sie blendet sich aus, solange ein 2.4.0-Dialog (QTE/Diagnose), das Tablet oder das
+  Minispiel-Panel offen ist. „Später entscheiden“ blendet sie bis zum nächsten Betreten der Open World aus.
+
+## 6b. Ebenen der Oberflächen (Studio-Klicktest `tests/test_studio_play.lua`)
+
+- Reihenfolge: Missionen 16, Tutorial 17, UnlockCards 18, ProgressHUD/TycoonHUD 19, **2.4.0-UI 20**, Fahren 25,
+  Minispiel-Panel 30, StartChoice 40, GarageCelebrations 45. Alle Phase-4-Karten und -Abzeichen liegen **unter**
+  dem 2.4.0-UI, damit Diagnose-/QTE-Dialoge, Tablet und Fahrzeugknöpfe (E/F/H) immer den Klick bekommen.
+- Kartenrahmen sind nicht `Active` (nur echte Knöpfe schlucken Klicks; Weltklicks bleiben frei). Karten werden mit
+  `PrestigeUI.FreeRect` platziert (nie über der HUD-Leiste oder den Fahrzeugknöpfen) und blenden sich sofort aus,
+  solange `IsBlocked`, das Tablet, das Panel oder der Fahr-HUD sichtbar ist (`MiniClient.RefreshOverlays` über
+  GarageClient `opts.subscribe`).
+
 ## 7. Open World: Missionen, Story, Gebäude, Passiv-Modus (`OWRules`, `StoryRules`, `OWService`, `StoryService`, `StoryUI`, `BuildingsUI`, `MissionClient`)
 
 - **Gebäude** (`GameConfig.OW.Buildings[typ]`, Stufen 1–4 mit Preis, Bauzeit, Wirkung):
@@ -196,6 +228,10 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   5. *Der Mega-Verkäufer* (Level 50): Produktion Stufe 4, 10 Verkäufe mit Bestpreis, einen Traumwagen
      besitzen (Vektor RS Goldstück ab 50, Vektor GTX ab 58 – oder später Aureon/Elys; die Mission nennt die Level) → Titel „Mega-Verkäufer“, Kosmetik, 25.000 Credits. Zweiter Strang „Werkstatt-Legende“ als
      Nebenmissionen (100 Aufträge, alle Geräte, 4 Bühnen).
+  - Startweg (§6a): Kapitel 1 trägt `PathSlot = 1` und `PathMissions[typ]` – werkstatt und autohaus `c1_m1` (3 Verkäufe am
+    Kiesplatz – der klassische Start bleibt unverändert, auch für Veteranen), produktion `c1_m1_produktion` (2 Bauteil-Pakete),
+    schrottplatz `c1_m1_schrottplatz` (2 Altteile vom Schrottplatz). Ohne Weg gilt `c1_m1`; ein Slot gilt als
+    erledigt, wenn irgendeine Variante erledigt ist (`StoryRules.SlotDone`).
   - Missionen: `story_start {id}`, `story_claim {id}`; Fortschritt zählt der Server über Statistiken
     (`MiniRules.STAT_KEYS`, `GoalsService`-Mechanik) und Ereignisse (Verkauf am Kiesplatz `story_sell {offer, price}`
     – `price` ist eine gewählte Preisstufe 1..3, kein Betrag).
@@ -302,6 +338,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 lobby_mode {mode}  lobby_settings {single,passive,beginner}  lobby_go  lobby_return
 party_create  party_join {code}  party_leave  party_kick {userId}
 tutorial_next {step}  tutorial_skip  tutorial_restart
+start_choose {path}                                                 -- Startwahl (§6a), einmalig
 prestige_claim {rank}
 ow_build {typ}  ow_collect {typ}  ow_passive {on}
 story_start {id}  story_claim {id}  story_sell {offer, price}      -- price = Stufe 1..3 (Absicht)
@@ -314,7 +351,8 @@ unlocks_seen
 ```
 
 Events: `mini_notice` mit `kind` ∈ { `mode`, `party`, `tutorial`, `unlock`, `prestige`, `story`, `mission`,
-`ow_ready`, `tycoon_market`, `tycoon_stage`, `trade`, `shop` }. Snapshot-Felder (§11).
+`ow_ready`, `tycoon_market`, `tycoon_stage`, `trade`, `shop`, `start` }. `start`: `{event="offer", choices}` |
+`{event="chosen", path, name, gift}`. Snapshot-Felder (§11).
 
 **Stand nach Umsetzung (Meilenstein 9):** Die Aktionsnamen und Felder oben sind genau so in `MiniNet.Actions`
 umgesetzt. Zusätzlich gesendete `mini_notice`-Arten: `lobby` (Lobby-Station geöffnet: `action`, `hint?`), `hint`
@@ -329,9 +367,10 @@ Neue Tabs: `lobby`, `unlocks`, `story` (Missionen + Nebenmissionen), `tycoon`, `
 
 ## 11. Snapshot-Felder (zusätzlich zu MiniSnapshot)
 
-`mode`, `placeKind`, `meta {beginner, passive, single, tutorialDone, tutorialStep}`, `party {code, leader, leaderMode, away, members[]}`,
+`mode`, `placeKind`, `meta {beginner, passive, single, tutorialDone, tutorialStep, startPath}`,
+`start {path, pending, choices[]}` (choices nur, solange die Wahl offen ist), `party {code, leader, leaderMode, away, members[]}`,
 `prestige {rank, next, claimable[], claimed[]}`, `unlocks {next, list[] (nur bei full)}`,
-`tutorial {step, text, target, done}`, `story {chapter, active, missions[], side[]}`, `ow {buildings{}, passive}`,
+`tutorial {step, count, text, target, done, path, waiting, openTab}`, `story {chapter, active, missions[], side[]}`, `ow {buildings{}, passive}`,
 `tycoon {run, slot, offers[], bonus{}}`, `shop {owned[], equipped{}, dlcCars[], passes{}, catalog{} (full)}`.
 Sticky (nur bei full): `unlocks.list`, `shop.catalog`, `story.missions`.
 

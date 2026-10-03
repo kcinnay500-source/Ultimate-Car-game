@@ -2,7 +2,11 @@
 -- (docs/PHASE4_CONTRACT.md §2): d.games.meta, dazu Default/Load für d.games.prestige (aus PrestigeRules).
 -- Reine Funktionen, keine Instanzen, kein Geld. MiniRules.DefaultGames/LoadGames rufen ApplyDefault/ApplyLoad.
 -- meta = { tutorialDone, tutorialStep (1..Anzahl Schritte), tutorialSkipped, beginner, passive, single,
---          lastMode ("lobby"|"openworld"|"tycoon"), firstSeen (unix), playSeconds, hintsSeen = { [hintId] = true } }
+--          lastMode ("lobby"|"openworld"|"tycoon"), firstSeen (unix), playSeconds, hintsSeen = { [hintId] = true },
+--          startPath ("" = Startwahl offen | "werkstatt" | "autohaus" | "produktion" | "schrottplatz", GameConfig.Start) }
+-- Startwahl: neue Profile haben startPath = "" und wählen beim ersten Open-World-Beitritt (StartService, start_choose).
+-- Veteranen (d.completed > 0, Tutorial beendet/übersprungen, schon im Tutorial weiter als Schritt 1 oder ein
+-- Open-World-Gebäude mit Stufe > 0) bekommen beim Laden bzw. über ResolveStartPath automatisch GameConfig.Start.Default.
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules"))
 
@@ -12,6 +16,7 @@ export type Meta = {
 	tutorialDone: boolean, tutorialStep: number, tutorialSkipped: boolean, tutorialRewarded: boolean,
 	beginner: boolean, passive: boolean, single: boolean,
 	lastMode: string, firstSeen: number, playSeconds: number, hintsSeen: { [string]: boolean },
+	startPath: string,
 }
 export type Settings = { single: boolean, passive: boolean, beginner: boolean }
 
@@ -29,8 +34,39 @@ local function loadInt(v: any, default: number, min: number, max: number): numbe
 	return math.floor(math.min(v, max))
 end
 
-local function stepCount(): number
-	return math.max(1, #GameConfig.Tutorial.Steps)
+local function startConfig(): any
+	return type(GameConfig.Start) == "table" and GameConfig.Start or { Order = {}, PathSet = {}, Default = "werkstatt" }
+end
+
+-- Gültiger Startweg (Whitelist GameConfig.Start.Order)?
+function MetaRules.IsStartPath(typ: any): boolean
+	return type(typ) == "string" and startConfig().PathSet[typ] == true
+end
+
+-- Schritte des Tutorials für einen Weg ("" / unbekannt = klassischer Weg)
+local function stepsFor(path: any): { any }
+	local tu = GameConfig.Tutorial
+	local list = type(tu.ByPath) == "table" and MetaRules.IsStartPath(path) and tu.ByPath[path] or nil
+	return list or tu.Steps
+end
+MetaRules.TutorialSteps = stepsFor
+
+local function stepCount(path: any): number
+	return math.max(1, #stepsFor(path))
+end
+
+-- Hat das (rohe) Open-World-Datum ein Gebäude mit Stufe > 0? (Veteranen-Erkennung beim Laden und zur Laufzeit)
+local function hasBuilding(ow: any): boolean
+	local b = type(ow) == "table" and ow.buildings or nil
+	if type(b) ~= "table" then
+		return false
+	end
+	for typ, e in pairs(b) do
+		if type(typ) == "string" and type(e) == "table" and finite(e.stage) and e.stage > 0 then
+			return true
+		end
+	end
+	return false
 end
 
 ---------------------------------------------------------------- Standardwerte und Laden
@@ -48,6 +84,7 @@ function MetaRules.Default(): Meta
 		firstSeen = 0,
 		playSeconds = 0,
 		hintsSeen = {},
+		startPath = "", -- Startwahl offen (StartService fragt beim ersten Open-World-Beitritt)
 	}
 end
 
@@ -55,13 +92,26 @@ end
 -- firstSeen = 0 (oder in der Zukunft) wird auf now gesetzt, wenn now bekannt ist.
 -- Veteranen (Profil ohne meta, aber mit abgerechneten Aufträgen d.completed) gelten als eingewiesen:
 -- das Tutorial ist für sie beendet (wie MiniRules.LoadGames jobsDone = d.completed übernimmt).
-function MetaRules.Load(raw: any, d: any, now: any): Meta
+-- rawGames (optional) = gespeichertes d.games (MetaRules.ApplyLoad): ein gespeichertes Open-World-Gebäude macht das
+-- Profil zum Veteranen der Startwahl (OWRules.Load läuft erst nach MetaRules).
+function MetaRules.Load(raw: any, d: any, now: any, rawGames: any?): Meta
 	local m = MetaRules.Default()
 	local r = type(raw) == "table" and raw or {}
 	local veteran = type(raw) ~= "table" and type(d) == "table" and finite(d.completed) and d.completed > 0
 	m.tutorialSkipped = r.tutorialSkipped == true
 	m.tutorialDone = r.tutorialDone == true or m.tutorialSkipped or veteran == true -- übersprungen = beendet
-	m.tutorialStep = loadInt(r.tutorialStep, 1, 1, stepCount())
+	-- Startweg: gespeicherter Weg (Whitelist); sonst Veteranen automatisch der klassische Weg, neue Profile "" (Wahl offen)
+	if MetaRules.IsStartPath(r.startPath) then
+		m.startPath = r.startPath
+	else
+		local played = type(d) == "table" and finite(d.completed) and d.completed > 0
+		local midTutorial = finite(r.tutorialStep) and r.tutorialStep >= 2 -- im klassischen Tutorial schon unterwegs
+		local rawOw = type(rawGames) == "table" and rawGames.ow or nil
+		if played or m.tutorialDone or midTutorial or hasBuilding(rawOw) then
+			m.startPath = startConfig().Default
+		end
+	end
+	m.tutorialStep = loadInt(r.tutorialStep, 1, 1, stepCount(m.startPath))
 	-- Belohnung: gespeichertes Flag; Profile von vor dem Flag, die das Tutorial regulär beendet haben, gelten als
 	-- belohnt (sonst gäbe es sie beim Neustart am Kiosk ein zweites Mal). Veteranen ebenso.
 	m.tutorialRewarded = r.tutorialRewarded == true or (r.tutorialRewarded == nil and r.tutorialDone == true and r.tutorialSkipped ~= true) or veteran == true
@@ -106,7 +156,7 @@ end
 -- Für MiniRules.LoadGames: raw = gespeichertes d.games, d = Profil mit geladenem d.level
 function MetaRules.ApplyLoad(g: any, raw: any, d: any, now: any)
 	local r = type(raw) == "table" and raw or {}
-	g.meta = MetaRules.Load(r.meta, d, now)
+	g.meta = MetaRules.Load(r.meta, d, now, r)
 	g.prestige = PrestigeRules.Load(r.prestige, d, now)
 end
 
@@ -182,6 +232,70 @@ function MetaRules.AddPlaySeconds(d: any, seconds: any)
 	if m and finite(seconds) and seconds > 0 then
 		m.playSeconds = math.min(MAX_SAFE, m.playSeconds + math.floor(seconds))
 	end
+end
+
+---------------------------------------------------------------- Startwahl (GameConfig.Start, StartService)
+-- Gewählter Startweg ("" = noch offen oder ohne meta)
+function MetaRules.StartPath(d: any): string
+	local m = MetaRules.Meta(d)
+	return m and MetaRules.IsStartPath(m.startPath) and m.startPath or ""
+end
+
+-- Weg für Tutorial und Story: gewählter Weg, sonst der klassische (werkstatt)
+function MetaRules.EffectivePath(d: any): string
+	local p = MetaRules.StartPath(d)
+	return p ~= "" and p or startConfig().Default
+end
+
+-- Veteran der Startwahl zur Laufzeit (wie beim Laden): abgerechnete Aufträge, Tutorial beendet/übersprungen,
+-- Tutorial schon über Schritt 1 hinaus oder ein Open-World-Gebäude mit Stufe > 0
+function MetaRules.IsStartVeteran(d: any): boolean
+	if type(d) ~= "table" then
+		return false
+	end
+	if finite(d.completed) and d.completed > 0 then
+		return true
+	end
+	local m = MetaRules.Meta(d)
+	if m and (m.tutorialDone == true or (finite(m.tutorialStep) and m.tutorialStep >= 2)) then
+		return true
+	end
+	local g = d.games
+	return type(g) == "table" and hasBuilding(g.ow)
+end
+
+-- Veteranen ohne Weg bekommen den klassischen Weg (idempotent). Rückgabe: Weg ("" = Wahl offen)
+function MetaRules.ResolveStartPath(d: any): string
+	local m = MetaRules.Meta(d)
+	if not m then
+		return ""
+	end
+	if not MetaRules.IsStartPath(m.startPath) then
+		m.startPath = MetaRules.IsStartVeteran(d) and startConfig().Default or ""
+	end
+	return m.startPath
+end
+
+-- Muss der Spieler noch wählen? (meta vorhanden, kein Weg, kein Veteran) – ändert nichts
+function MetaRules.StartPending(d: any): boolean
+	local m = MetaRules.Meta(d)
+	return m ~= nil and not MetaRules.IsStartPath(m.startPath) and not MetaRules.IsStartVeteran(d)
+end
+
+-- Weg einmalig setzen. Rückgabe: ok, Grund ("ok" | "invalid" | "already" | "nometa")
+function MetaRules.SetStartPath(d: any, typ: any): (boolean, string)
+	local m = MetaRules.Meta(d)
+	if not m then
+		return false, "nometa"
+	end
+	if not MetaRules.IsStartPath(typ) then
+		return false, "invalid"
+	end
+	if MetaRules.IsStartPath(m.startPath) then
+		return false, "already"
+	end
+	m.startPath = typ
+	return true, "ok"
 end
 
 ---------------------------------------------------------------- Beginner-Hinweise

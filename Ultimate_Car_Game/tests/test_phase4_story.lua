@@ -129,6 +129,13 @@ end
 local function finishTutorial(T, g, pl, d, Flow)
 	local TR = g:MiniShared("TutorialRules")
 	T.eq(TR.StepIndex(d), 1, "Tutorial Schritt 1")
+	-- neues Profil: erst die Startwahl (Werkstatt), vorher zählt „Weiter“ nicht
+	local MR = g:MiniShared("MetaRules")
+	T.check(MR.StartPending(d), "Startwahl offen")
+	act(T, g, pl, "tutorial_next", { step = 1 }, "ok")
+	T.eq(TR.StepIndex(d), 1, "vor der Startwahl kein Fortschritt")
+	act(T, g, pl, "start_choose", { path = "werkstatt" }, "ok")
+	T.eq(MR.StartPath(d), "werkstatt", "Startweg werkstatt")
 	act(T, g, pl, "tutorial_next", { step = 1 }, "ok")
 	act(T, g, pl, "tutorial_next", { step = 2 }, "ok")
 	g:Send(pl, "travel", { key = "workshop" })

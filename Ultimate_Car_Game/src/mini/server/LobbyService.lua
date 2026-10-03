@@ -688,6 +688,7 @@ function LobbyService.SnapshotFields(ms: any, d: any, _t: number?, _full: boolea
 			single = settings.single,
 			tutorialDone = m and m.tutorialDone == true or false,
 			tutorialStep = m and m.tutorialStep or 1,
+			startPath = MetaRules.StartPath(d), -- "" = Startwahl offen (StartService/StartUI)
 		},
 		party = partyField,
 	}

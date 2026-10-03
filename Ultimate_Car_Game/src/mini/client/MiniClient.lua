@@ -10,6 +10,11 @@
 --   openTablet(key)  öffnet eine Tablet-Seite (z. B. "workshop", "shop")
 --   hideHud(isOpen)  wird bei jedem Öffnen/Schließen gerufen, damit 2.4.0-HUD und Fahrzeug-Knöpfe sich aus-/einblenden
 --   toast(text)      der 2.4.0-Toast (für Hinweise, die nur der Client erzeugt)
+--   subscribe(fn)    meldet fn bei jedem Wechsel von 2.4.0-Dialog (InteractionOverlay), Tablet und Fahrzeugknöpfen an:
+--                    dann blendet RefreshOverlays sofort alle Phase-4-Karten/-Abzeichen aus bzw. ein (nicht erst im
+--                    nächsten 0,2-s-Takt), damit nie eine Karte im selben Moment über einem 2.4.0-Dialog liegt.
+-- Alle Phase-4-Oberflächen außerhalb des Panels (Tutorial 17, Freischaltungen 18, Missionen 16, Abzeichen 19) liegen
+-- UNTER dem 2.4.0-UI (20); nur das Panel selbst (30) liegt darüber.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -62,6 +67,7 @@ local Tutorial -- TutorialUI (Ausbaustufe 4: Tutorial-Karte, Beginner-Hinweise; 
 local Tycoon -- TycoonClient (Meilenstein 4: Bargeld-Abzeichen, Pad-Blitz, Produzenten-Animationen; kein Tab)
 local Mission -- MissionClient (Meilenstein 7: Welt-Marker, Missions-/Kapitel-Karten, NPC-Kunden; eigener Heartbeat, kein Tab)
 local Unlocks -- GarageShared.Mini.Unlocks (repliziert): Sperrhinweis je Tab
+local StartChoice -- StartUI (Startwahl in der Open World, ScreenGui "StartChoice"; optional, nur wenn das Modul da ist)
 local Modules = {}
 local LockNotes = {} -- [tab] = TextLabel „Ab Level n: …“ über dem Bereich (Bereiche bleiben sichtbar, nur markiert)
 local latest, latestAt = nil, 0
@@ -155,6 +161,24 @@ function MiniClient.Snapshot()
 	return latest
 end
 
+-- Alle Karten/Abzeichen außerhalb des Panels sofort neu ein-/ausblenden (2.4.0-Dialog, Tablet, Panel, Tacho)
+function MiniClient.RefreshOverlays()
+	if Tutorial then
+		call(Tutorial.Refresh)
+	end
+	call(Modules.unlocks and Modules.unlocks.Refresh)
+	call(Modules.prestige and Modules.prestige.Refresh)
+	if Tycoon then
+		call(Tycoon.Refresh)
+	end
+	if Mission then
+		call(Mission.Refresh)
+	end
+	if StartChoice then
+		call(StartChoice.Render) -- Startwahl weicht 2.4.0-Dialog und Tablet aus (liegt sonst mit 40 darüber)
+	end
+end
+
 ---------------------------------------------------------------- Anzeige
 local function renderVisible()
 	if not latest or not MiniClient.IsOpen() then
@@ -240,6 +264,9 @@ local function onSnapshot(s)
 	if Mission then
 		call(Mission.OnSnapshot, s) -- Missions-Marker, Kapitel-Intro bei neuem Kapitel
 	end
+	if StartChoice then
+		call(StartChoice.OnSnapshot, s) -- Startwahl (snapshot.start.pending)
+	end
 	if Modules.story and Modules.story.OnSnapshot then
 		call(Modules.story.OnSnapshot, s) -- Preistafel am Kiesplatz und Kunden-Countdown auch bei geschlossenem Panel
 	end
@@ -322,6 +349,10 @@ local function onNotice(data)
 		end
 	elseif kind == "ow_ready" or kind == "ow_build" or kind == "ow_collect" or kind == "ow_passive" then
 		call(Modules.buildings and Modules.buildings.OnNotice, data) -- Gebäude: Karten neu, Countdown, Passiv-Schalter
+	elseif kind == "start" then
+		if StartChoice then
+			call(StartChoice.OnNotice, data) -- Startwahl bestätigt/abgelehnt
+		end
 	elseif kind == "story" or kind == "mission" then
 		-- Story: Verkauf, Mission gestartet/geschafft/abgeholt, Lieferung, Co-op-Fortschritt (Tab + Welt-Karten)
 		call(Modules.story and Modules.story.OnNotice, data)
@@ -359,6 +390,11 @@ function MiniClient.Start(o)
 			return call(opts.isTabletOpen) == true
 		end,
 		IsBlocked = MiniClient.IsBlocked,
+		-- QTE/Diagnose läuft, das 2.4.0-Tablet oder das Minispiel-Panel ist offen: StartUI blendet sich dann aus, damit
+		-- die Startwahl (DisplayOrder 40) nie über einem 2.4.0-Dialog oder dem Panel liegt; danach kommt sie wieder
+		IsGarageBusy = function()
+			return MiniClient.IsBlocked() or call(opts.isTabletOpen) == true or MiniClient.IsOpen()
+		end,
 		Open = MiniClient.Open, -- Tab öffnen (schließt das Tablet; TycoonClient nutzt es für das Start-Pad)
 		OpenTablet = opts.openTablet and function(key)
 			MiniClient.Close()
@@ -430,6 +466,19 @@ function MiniClient.Start(o)
 		warnOnce("mission", "Missionen nicht geladen: " .. tostring(errM))
 	end
 
+	-- Startwahl (StartUI, optional): nur laden, wenn das Modul im Place ist – fehlt es, läuft alles wie bisher
+	local startNode = folder:FindFirstChild("StartUI")
+	if startNode then
+		local okSt, errSt = pcall(function()
+			StartChoice = require(startNode)
+			StartChoice.Start(ctx)
+		end)
+		if not okSt then
+			StartChoice = nil
+			warnOnce("start", "Startwahl nicht geladen: " .. tostring(errSt))
+		end
+	end
+
 	UI.OnTabShown = function(key)
 		local m = Modules[key]
 		if m and m.OnShow then
@@ -445,7 +494,10 @@ function MiniClient.Start(o)
 			Remote.Send("mini_sync")
 		end
 		call(opts.hideHud, isOpen)
+		MiniClient.RefreshOverlays()
 	end
+	-- 2.4.0 meldet Dialog/Tablet/Fahrzeugknöpfe sofort (GarageClient, opts.subscribe)
+	call(opts.subscribe, MiniClient.RefreshOverlays)
 
 	local Event = ReplicatedStorage:WaitForChild("GarageShared"):WaitForChild("Remotes"):WaitForChild("Event")
 	Event.OnClientEvent:Connect(function(kind, value)
@@ -494,9 +546,15 @@ function MiniClient.Start(o)
 
 	-- Pro Frame: nur leichte Anzeige-Updates des sichtbaren Bereichs und der gegenseitige Ausschluss
 	local headerTimer = 0
+	local overlayTimer = 0
 	RunService.Heartbeat:Connect(function(dt)
 		if Tutorial then
 			call(Tutorial.Step, dt) -- auch bei geschlossenem Panel (Marker, Sichtbarkeit; drosselt selbst auf 0,2 s)
+		end
+		overlayTimer += dt
+		if overlayTimer >= 0.2 then
+			overlayTimer = 0
+			call(Modules.unlocks and Modules.unlocks.Refresh) -- Freischaltungs-Karte: eigener Takt fehlt dort
 		end
 		if not UI.IsOpen then
 			return

@@ -14,7 +14,10 @@ export type UnlockEntry = {
 export type PrestigeReward = {
 	rank: number, title: string, incomePct: number, discountPct: number, cosmetic: string, tycoonRebirthPct: number,
 }
-export type TutorialStep = { id: string, text: string, target: string?, zone: string?, event: string }
+export type TutorialStep = {
+	id: string, text: string, target: string?, zone: string?, event: string,
+	at: string?, openTab: string?, passiveSkip: boolean?,
+}
 export type Hint = { id: string, text: string, when: string }
 
 ---------------------------------------------------------------- Places und Modi (§1)
@@ -166,24 +169,158 @@ GameConfig.Party = {
 --   "settled"         Mini.OnSettled (Abrechnung)
 --   "action:<name>"   eine Mini-Aktion war erfolgreich (z. B. mini_travel)
 -- target = Stationsschlüssel für den Pfeil/Marker im Client (zone plot: Plot.Stations.<key>, zone city: City.Stations.<key>).
+-- Startwahl (GameConfig.Start, meta.startPath): Das Tutorial hat einen gemeinsamen Anfang (Intro: laufen, Menü M),
+-- einen Mittelteil je Startweg (Paths[typ]) und ein gemeinsames Ende (End: Stadtplan, Kiesplatz). Ein Schritt im
+-- Mittelteil trägt at = "start" (Standard: gleich nach dem Intro), "city" (nach dem Stadtplan-Schritt, vor dem Kiesplatz)
+-- oder "end" (nach dem Kiesplatz). ByPath[typ] ist die fertige Liste je Weg; Steps = ByPath.werkstatt (der klassische
+-- 2.4.0-Start, 11 Schritte, unverändert). Ohne gewählten Weg (startPath = "") gilt werkstatt.
+-- openTab = Tab, dessen Öffnen den Lese-Schritt erledigt (TutorialUI: wie „menu“, sobald das Panel auf diesem Tab steht);
+-- passiveSkip = Schritt, den der Passiv-Modus unmöglich macht (Kiesplatz-Verkauf): er gilt im Passiv-Modus als erledigt.
+local TUTORIAL_STEPS: { [string]: TutorialStep } = {
+	move = { id = "move", text = "Willkommen in deiner Werkstatt! Lauf ein paar Schritte – mit WASD oder dem Joystick.", target = nil, zone = nil, event = "next" },
+	menu = { id = "menu", text = "Öffne das Menü mit der Taste M oder dem Knopf „Minispiele“. Dort findest du alles Wichtige.", target = nil, zone = nil, event = "next" },
+	-- werkstatt: die 2.4.0-Aufträge
+	reception = { id = "reception", text = "Geh zum Empfang deiner Werkstatt und drück E.", target = "workshop", zone = "plot", event = "station:workshop" },
+	accept = { id = "accept", text = "Nimm am Empfang einen Auftrag an. Ein Kunde bringt dir sein Auto.", target = "workshop", zone = "plot", event = "job:accepted" },
+	obd = { id = "obd", text = "Steck das OBD-Gerät ans Auto und finde den Fehler.", target = nil, zone = nil, event = "job:repair" },
+	repair = { id = "repair", text = "Repariere das Auto Schritt für Schritt bis zur Endkontrolle.", target = nil, zone = nil, event = "job:invoice" },
+	settle = { id = "settle", text = "Rechne den Auftrag am Empfang ab – die Credits gehören dir!", target = "workshop", zone = "plot", event = "settled" },
+	map = { id = "map", text = "Drück M (oder den Knopf „Minispiele“) und öffne den Tab „Stadtplan“ – reise damit in die Stadt.", target = nil, zone = nil, event = "action:mini_travel" },
+	dealer = { id = "dealer", text = "Schau im Autohaus vorbei und drück dort E. Kaufen kannst du ab Level 3 – ansehen darfst du jetzt schon.", target = "dealer", zone = "city", event = "tab:dealer", at = "city" },
+	goals = { id = "goals", text = "Sieh dir an der Infotafel deine Tagesziele an – jeden Tag gibt es neue.", target = "goals", zone = "city", event = "tab:goals", at = "city" },
+	-- Meilenstein 7: Anschluss an die Story (Kapitel 1 „Der Kiesplatz“, Station City.Stations.kiesplatz, Tab story)
+	kiesplatz = { id = "kiesplatz", text = "Zum Schluss: Reise mit dem Stadtplan zum Kiesplatz am Stadtrand und drück dort E. Da beginnt deine Story – vom Kiesplatzhändler zum Mega-Verkäufer. Viel Spaß in der Werkstattmeile!", target = "kiesplatz", zone = "city", event = "tab:story" },
+	-- autohaus: das geschenkte Autohaus (OWRules.GrantStart), Händler, erster Verkauf am Kiesplatz
+	ah_buildings = { id = "ah_buildings", text = "Dein Autohaus steht schon fertig auf deinem Grundstück! Öffne mit M das Menü und dort den Tab „Gebäude“. Schau es dir an und tipp danach hier auf „Weiter“.", target = nil, zone = nil, event = "next", openTab = "buildings" },
+	ah_collect = { id = "ah_collect", text = "Hol im Tab „Gebäude“ beim Autohaus deine ersten Credits ab – tipp dort auf „Abholen“.", target = nil, zone = nil, event = "action:ow_collect" },
+	ah_dealer = { id = "ah_dealer", text = "Schau beim Händler in der Stadt vorbei und drück dort E. Dein eigenes Autohaus bringt dir dort Rabatt – kaufen kannst du ab Level 3.", target = "dealer", zone = "city", event = "tab:dealer", at = "city" },
+	ah_sell = { id = "ah_sell", text = "Jetzt dein erster Verkauf: Warte am Kiesplatz auf einen Kunden und nenne deinen Preis. „Günstig“ klappt immer!", target = "kiesplatz", zone = "city", event = "action:story_sell", at = "end", passiveSkip = true },
+	-- produktion: die geschenkte Produktion, Bauteil-Pakete, Tuning-Zentrum
+	pr_buildings = { id = "pr_buildings", text = "Deine Produktion steht schon fertig auf deinem Grundstück! Öffne mit M das Menü und dort den Tab „Gebäude“. Schau sie dir an und tipp danach hier auf „Weiter“.", target = nil, zone = nil, event = "next", openTab = "buildings" },
+	pr_collect = { id = "pr_collect", text = "Hol im Tab „Gebäude“ deine ersten Bauteil-Pakete aus der Produktion ab – tipp dort auf „Abholen“. Darin stecken Altteile.", target = nil, zone = nil, event = "action:ow_collect" },
+	pr_tuning = { id = "pr_tuning", text = "Schau im Tuning-Zentrum in der Stadt vorbei und drück dort E. Hier machen deine Altteile später Autos schneller – Tuning-Projekte gibt es ab Level 6.", target = "tuning", zone = "city", event = "tab:tuning", at = "city" },
+	-- schrottplatz: der geschenkte Schrottplatz, Schrott abholen, Schrottpresse
+	sc_buildings = { id = "sc_buildings", text = "Dein Schrottplatz steht schon fertig auf deinem Grundstück! Öffne mit M das Menü und dort den Tab „Gebäude“. Schau ihn dir an und tipp danach hier auf „Weiter“.", target = nil, zone = nil, event = "next", openTab = "buildings" },
+	sc_collect = { id = "sc_collect", text = "Hol im Tab „Gebäude“ Schrott und Altteile von deinem Schrottplatz ab – tipp dort auf „Abholen“. Der Schrott landet bei deiner Schrottpresse.", target = nil, zone = nil, event = "action:ow_collect" },
+	sc_press = { id = "sc_press", text = "Schau an der Schrottpresse in der Stadt vorbei und drück dort E. Ab Level 2 presst du hier Schrott und tauschst ihn beim Schrotthändler gegen Credits.", target = "press", zone = "city", event = "tab:press", at = "city" },
+}
+local TS = TUTORIAL_STEPS
+
 GameConfig.Tutorial = {
-	Reward = { credits = 500, xp = 60 }, -- einmalig am Ende (nicht beim Überspringen, nicht nach einem Neustart)
-	Steps = {
-		{ id = "move", text = "Willkommen in deiner Werkstatt! Lauf ein paar Schritte – mit WASD oder dem Joystick.", target = nil, zone = nil, event = "next" },
-		{ id = "menu", text = "Öffne das Menü mit der Taste M oder dem Knopf „Minispiele“. Dort findest du alles Wichtige.", target = nil, zone = nil, event = "next" },
-		{ id = "reception", text = "Geh zum Empfang deiner Werkstatt und drück E.", target = "workshop", zone = "plot", event = "station:workshop" },
-		{ id = "accept", text = "Nimm am Empfang einen Auftrag an. Ein Kunde bringt dir sein Auto.", target = "workshop", zone = "plot", event = "job:accepted" },
-		{ id = "obd", text = "Steck das OBD-Gerät ans Auto und finde den Fehler.", target = nil, zone = nil, event = "job:repair" },
-		{ id = "repair", text = "Repariere das Auto Schritt für Schritt bis zur Endkontrolle.", target = nil, zone = nil, event = "job:invoice" },
-		{ id = "settle", text = "Rechne den Auftrag am Empfang ab – die Credits gehören dir!", target = "workshop", zone = "plot", event = "settled" },
-		{ id = "map", text = "Drück M (oder den Knopf „Minispiele“) und öffne den Tab „Stadtplan“ – reise damit in die Stadt.", target = nil, zone = nil, event = "action:mini_travel" },
-		{ id = "dealer", text = "Schau im Autohaus vorbei und drück dort E. Kaufen kannst du ab Level 3 – ansehen darfst du jetzt schon.", target = "dealer", zone = "city", event = "tab:dealer" },
-		{ id = "goals", text = "Sieh dir an der Infotafel deine Tagesziele an – jeden Tag gibt es neue.", target = "goals", zone = "city", event = "tab:goals" },
-		-- Meilenstein 7: Anschluss an die Story (Kapitel 1 „Der Kiesplatz“, Station City.Stations.kiesplatz, Tab story)
-		{ id = "kiesplatz", text = "Zum Schluss: Reise mit dem Stadtplan zum Kiesplatz am Stadtrand und drück dort E. Da beginnt deine Story – vom Kiesplatzhändler zum Mega-Verkäufer. Viel Spaß in der Werkstattmeile!", target = "kiesplatz", zone = "city", event = "tab:story" },
-	} :: { TutorialStep },
+	Reward = { credits = 500, xp = 60 }, -- einmalig am Ende (nicht beim Überspringen, nicht nach einem Neustart), für jeden Weg gleich
+	Intro = { TS.move, TS.menu } :: { TutorialStep },
+	Paths = {
+		werkstatt = { TS.reception, TS.accept, TS.obd, TS.repair, TS.settle, TS.dealer, TS.goals },
+		autohaus = { TS.ah_buildings, TS.ah_collect, TS.ah_dealer, TS.ah_sell },
+		produktion = { TS.pr_buildings, TS.pr_collect, TS.pr_tuning },
+		schrottplatz = { TS.sc_buildings, TS.sc_collect, TS.sc_press },
+	} :: { [string]: { TutorialStep } },
+	End = { TS.map, TS.kiesplatz } :: { TutorialStep }, -- "city"-Schritte kommen zwischen End[1] und End[2]
+	DefaultPath = "werkstatt", -- ohne Startwahl (startPath = "") und für Veteranen
+	Steps = {} :: { TutorialStep }, -- = ByPath.werkstatt (unten gefüllt)
+	ByPath = {} :: { [string]: { TutorialStep } },
 	EventKinds = { "next", "station", "tab", "job", "settled", "action" },
 }
+do
+	local TU = GameConfig.Tutorial
+	for typ, middle in pairs(TU.Paths) do
+		local list = {}
+		local function add(st)
+			table.insert(list, st)
+		end
+		for _, st in ipairs(TU.Intro) do
+			add(st)
+		end
+		for _, st in ipairs(middle) do
+			if st.at == nil or st.at == "start" then
+				add(st)
+			end
+		end
+		add(TU.End[1])
+		for _, st in ipairs(middle) do
+			if st.at == "city" then
+				add(st)
+			end
+		end
+		for i = 2, #TU.End do
+			add(TU.End[i])
+		end
+		for _, st in ipairs(middle) do
+			if st.at == "end" then
+				add(st)
+			end
+		end
+		TU.ByPath[typ] = list
+	end
+	TU.Steps = TU.ByPath[TU.DefaultPath]
+end
+
+---------------------------------------------------------------- Startwahl in der Open World (wie im Tycoon)
+-- Beim ersten Open-World-Beitritt eines NEUEN Profils wählt der Spieler einen von vier Startwegen (StartUI → Aktion
+-- start_choose {path}, einmalig; StartService). Gespeichert in d.games.meta.startPath ("" = noch nicht gewählt).
+-- Veteranen (abgerechnete Aufträge, Tutorial beendet/übersprungen oder schon ein Open-World-Gebäude) bekommen
+-- automatisch Default ("werkstatt") und sehen die Wahl nie (MetaRules.Load / MetaRules.ResolveStartPath).
+-- werkstatt = der klassische 2.4.0-Start (das Werkstatt-Grundstück hat jeder). autohaus/produktion/schrottplatz:
+-- dieses Open-World-Gebäude steht sofort auf Stufe 1 – geschenkt, ohne Level-Sperre und ohne Bauzeit
+-- (OWRules.GrantStart). yieldHours = so viele Stunden Ertrag warten beim Start schon zum Abholen (Tutorial-Schritt
+-- „Abholen“ und die erste Story-Mission); höchstens OW.PassiveCapHours.
+-- Balance: Autohaus Stufe 1 = 25 Cr/Min (≈ 12 % der Werkstatt auf Level 1, Grenze 25 %), Startertrag 300 Cr;
+-- Produktion: 2 Bauteil-Pakete (20 Altteile); Schrottplatz: 2 Mrd. Schrott (≈ 200 Cr an der Presse) + 2 Altteile.
+export type StartPath = {
+	id: string, name: string, short: string, desc: string, first: string, bonus: string, color: string,
+	building: string?, yieldHours: number,
+}
+GameConfig.Start = {
+	Order = { "werkstatt", "autohaus", "produktion", "schrottplatz" },
+	Default = "werkstatt",
+	Title = "Wie willst du starten?",
+	Intro = "Such dir aus, womit du in der Werkstattmeile loslegst. Deine Werkstatt hast du immer – alles andere kannst du später auch noch bauen.",
+	Paths = {
+		werkstatt = {
+			id = "werkstatt", name = "Werkstatt", color = "blue", building = nil, yieldHours = 0,
+			short = "Autos reparieren wie ein echter Mechaniker",
+			desc = "Kunden bringen ihre Autos. Du findest den Fehler mit dem OBD-Gerät und reparierst sie.",
+			first = "Zuerst: einen Auftrag annehmen, reparieren und abrechnen.",
+			bonus = "Bonus: der klassische Start – Aufträge bringen dir am meisten XP.",
+		},
+		autohaus = {
+			id = "autohaus", name = "Autohaus", color = "green", building = "autohaus", yieldHours = 0.2,
+			short = "Autos verkaufen und Credits verdienen",
+			desc = "Dein eigenes Autohaus verkauft Autos für dich – auch wenn du unterwegs bist.",
+			first = "Zuerst: Credits im Autohaus abholen, den Händler besuchen und am Kiesplatz verkaufen.",
+			bonus = "Bonus: Autohaus Stufe 1 geschenkt – Credits jede Stunde und Rabatt beim Händler.",
+		},
+		produktion = {
+			id = "produktion", name = "Produktion", color = "yellow", building = "produktion", yieldHours = 12,
+			short = "Bauteile herstellen für schnelle Autos",
+			desc = "Deine Fabrik packt Bauteil-Pakete voller Altteile – die brauchst du später fürs Tuning.",
+			first = "Zuerst: Bauteil-Pakete abholen und das Tuning-Zentrum besuchen.",
+			bonus = "Bonus: Produktion Stufe 1 geschenkt – Bauteil-Pakete und schnelleres Tuning.",
+		},
+		schrottplatz = {
+			id = "schrottplatz", name = "Schrottplatz", color = "red", building = "schrottplatz", yieldHours = 1,
+			short = "Schrott sammeln und Altteile finden",
+			desc = "Dein Schrottplatz sammelt Schrott für die Presse und findet Altteile – ganz von allein.",
+			first = "Zuerst: Schrott abholen und die Schrottpresse besuchen.",
+			bonus = "Bonus: Schrottplatz Stufe 1 geschenkt – Schrott, Altteile und mehr Schrott an der Presse.",
+		},
+	} :: { [string]: StartPath },
+	Texts = {
+		chosen = "Super! Du startest mit: %s.",
+		gift = "Geschenk: %s Stufe 1 steht schon fertig auf deinem Grundstück!",
+		already = "Deinen Start hast du schon gewählt.",
+		invalid = "Diesen Start gibt es nicht. Tipp auf eine der vier Karten.",
+		notHere = "Deinen Start wählst du in der Werkstattmeile (Open World).",
+		choose = "Das wähle ich!",
+		waiting = "Einen Moment …",
+		later = "Später entscheiden",
+		laterHint = "Kein Problem! Die Startwahl kommt wieder, wenn du das nächste Mal in die Werkstattmeile reist.",
+	},
+}
+GameConfig.Start.PathSet = {}
+for _, typ in ipairs(GameConfig.Start.Order) do
+	GameConfig.Start.PathSet[typ] = true
+end
 
 ---------------------------------------------------------------- Beginner-Hinweise (§6)
 -- when: "unlock:<key>" (Level mit Freischaltung erreicht), "station:<key>" (Station geöffnet, Plot oder Stadt
@@ -536,6 +673,12 @@ GameConfig.OW = {
 --   StoryRules.RequiredLevel(def) muss ≤ Kapitel-Level sein (tests/test_story.lua), sonst sitzt der Spieler in einer Sackgasse.
 --   reward = { credits = n, xp = n?, cosmetic = id?, title = string? }; fehlt xp, gilt GameConfig.XP.StoryMission[kapitel]
 --   minutes = erwarteter Aufwand (Balance: credits / minutes ≤ Balance.Share × Werkstatt-Cr/Min des Kapitel-Levels)
+--   Startweg (GameConfig.Start, meta.startPath): Ein Kapitel kann PathMissions = { [typ] = Mission } tragen; diese ersetzen
+--   die Mission an Stelle PathSlot (Standard 1) für Spieler mit diesem Startweg (StoryRules.MissionAt). Ohne Startweg
+--   gilt Missions[PathSlot]. Erledigt ist die Stelle, sobald irgendeine ihrer Varianten erledigt ist (Veteranen behalten
+--   ihren Stand); eine schon laufende Variante läuft zu Ende.
+--   kind = "own" mit owTyp/owStat: Lebenszeit-Zähler eines Open-World-Gebäudes (d.games.ow.buildings[owTyp][owStat],
+--   OWRules: packs = abgeholte Bauteil-Pakete, partsTotal = abgeholte Altteile, collects = Abholungen mit Ertrag)
 local Story = {}
 
 Story.Title = "Vom Kiesplatzhändler zum Mega-Verkäufer"
@@ -548,6 +691,7 @@ Story.Chapters = {
 			.. "Die Kunden kommen schon, jetzt brauchst du nur noch den richtigen Preis. "
 			.. "Jeder Verkauf bringt dich deinem Traum vom eigenen Autohaus ein Stück näher.",
 		Missions = {
+			-- Startwege werkstatt/autohaus und ohne Startwahl; produktion/schrottplatz ersetzen diese Stelle (PathMissions)
 			{ id = "c1_m1", title = "Drei Gebrauchtwagen verkaufen", kind = "sell", target = 3, minutes = 4,
 				text = "Geh zum Kiesplatz, sprich mit den Kunden und nenne deinen Preis. Günstig klappt immer, teuer braucht Verhandlungsglück.",
 				reward = { credits = 150 } },
@@ -558,6 +702,19 @@ Story.Chapters = {
 			{ id = "c1_m3", title = "Die ersten 2.500 Credits", kind = "own", money = 2500, target = 2500, minutes = 4,
 				text = "Bring deinen Kontostand auf 2.500 Credits – mit Verkäufen am Kiesplatz oder Aufträgen in der Werkstatt.",
 				reward = { credits = 160 } },
+		},
+		-- Erste Mission je Startweg (Balance wie oben: ≤ 40 % von 214 Cr/Min auf Level 1 ≈ 85 Cr/Min)
+		PathSlot = 1,
+		PathMissions = {
+			-- werkstatt: der klassische Start bleibt unverändert – c1_m1 (Missions[1]): das Werkstatt-Tutorial endet am Kiesplatz
+			-- („Da beginnt deine Story“), und Veteranen (automatisch werkstatt) behalten ihre erste Mission
+			-- autohaus: c1_m1 (Missions[1], drei Verkäufe am Kiesplatz) – unter der Tabelle eingetragen
+			produktion = { id = "c1_m1_produktion", title = "Zwei Bauteil-Pakete abholen", kind = "own", owTyp = "produktion", owStat = "packs", target = 2, minutes = 4,
+				text = "Deine Produktion packt Bauteil-Pakete voller Altteile. Hol im Tab „Gebäude“ zwei Pakete ab – die ersten warten schon auf dich.",
+				reward = { credits = 150 } },
+			schrottplatz = { id = "c1_m1_schrottplatz", title = "Altteile vom Schrottplatz", kind = "own", owTyp = "schrottplatz", owStat = "partsTotal", target = 2, minutes = 4,
+				text = "Dein Schrottplatz findet beim Sortieren Altteile. Hol im Tab „Gebäude“ insgesamt zwei Altteile ab – den Schrott dazu bekommt deine Presse.",
+				reward = { credits = 150 } },
 		},
 	},
 	{
@@ -630,6 +787,8 @@ Story.Chapters = {
 		},
 	},
 }
+
+Story.Chapters[1].PathMissions.autohaus = Story.Chapters[1].Missions[1] -- Startweg autohaus: drei Verkäufe am Kiesplatz
 
 ---------------------------------------------------------------- Kiesplatz-Verkauf (story_sell {offer, price}; price = Preisstufe 1..3)
 -- Der Spieler kauft den Gebrauchtwagen gedanklich aus dem Erlös: gutgeschrieben wird nur der Reingewinn (profit) je Stufe,
@@ -1059,11 +1218,19 @@ for _, h in ipairs(GameConfig.Hints) do
 	table.insert(GameConfig.HintsByWhen[h.when], h)
 end
 
-GameConfig.TutorialStepById = {}
-GameConfig.TutorialStepIndex = {} -- id -> Nummer (1-basiert)
+GameConfig.TutorialStepById = {} -- id -> Schritt (alle Wege)
+GameConfig.TutorialStepIndex = {} -- id -> Nummer (1-basiert) im klassischen Weg (werkstatt)
+GameConfig.TutorialStepIndexByPath = {} -- typ -> id -> Nummer
 for i, s in ipairs(GameConfig.Tutorial.Steps) do
 	GameConfig.TutorialStepById[s.id] = s
 	GameConfig.TutorialStepIndex[s.id] = i
+end
+for typ, list in pairs(GameConfig.Tutorial.ByPath) do
+	GameConfig.TutorialStepIndexByPath[typ] = {}
+	for i, s in ipairs(list) do
+		GameConfig.TutorialStepById[s.id] = s
+		GameConfig.TutorialStepIndexByPath[typ][s.id] = i
+	end
 end
 GameConfig.Tutorial.Count = #GameConfig.Tutorial.Steps
 

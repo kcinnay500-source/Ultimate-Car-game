@@ -708,6 +708,14 @@ function TycoonClient.Step(dt: number?)
 	stepAnimations(d)
 end
 
+-- Sofort neu prüfen (MiniClient.RefreshOverlays: 2.4.0-Dialog/Tablet/Panel auf oder zu), nicht erst im nächsten Takt
+function TycoonClient.Refresh()
+	if hud.gui then
+		setHudEnabled(hudShouldShow())
+		hudTimer = 0
+	end
+end
+
 function TycoonClient.OnSnapshot(s)
 	if type(s) ~= "table" then
 		return

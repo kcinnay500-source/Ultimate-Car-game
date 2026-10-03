@@ -1,18 +1,22 @@
 -- OWRules: Open-World-Gebäude, Perks und Passiv-Modus als reine Regeln (docs/PHASE4_CONTRACT.md §2, §5, §7).
--- Daten: d.games.ow = { buildings = { [typ] = { stage, built, readyAt, collectedAt, carAt, partsCarry } }, passive, lastPassiveAt }
+-- Daten: d.games.ow = { buildings = { [typ] = { stage, built, readyAt, collectedAt, carAt, partsCarry, packs, partsTotal,
+--                        collects, gift } }, passive, lastPassiveAt }
 --   stage       = gekaufte Zielstufe (0 = nichts gebaut), readyAt = Serverzeit (unix), ab der diese Stufe fertig ist
 --   built       = fertig gebaute Stufe (≤ stage); nur sie zählt für Erträge und Perks. Nur Settle(d, now) hebt built auf
 --                 stage, sobald readyAt erreicht ist – auch für offline fertig gewordene Bauten: Load lässt built wie
 --                 gespeichert, der Dienst ruft Settle beim Beitritt (dann gibt es ow_ready + Toast) und im Tick.
 --   collectedAt = Beginn des laufenden Ertragszeitraums (unix); carAt = Beginn des Gutschein-Zeitraums (Produktion 4)
 --   partsCarry  = angebrochener Altteil-Rest (0 ≤ x < 1) aus partsPerHour, damit häufiges Abholen keine Teile verliert
+--   packs/partsTotal/collects = Lebenszeit-Zähler (abgeholte Bauteil-Pakete, abgeholte Altteile, Abholungen mit Ertrag)
+--                 für Story-Missionen (kind own, owTyp/owStat); gift = Stufe 1 kam aus der Startwahl (GrantStart)
 -- werkstatt ist das 2.4.0-Grundstück: Stufe = d.bays, kein Kaufweg hier (CanBuild -> "werkstatt").
 -- Zahlen nur aus GameConfig.OW. Keine Instanzen, kein Zufall. Geld ändert sich nur über MiniRules.AddMoney/AddIncome
 -- (lazy require wie CarRules: MiniRules lädt OWRules, darum kein require am Dateikopf).
 -- Schnittstelle: Default/Load/ApplyDefault/ApplyLoad, CanBuild(d, typ, now) -> ok, reason, cost; Build(d, typ, now);
 -- Settle(d, now) -> { typ... } fertig geworden; Ready(d, typ, now); Remaining(d, typ, now); Collectable(d, typ, now) ->
 -- amounts; Collect(d, typ, now) -> { credits, scrap, parts, car } | nil; Perk(d, kind) -> Faktor ≥ 1; Discount(d);
--- PassiveSet(d, on, now); IsPassive(d); Summary(d, now) (Snapshot-Felder).
+-- PassiveSet(d, on, now); IsPassive(d); Summary(d, now) (Snapshot-Felder);
+-- GrantStart(d, typ, now) -> ok, Grund: Startwahl (GameConfig.Start) – Stufe 1 geschenkt und sofort fertig.
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local Unlocks = require(script.Parent:WaitForChild("Unlocks"))
 local C = require(script.Parent.Parent:WaitForChild("Config"))
@@ -23,7 +27,10 @@ local OW = GameConfig.OW
 local MAX_SAFE = 2 ^ 53
 local HOUR = 3600
 
-export type Building = { stage: number, built: number, readyAt: number, collectedAt: number, carAt: number, partsCarry: number }
+export type Building = {
+	stage: number, built: number, readyAt: number, collectedAt: number, carAt: number, partsCarry: number,
+	packs: number, partsTotal: number, collects: number, gift: boolean,
+}
 export type OW = { buildings: { [string]: Building }, passive: boolean, lastPassiveAt: number }
 export type Amounts = { credits: number, scrap: number, parts: number, car: string?, hours: number }
 
@@ -85,7 +92,10 @@ end
 
 ---------------------------------------------------------------- Standardwerte und Laden
 local function newBuilding(): Building
-	return { stage = 0, built = 0, readyAt = 0, collectedAt = 0, carAt = 0, partsCarry = 0 }
+	return {
+		stage = 0, built = 0, readyAt = 0, collectedAt = 0, carAt = 0, partsCarry = 0,
+		packs = 0, partsTotal = 0, collects = 0, gift = false,
+	}
 end
 
 function OWRules.Default(): OW
@@ -120,6 +130,10 @@ function OWRules.Load(raw: any, d: any, _now: any): OW
 		b.carAt = loadInt(src.carAt, 0, 0, MAX_SAFE)
 		local carry = src.partsCarry
 		b.partsCarry = finite(carry) and carry >= 0 and carry < 1 and carry or 0
+		b.packs = loadInt(src.packs, 0, 0, MAX_SAFE)
+		b.partsTotal = loadInt(src.partsTotal, 0, 0, MAX_SAFE)
+		b.collects = loadInt(src.collects, 0, 0, MAX_SAFE)
+		b.gift = src.gift == true and b.stage > 0
 		if b.built == 0 then
 			b.collectedAt = 0
 			b.carAt = 0
@@ -166,6 +180,15 @@ function OWRules.Ensure(d: any): OW?
 	for _, typ in ipairs(OW.Types) do
 		if typ ~= "werkstatt" and type(o.buildings[typ]) ~= "table" then
 			o.buildings[typ] = newBuilding()
+		end
+	end
+	-- Profile aus einer laufenden Sitzung vor den Lebenszeit-Zählern
+	for _, b in pairs(o.buildings) do
+		if type(b) == "table" then
+			b.packs = finite(b.packs) and b.packs or 0
+			b.partsTotal = finite(b.partsTotal) and b.partsTotal or 0
+			b.collects = finite(b.collects) and b.collects or 0
+			b.gift = b.gift == true
 		end
 	end
 	return o
@@ -331,6 +354,51 @@ function OWRules.Build(d: any, typ: any, now: any): (boolean, string, number, Am
 	return true, "ok", cost, collected
 end
 
+---------------------------------------------------------------- Startwahl (GameConfig.Start, StartService)
+-- Schenkt Stufe 1 des Gebäudes eines Startwegs: ohne Level-Sperre, ohne Preis, ohne Bauzeit. readyAt liegt yieldHours
+-- (GameConfig.Start.Paths[typ].yieldHours, höchstens PassiveCapHours) in der Vergangenheit, darum ist die Stufe sofort
+-- fertig (Ready = true) und der Startertrag wartet schon zum Abholen. built bleibt bis zum nächsten Settle auf 0:
+-- OWService verbucht den Bau dann im nächsten Tick (Settle -> Stufenmodell am Anker, mini_notice ow_ready + Toast) –
+-- genau wie einen offline fertig gewordenen Bau. Idempotent: nie zweimal, nie über eine schon gebaute Stufe.
+-- Rückgabe: ok, Grund ("ok" | "werkstatt" (klassischer Start, nichts zu schenken) | "unknown" | "already" | "nodata")
+function OWRules.GrantStart(d: any, typ: any, now: any): (boolean, string)
+	local S = GameConfig.Start
+	local path = type(S) == "table" and type(S.Paths) == "table" and type(typ) == "string" and S.Paths[typ] or nil
+	if not path then
+		return false, "unknown"
+	end
+	local btyp = path.building
+	if btyp == nil or btyp == "werkstatt" then
+		return false, "werkstatt"
+	end
+	if not OWRules.Building(btyp) or OWRules.MaxStage(btyp) < 1 then
+		return false, "unknown"
+	end
+	if not OWRules.Ensure(d) then
+		return false, "nodata"
+	end
+	local e = OWRules.Entry(d, btyp)
+	if not e then
+		return false, "nodata"
+	end
+	if e.stage > 0 or e.gift == true then
+		return false, "already"
+	end
+	local t = math.floor(nowOr(now))
+	local hours = finite(path.yieldHours) and math.max(0, path.yieldHours) or 0
+	local cap = finite(OW.PassiveCapHours) and OW.PassiveCapHours > 0 and OW.PassiveCapHours or 12
+	hours = math.min(hours, cap)
+	local readyAt = math.max(0, t - math.floor(hours * HOUR))
+	e.stage = 1
+	e.built = 0 -- Settle (OWService-Tick) hebt built auf 1 und stellt das Modell auf
+	e.readyAt = readyAt
+	e.collectedAt = readyAt
+	e.carAt = readyAt
+	e.partsCarry = 0
+	e.gift = true
+	return true, "ok"
+end
+
 ---------------------------------------------------------------- Erträge
 local function capHours(): number
 	local h = OW.PassiveCapHours
@@ -408,6 +476,13 @@ function OWRules.Collect(d: any, typ: any, now: any, opts: { skipCar: boolean? }
 		g.parts = math.min(MAX_SAFE, g.parts + a.parts)
 	elseif a.parts > 0 then
 		a.parts = 0
+	end
+	-- Lebenszeit-Zähler (Story-Missionen der Startwege): Abholungen, Altteile, Bauteil-Pakete
+	e.collects = math.min(MAX_SAFE, (finite(e.collects) and e.collects or 0) + 1)
+	e.partsTotal = math.min(MAX_SAFE, (finite(e.partsTotal) and e.partsTotal or 0) + a.parts)
+	if a.parts > 0 and finite(st.partsEveryHours) and st.partsEveryHours > 0 then
+		local packs = math.floor(a.hours / st.partsEveryHours)
+		e.packs = math.min(MAX_SAFE, (finite(e.packs) and e.packs or 0) + packs)
 	end
 	-- Altteile je Stunde (Schrottplatz): den Bruchteil eines Teils für das nächste Abholen aufheben
 	if finite(st.partsPerHour) then
