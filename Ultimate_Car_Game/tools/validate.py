@@ -215,7 +215,22 @@ def scratch_dir():
     return Path(tmp.name), tmp
 
 
+def validate_default_outputs(builder):
+    """B-013: ohne Dateinamen schreibt jeder Place in eine eigene Datei – eine Variante nie über den Haupt-Place."""
+    main = builder.ROOT / "Ultimate_Car_Game.rbxlx"
+    outs = {place: builder.default_out(place) for place in builder.PLACES}
+    check(outs["all"] == main, f"build_place: Standard-Ausgabe für all ist {outs['all'].name} statt {main.name}")
+    for place, out in outs.items():
+        if place != "all":
+            check(out.name.lower() != main.name.lower(),
+                  f"build_place --place {place} ohne Dateinamen würde den Haupt-Place {main.name} überschreiben")
+        check(out.parent == builder.ROOT, f"build_place: Standard-Ausgabe für {place} liegt nicht im Projektordner")
+    names = {out.name.lower() for out in outs.values()}
+    check(len(names) == len(outs), f"build_place: Standard-Ausgaben nicht eindeutig ({sorted(o.name for o in outs.values())})")
+
+
 def validate_variants(builder, script_keys):
+    validate_default_outputs(builder)
     out_dir, keep = scratch_dir()
     fresh = load_builder()
     for place in ("lobby", "openworld", "tycoon"):

@@ -26,6 +26,8 @@ Plot-Vorlage Workspace.Werkstatt und alle Skripte sind in jedem Place enthalten)
 Aufrufe:
   python tools/build_place.py Ultimate_Car_Game.rbxlx        Place bauen (PlaceKind all)
   python tools/build_place.py --place lobby Lobby.rbxlx      nur die Lobby-Halle (PlaceKind lobby)
+  python tools/build_place.py --place lobby                  ohne Dateinamen: Ultimate_Car_Game_Lobby.rbxlx
+                                                             (openworld: …_OpenWorld, tycoon: …_Tycoon; nie der Haupt-Place)
   python tools/build_place.py --extract                      Skripte aus dem Basisplace nach src/garage schreiben
   python tools/build_place.py --roundtrip                    Prüfen: Basis + src/garage == Basis (bis auf Skript-Quelltexte)
 """
@@ -364,6 +366,23 @@ def cmd_build(out: Path, place="all"):
         print(f"Texte exportiert: {csv_path.relative_to(ROOT)} ({n} Einträge)")
 
 
+# B-013: Standard-Ausgabedatei je Place (Namen wie in START_HIER.md / docs/PHASE4_CONTRACT.md §1). Ohne Dateinamen
+# schrieb ``--place lobby|openworld|tycoon`` früher nach Ultimate_Car_Game.rbxlx und überschrieb den Haupt-Place.
+DEFAULT_OUT = {
+    "all": "Ultimate_Car_Game.rbxlx",
+    "lobby": "Ultimate_Car_Game_Lobby.rbxlx",
+    "openworld": "Ultimate_Car_Game_OpenWorld.rbxlx",
+    "tycoon": "Ultimate_Car_Game_Tycoon.rbxlx",
+}
+
+
+def default_out(place="all"):
+    """Ausgabepfad, wenn kein Dateiname angegeben ist: je Place eine eigene Datei im Projektordner."""
+    if place not in DEFAULT_OUT:
+        raise SystemExit(f"Unbekannter Place '{place}' (erlaubt: {', '.join(PLACES)})")
+    return ROOT / DEFAULT_OUT[place]
+
+
 def main():
     args = sys.argv[1:]
     if args and args[0] == "--extract":
@@ -378,7 +397,7 @@ def main():
             raise SystemExit(f"--place erwartet einen von: {', '.join(PLACES)}")
         place = args[i + 1]
         del args[i:i + 2]
-    out = Path(args[0]) if args else ROOT / "Ultimate_Car_Game.rbxlx"
+    out = Path(args[0]) if args else default_out(place)  # B-013: Variante nie über den Haupt-Place schreiben
     if not out.is_absolute():
         out = Path.cwd() / out
     cmd_build(out, place)
