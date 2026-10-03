@@ -24,6 +24,51 @@ local function owns(userId, passId)
 	return ok and result == true
 end
 
+-- B-019: Besitz nach einem Kaufereignis beim Server bestätigen. PromptGamePassPurchaseFinished(purchased = true)
+-- allein ist kein Beleg (manipulierte Clients können das Signal auslösen). onOwned() läuft nur, wenn
+-- UserOwnsGamePassAsync den Besitz bestätigt; wegen des Besitz-Caches bis zu ConfirmTries Versuche mit Pause.
+-- Läuft in einem eigenen Task (blockiert den Ereignis-Handler nicht). Je Spieler und Pass höchstens eine laufende
+-- Prüfung: weitere Ereignisse hängen sich an, statt neue Abfragen auszulösen (Budget).
+MiniPasses.ConfirmTries = 3
+MiniPasses.ConfirmWait = 2 -- Sekunden zwischen den Versuchen
+
+local confirming = {} -- ["<userId>:<passId>"] = { onOwned, ... }
+
+function MiniPasses.Confirm(userId, passId, onOwned)
+	if type(userId) ~= "number" or type(passId) ~= "number" or passId <= 0 then
+		return
+	end
+	local key = userId .. ":" .. passId
+	if confirming[key] then
+		table.insert(confirming[key], onOwned)
+		return
+	end
+	confirming[key] = { onOwned }
+	task.spawn(function()
+		local owned = false
+		for try = 1, MiniPasses.ConfirmTries do
+			if owns(userId, passId) then
+				owned = true
+				break
+			end
+			if try < MiniPasses.ConfirmTries then
+				task.wait(MiniPasses.ConfirmWait)
+			end
+		end
+		local waiting = confirming[key]
+		confirming[key] = nil
+		if not owned then
+			return
+		end
+		for _, fn in ipairs(waiting) do
+			local ok, err = pcall(fn)
+			if not ok then
+				warn("[Game Passes] Gutschrift nach Kauf: " .. tostring(err))
+			end
+		end
+	end)
+end
+
 -- Kann warten (UserOwnsGamePassAsync); ohne eingetragene IDs kehrt es sofort zurück.
 function MiniPasses.Check(userId)
 	local passes = { doubleScrap = false, pressPlus = false }
@@ -33,7 +78,8 @@ function MiniPasses.Check(userId)
 	return passes
 end
 
--- onPurchased(player, field) wird nach einem erfolgreichen Kauf in dieser Sitzung aufgerufen.
+-- onPurchased(player, field) wird nach einem erfolgreichen Kauf in dieser Sitzung aufgerufen –
+-- erst nachdem der Server den Besitz bestätigt hat (B-019, MiniPasses.Confirm).
 function MiniPasses.Init(onPurchased)
 	local ok, err = pcall(function()
 		MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
@@ -43,7 +89,9 @@ function MiniPasses.Init(onPurchased)
 			for name, field in pairs(MiniPasses.Fields) do
 				local id = MiniConfig.GamePasses[name].id
 				if id > 0 and id == passId then
-					onPurchased(player, field)
+					MiniPasses.Confirm(player.UserId, id, function()
+						onPurchased(player, field)
+					end)
 				end
 			end
 		end)

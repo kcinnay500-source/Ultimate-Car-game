@@ -476,6 +476,7 @@ return {
 		T.eq(mp.prompts[1] and mp.prompts[1].passId, PASS_DEKO, "richtige Pass-Id")
 		-- Kauf in der Sitzung: Ereignis -> Kosmetik sofort, Toast; zweites Ereignis still
 		m = g:Mark()
+		mp.owned["708:" .. PASS_DEKO] = true -- B-019: nach einem echten Kauf bestätigt Roblox den Besitz
 		g.env.services.MarketplaceService.PromptGamePassPurchaseFinished:Fire(p, PASS_DEKO, true)
 		g:Flush()
 		T.eq(shop.owned.wrap_karo, true, "Deko-Paket: Folierung")

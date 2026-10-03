@@ -6,7 +6,8 @@
 --                                    Pass-Schlüssel aus GameConfig.Shop.Passes; Id 0 -> „noch nicht eingerichtet“,
 --                                    kein Prompt; sonst purchasePrompt {productId} über den 2.4.0-Weg bzw.
 --                                    PromptGamePassPurchase)
---   Init(ctx?)                       verbindet PromptGamePassPurchaseFinished (pcall); ctx.emit (MiniService-ctx) ist
+--   Init(ctx?)                       verbindet PromptGamePassPurchaseFinished (pcall; Gutschrift erst nach
+--                                    bestätigtem Besitz, MiniPasses.Confirm); ctx.emit (MiniService-ctx) ist
 --                                    optional – ohne ctx geht purchasePrompt direkt über GarageShared.Remotes.Event
 --   OnJoin(ms, d, now)               Sitzung merken, Game-Pass-Besitz prüfen (UserOwnsGamePassAsync in pcall, kann
 --                                    warten) und die Pass-Kosmetik idempotent gutschreiben (ShopRules.Grant)
@@ -34,6 +35,7 @@ local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 local ShopRules = require(MiniShared:WaitForChild("ShopRules"))
 local CarCatalog = require(MiniShared:WaitForChild("CarCatalog"))
 local Unlocks = require(MiniShared:WaitForChild("Unlocks"))
+local MiniPasses = require(script.Parent:WaitForChild("MiniPasses")) -- B-019: Besitz-Bestätigung nach Kaufereignis
 
 local ShopService = {}
 
@@ -310,10 +312,18 @@ function ShopService.Init(c: any?)
 			if not pass or not ms or not alive(ms) then
 				return
 			end
-			local okA, errA = pcall(applyPass, ms, ms.p.profile.data, pass, true)
-			if not okA then
-				warn("[Shop] Game Pass " .. tostring(pass.key) .. ": " .. tostring(errA))
-			end
+			-- B-019: das Ereignis allein ist kein Beleg (von manipulierten Clients auslösbar) – Gutschrift erst,
+			-- wenn UserOwnsGamePassAsync den Besitz bestätigt (eigener Task, kurze Wiederholung wegen Cache)
+			MiniPasses.Confirm(player.UserId, id, function()
+				local cur = sessions[player]
+				if not cur or not alive(cur) then
+					return
+				end
+				local okA, errA = pcall(applyPass, cur, cur.p.profile.data, pass, true)
+				if not okA then
+					warn("[Shop] Game Pass " .. tostring(pass.key) .. ": " .. tostring(errA))
+				end
+			end)
 		end)
 	end)
 	if not ok then
