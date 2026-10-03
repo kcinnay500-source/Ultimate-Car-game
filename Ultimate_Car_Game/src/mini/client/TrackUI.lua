@@ -6,6 +6,10 @@ local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):W
 local MiniLocale = require(Mini:WaitForChild("MiniLocale"))
 local Lib = require(script.Parent:WaitForChild("DealerUI")).Lib
 local DriveClient = require(script.Parent:WaitForChild("DriveClient"))
+local okRules, TrackRules = pcall(require, Mini:WaitForChild("TrackRules"))
+if not okRules then
+	TrackRules = nil
+end
 
 local TrackUI = {}
 
@@ -32,6 +36,8 @@ function TrackUI.Build(page, ctx)
 	UI.Small(head, "Fahre mit deinem eigenen Auto alle Checkpoints der Strecke in der richtigen Reihenfolge ab. Die Zeit misst der Server. Credits gibt es nur, wenn du deine belohnte Bestzeit verbesserst.", 2)
 	refs.best = UI.Label(head, "", { Font = UI.FontBold, TextSize = 17, LayoutOrder = 3 })
 	refs.info = UI.Small(head, "", 4)
+	refs.layout = UI.Small(head, TrackUI.LayoutText(), 5)
+	refs.layout.Name = "Streckenfuehrung"
 
 	local run = UI.Card(page, 2)
 	UI.Title(run, "Zeitfahren", 1)
@@ -56,6 +62,25 @@ function TrackUI.Build(page, ctx)
 			Remote.Send("mini_travel", { key = "dealer" })
 		end
 	end, { Name = "ZumAutohaus", LayoutOrder = 9, Visible = false })
+end
+
+-- Streckenführung (TrackRules.Layout): Name, Abschnitte, Länge und Checkpoints als eine Zeile
+function TrackUI.LayoutText()
+	local L = TrackRules and type(TrackRules.Layout) == "table" and TrackRules.Layout or nil
+	if not L then
+		return ""
+	end
+	local parts = {}
+	if type(L.sections) == "table" and #L.sections > 0 then
+		table.insert(parts, table.concat(L.sections, " · "))
+	end
+	if type(L.length) == "number" then
+		table.insert(parts, "ca. " .. MiniLocale.Group(math.floor(L.length / 10 + 0.5) * 10) .. " Studs")
+	end
+	if type(L.checkpoints) == "number" then
+		table.insert(parts, L.checkpoints .. " Checkpoints + Ziel")
+	end
+	return "Strecke: " .. tostring(L.name or "Teststrecke") .. (#parts > 0 and (" – " .. table.concat(parts, " · ")) or "")
 end
 
 -- mini_notice track_*: Zustand in DriveClient (einmal je Hinweis), Ergebnis hier anzeigen

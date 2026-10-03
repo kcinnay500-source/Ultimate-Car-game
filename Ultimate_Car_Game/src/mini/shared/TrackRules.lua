@@ -3,10 +3,24 @@
 -- Plausibilität: jeder Abschnitt braucht mindestens Luftlinie / Höchsttempo (gegen Teleport), die ganze
 -- Runde mindestens max(Track.minLapSeconds, Streckenlänge / Höchsttempo). Höchsttempo = das des GEFAHRENEN Autos
 -- (CarSpeed: Spitze × Nitro × speedMargin), nicht das schnellste Auto des Katalogs. Belohnung nur für eine verbesserte Bestzeit, gedeckelt.
--- Daten: d.games.track = { best = <Sekunden oder 0>, rewardedBest = <Sekunden oder 0>, runs = <int> }
+-- Daten: d.games.track = { best = <Sekunden oder 0>, rewardedBest = <Sekunden oder 0>, runs = <int>, layout = <int> }
+-- layout = Version der Streckenführung (TrackRules.Layout.version). Zeiten einer anderen Streckenführung verfallen beim
+-- Laden (3.0: Grand-Prix-Kurs statt Oval); die Anzahl der Läufe bleibt.
 local CarCatalog = require(script.Parent:WaitForChild("CarCatalog"))
 
 local TrackRules = {}
+
+-- Streckenführung (tools/worldgen/vehicles.py TRACK_LAYOUT / track_length; City.Track hat die Attribute Layout und
+-- Length). legacyMin: Zeiten aus Profilen ohne layout-Feld darunter stammen sicher vom alten, kurzen Oval
+-- (~780 Studs, 8–16 s) und verfallen; längere Zeiten sind auf dem neuen Kurs ohnehin schlagbar und bleiben.
+TrackRules.Layout = {
+	version = 2,
+	name = "Grand-Prix-Kurs",
+	length = 1223, -- Studs (Mittellinie)
+	checkpoints = 12, -- Zwischenpunkte, dazu das Ziel
+	legacyMin = 20,
+	sections = { "Start/Ziel-Gerade", "Kurve 1", "S-Kurve", "schnelle Kurve", "lange Gerade", "Haarnadel", "Zielkurve" },
+}
 
 local MAX_SAFE = 2 ^ 53
 local MAX_TIME = 24 * 3600
@@ -21,7 +35,7 @@ end
 
 ---------------------------------------------------------------- Daten
 function TrackRules.Default()
-	return { best = 0, rewardedBest = 0, runs = 0 }
+	return { best = 0, rewardedBest = 0, runs = 0, layout = TrackRules.Layout.version }
 end
 
 -- raw = gespeichertes d.games.track (oder nil). Idempotent; NaN/negativ/unsinnig -> Standard.
@@ -43,6 +57,17 @@ function TrackRules.Load(raw)
 	end
 	if finite(raw.runs) and raw.runs >= 0 then
 		t.runs = math.floor(math.min(raw.runs, MAX_SAFE))
+	end
+	-- Zeiten einer anderen Streckenführung verfallen (Bestzeit vom alten Oval wäre auf dem Grand-Prix-Kurs unschlagbar)
+	local L = TrackRules.Layout
+	local stale
+	if raw.layout == nil then
+		stale = (t.best > 0 and t.best < L.legacyMin) or (t.rewardedBest > 0 and t.rewardedBest < L.legacyMin)
+	else
+		stale = raw.layout ~= L.version
+	end
+	if stale then
+		t.best, t.rewardedBest = 0, 0
 	end
 	return t
 end

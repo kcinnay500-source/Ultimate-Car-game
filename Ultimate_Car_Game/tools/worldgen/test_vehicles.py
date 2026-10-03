@@ -115,15 +115,14 @@ def test_checkpoints():
     cps = vehicles.checkpoints()
     check(cps[-1][0] == "Ziel" and [c[0] for c in cps[:-1]] == ["CP%d" % (i + 1) for i in range(len(cps) - 1)],
           "Checkpoint-Namen")
-    from worldgen.ground_roads import traffic_loops
-    loop = next(p for k, n, p, s in traffic_loops() if k == "T")
+    loop = vehicles.track_loop()
     samples = drive.polyline_samples(loop, True, 0.5)
     last = i0 = None
     for name, (x, z), (dx, dz) in cps:
         d, i = min((math.hypot(sx - x, sz - z), i) for i, (sx, sz, a, b) in enumerate(samples))
         sd = samples[i]
         i0 = i if i0 is None else i0
-        i = (i - i0) % len(samples)          # Schleife T beginnt bei (-85, 270): relativ zu CP1 zählen
+        i = (i - i0) % len(samples)          # Mittellinie beginnt bei (-90, 270): relativ zu CP1 zählen
         check(d < 2.0, "%s auf der Ideallinie (%.2f)" % (name, d))
         check(dx * sd[2] + dz * sd[3] > 0.95, "%s Fahrtrichtung" % name)
         if last is not None and name != "Ziel":
@@ -132,6 +131,28 @@ def test_checkpoints():
     x, fy, z, yaw = vehicles.spawn_world("track")
     zx = cps[-1][1][0]
     check(x < zx - vehicles.CP_SIZE[2] / 2 - drive.CAR_HALF_L, "Startplatz vor der Ziellinie, ohne sie zu berühren")
+
+
+def test_track_geometry():
+    """3.0 Grand-Prix-Kurs: Mittellinie geschlossen, tangential stetig, länger als das alte Oval, Kurvenmix"""
+    geo = vehicles.track_geometry()
+    check(math.dist(geo[-1][2], vehicles.TRACK_START) < 1e-6, "Strecke geschlossen (%s)" % (geo[-1][2],))
+    for i, g in enumerate(geo):
+        nxt = geo[(i + 1) % len(geo)]
+        check(math.dist(g[2], nxt[1]) < 1e-6, "Stück %d schließt an" % i)
+        (p, d1), (q, d2) = vehicles.track_point(i, 1.0), vehicles.track_point((i + 1) % len(geo), 0.0)
+        check(d1[0] * d2[0] + d1[1] * d2[1] > 0.9999, "Stück %d tangential stetig" % i)
+    ln = vehicles.track_length()
+    check(1100 < ln < 1400, "Rundenlänge %.0f (altes Oval ~780)" % ln)
+    arcs = [g[3] for g in geo if g[0] == "A"]
+    check(any(abs(a[3] - a[2]) >= 179 and a[1] <= 40 for a in arcs), "Haarnadel (180°, enger Radius)")
+    check(any(a[1] >= 80 for a in arcs), "schnelle Kurve (großer Radius)")
+    check(any(g[0] == "A" and g[3][4] < 0 for g in geo) and any(g[0] == "A" and g[3][4] > 0 for g in geo),
+          "Links- und Rechtskurven (S-Kurve)")
+    check(max(math.dist(g[1], g[2]) for g in geo if g[0] == "S") >= 300, "lange Gerade >= 300")
+    for x, z in vehicles.track_loop(5.0):
+        check(-300 <= x <= 300 and 230 <= z <= 560 - vehicles.TRACK_WIDTH / 2, "Mittellinie im Gelände (%g,%g)" % (x, z))
+    check(len(vehicles.checkpoints()) <= 20, "höchstens 20 Checkpoints (Zeitfahren-Tests: 9 s je Abschnitt < 240 s)")
 
 
 def test_place(path):
@@ -162,6 +183,7 @@ if __name__ == "__main__":
     test_drive()
     test_tables()
     test_checkpoints()
+    test_track_geometry()
     if len(sys.argv) > 1:
         test_place(sys.argv[1])
     for f in FAILS:

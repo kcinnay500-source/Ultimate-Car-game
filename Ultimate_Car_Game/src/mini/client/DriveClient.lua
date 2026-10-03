@@ -13,6 +13,10 @@
 --   * Auto aufrichten: liegt das Auto auf der Seite/dem Dach (UpVector.Y < FlipUp) und steht fast (< FlipSpeed)
 --     länger als FlipDelay, erscheint „Auto aufrichten [R]“ (Handy: Knopf). Der Fahrer ist Netzwerk-Besitzer, daher
 --     setzt der Client das Auto selbst 4 Studs höher aufrecht hin (gleiche Stelle, gleiche Blickrichtung).
+--   * 3.x Auto rufen: Taste G (Tastatur) sendet car_call {} (Server: Lieblingsauto bzw. Flitzer an die nächste
+--     Fahrbahn neben dem Spieler). Nur in der Open World (Snapshot-Feld mode), nicht beim Tippen (gameProcessed),
+--     nicht bei offenem Tablet/Panel/QTE (ctx.IsGarageBusy), nicht während der Startwahl, nicht im eigenen Auto;
+--     höchstens alle GameConfig.StarterCar.ClientSendGap Sekunden.
 --   * Tuning wirkt sofort: Torque/BrakeTorque/MaxSpeed usw. werden jedes Frame aus den Modell-Attributen gelesen.
 --   * Das HUD weicht dem 2.4.0-Tablet und QTE/Diagnose (ctx.IsTabletOpen/ctx.IsBlocked).
 --   * Die Kamera bleibt Roblox-Standard.
@@ -55,6 +59,9 @@ DriveClient.FlipSpeed = 3 -- Studs/s: darunter gilt das Auto als liegen gebliebe
 DriveClient.FlipDelay = 2 -- Sekunden, bis „Auto aufrichten“ angeboten wird
 DriveClient.FlipLift = 4 -- Studs über der aktuellen Stelle
 DriveClient.FlipCooldown = 3
+DriveClient.CallKey = Enum.KeyCode.G -- 3.x: Auto rufen
+DriveClient.CallSendGap = 1 -- Sekunden zwischen zwei car_call (GameConfig.StarterCar.ClientSendGap)
+DriveClient.CallOnlyText = "Auto rufen geht nur in der Open World."
 DriveClient.HudTop = 58 -- Tacho unter der 2.4.0-Fortschrittsleiste (y 8..54)
 DriveClient.ToastTop = 118 -- Toasts während der Fahrt unter dem Tacho (sonst y 62)
 
@@ -72,6 +79,8 @@ local cachedChar, cachedHum
 local lastNitroSent = -math.huge
 local lastHornSent = -math.huge
 local flipSince, lastFlip = nil, -math.huge
+local lastCallSent = -math.huge -- 3.x: Auto rufen (Taste G)
+local snapMode, snapStartPending = nil, false -- 3.x: aus dem Minispiel-Snapshot (mode, start.pending)
 local shownSpeed = 0
 local info = { driving = false, speed = 0, kmh = 0, gear = "N", nitro = false }
 
@@ -105,6 +114,17 @@ local function loadCatalogDefaults()
 	local phys = type(cat.Physics) == "table" and cat.Physics or {}
 	DriveClient.CoastFactor = num(phys.coastShare) or DriveClient.CoastFactor
 	DriveClient.ParkFactor = num(phys.parkShare) or DriveClient.ParkFactor
+	-- 3.x: Abstand der Taste G aus GameConfig.StarterCar
+	pcall(function()
+		local mini = game:GetService("ReplicatedStorage").GarageShared.Mini
+		local gc = require(mini:FindFirstChild("GameConfig"))
+		local sc = type(gc) == "table" and gc.StarterCar
+		DriveClient.CallSendGap = type(sc) == "table" and num(sc.ClientSendGap) or DriveClient.CallSendGap
+		local text = type(sc) == "table" and type(sc.Text) == "table" and sc.Text.openWorld
+		if type(text) == "string" then
+			DriveClient.CallOnlyText = text
+		end
+	end)
 end
 
 local function serverNow()
@@ -354,6 +374,62 @@ local function onHornAction(_, inputState)
 		return Enum.ContextActionResult.Sink
 	end
 	return Enum.ContextActionResult.Pass
+end
+
+---------------------------------------------------------------- 3.x: Auto rufen (Taste G)
+-- Darf gerade gerufen werden? Rückgabe true | false, Grund ("busy", "start", "mode", "seated", "gap")
+function DriveClient.CanCall(clock)
+	clock = clock or os.clock()
+	if ctx then
+		for _, key in ipairs({ "IsGarageBusy", "IsTabletOpen", "IsBlocked" }) do
+			local fn = ctx[key]
+			if type(fn) == "function" then
+				local ok, res = pcall(fn)
+				if ok and res == true then
+					return false, "busy"
+				end
+			end
+		end
+	end
+	if snapStartPending then
+		return false, "start" -- Startwahl offen (StartUI liegt darüber)
+	end
+	if snapMode ~= nil and snapMode ~= "openworld" then
+		return false, "mode"
+	end
+	if drive then
+		return false, "seated" -- sitzt schon im eigenen Auto
+	end
+	if clock - lastCallSent < DriveClient.CallSendGap then
+		return false, "gap"
+	end
+	return true
+end
+
+-- Absicht „Auto rufen“ senden (Taste G; das Handy sendet car_call selbst). Rückgabe true = gesendet.
+function DriveClient.CallCar()
+	local clock = os.clock()
+	local ok, why = DriveClient.CanCall(clock)
+	if not ok then
+		if why == "mode" and ctx and ctx.Toast and clock - lastCallSent >= DriveClient.CallSendGap then
+			lastCallSent = clock
+			pcall(ctx.Toast, DriveClient.CallOnlyText)
+		end
+		return false
+	end
+	lastCallSent = clock
+	Remote.Send("car_call", {})
+	return true
+end
+
+local function onCallInput(input, gameProcessed)
+	if gameProcessed or not input or input.KeyCode ~= DriveClient.CallKey then
+		return -- beim Tippen (TextBox) oder von der Oberfläche verarbeitet
+	end
+	if input.UserInputType ~= nil and input.UserInputType ~= Enum.UserInputType.Keyboard then
+		return
+	end
+	DriveClient.CallCar()
 end
 
 ---------------------------------------------------------------- Auto aufrichten
@@ -761,6 +837,13 @@ end
 
 -- Snapshot-Feld track {active, startedAt, checkpoint, total}: hält die Anzeige nach einem Rejoin/Lag im Takt
 function DriveClient.OnSnapshot(s)
+	if type(s) == "table" then
+		-- 3.x: Modus und offene Startwahl für die Taste G
+		if type(s.mode) == "string" then
+			snapMode = s.mode
+		end
+		snapStartPending = type(s.start) == "table" and s.start.pending == true
+	end
 	local tr = type(s) == "table" and s.track
 	if type(tr) ~= "table" then
 		return
@@ -819,6 +902,12 @@ function DriveClient.Start(c)
 	UI = ctx.UI or require(script.Parent:WaitForChild("MiniUI"))
 	Remote = ctx.Remote or require(script.Parent:WaitForChild("MiniRemote"))
 	buildHud()
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		local ok, err = pcall(onCallInput, input, gameProcessed)
+		if not ok then
+			warn("[Fahren] Auto rufen: " .. tostring(err))
+		end
+	end)
 	RunService.Heartbeat:Connect(function(dt)
 		local ok, err = pcall(step, dt)
 		if not ok and drive then

@@ -186,7 +186,7 @@ end
 
 ---------------------------------------------------------------- Fälle
 return {
-	{ "Handy: Taste P und Handy-Knopf öffnen/schließen, Slide-Tween, Home mit sechs Apps, Navigation", function(T, H)
+	{ "Handy: Taste P und Handy-Knopf öffnen/schließen, Slide-Tween, Home mit sieben Apps (3.x: „Auto rufen“), Navigation", function(T, H)
 		local S = setup(H, T)
 		local g, p = S.g, S.p
 		T.check(S.gui ~= nil, "ScreenGui „Handy“ angelegt")

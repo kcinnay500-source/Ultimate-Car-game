@@ -19,6 +19,18 @@
 --   CarService.Tick(ms, d, now)          0,5-s-Tick: Probefahrt-Ende, Leerlauf, Zeitfahren-Timeout, Nitro, Belohnung
 --   CarService.OnLeave(ms)               alles abbauen
 --   CarService.SnapshotFields(ms, d, now) Felder für den Minispiel-Snapshot (§5)
+--
+-- 3.x Startauto „Flitzer“ (CarCatalog.Starter, Daten d.games.flitzer über CarRules):
+--   car_call {}            Auto rufen (Taste G / Handy-App „Auto rufen“): nur in der Open World, Abklingzeit
+--                          GameConfig.StarterCar.CallCooldown (5 s); baut das vorige eigene Auto ab und stellt das
+--                          Lieblingsauto (Standard: Flitzer) an die nächste freie Fahrbahnstelle neben dem Spieler
+--                          (City.Roads, Asphalt; Rückfall: eigener Werkstatt-Parkplatz / City.CarSpawns) und setzt ihn
+--                          hinein. Nicht während Zeitfahren, Probefahrt, Spielhallen-Runde, Reparatur in der Großen
+--                          Werkstatt oder einer Lieferfahrt mit schon draußen stehendem Auto.
+--   car_favourite {id}     Lieblingsauto wählen (CarCatalog.StarterCarId = Flitzer, sonst eigene Auto-Id)
+--   Beide Aktionen registriert Register nur, wenn MiniNet.Actions sie kennt (Verkabelung durch den Integrator).
+--   Begrüßung: wer in dieser Sitzung seinen Startweg wählt (meta.startPath "" -> Weg), bekommt in der Open World
+--   einmal den Flitzer neben sich gestellt (flitzer.due/intro) mit Toast GameConfig.StarterCar.Text.intro.
 local Players = game:GetService("Players")
 local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local CarCatalog = require(MiniShared:WaitForChild("CarCatalog"))
@@ -30,6 +42,7 @@ local VehicleFactory = require(script.Parent:WaitForChild("VehicleFactory"))
 local CityService = require(script.Parent:WaitForChild("CityService"))
 local ShopService = require(script.Parent:WaitForChild("ShopService")) -- Meilenstein 8: Kosmetik je Auto (CosmeticsFor)
 local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
+local MiniNet = require(MiniShared:WaitForChild("MiniNet")) -- 3.x: car_call/car_favourite nur registrieren, wenn verkabelt
 
 local CarService = {}
 CarService.States = {} -- [Player] = Auto-Zustand der Sitzung (cs)
@@ -58,6 +71,48 @@ local TEXT = {
 	wash_range = "Fahre dein Auto in die Waschstraße.",
 	no_money = "Nicht genug Credits.",
 }
+
+-- 3.x: Startauto/Auto rufen. Zahlen und Texte aus GameConfig.StarterCar (Rückfall hier, falls der Abschnitt fehlt).
+local STARTER_DEFAULTS = {
+	CallCooldown = 5, -- Sekunden zwischen zwei car_call eines Spielers
+	SearchRadius = 300, -- Studs: so weit wird die nächste Fahrbahn gesucht
+	RoadMargin = 5, -- Abstand der Wagenmitte zum Fahrbahnrand
+	RoadCandidates = 8, -- so viele nächstgelegene Fahrbahnstücke werden geprüft
+	SlideStep = 9, -- Ausweichen entlang der Fahrbahn (Studs)
+	IntroDelay = 2, -- Sekunden in der Open World, bevor der Begrüßungs-Flitzer kommt
+	IntroRetry = 5, -- erneuter Versuch, wenn gerade kein Platz war
+	Text = {
+		intro = "Dein Flitzer! Ruf ihn jederzeit mit dem Handy (P) → „Auto rufen“ oder Taste G",
+		called = "%s ist da – gute Fahrt!",
+		cooldown = "Dein Auto ist gleich wieder rufbar (noch %d s).",
+		openWorld = "Auto rufen geht nur in der Open World.",
+		track = "Während des Zeitfahrens kannst du kein Auto rufen.",
+		testdrive = "Beende zuerst die Probefahrt.",
+		arcade = "Beende zuerst deine Runde in der Spielhalle.",
+		repair = "Warte, bis die Reparatur in der Großen Werkstatt fertig ist.",
+		delivery = "Während einer Lieferfahrt bleibt dein Auto draußen – steig wieder ein!",
+		seated = "Du sitzt schon in deinem Auto.",
+		noCharacter = "Warte, bis deine Figur wieder da ist.",
+		favourite = "Lieblingsauto: %s. Ruf es mit Taste G oder im Handy.",
+		favouriteMissing = "Dein Lieblingsauto steht gerade nicht bereit – der Flitzer kommt.",
+		nitro = "Der Flitzer hat kein Nitro – dafür ist er super wendig!",
+		trackStarter = "Zeitfahren fährst du mit einem Auto aus dem Autohaus – der Flitzer fährt außer Konkurrenz.",
+	},
+}
+local function starterCfg(key)
+	local sc = type(GameConfig.StarterCar) == "table" and GameConfig.StarterCar or nil
+	local v = sc and sc[key]
+	if v == nil then
+		v = STARTER_DEFAULTS[key]
+	end
+	return v
+end
+local function starterText(key)
+	local sc = type(GameConfig.StarterCar) == "table" and GameConfig.StarterCar or nil
+	local t = sc and type(sc.Text) == "table" and sc.Text[key]
+	return type(t) == "string" and t or STARTER_DEFAULTS.Text[key]
+end
+CarService.StarterText = starterText
 -- Abbruchgründe (mini_notice track_abort {reason, cause}): early, tooFast, expired, left, despawn
 local ABORT = {
 	early = "Frühstart! Das Zeitfahren wurde abgebrochen.",
@@ -322,7 +377,14 @@ local function newState(ms)
 		player = player, p = ms.p, ms = ms, conns = {},
 		lastSpawnAt = { car = -math.huge, test = -math.huge }, testdriveReadyAt = 0, nitroUntil = nil, nitroReadyAt = 0,
 		washReadyAt = 0, shine = {}, pendingReward = 0, pendingXp = 0,
+		lastCallAt = -math.huge, introTryAt = -math.huge, owSince = nil, -- 3.x: Auto rufen / Begrüßungs-Flitzer
+		pathAtJoin = nil,
 	}
+	-- 3.x: Startweg beim Sitzungsbeginn ("" = Startwahl offen -> nach der Wahl kommt der Begrüßungs-Flitzer)
+	pcall(function()
+		local meta = ms.p.profile.data.games.meta
+		cs.pathAtJoin = type(meta) == "table" and type(meta.startPath) == "string" and meta.startPath or nil
+	end)
 	states[player] = cs
 	local ok, conn = pcall(function()
 		return player.CharacterAdded:Connect(function(ch)
@@ -683,13 +745,15 @@ local function applyCosmetics(cs, model, car)
 	end
 end
 
-local function spawnVehicle(cs, slot, car, keys, testdrive)
+-- 3.x: opts = { cframe = Ziel (statt keys), noSeat = true (nicht einsetzen, z. B. Begrüßungs-Flitzer) }
+local function spawnVehicle(cs, slot, car, keys, testdrive, opts)
 	local m = CarCatalog.Model(car.model)
 	if not m then
 		return nil, "Unbekanntes Modell."
 	end
+	opts = opts or {}
 	despawn(cs, slot, "replaced")
-	local cf = spawnCFrame(cs, keys)
+	local cf = opts.cframe or spawnCFrame(cs, keys)
 	if not cf then
 		return nil, TEXT.no_spot
 	end
@@ -701,7 +765,7 @@ local function spawnVehicle(cs, slot, car, keys, testdrive)
 		name = (testdrive and "Probe_" or "Car_") .. player.UserId,
 		ownerId = player.UserId, ownerName = player.Name, carId = testdrive and 0 or car.id, modelId = m.id,
 		displayName = m.name, testdrive = testdrive, cframe = cf,
-		plate = testdrive and "PROBEFAHRT" or ("UCG · " .. string.format("%02d", car.id % 100)), shine = shine,
+		plate = testdrive and "PROBEFAHRT" or (m.starter and "FLITZER" or ("UCG · " .. string.format("%02d", car.id % 100))), shine = shine,
 	})
 	if not ok or not model then
 		if ok == false then
@@ -718,8 +782,13 @@ local function spawnVehicle(cs, slot, car, keys, testdrive)
 		occupied = false, conns = {},
 	}
 	cs[slot] = v
+	if m.starter then
+		model:SetAttribute("Starter", true) -- 3.x: Flitzer (Startauto)
+	end
 	bindVehicle(cs, v)
-	seatOwner(cs, v)
+	if not opts.noSeat then
+		seatOwner(cs, v)
+	end
 	dirty(cs)
 	return v
 end
@@ -730,7 +799,7 @@ local function refreshSpawned(cs, d, id)
 	if not v or v.carId ~= id or not vehicleAlive(v) then
 		return
 	end
-	local car = CarRules.Find(d, id)
+	local car = CarRules.Owned(d, id) -- 3.x: auch der Flitzer
 	if not car then
 		return
 	end
@@ -782,6 +851,340 @@ local function endTestdrive(cs, reason)
 	end
 end
 
+---------------------------------------------------------------- 3.x: Auto rufen (Fahrbahn neben dem Spieler)
+-- Fahrbahnstücke der Stadt: flache Asphalt-Quader unter City.Roads (Fahrbahn, Knoten, Absenkungen, Vorfelder) und
+-- jedes Teil der Stadt mit Attribut CarRoad = true (z. B. Zufahrten anderer Bezirke). Einmal gesammelt.
+local roadCache = nil
+local function isRoadPart(x)
+	if not x:IsA("BasePart") or x:IsA("WedgePart") or x:IsA("CornerWedgePart") then
+		return false
+	end
+	if x:IsA("Part") and x.Shape ~= Enum.PartType.Block then
+		return false
+	end
+	local up = x.CFrame.UpVector
+	if math.abs(up.Y) < 0.98 then
+		return false
+	end
+	if x:GetAttribute("CarRoad") == true then
+		return true
+	end
+	return x.Material == Enum.Material.Asphalt and x.Size.X >= 10 and x.Size.Z >= 10
+end
+
+function CarService.RoadParts()
+	if roadCache and #roadCache > 0 and roadCache[1].Parent ~= nil then
+		return roadCache
+	end
+	local list = {}
+	local c = city()
+	if c then
+		local roads = c:FindFirstChild("Roads")
+		if roads then
+			for _, x in ipairs(roads:GetDescendants()) do
+				if isRoadPart(x) then
+					table.insert(list, x)
+				end
+			end
+		end
+		local districts = c:FindFirstChild("Districts")
+		if districts then
+			for _, x in ipairs(districts:GetDescendants()) do
+				if x:IsA("BasePart") and x:GetAttribute("CarRoad") == true and isRoadPart(x) then
+					table.insert(list, x)
+				end
+			end
+		end
+	end
+	roadCache = list
+	return list
+end
+
+-- Nächster Punkt auf der Oberseite eines Fahrbahnstücks (mit Randabstand), dazu die Fahrtrichtung (lange Achse)
+local function nearestOnRoad(part, pos, margin)
+	local cf, size = part.CFrame, part.Size
+	local lp = cf:PointToObjectSpace(pos)
+	local hx, hz = size.X / 2, size.Z / 2
+	local mx, mz = math.max(0, hx - margin), math.max(0, hz - margin)
+	local x = math.clamp(lp.X, -mx, mx)
+	local z = math.clamp(lp.Z, -mz, mz)
+	local top = (cf.UpVector.Y >= 0) and size.Y / 2 or -size.Y / 2
+	local world = cf:PointToWorldSpace(Vector3.new(x, top, z))
+	local axis = size.X >= size.Z and cf.RightVector or cf.LookVector
+	axis = Vector3.new(axis.X, 0, axis.Z)
+	axis = axis.Magnitude > 1e-3 and axis.Unit or Vector3.new(0, 0, -1)
+	return world, axis, { x = x, z = z, mx = mx, mz = mz, top = top }
+end
+
+-- Steht dort nichts Festes (Laterne, Ampel, Baum, Gebäude, Verkehr)? Autos der Spieler prüft occupied().
+local function spotFree(cf)
+	local ok, blocked = pcall(function()
+		local params = OverlapParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = ignoreList()
+		local hits = workspace:GetPartBoundsInBox(cf * CFrame.new(0, 3.1, 0), Vector3.new(6.5, 4.4, 9.5), params)
+		for _, h in ipairs(hits) do
+			if h.CanCollide and h.Transparency < 1 then
+				return true
+			end
+		end
+		return false
+	end)
+	return not ok or not blocked
+end
+
+-- Ziel-CFrame (Boden unter den Reifen) auf der nächsten freien Fahrbahnstelle neben dem Spieler, oder nil
+function CarService.RoadSpot(cs, pos, look)
+	local margin = starterCfg("RoadMargin")
+	local radius = starterCfg("SearchRadius")
+	local cands = {}
+	for _, part in ipairs(CarService.RoadParts()) do
+		if part.Parent then
+			local world, axis, info = nearestOnRoad(part, pos, margin)
+			local dx, dz = world.X - pos.X, world.Z - pos.Z
+			local dist = math.sqrt(dx * dx + dz * dz)
+			if dist <= radius then
+				-- kleine Asphaltflächen (Bordsteinabsenkungen, Einfahrten) nur, wenn keine Straße deutlich näher liegt
+				local small = math.min(part.Size.X, part.Size.Z) < 20
+				table.insert(cands, { part = part, world = world, axis = axis, info = info, dist = dist, rank = dist + (small and 20 or 0) })
+			end
+		end
+	end
+	table.sort(cands, function(a, b)
+		return a.rank < b.rank
+	end)
+	local step = starterCfg("SlideStep")
+	local P = CarCatalog.Physics
+	for i = 1, math.min(#cands, starterCfg("RoadCandidates")) do
+		local c = cands[i]
+		local axis = c.axis
+		if look and axis:Dot(look) < 0 then
+			axis = -axis -- Nase grob in Blickrichtung des Spielers
+		end
+		local cf0 = c.part.CFrame
+		local localAxis = cf0:VectorToObjectSpace(c.axis)
+		for _, k in ipairs({ 0, 1, -1, 2, -2, 3, -3 }) do
+			-- entlang der Fahrbahn verschieben, im Stück bleiben
+			local x = math.clamp(c.info.x + localAxis.X * k * step, -c.info.mx, c.info.mx)
+			local z = math.clamp(c.info.z + localAxis.Z * k * step, -c.info.mz, c.info.mz)
+			local at = cf0:PointToWorldSpace(Vector3.new(x, c.info.top, z))
+			if k == 0 or (at - c.world).Magnitude > 1 then
+				local y = groundY(at) or at.Y
+				if math.abs(y - at.Y) > 3 then
+					y = at.Y -- Strahl traf etwas anderes (Dach, Brücke): Fahrbahnhöhe nehmen
+				end
+				local spot = Vector3.new(at.X, y + P.spawnLift, at.Z)
+				local cf = CFrame.lookAt(spot, spot + axis)
+				if not occupied(spot) and spotFree(cf) then
+					return cf, c.dist
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- Wohin kommt das gerufene Auto? Nächste freie Fahrbahn; liegt der eigene Werkstatt-Parkplatz näher, dorthin;
+-- sonst der nächste City.CarSpawns-Punkt bzw. die Werkstatt (Rückfallkette von spawnCFrame).
+function CarService.CallSpot(cs)
+	local _, _, root = characterParts(cs.player)
+	if not root then
+		return nil
+	end
+	local pos = root.Position
+	local look = root.CFrame.LookVector
+	look = Vector3.new(look.X, 0, look.Z)
+	look = look.Magnitude > 1e-3 and look.Unit or nil
+	local cf, dist = CarService.RoadSpot(cs, pos, look)
+	local plotCf = plotSpawn(cs)
+	if plotCf then
+		local d2 = Vector3.new(plotCf.Position.X - pos.X, 0, plotCf.Position.Z - pos.Z).Magnitude
+		if not cf or d2 < dist then
+			return spawnCFrame(cs, { "workshop" })
+		end
+	end
+	if cf then
+		return cf
+	end
+	-- keine Fahrbahn in Reichweite: nächster Stellplatz der Stadt
+	local c = city()
+	local folder = c and c:FindFirstChild("CarSpawns")
+	local best, bestD = nil, math.huge
+	if folder then
+		for _, sp in ipairs(folder:GetChildren()) do
+			local acf = anchorCFrame(sp)
+			if acf then
+				local d = (acf.Position - pos).Magnitude
+				if d < bestD then
+					best, bestD = sp.Name, d
+				end
+			end
+		end
+	end
+	return spawnCFrame(cs, best and { best } or { "workshop" })
+end
+
+-- Lieferfahrt läuft (StoryService: ms.story.delivery)?
+local function deliveryRunning(ms)
+	local ss = ms and ms.story
+	return type(ss) == "table" and type(ss.delivery) == "table"
+end
+
+-- Spielhallen-Runde läuft? (ArcadeService.Round; lazy, da ArcadeService später geladen werden kann)
+local function arcadeRunning(ms)
+	local ok, round = pcall(function()
+		local mod = script.Parent:FindFirstChild("ArcadeService")
+		local A = mod and require(mod)
+		return A and A.Round and A.Round(ms)
+	end)
+	return ok and round ~= nil and round ~= false
+end
+
+-- Grund, warum gerade kein Auto gerufen werden darf (Text) oder nil
+function CarService.CallBlock(cs, ms)
+	local mode = ms and ms.p and ms.p.mode
+	if mode ~= nil and mode ~= "openworld" then
+		return starterText("openWorld")
+	end
+	if cs.run then
+		return starterText("track")
+	end
+	if cs.test then
+		return starterText("testdrive")
+	end
+	if arcadeRunning(ms) then
+		return starterText("arcade")
+	end
+	if type(ms.pw) == "table" and ms.pw.job then
+		return starterText("repair")
+	end
+	if deliveryRunning(ms) and cs.car and vehicleAlive(cs.car) then
+		return starterText("delivery")
+	end
+	local _, humanoid, root = characterParts(cs.player)
+	if not humanoid or not root or humanoid.Health <= 0 then
+		return starterText("noCharacter")
+	end
+	local v = cs.car
+	if v and vehicleAlive(v) and v.info.seat.Occupant == humanoid then
+		return starterText("seated")
+	end
+	return nil
+end
+
+-- car_call: Lieblingsauto (Standard Flitzer) neben den Spieler rufen. Rückgabe true = Auto steht da.
+function CarService.CallCar(ms, _, d, t)
+	local cs = stateOf(ms)
+	t = t or now()
+	local block = CarService.CallBlock(cs, ms)
+	if block then
+		toast(cs, block)
+		return nil
+	end
+	local cd = starterCfg("CallCooldown")
+	if t - cs.lastCallAt < cd then
+		toast(cs, string.format(starterText("cooldown"), math.max(1, math.ceil(cd - (t - cs.lastCallAt)))))
+		return nil
+	end
+	local car, isStarter = CarRules.Favourite(d)
+	local f = CarRules.StarterData(d)
+	if isStarter and f.fav > 0 then
+		toast(cs, starterText("favouriteMissing"))
+		if not CarRules.Find(d, f.fav) then
+			f.fav = 0 -- verkauft/versteigert: wieder der Flitzer (nur in einer Auktion gesperrt: Wahl bleibt)
+		end
+	end
+	local ok, checked = CarRules.CanSpawn(d, car.id)
+	if not isStarter and not ok then
+		toast(cs, checked)
+		return nil
+	end
+	despawn(cs, "car", "replaced") -- vorher abbauen: sein Platz ist dann wieder frei
+	local cf = CarService.CallSpot(cs)
+	if not cf then
+		toast(cs, TEXT.no_spot)
+		return nil
+	end
+	cs.lastCallAt = t
+	cs.lastSpawnAt.car = t
+	local v, err = spawnVehicle(cs, "car", car, nil, false, { cframe = cf })
+	if not v then
+		toast(cs, err)
+		return nil
+	end
+	if not isStarter then
+		CarRules.SetActive(d, car.id)
+	end
+	MiniRules.MarkActive(d, t)
+	notice(cs, "car_spawned", { id = car.id, model = car.model, name = v.name, testdrive = false, at = "call", starter = isStarter })
+	toast(cs, string.format(starterText("called"), v.name))
+	return true
+end
+
+-- car_favourite {id}: Lieblingsauto für car_call (CarCatalog.StarterCarId = Flitzer)
+function CarService.SetFavourite(ms, data, d)
+	local cs = stateOf(ms)
+	local ok, res = CarRules.SetFavourite(d, type(data) == "table" and data.id or nil)
+	if not ok then
+		toast(cs, res)
+		return nil
+	end
+	local m = CarCatalog.Model(res.model)
+	toast(cs, string.format(starterText("favourite"), m and m.name or "Auto"))
+	dirty(cs)
+	return true
+end
+
+-- Begrüßung: nach der Startwahl in dieser Sitzung einmal den Flitzer neben den Spieler stellen (nicht einsetzen)
+local function tickIntro(cs, ms, d, t)
+	local mode = ms.p.mode
+	if mode ~= nil and mode ~= "openworld" then -- ohne Modus gilt die Sitzung als Open World (wie TutorialService)
+		cs.owSince = nil
+		return
+	end
+	cs.owSince = cs.owSince or t
+	local f = CarRules.StarterData(d)
+	if f.intro then
+		return
+	end
+	if not f.due then
+		local meta = d.games.meta
+		local path = type(meta) == "table" and meta.startPath or nil
+		if cs.pathAtJoin == "" and type(path) == "string" and path ~= "" then
+			f.due = true
+		else
+			return
+		end
+	end
+	if t - cs.owSince < starterCfg("IntroDelay") or t - cs.introTryAt < starterCfg("IntroRetry") then
+		return
+	end
+	if ms.greeted ~= true then
+		return -- erst wenn der Client zuhört ('hello'), sonst ginge der Toast verloren
+	end
+	cs.introTryAt = t
+	if cs.car or cs.test or cs.run then
+		f.due, f.intro = false, true -- hat schon ein Auto draußen: Begrüßung entfällt
+		return
+	end
+	local _, humanoid, root = characterParts(cs.player)
+	if not humanoid or not root or humanoid.Health <= 0 or humanoid.SeatPart ~= nil then
+		return
+	end
+	local cf = CarService.CallSpot(cs)
+	if not cf then
+		return
+	end
+	local v = spawnVehicle(cs, "car", CarRules.StarterCar(t), nil, false, { cframe = cf, noSeat = true })
+	if not v then
+		return
+	end
+	f.due, f.intro = false, true
+	notice(cs, "car_spawned", { id = CarCatalog.StarterCarId, model = CarCatalog.StarterId, name = v.name, testdrive = false, at = "intro", starter = true })
+	toast(cs, starterText("intro"))
+end
+CarService.TickIntro = tickIntro
+
 ---------------------------------------------------------------- Aktionen
 function CarService.Register(Actions, a)
 	api = a
@@ -801,6 +1204,10 @@ function CarService.Register(Actions, a)
 
 	Actions.Register("mini_car_sell", function(ms, data, d)
 		local cs = stateOf(ms)
+		if CarRules.IsStarterId(data.id) then
+			toast(cs, CarRules.Text.starterSell) -- 3.x: Flitzer ist unverkäuflich (bleibt auch draußen stehen)
+			return
+		end
 		local car = CarRules.Find(d, data.id)
 		if car and car.locked then
 			toast(cs, "Dieses Auto ist gerade in einer Auktion.")
@@ -914,10 +1321,10 @@ function CarService.Register(Actions, a)
 			toast(cs, TEXT.nitro_drive)
 			return
 		end
-		local car = CarRules.Find(d, v.carId)
+		local car = CarRules.Owned(d, v.carId) -- 3.x: auch der Flitzer (ohne Nitro)
 		local stats = car and CarRules.Stats(car)
 		if not stats or stats.nitro.level <= 0 then
-			toast(cs, TEXT.nitro_none)
+			toast(cs, CarRules.IsStarterId(v.carId) and starterText("nitro") or TEXT.nitro_none)
 			return
 		end
 		if t < cs.nitroReadyAt then
@@ -956,7 +1363,7 @@ function CarService.Register(Actions, a)
 	Actions.Register("mini_carwash", function(ms, _, d, t)
 		local cs = stateOf(ms)
 		local v = cs.car
-		local car = v and vehicleAlive(v) and CarRules.Find(d, v.carId)
+		local car = v and vehicleAlive(v) and CarRules.Owned(d, v.carId) -- 3.x: der Flitzer darf auch glänzen
 		if not car then
 			toast(cs, CarRules.Find(d, d.games.activeCar) and TEXT.wash_fetch or TEXT.wash_none)
 			return
@@ -992,9 +1399,12 @@ function CarService.Register(Actions, a)
 			return
 		end
 		local id = cs.car and cs.car.carId or d.games.activeCar
+		if CarRules.IsStarterId(id) then
+			id = d.games.activeCar -- 3.x: der Flitzer fährt außer Konkurrenz – Zeitfahren mit dem aktiven eigenen Auto
+		end
 		local ok, car = CarRules.CanSpawn(d, id)
 		if not ok then
-			toast(cs, CarRules.Find(d, id) and car or TEXT.no_car)
+			toast(cs, CarRules.Find(d, id) and car or (cs.car and CarRules.IsStarterId(cs.car.carId) and starterText("trackStarter") or TEXT.no_car))
 			return
 		end
 		if t - cs.lastSpawnAt.car < CarCatalog.SpawnCooldown then
@@ -1027,6 +1437,15 @@ function CarService.Register(Actions, a)
 			startAt = run.startAt, total = run.total, best = trackData(d).best, countdown = CarCatalog.Track.countdown,
 		})
 	end)
+
+	-- 3.x: Auto rufen / Lieblingsauto – nur registrieren, wenn MiniNet.Actions sie kennt (Verkabelung durch den
+	-- Integrator; vorher würde Actions.Register die Aktion ablehnen)
+	if MiniNet.Actions.car_call then
+		Actions.Register("car_call", CarService.CallCar)
+	end
+	if MiniNet.Actions.car_favourite then
+		Actions.Register("car_favourite", CarService.SetFavourite)
+	end
 end
 
 ---------------------------------------------------------------- Lebenszyklus
@@ -1040,7 +1459,7 @@ function CarService.Init(c)
 		end
 		local v = cs.car
 		if v and vehicleAlive(v) then
-			local car = CarRules.Find(d, v.carId)
+			local car = CarRules.Owned(d, v.carId) -- 3.x: auch der Flitzer trägt angelegte Kosmetik
 			if car then
 				applyCosmetics(cs, v.model, car)
 			end
@@ -1147,13 +1566,18 @@ function CarService.Tick(ms, d, t)
 	end
 	v = cs.car
 	if v and v.model:GetAttribute("Shine") and (cs.shine[v.carId] or 0) <= t then
-		local car = CarRules.Find(d, v.carId)
+		local car = CarRules.Owned(d, v.carId)
 		if car then
 			VehicleFactory.ApplyStyle(v.model, car, false)
 		end
 	end
 	if cs.pendingReward > 0 or cs.pendingXp > 0 then
 		payPending(cs)
+	end
+	-- 3.x: Begrüßungs-Flitzer nach der Startwahl
+	local okIntro, errIntro = pcall(tickIntro, cs, ms, d, t)
+	if not okIntro then
+		warn("[Autos] Begrüßungs-Flitzer: " .. tostring(errIntro))
 	end
 end
 
@@ -1167,13 +1591,18 @@ function CarService.SnapshotFields(ms, d, t)
 	out.track = { best = tr.best, rewardedBest = tr.rewardedBest, runs = tr.runs, running = false, active = false }
 	out.spawnedCar = false
 	out.spawnedId = 0
+	out.spawnedStarter = false
 	out.testdrive = false
 	out.nitro = { readyAt = 0, untilAt = 0 }
 	local cs = ms and states[ms.player]
 	if cs and cs.p == ms.p then
 		if cs.car then
-			out.spawnedCar = true
+			-- 3.x: der Flitzer ist kein Garagenauto: spawnedCar bleibt false (DealerUI.IsOut würde sonst das aktive
+			-- eigene Auto als „draußen“ zeigen), spawnedId = CarCatalog.StarterCarId, spawnedStarter = true
+			local starter = CarRules.IsStarterId(cs.car.carId)
+			out.spawnedCar = not starter
 			out.spawnedId = cs.car.carId
+			out.spawnedStarter = starter
 		end
 		if cs.test then
 			out.testdrive = { model = cs.test.modelId, name = cs.test.name, endsAt = cs.test.endsAt or 0 }

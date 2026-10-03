@@ -17,6 +17,10 @@
 --                      NoCollide_XX NoCollisionConstraint Rad <-> Chassis
 --   Attribute (für DriveClient): siehe VehicleFactory.ApplyStats
 -- Keine Asset-IDs: Partikel nutzen die eingebaute Standardtextur.
+-- 3.x: Startauto „Flitzer“ (body = "flitzer"): ohne Vorlage in ServerStorage.CarTemplates baut
+-- VehicleFactory.StarterTemplate() die Karosserie aus Parts (gleiche Namensregeln wie die 2.4.0-Vorlagen:
+-- Root, Chassis, Paint/Hood/Mirror, Seat, Headlamp, Plate, Wheel<XX>Tire/Rim). Kleinere Maße über
+-- CarCatalog.PhysicsFor(body) (CarCatalog.BodyPhysics.flitzer: tieferer Rumpf, kleine Räder).
 local ServerStorage = game:GetService("ServerStorage")
 local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local CarCatalog = require(MiniShared:WaitForChild("CarCatalog"))
@@ -44,11 +48,109 @@ local function phys()
 	return CarCatalog.Physics
 end
 
+local starterTemplate: Model? = nil -- 3.x: Flitzer-Vorlage (einmal gebaut, ohne Parent)
+
+-- 3.x: Karosserie des Flitzers aus Parts (Root am Boden, Nase nach -Z; etwa 60 % eines Kompaktwagens, 1 Sitz)
+function VehicleFactory.StarterTemplate(): Model
+	if starterTemplate then
+		return starterTemplate
+	end
+	local m = Instance.new("Model")
+	m.Name = CarCatalog.Starter.body
+	local trim = Color3.fromRGB(22, 26, 31)
+	local paint = CarCatalog.PaintColor(CarCatalog.Starter.paint)
+	local function part(name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?, shape: Enum.PartType?): Part
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanTouch = false
+		p.CanQuery = false
+		p.CastShadow = true
+		p.Size = size
+		p.CFrame = cf
+		p.Color = color
+		p.Material = material or Enum.Material.SmoothPlastic
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		if shape then
+			p.Shape = shape
+		end
+		p.Parent = m
+		return p
+	end
+	local root = part("Root", Vector3.new(0.1, 0.1, 0.1), CFrame.new(0, 0, 0), trim)
+	root.Transparency = 1
+	root.CastShadow = false
+	m.PrimaryPart = root
+	-- Wanne, Haube, Heck, Seitenwände (Lack)
+	part("Chassis", Vector3.new(4.3, 0.3, 7.2), CFrame.new(0, 1.1, 0), trim, Enum.Material.Metal)
+	part("Paint", Vector3.new(4.8, 0.9, 6.8), CFrame.new(0, 1.7, 0), paint, Enum.Material.Metal)
+	part("Hood", Vector3.new(4.4, 0.5, 2.0), CFrame.new(0, 2.4, -2.35), paint, Enum.Material.Metal)
+	part("Paint", Vector3.new(4.4, 0.7, 1.5), CFrame.new(0, 2.5, 2.65), paint, Enum.Material.Metal)
+	for _, sx in ipairs({ -1, 1 }) do
+		part("Paint", Vector3.new(0.3, 0.55, 2.9), CFrame.new(sx * 2.25, 2.42, 0.45), paint, Enum.Material.Metal)
+		part("Stripe", Vector3.new(0.06, 0.22, 4.6), CFrame.new(sx * 2.43, 1.75, 0.2), Color3.fromRGB(236, 238, 240))
+		part("Mirror", Vector3.new(0.45, 0.32, 0.35), CFrame.new(sx * 2.62, 2.85, -0.95), paint, Enum.Material.Metal)
+		part("MirrorStalk", Vector3.new(0.3, 0.1, 0.12), CFrame.new(sx * 2.4, 2.78, -0.95), trim)
+		part("Headlamp", Vector3.new(0.9, 0.55, 0.12), CFrame.new(sx * 1.45, 1.85, -3.46), Color3.fromRGB(255, 244, 214))
+		part("Taillight", Vector3.new(0.7, 0.4, 0.12), CFrame.new(sx * 1.6, 1.95, 3.46), Color3.fromRGB(214, 40, 48))
+		part("Fender", Vector3.new(1.0, 0.22, 2.2), CFrame.new(sx * 2.35, 2.05, -2.45), trim)
+		part("Fender", Vector3.new(1.0, 0.22, 2.2), CFrame.new(sx * 2.35, 2.05, 2.35), trim)
+		part("RollBar", Vector3.new(0.28, 2.0, 0.28), CFrame.new(sx * 1.75, 3.6, 2.0), trim, Enum.Material.Metal)
+	end
+	part("RollBar", Vector3.new(3.78, 0.28, 0.28), CFrame.new(0, 4.6, 2.0), trim, Enum.Material.Metal)
+	local glass = part("Windscreen", Vector3.new(3.9, 1.3, 0.12), CFrame.new(0, 3.2, -1.2) * CFrame.Angles(math.rad(18), 0, 0),
+		Color3.fromRGB(75, 107, 123), Enum.Material.Glass)
+	glass.Transparency = 0.3
+	glass.Reflectance = 0.12
+	glass.CastShadow = false
+	part("WindowTrim", Vector3.new(4.0, 0.15, 0.15), CFrame.new(0, 3.82, -1.0), trim)
+	part("Grille", Vector3.new(2.0, 0.35, 0.1), CFrame.new(0, 1.6, -3.46), trim)
+	part("Bumper", Vector3.new(5.0, 0.4, 0.45), CFrame.new(0, 1.3, -3.6), trim)
+	part("Bumper", Vector3.new(5.0, 0.4, 0.45), CFrame.new(0, 1.3, 3.6), trim)
+	-- Cockpit: ein Sitz in der Mitte, Lenkrad
+	part("Seat", Vector3.new(1.8, 0.4, 1.6), CFrame.new(0, 1.95, 0.55), trim)
+	part("SeatBack", Vector3.new(1.8, 1.5, 0.35), CFrame.new(0, 2.75, 1.45), trim)
+	part("SteeringColumn", Vector3.new(0.15, 0.15, 0.9), CFrame.new(0, 2.6, -0.95), trim)
+	part("SteeringWheel", Vector3.new(0.15, 1.0, 1.0), CFrame.new(0, 2.85, -0.55) * CFrame.Angles(0, math.rad(90), 0), trim, Enum.Material.SmoothPlastic, Enum.PartType.Cylinder)
+	-- Kennzeichen hinten (Build setzt den Text)
+	local plate = part("Plate", Vector3.new(1.6, 0.45, 0.08), CFrame.new(0, 1.75, 3.47), Color3.fromRGB(236, 238, 240))
+	local sg = Instance.new("SurfaceGui")
+	sg.Name = "PlateGui"
+	sg.Face = Enum.NormalId.Back
+	sg.LightInfluence = 0
+	sg.PixelsPerStud = 50
+	sg.Parent = plate
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.TextColor3 = trim
+	label.Text = "FLITZER"
+	label.Parent = sg
+	-- Räder (Radius 0,95): Reifen, Felge, Nabe je Ecke
+	for _, c in ipairs(CORNERS) do
+		local sx = (c == "FL" or c == "RL") and -1 or 1
+		local z = FRONT[c] and -2.45 or 2.35
+		part("Wheel" .. c .. "Tire", Vector3.new(0.8, 1.9, 1.9), CFrame.new(sx * 2.35, 0.95, z), trim, Enum.Material.SmoothPlastic, Enum.PartType.Cylinder)
+		part("Wheel" .. c .. "Rim", Vector3.new(0.1, 1.2, 1.2), CFrame.new(sx * 2.77, 0.95, z), Color3.fromRGB(230, 232, 235), Enum.Material.Metal, Enum.PartType.Cylinder)
+		part("Wheel" .. c .. "Hub", Vector3.new(0.12, 0.45, 0.45), CFrame.new(sx * 2.83, 0.95, z), trim, Enum.Material.Metal, Enum.PartType.Cylinder)
+	end
+	starterTemplate = m
+	return m
+end
+
 function VehicleFactory.Template(body)
 	local folder = ServerStorage:FindFirstChild("CarTemplates")
 	local t = folder and type(body) == "string" and folder:FindFirstChild(body)
 	if t and t:IsA("Model") then
 		return t
+	end
+	if body == CarCatalog.Starter.body then
+		return VehicleFactory.StarterTemplate() -- 3.x: Flitzer aus Parts
 	end
 	return nil
 end
@@ -127,7 +229,7 @@ function VehicleFactory.Build(opts)
 	if not template then
 		return nil, "Fahrzeugvorlage fehlt: " .. tostring(opts.body)
 	end
-	local P = phys()
+	local P = CarCatalog.PhysicsFor(opts.body) -- 3.x: eigene Maße je Karosserie (Flitzer)
 	local model = template:Clone()
 	model.Name = opts.name or "Car"
 	local root = model.PrimaryPart or model:FindFirstChild("Root")
@@ -144,7 +246,7 @@ function VehicleFactory.Build(opts)
 	local info = {
 		model = model, root = root, paint = {}, rims = {}, spoilers = {}, spoilerAlpha = {}, reflect = {},
 		wheelParts = { FL = {}, FR = {}, RL = {}, RR = {} }, tires = {}, wheels = {}, knuckles = {},
-		axles = {}, steers = {}, springs = {}, body = {},
+		axles = {}, steers = {}, springs = {}, body = {}, phys = P,
 	}
 	local minX, maxX, minY, maxY, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge, math.huge, -math.huge
 	local driverSeat, driverX = nil, math.huge
@@ -477,7 +579,7 @@ function VehicleFactory.ApplyStats(model, stats, initial)
 	if not info or not stats then
 		return false
 	end
-	local P = phys()
+	local P = info.phys or phys() -- 3.x: Maße der Karosserie (Federlänge des Flitzers)
 	local chassis = info.chassis
 	local size = chassis.Size
 	local bodyMass = math.max(1, stats.mass)

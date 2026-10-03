@@ -9,12 +9,16 @@
 --                  Anruf-Bildschirm mit Avatar, Name, „Es klingelt …“ und der Antwort des Kunden als Sprechblase
 --   Nachrichten    die letzten 30 Hinweise (Toasts, Anrufe), neueste oben
 --   Aufträge       laufende Werkstatt-Aufträge mit Phase und nächstem Schritt (aus dem 2.4.0-Zustand)
+--   Auto rufen     (3.x) großer Knopf „Auto rufen“ -> car_call {} (Server stellt das Lieblingsauto, Standard Flitzer, an
+--                  die nächste Fahrbahn und setzt dich hinein; auch Taste G) und die Garage: Flitzer + eigene Autos aus
+--                  dem Snapshot (cars), „Favorit“ -> car_favourite {id} (CarCatalog.StarterCarId = Flitzer)
 --   Karte          öffnet den Stadtplan (Minispiel-Tab "map")
 --   Konto          Credits, Level, Prestige-Rang, Tycoon-Bargeld (aus dem Minispiel-Snapshot)
 --   Einstellungen  Beginner-/Passiv-Modus (bestehende Aktion lobby_settings); solange die Startwahl offen ist
 --                  („Später entscheiden“), der Knopf „Startweg wählen“ (ctx.ReopenStart -> StartUI.Reopen)
 --
--- Der Client sendet nur Absichten: phone_call {id} (Auftrags-ID, String) und lobby_settings über MiniRemote. Ob und
+-- Der Client sendet nur Absichten: phone_call {id} (Auftrags-ID, String), lobby_settings, car_call {} und
+-- car_favourite {id} (Auto-Id als Zahl, keine Beträge) über MiniRemote. Ob und
 -- wie der Kunde antwortet, entscheidet der Server (Ereignis "call": state = "ringing" | "answer" | "ended").
 -- Das Handy blendet sich aus, solange QTE/Diagnose/OBD-Tester (ctx.IsBlocked), das Tablet, das Minispiel-Panel
 -- oder die Fahrt (ScreenGui "Fahren") zu sehen sind; danach kommt es im selben Zustand wieder.
@@ -54,6 +58,7 @@ PhoneUI.Apps = {
 	{ key = "kunden", title = "Kunden" },
 	{ key = "nachrichten", title = "Nachrichten" },
 	{ key = "auftraege", title = "Aufträge" },
+	{ key = "auto", title = "Auto rufen" }, -- 3.x: Auto rufen + Garage (Lieblingsauto)
 	{ key = "karte", title = "Karte" },
 	{ key = "konto", title = "Konto" },
 	{ key = "einstellungen", title = "Einstellungen" },
@@ -106,6 +111,15 @@ local TEXT = {
 	beginnerInfo = "Hinweis-Karten und Erklärungen",
 	passive = "Passiv-Modus",
 	passiveInfo = "Nur zuschauen und handeln, keine Missionen",
+	-- 3.x: App „Auto rufen“
+	callCar = "Auto rufen",
+	callHint = "Dein Auto kommt an die nächste Straße neben dir. Taste G geht auch.",
+	callOnlyOW = "Auto rufen geht nur in der Open World.",
+	garage = "Garage – wähle dein Lieblingsauto",
+	favourite = "Favorit",
+	isFavourite = "★ Favorit",
+	starterInfo = "Startauto · immer dabei · unverkäuflich",
+	inAuction = "In Auktion",
 	startTitle = "Startweg wählen",
 	startInfo = "Du hast deinen Start noch nicht gewählt. Tipp hier, um die vier Startwege zu sehen.",
 }
@@ -520,6 +534,7 @@ local function drawIcon(parent: Instance, key: string)
 		auftraege = { Color3.fromRGB(255, 170, 60), Color3.fromRGB(210, 100, 20) },
 		karte = { Color3.fromRGB(70, 220, 200), Color3.fromRGB(20, 140, 150) },
 		konto = { Color3.fromRGB(255, 214, 80), Color3.fromRGB(214, 150, 20) },
+		auto = { Color3.fromRGB(255, 120, 90), Color3.fromRGB(214, 50, 60) },
 		einstellungen = { Color3.fromRGB(160, 168, 184), Color3.fromRGB(80, 88, 104) },
 	}
 	local pair = colors[key] or colors.einstellungen
@@ -565,6 +580,19 @@ local function drawIcon(parent: Instance, key: string)
 		end
 		local pin = f("Pin", 22, 14, 9, 9, nil, Color3.fromRGB(230, 60, 70))
 		round(pin)
+	elseif key == "auto" then
+		-- 3.x: kleines Auto aus Frames (Dach, Karosserie, Fenster, zwei Räder)
+		f("Roof", 15, 13, 22, 11, 5)
+		f("Window", 19, 15, 14, 7, 3, pair[2])
+		f("Body", 7, 22, 38, 12, 5)
+		f("Lamp", 39, 25, 5, 4, 2, Color3.fromRGB(255, 236, 150))
+		for i, x in ipairs({ 11, 31 }) do
+			local w = f("Wheel" .. i, x, 30, 11, 11, nil, Color3.fromRGB(28, 30, 36))
+			round(w)
+			local hub = f("Hub" .. i, 3, 3, 5, 5, nil, Color3.fromRGB(220, 224, 230))
+			hub.Parent = w
+			round(hub)
+		end
 	elseif key == "konto" then
 		local coin = f("Coin", 11, 11, 30, 30, nil, Color3.fromRGB(255, 240, 170))
 		round(coin)
@@ -646,9 +674,12 @@ local render = {}
 function render.home()
 	local grid = make("Frame", refs.content, { Name = "Home", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1) })
 	make("UIPadding", grid, { PaddingTop = UDim.new(0, 14), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
+	-- 3.x: quer alle Apps in einer Reihe (sieben Apps: Zellen schmaler), hochkant drei Spalten
+	local n = #PhoneUI.Apps
+	local landW = math.min(74, math.floor((PhoneUI.Height - 2 * PhoneUI.Bezel - 16 - (n - 1) * 4) / math.max(1, n)))
 	local layout = make("UIGridLayout", grid, {
 		SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center,
-		CellSize = orientation == "landscape" and UDim2.fromOffset(74, 78) or UDim2.fromOffset(72, 84),
+		CellSize = orientation == "landscape" and UDim2.fromOffset(landW, 78) or UDim2.fromOffset(72, 84),
 		CellPadding = orientation == "landscape" and UDim2.fromOffset(4, 6) or UDim2.fromOffset(6, 12),
 	})
 	refs.grid = layout
@@ -662,7 +693,8 @@ function render.home()
 		end)
 		drawIcon(b, a.key)
 		label(b, "Name", a.title, {
-			Position = UDim2.new(0, -4, 0, 56), Size = UDim2.new(1, 8, 0, 16), TextSize = 11, Font = Enum.Font.GothamMedium,
+			Position = UDim2.new(0, -4, 0, 56), Size = UDim2.new(1, 8, 0, 16),
+			TextSize = (orientation == "landscape" and landW < 74) and 10 or 11, Font = Enum.Font.GothamMedium,
 			TextXAlignment = Enum.TextXAlignment.Center, TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd,
 		})
 		refs.icons[a.key] = b
@@ -770,6 +802,128 @@ function render.auftraege()
 	end
 	if order == 0 then
 		note(sf, "Empty", st and TEXT.noJobs or TEXT.loading, 1, 60)
+	end
+end
+
+---------------------------------------------------------------- 3.x: App „Auto rufen“ (car_call, Garage/Lieblingsauto)
+local pendingFav: any = nil -- { id, at } nach car_favourite, bis der Snapshot es bestätigt
+
+local function starterId(): number
+	local s = snapshot()
+	local st = type(s) == "table" and type(s.starterCar) == "table" and s.starterCar or nil
+	return st and num(st.id, -1) or -1
+end
+
+-- Gewähltes Lieblingsauto (Snapshot favCar; kurz nach dem Tippen die eigene Wahl)
+function PhoneUI.Favourite(): number
+	local s = snapshot()
+	local fav = type(s) == "table" and num(s.favCar, starterId()) or starterId()
+	if pendingFav then
+		if pendingFav.id == fav or os.clock() - pendingFav.at > 3 then
+			pendingFav = nil
+		else
+			return pendingFav.id
+		end
+	end
+	return fav
+end
+
+local function openWorldOnly(): boolean
+	local s = snapshot()
+	return type(s) == "table" and type(s.mode) == "string" and s.mode ~= "openworld"
+end
+
+-- Auto rufen: Absicht car_call {} an den Server, Handy zu (man sieht das Auto kommen)
+function PhoneUI.CallCar(): boolean
+	if not ctx.Remote then
+		return false
+	end
+	if openWorldOnly() then
+		call(ctx.Toast, TEXT.callOnlyOW)
+		return false
+	end
+	ctx.Remote.Send("car_call", {})
+	PhoneUI.Close()
+	return true
+end
+
+-- Lieblingsauto wählen: car_favourite {id} (Flitzer = snapshot.starterCar.id)
+function PhoneUI.SetFavourite(id: any): boolean
+	if type(id) ~= "number" or id ~= id or id % 1 ~= 0 or not ctx.Remote then
+		return false
+	end
+	pendingFav = { id = id, at = os.clock() }
+	ctx.Remote.Send("car_favourite", { id = id })
+	renderedKey = nil
+	return true
+end
+
+-- Garage-Liste: Flitzer zuerst, dann die eigenen Autos (snapshot.cars)
+function PhoneUI.GarageCars(): { any }
+	local s = snapshot()
+	local out = {}
+	local st = type(s) == "table" and type(s.starterCar) == "table" and s.starterCar or nil
+	table.insert(out, {
+		id = st and num(st.id, -1) or -1, name = st and type(st.name) == "string" and st.name or "Flitzer",
+		info = TEXT.starterInfo, starter = true,
+	})
+	for _, c in ipairs(type(s) == "table" and type(s.cars) == "table" and s.cars or {}) do
+		if type(c) == "table" and type(c.id) == "number" then
+			local stats = type(c.stats) == "table" and c.stats or {}
+			table.insert(out, {
+				id = c.id, name = type(c.name) == "string" and c.name or "Auto", locked = c.locked == true,
+				info = (stats.topSpeed and (tostring(math.floor(num(stats.topSpeed, 0))) .. " km/h") or "") .. (c.locked == true and (" · " .. TEXT.inAuction) or ""),
+			})
+		end
+	end
+	return out
+end
+
+function render.auto()
+	header(TITLES.auto)
+	local sf = list()
+	local bh = touchH(52)
+	local c = card(sf, "CallCard", 1, 44 + bh)
+	label(c, "Hint", openWorldOnly() and TEXT.callOnlyOW or TEXT.callHint, {
+		Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 32), TextSize = 11, TextColor3 = C.muted,
+		TextYAlignment = Enum.TextYAlignment.Top,
+	})
+	local b = button(c, "CallCar", TEXT.callCar .. (UserInputService.KeyboardEnabled and " [G]" or ""), C.green, function()
+		PhoneUI.CallCar()
+	end)
+	b.Position = UDim2.new(0, 10, 1, -(bh + 6))
+	b.Size = UDim2.new(1, -20, 0, bh)
+	b.TextSize = 16
+	note(sf, "GarageTitle", TEXT.garage, 2, 18)
+	local fav = PhoneUI.Favourite()
+	for i, car in ipairs(PhoneUI.GarageCars()) do
+		local fh = touchH(44)
+		local row = card(sf, "Car_" .. tostring(car.id), 2 + i, math.max(52, fh + 8))
+		label(row, "Name", car.name, {
+			Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -120, 0, 18), Font = Enum.Font.GothamBold, TextSize = 13,
+			TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		label(row, "Info", car.info or "", {
+			Position = UDim2.fromOffset(10, 24), Size = UDim2.new(1, -120, 0, 22), TextSize = 10, TextColor3 = C.muted,
+			TextYAlignment = Enum.TextYAlignment.Top, TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		local isFav = car.id == fav
+		local fb = button(row, "Fav_" .. tostring(car.id), isFav and TEXT.isFavourite or TEXT.favourite,
+			isFav and C.yellow or Color3.fromRGB(58, 66, 84), function()
+				if not car.locked then
+					PhoneUI.SetFavourite(car.id)
+				end
+			end)
+		fb.AnchorPoint = Vector2.new(1, 0.5)
+		fb.Position = UDim2.new(1, -8, 0.5, 0)
+		fb.Size = UDim2.fromOffset(100, fh)
+		fb.TextSize = 12
+		fb.AutoButtonColor = not car.locked
+		fb:SetAttribute("Favourite", isFav)
+		if car.locked then
+			fb.Text = TEXT.inAuction
+			fb.TextColor3 = C.muted
+		end
 	end
 end
 
@@ -1061,6 +1215,12 @@ local function signature(): string
 	elseif app == "einstellungen" then
 		local v = currentSettings()
 		return "einstellungen|" .. (v and (tostring(v.passive) .. tostring(v.beginner)) or "nil") .. "|" .. tostring(PhoneUI.StartPending())
+	elseif app == "auto" then
+		local parts = {}
+		for _, car in ipairs(PhoneUI.GarageCars()) do
+			table.insert(parts, tostring(car.id) .. ":" .. tostring(car.locked) .. ":" .. tostring(car.name))
+		end
+		return "auto|" .. tostring(PhoneUI.Favourite()) .. "|" .. tostring(openWorldOnly()) .. "|" .. table.concat(parts, ",")
 	elseif app == "nachrichten" then
 		return "nachrichten|" .. tostring(#messages) .. "|" .. tostring(messages[1] and messages[1].at)
 	elseif app == "home" then

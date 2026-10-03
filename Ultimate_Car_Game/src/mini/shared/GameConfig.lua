@@ -1420,4 +1420,35 @@ GameConfig.PublicWorkshop = {
 	ExcludedModels = { flitzer = true }, -- Startauto (nicht verkäuflich) braucht keine Reparatur
 }
 
+---------------------------------------------------------------- Startauto „Flitzer“ / Auto rufen (3.x, Team Autos)
+-- Fahrwerte des Flitzers stehen in CarCatalog.Starter; hier nur das Rufen (car_call, Taste G, Handy „Auto rufen“).
+GameConfig.StarterCar = {
+	Model = "flitzer", -- CarCatalog.StarterId
+	CallCooldown = 5, -- Sekunden zwischen zwei car_call eines Spielers
+	SearchRadius = 300, -- Studs: so weit sucht der Server die nächste Fahrbahn (City.Roads, Asphalt / CarRoad)
+	RoadMargin = 5, -- Abstand der Wagenmitte zum Fahrbahnrand
+	RoadCandidates = 8, -- so viele nächstgelegene Fahrbahnstücke werden geprüft
+	SlideStep = 9, -- belegt (Laterne, Ampel, Auto): so weit entlang der Fahrbahn ausweichen
+	IntroDelay = 2, -- Sekunden in der Open World nach der Startwahl, bis der Begrüßungs-Flitzer kommt
+	IntroRetry = 5, -- erneuter Versuch, wenn gerade kein Platz frei war
+	ClientSendGap = 1, -- Client: Taste G höchstens 1× pro Sekunde
+	Text = {
+		intro = "Dein Flitzer! Ruf ihn jederzeit mit dem Handy (P) → „Auto rufen“ oder Taste G",
+		called = "%s ist da – gute Fahrt!",
+		cooldown = "Dein Auto ist gleich wieder rufbar (noch %d s).",
+		openWorld = "Auto rufen geht nur in der Open World.",
+		track = "Während des Zeitfahrens kannst du kein Auto rufen.",
+		testdrive = "Beende zuerst die Probefahrt.",
+		arcade = "Beende zuerst deine Runde in der Spielhalle.",
+		repair = "Warte, bis die Reparatur in der Großen Werkstatt fertig ist.",
+		delivery = "Während einer Lieferfahrt bleibt dein Auto draußen – steig wieder ein!",
+		seated = "Du sitzt schon in deinem Auto.",
+		noCharacter = "Warte, bis deine Figur wieder da ist.",
+		favourite = "Lieblingsauto: %s. Ruf es mit Taste G oder im Handy.",
+		favouriteMissing = "Dein Lieblingsauto steht gerade nicht bereit – der Flitzer kommt.",
+		nitro = "Der Flitzer hat kein Nitro – dafür ist er super wendig!",
+		trackStarter = "Zeitfahren fährst du mit einem Auto aus dem Autohaus – der Flitzer fährt außer Konkurrenz.",
+	},
+}
+
 return GameConfig
