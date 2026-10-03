@@ -140,8 +140,38 @@ function PlaceRouter.OnTeleportInitFailed(player: any, result: any, message: any
 	end
 end
 
+-- B-020: Zonen-Spawn der eigenen Variante von Beginn an aktiv. In den Places "lobby" und "tycoon" gibt es keine
+-- Stadt (kein CitySpawn), LobbySpawn/TycoonSpawn sind in der Welt abgeschaltet gebaut und der Plot-Spawn entsteht erst
+-- nach dem Laden des Profils – die Figur erschien bis dahin am Ursprung über dem Nichts. Gibt es einen aktiven
+-- CitySpawn (all-Place, Open World), bleibt er der einzige Erst-Spawn und hier ändert sich nichts.
+-- Rückgabe: der eingeschaltete SpawnLocation oder nil.
+function PlaceRouter.EnsureZoneSpawn(): Instance?
+	local kind = PlaceRouter.PlaceKind()
+	if kind ~= "lobby" and kind ~= "tycoon" then
+		return nil
+	end
+	local city = workspace:FindFirstChild("City")
+	local citySpawn = city and city:FindFirstChild("CitySpawn")
+	if citySpawn and citySpawn:IsA("SpawnLocation") and citySpawn.Enabled then
+		return nil
+	end
+	local zone = GameConfig.Zones[kind]
+	local model = zone and workspace:FindFirstChild(zone.model)
+	local spawn = model and zone.spawn and model:FindFirstChild(zone.spawn)
+	if spawn and spawn:IsA("SpawnLocation") then
+		spawn.Enabled = true
+		return spawn
+	end
+	warn("[Ortswechsel] Zonen-Spawn fehlt im Place " .. kind .. " – Figuren erscheinen am Ursprung")
+	return nil
+end
+
 function PlaceRouter.Init(c: any)
 	ctx = type(c) == "table" and c or nil
+	local okSpawn, errSpawn = pcall(PlaceRouter.EnsureZoneSpawn) -- B-020
+	if not okSpawn then
+		warn("[Ortswechsel] Zonen-Spawn: " .. tostring(errSpawn))
+	end
 	if failedConnection then
 		return
 	end
