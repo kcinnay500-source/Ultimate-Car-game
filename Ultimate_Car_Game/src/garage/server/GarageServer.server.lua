@@ -635,8 +635,12 @@ Players.PlayerRemoving:Connect(function(player)
     local p=sessions[player];if not p then return end
     advanceDays(p,now());p.closing=true;p.pending=nil
     Mini.OnLeave(p,p.profile.writable) -- 3.0: vor P.Save (Save gibt writable frei); blockiert nicht
+    -- 3.0: Werkstatt sofort abbauen, nicht erst nach dem Speichern: P.Save kann Sekunden dauern (zweiter Versuch,
+    -- 3.0: langsamer DataStore, laufender Autosave) – so lange blieb der Slot belegt und ein Nachrücker wurde gekickt.
+    -- 3.0: Die Sitzung bleibt bis nach dem Speichern eingetragen (closing), damit BindToClose darauf wartet.
+    W.Destroy(player)
     local saved=P.Save(p.profile,true);Mini.OnSaved(p,saved) -- 3.0: Bestenliste nur nach gelungenem Speichern
-    sessions[player]=nil;W.Destroy(player)
+    sessions[player]=nil
 end)
 task.spawn(function()
     while true do
