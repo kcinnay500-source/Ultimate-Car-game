@@ -387,6 +387,7 @@ party_create  party_join {code}  party_leave  party_kick {userId}
 tutorial_next {step}  tutorial_skip  tutorial_restart
 start_choose {path}                                                 -- Startwahl (§6a), einmalig
 phone_call {id}                                                     -- Handy: Kunden eines Fahrzeug-Checks anrufen (§6c)
+phone_hangup                                                        -- Handy: Auflegen während des Klingelns (Anruf wird nicht ausgewertet)
 prestige_claim {rank}
 ow_build {typ}  ow_collect {typ}  ow_passive {on}
 story_start {id}  story_claim {id}  story_sell {offer, price}      -- price = Stufe 1..3 (Absicht)

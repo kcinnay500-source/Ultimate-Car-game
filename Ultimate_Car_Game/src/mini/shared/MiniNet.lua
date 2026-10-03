@@ -92,6 +92,7 @@ MiniNet.Actions = {
 	start_choose = { path = "string" },
 	-- Handy (PhoneService): Kunden eines Fahrzeug-Checks anrufen (id = 2.4.0-Auftrags-Id "job_<n>", kein Betrag)
 	phone_call = { id = "string" },
+	phone_hangup = {}, -- Auflegen während des Klingelns: Anruf wird nicht ausgewertet (reine Absicht)
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,

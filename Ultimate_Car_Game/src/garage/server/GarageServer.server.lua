@@ -316,6 +316,14 @@ local function callCustomer(p,jobId)
     end)
     return true,nil
 end
+-- 3.0: Auflegen während des Klingelns bricht den Anruf ab: keine Auswertung, der Auftrag bleibt in der Freigabe.
+local function hangUpCall(p)
+    local call=p.calling
+    if not call then return false end
+    p.calling=nil -- der Klingel-Timer erkennt den Abbruch an p.calling~=call
+    emit(p,"call",{job=call.job,state="ended"});push(p)
+    return true
+end
 local function token(p,key,job)
     p.confirm={token=Http:GenerateGUID(false),key=key,job=job,expires=now()+30}
     emit(p,"confirm",p.confirm)
@@ -578,7 +586,8 @@ local function request(player,action,a)
 end
 -- 3.0: Minispiele an dieselben Wege anbinden (ein Eingang, ein Profil, keine neuen Remotes).
 Mini.Init({emit=emit,toast=toast,changed=changed,push=push,getSession=function(player) return sessions[player] end,moveTo=moveTo,now=now,
-    callCustomer=callCustomer}) -- 3.0: Handy-Anruf beim Kunden (Fahrzeug-Check)
+    callCustomer=callCustomer, -- 3.0: Handy-Anruf beim Kunden (Fahrzeug-Check)
+    hangUpCall=hangUpCall}) -- 3.0: Auflegen während des Klingelns
 Command.OnServerEvent:Connect(request)
 Purchases.Init(function(player) return sessions[player] end,function(p,product,result)
     emit(p,"purchaseFX",Purchases.FX(product)) -- 3.0: Titel je Art (Credits/Auto/Optik/Paket)

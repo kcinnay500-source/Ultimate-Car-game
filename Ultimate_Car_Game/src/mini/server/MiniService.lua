@@ -340,6 +340,13 @@ function api.callCustomer(p, id)
 	end
 	return false, nil
 end
+-- Handy: laufenden Anruf abbrechen (GarageServer.hangUpCall). Rückgabe true, wenn ein Anruf lief
+function api.hangUpCall(p)
+	if ctx and type(ctx.hangUpCall) == "function" then
+		return ctx.hangUpCall(p)
+	end
+	return false
+end
 -- Eingeliefertes Auto von der Straße holen
 function api.releaseCar(ms, id)
 	return CarService.ReleaseCar(ms.player, id, "auction")

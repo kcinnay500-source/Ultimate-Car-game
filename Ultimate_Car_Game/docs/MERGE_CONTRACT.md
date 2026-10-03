@@ -52,7 +52,7 @@ Hintergrund: `docs/analysis_2.4.0/*.md` (server, shared, client, world, merge, c
 
 | Stelle | Aufruf |
 |---|---|
-| nach dem Laden der Module | `Mini.Init({emit=emit, toast=toast, changed=changed, push=push, getSession=getSession, moveTo=moveTo, now=now, callCustomer=callCustomer})` – `callCustomer(p, jobId) -> ok, msg` (Handy, 3.x: `PhoneService`/`phone_call`, PHASE4_CONTRACT §6c) |
+| nach dem Laden der Module | `Mini.Init({emit=emit, toast=toast, changed=changed, push=push, getSession=getSession, moveTo=moveTo, now=now, callCustomer=callCustomer, hangUpCall=hangUpCall})` – `callCustomer(p, jobId) -> ok, msg` (Handy, 3.x: `PhoneService`/`phone_call`, PHASE4_CONTRACT §6c); `hangUpCall(p) -> bool` bricht den klingelnden Anruf ab (`phone_hangup`) |
 | `request()` vor `act()` | `if Mini.Handles(action) then return Mini.Handle(p, action, a) end` (Mini-Aktionen sind vom 0,12-s-Namens-Cooldown ausgenommen; Budget, `transacting`-Sperre und Arg-Filter gelten) |
 | `act 'hello'` | `Mini.Hello(p)` |
 | `act 'settle'` nach Erfolg | `Mini.OnSettled(p)` |

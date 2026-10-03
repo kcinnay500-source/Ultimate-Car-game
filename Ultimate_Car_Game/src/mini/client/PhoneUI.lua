@@ -1427,6 +1427,10 @@ function PhoneUI.HangUp()
 		PhoneUI.Close()
 		return
 	end
+	-- B-024: Auflegen beim Wählen/Klingeln bricht den Anruf auch auf dem Server ab (sonst wertet er ihn trotzdem aus)
+	if cs and (cs.state == "dialing" or cs.state == "ringing") and ctx and ctx.Remote and ctx.Remote.Send then
+		ctx.Remote.Send("phone_hangup", {})
+	end
 	callState = nil
 	app = "home"
 	PhoneUI.Render(true)
