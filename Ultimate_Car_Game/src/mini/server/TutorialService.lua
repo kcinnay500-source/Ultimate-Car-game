@@ -49,8 +49,8 @@ local TEXT = {
 	started = "Willkommen! Das Tutorial zeigt dir die Werkstatt. Du kannst es jederzeit überspringen.",
 	-- je Startweg (werkstatt = started)
 	startedByPath = {
-		autohaus = "Willkommen! Das Tutorial zeigt dir dein Autohaus. Du kannst es jederzeit überspringen.",
-		produktion = "Willkommen! Das Tutorial zeigt dir deine Produktion. Du kannst es jederzeit überspringen.",
+		autohaus = "Willkommen! Das Tutorial zeigt dir dein Verkaufshaus. Du kannst es jederzeit überspringen.",
+		produktion = "Willkommen! Das Tutorial zeigt dir deine Herstellung. Du kannst es jederzeit überspringen.",
 		schrottplatz = "Willkommen! Das Tutorial zeigt dir deinen Schrottplatz. Du kannst es jederzeit überspringen.",
 	},
 	waiting = TutorialRules.Text.waiting,
@@ -249,7 +249,11 @@ local function next_(ms: any, data: any, d: any)
 end
 
 local function skip(ms: any, _: any, d: any)
-	if not TutorialRules.Skip(d) then
+	local ok, why = TutorialRules.Skip(d)
+	if not ok then
+		if why == "waiting" then
+			api.toast(ms, TEXT.waiting) -- Startwahl offen: die Wahl ist Pflicht, erst danach lässt sich das Tutorial überspringen
+		end
 		return -- schon beendet: still (Doppeltipp)
 	end
 	ms.tutorialRewardPending = nil

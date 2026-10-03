@@ -11,9 +11,17 @@
 --   OnStat(ms, d, key, delta)         Statistik gestiegen (MiniRules.AddStat; Integrator ruft es aus MiniService.OnSettled
 --                                     und den Diensten bzw. zentral): Story-/Nebenmissionen, Co-op
 --   OnEvent(ms, d, event, data?)      Ereignis: "settle", "car_bought", "auction_won", "auction_consigned", "track_finish" {time},
---                                     "arcade_round", "ow_built:<typ>", "action:<aktion>" (nach jeder gelungenen Aktion), …
+--                                     "arcade_round", "ow_built:<typ>", "action:<aktion>" (nach jeder gelungenen Aktion),
+--                                     3.x: "pw_repair" {car, gain}, "pw_parts_sold" {part, count, value} (PublicWorkshopService
+--                                     über api.storyEvent), "delivery" … Zu "settle" meldet der Dienst selbst die Art des
+--                                     abgerechneten Auftrags ("settle:<art>", ein Fahrzeug-Check zusätzlich "settle:inspection").
 --   Tick(ms, d, now) -> changed       alle 0,5 s: Tageswechsel, Kunden am Kiesplatz (nur solange die Figur in Reichweite der
---                                     Station ist), Bedingungs-Missionen, Lieferfahrten
+--                                     Station ist), Bedingungs-Missionen, Lieferfahrten; 3.x: Story ohne „Starten“ (die
+--                                     aktuelle Mission startet in der Open World von selbst, StoryRules.AutoStart) und die
+--                                     Profil-Ereignisse "parts_bought" (Ersatzteile gekauft: Lager + Bestellungen wachsen) und
+--                                     "equipment_bought" (Werkstattgerät gekauft: Summe d.equipment wächst)
+--   OnStartChosen(ms, d, now)         3.x: Startwahl getroffen (StartService): Mission 1 des Wegs läuft sofort
+--   ResetChapter1(ms, d)              3.x: Kapitel 1 von vorn (StartService.ResetStart, Entwickler-Menü)
 --   OnLeave(ms)                       Sitzung vergessen
 --   SnapshotFields(ms, d, now, full)  { story = StoryRules.View(...) } (missions/chapters nur bei full)
 -- Co-op (§7): Fortschritt eines Party-Mitglieds (LobbyService.PartyOf) zählt für alle Mitglieder mit derselben aktiven
@@ -36,7 +44,7 @@ local StoryService = {}
 
 export type Session = {
 	sale: any, nextAt: number, delivery: any, seen: { [string]: number }, routesAt: number, routes: { any }, checkAt: number,
-	lastPos: Vector3?,
+	lastPos: Vector3?, jobs: { [string]: any }?, partsTotal: number?, equipTotal: number?,
 }
 
 StoryService.Sessions = setmetatable({}, { __mode = "k" }) :: { [Player]: any } -- [Player] = ms
@@ -122,7 +130,8 @@ end
 
 local function session(ms: any): Session
 	if type(ms.story) ~= "table" then
-		ms.story = { sale = false, nextAt = 0, delivery = false, seen = {}, routesAt = -math.huge, routes = {}, checkAt = -math.huge, lastPos = nil }
+		ms.story = { sale = false, nextAt = 0, delivery = false, seen = {}, routesAt = -math.huge, routes = {}, checkAt = -math.huge, lastPos = nil,
+			jobs = nil, partsTotal = nil, equipTotal = nil }
 	end
 	return ms.story
 end
@@ -180,6 +189,122 @@ local function progressWith(ms: any, d: any, fn: () -> { any })
 	local changes = fn()
 	announce(ms, changes)
 	share(ms, d, changes)
+end
+
+---------------------------------------------------------------- Story ohne „Starten“ (3.x)
+local function partySize(ms: any): number
+	local party = LobbyService.PartyOf and LobbyService.PartyOf(ms.player) or nil
+	return type(party) == "table" and type(party.members) == "table" and #party.members or 0
+end
+
+-- Mission gestartet (von Hand oder automatisch): Hinweis, Toast, Bedingungen gleich prüfen (z. B. schon erfüllt)
+local function announceStart(ms: any, d: any, def: any, auto: boolean)
+	local cur = StoryRules.Current(d)
+	notice(ms, "story", { event = "started", chapter = cur.chapter, mission = def.id, title = def.title, text = def.text, auto = auto })
+	if auto then
+		toast(ms, string.format(S().Texts.autoStarted or "Neue Mission: „%s“", def.title))
+	else
+		toast(ms, string.format(S().Texts.started, def.title, def.text))
+	end
+	local view = StoryRules.MissionView(d, def, levelOf(d))
+	session(ms).seen[def.id] = view.progress
+	if view.claimable then
+		announce(ms, { { id = def.id, title = def.title, progress = view.progress, target = view.target, done = true, side = false, delta = 0 } })
+	end
+	dirty(ms)
+end
+
+-- Aktuelle Mission von selbst starten: nur in der Open World, nicht im Passiv-Modus, nicht vor der Startwahl.
+-- Rückgabe: die gestartete Mission oder nil
+local function autoStart(ms: any, d: any, t: number): any
+	if type(d) ~= "table" or not inOpenWorld(ms) or passive(d) or MetaRules.StartPending(d) then
+		return nil
+	end
+	local def = StoryRules.AutoStart(d, t, partySize(ms), levelOf(d))
+	if def then
+		announceStart(ms, d, def, true)
+	end
+	return def
+end
+StoryService.AutoStart = autoStart
+
+---------------------------------------------------------------- Profil-Ereignisse (3.x): Auftragsart beim Abrechnen, Teile-/Gerätekauf
+local function jobMap(d: any): { [string]: any }
+	local out = {}
+	for _, j in ipairs(type(d) == "table" and type(d.jobs) == "table" and d.jobs or {}) do
+		if type(j) == "table" and type(j.id) == "string" and type(j.kind) == "string" then
+			-- Fahrzeug-Check: Art "inspection", nach der Kundenfreigabe die Art des Befunds (mit Salz/Check-Vergütung)
+			local check = j.kind == "inspection" or type(j.salt) == "number" or j.inspectionBonus ~= nil or j.finding ~= nil
+			out[j.id] = { kind = j.kind, phase = j.phase, check = check }
+		end
+	end
+	return out
+end
+
+local function sumValues(t: any): number
+	local n = 0
+	for _, v in pairs(type(t) == "table" and t or {}) do
+		if finite(v) and v > 0 then
+			n += v
+		end
+	end
+	return n
+end
+
+local function partsTotal(d: any): number
+	local n = sumValues(type(d) == "table" and d.inventory or nil)
+	for _, o in ipairs(type(d) == "table" and type(d.orders) == "table" and d.orders or {}) do
+		if type(o) == "table" and finite(o.qty) and o.qty > 0 then
+			n += o.qty
+		end
+	end
+	return n
+end
+
+local function equipTotal(d: any): number
+	return sumValues(type(d) == "table" and d.equipment or nil)
+end
+
+-- Stand merken (Tick) bzw. Käufe melden; Rückgabe: Liste { event, data }
+local function trackProfile(ms: any, d: any): { any }
+	local ss = session(ms)
+	local out = {}
+	local parts, equip = partsTotal(d), equipTotal(d)
+	if ss.partsTotal ~= nil and parts > ss.partsTotal then
+		table.insert(out, { "parts_bought", { count = parts - ss.partsTotal } })
+	end
+	if ss.equipTotal ~= nil and equip > ss.equipTotal then
+		table.insert(out, { "equipment_bought", { count = equip - ss.equipTotal } })
+	end
+	ss.partsTotal, ss.equipTotal = parts, equip
+	ss.jobs = jobMap(d)
+	return out
+end
+
+-- Abgerechneter Auftrag (Mini.OnSettled -> OnEvent "settle"): der Auftrag, der seit dem letzten Tick aus d.jobs
+-- verschwunden ist (bevorzugt einer in Phase invoice). Rückgabe: Ereignisse "settle:<art>" (+ "settle:inspection")
+local function settledEvents(ms: any, d: any): { string }
+	local ss = session(ms)
+	local before = ss.jobs
+	if type(before) ~= "table" then
+		return {}
+	end
+	local now = jobMap(d)
+	local pick, pickId = nil, nil
+	for id, j in pairs(before) do
+		if not now[id] and (pick == nil or (j.phase == "invoice" and pick.phase ~= "invoice")) then
+			pick, pickId = j, id
+		end
+	end
+	if not pick then
+		return {}
+	end
+	before[pickId] = nil -- nie doppelt zählen
+	local out = { "settle:" .. tostring(pick.kind) }
+	if pick.check and pick.kind ~= "inspection" then
+		table.insert(out, "settle:inspection")
+	end
+	return out
 end
 
 ---------------------------------------------------------------- Kiesplatz
@@ -287,25 +412,22 @@ function storyStart(ms: any, data: any, d: any, t: number)
 		toast(ms, S().Texts.passive)
 		return
 	end
-	local party = LobbyService.PartyOf and LobbyService.PartyOf(ms.player) or nil
-	local members = type(party) == "table" and type(party.members) == "table" and #party.members or 0
-	local ok, res = StoryRules.Start(d, data.id, t, members)
+	-- 3.x: die Story startet ihre Missionen selbst; ein „Starten“ der schon laufenden Mission ist kein Fehler
+	local st = StoryRules.Data(d)
+	if st and type(st.active) == "table" and st.active.id == data.id then
+		dirty(ms)
+		return true
+	end
+	local ok, res = StoryRules.Start(d, data.id, t, partySize(ms))
 	if not ok then
 		if not data.auto then
 			toast(ms, res)
 		end
 		return
 	end
-	local cur = StoryRules.Current(d)
-	notice(ms, "story", { event = "started", chapter = cur.chapter, mission = res.id, title = res.title, text = res.text })
-	toast(ms, string.format(S().Texts.started, res.title, res.text))
 	-- Bedingungs-Missionen können sofort erfüllt sein (z. B. Hebebühne 2 schon gekauft)
-	local view = StoryRules.MissionView(d, res, levelOf(d))
-	session(ms).seen[res.id] = view.progress
-	if view.claimable then
-		announce(ms, { { id = res.id, title = res.title, progress = view.progress, target = view.target, done = true, side = false, delta = 0 } })
-	end
-	dirty(ms)
+	announceStart(ms, d, res, data.auto == true)
+	return true
 end
 
 local function storyClaim(ms: any, data: any, d: any, t: number)
@@ -321,18 +443,20 @@ local function storyClaim(ms: any, data: any, d: any, t: number)
 		event = "claimed", chapter = res.chapter, mission = res.mission.id, title = res.mission.title, credits = res.credits, xp = res.xp,
 		cosmetic = res.cosmetic, cosmeticGranted = res.cosmeticGranted, titleReward = res.title,
 		chapterDone = res.chapterDone, chapterXp = res.chapterXp, nextChapter = res.nextChapter, nextLevel = res.nextLevel, finished = res.finished,
-		text = res.chapterDone and (res.finished and T.storyDone or string.format(T.chapterDone, res.chapter, StoryRules.Chapter(res.chapter).title, res.chapterXp, res.nextChapter, res.nextLevel)) or "",
+		text = res.chapterDone and (res.finished and T.storyDone or string.format(T.chapterDone, res.chapter, (StoryRules.ChapterInfo(d, res.chapter)), res.chapterXp, res.nextChapter, res.nextLevel)) or "",
 	})
 	toast(ms, string.format(T.claimed, res.mission.title, MiniLocale.Credits(res.credits), res.xp))
 	if res.chapterDone then
 		if res.finished then
 			toast(ms, T.storyDone)
 		else
-			toast(ms, string.format(T.chapterDone, res.chapter, StoryRules.Chapter(res.chapter).title, res.chapterXp, res.nextChapter, res.nextLevel))
+			toast(ms, string.format(T.chapterDone, res.chapter, (StoryRules.ChapterInfo(d, res.chapter)), res.chapterXp, res.nextChapter, res.nextLevel))
 		end
 	end
 	session(ms).seen = {}
+	autoStart(ms, d, t) -- 3.x: die nächste Mission läuft gleich an (Kapitel offen, Open World, nicht passiv)
 	dirty(ms)
+	return true
 end
 
 local function sideClaim(ms: any, data: any, d: any, t: number)
@@ -375,9 +499,46 @@ function StoryService.OnEvent(ms: any, d: any, event: any, data: any)
 	if not ms or type(event) ~= "string" then
 		return
 	end
+	local t = now()
 	progressWith(ms, d, function()
-		return StoryRules.OnEvent(d, event, data, now())
+		local changes = StoryRules.OnEvent(d, event, data, t)
+		-- 3.x: Art des abgerechneten Auftrags (Ölwechsel, Fahrzeug-Check …) für Kapitel 1 „Werkstatt“
+		if event == "settle" then
+			for _, ev in ipairs(settledEvents(ms, d)) do
+				for _, c in ipairs(StoryRules.OnEvent(d, ev, data, t)) do
+					table.insert(changes, c)
+				end
+			end
+		end
+		return changes
 	end)
+	if event == "pw_repair" and type(d) == "table" and not passive(d) then
+		toast(ms, S().Sale.Texts.repairedReady)
+		dirty(ms)
+	end
+end
+
+-- 3.x: Startwahl getroffen (StartService nach start_choose): Kapitel 1 des Wegs läuft sofort mit Mission 1.
+-- Rückgabe: die gestartete Mission oder nil
+function StoryService.OnStartChosen(ms: any, d: any, t: number?): any
+	if not ms or type(d) ~= "table" then
+		return nil
+	end
+	StoryService.Sessions[ms.player] = ms
+	session(ms).seen = {}
+	return autoStart(ms, d, finite(t) and t or now())
+end
+
+-- 3.x: Kapitel 1 von vorn (StartService.ResetStart): erledigte Kapitel-1-Missionen und die laufende sind weg; die
+-- erste Mission startet wieder nach der neuen Startwahl. Rückgabe: true, wenn sich etwas geändert hat
+function StoryService.ResetChapter1(ms: any, d: any): boolean
+	local changed = StoryRules.ResetChapter1(d)
+	if ms then
+		local ss = session(ms)
+		ss.seen = {}
+		dirty(ms)
+	end
+	return changed
 end
 
 ---------------------------------------------------------------- Lieferungen (City.Missions.Delivery_<n>)
@@ -522,6 +683,7 @@ function StoryService.OnJoin(ms: any, d: any, t: number?)
 	local ss = session(ms)
 	StoryRules.Data(d)
 	StoryRules.EnsureSideDay(d, t)
+	trackProfile(ms, d) -- Stand für Teile-/Gerätekauf und Auftragsart merken (nichts melden)
 	-- Der Takt nach einem Verkauf (OfferInterval/FailInterval) steht im Profil: ein Rejoin bringt keinen früheren Kunden
 	ss.nextAt = math.max(StoryRules.NextOfferAt(d), t + (S().Sale.FirstOfferDelay or 2))
 end
@@ -552,6 +714,11 @@ function StoryService.Tick(ms: any, d: any, t: number?): boolean
 	if StoryRules.EnsureSideDay(d, t) then
 		changed = true
 	end
+	-- 3.x: Teile-/Gerätekauf aus dem Profil (2.4.0-Aktionen laufen nicht über MiniService) und Auftragsliste merken
+	for _, e in ipairs(trackProfile(ms, d)) do
+		StoryService.OnEvent(ms, d, e[1], e[2])
+		changed = true
+	end
 	-- Kiesplatz: Kunde kommt (Open World, nicht passiv, Figur in Reichweite der Station), zieht nach Patience weiter;
 	-- den Abschieds-Hinweis gibt es nur, wenn der Spieler gerade dort steht (sonst hat er den Kunden nie gesehen)
 	local sale = ss.sale
@@ -574,9 +741,13 @@ function StoryService.Tick(ms: any, d: any, t: number?): boolean
 		newOffer(ms, d, t)
 		changed = true
 	end
-	-- Bedingungs-Missionen (own/build) und Legende: Fortschritt aus dem Profil, höchstens 1×/s
+	-- Bedingungs-Missionen (own/build) und Legende: Fortschritt aus dem Profil, höchstens 1×/s; 3.x: dazu startet die
+	-- aktuelle Mission von selbst (z. B. nach einem Levelaufstieg, der das nächste Kapitel öffnet)
 	if t - ss.checkAt >= CHECK_INTERVAL then
 		ss.checkAt = t
+		if autoStart(ms, d, t) then
+			changed = true
+		end
 		local st = StoryRules.Data(d)
 		if st and type(st.active) == "table" and not passive(d) then
 			local def = StoryRules.Mission(st.active.id)

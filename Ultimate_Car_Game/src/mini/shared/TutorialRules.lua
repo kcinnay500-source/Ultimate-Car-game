@@ -222,11 +222,16 @@ function TutorialRules.Next(d: any, stepNumber: any): (boolean, any)
 	return true, finished
 end
 
--- Überspringen: jederzeit; setzt tutorialSkipped und tutorialDone (keine Belohnung). false, wenn schon beendet.
-function TutorialRules.Skip(d: any): boolean
+-- Überspringen: jederzeit nach der Startwahl; setzt tutorialSkipped und tutorialDone (keine Belohnung). false, wenn
+-- schon beendet. 3.x: Solange die Startwahl offen ist, geht es nicht (false, "waiting") – sonst wäre das Profil damit
+-- Veteran (werkstatt) und hätte die Pflicht-Wahl übersprungen.
+function TutorialRules.Skip(d: any): (boolean, string?)
 	local m = MetaRules.Meta(d)
 	if not m or m.tutorialDone == true then
 		return false
+	end
+	if MetaRules.StartPending(d) then
+		return false, "waiting"
 	end
 	m.tutorialSkipped = true
 	m.tutorialDone = true

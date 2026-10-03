@@ -20,8 +20,16 @@
 --                 Kunde_1..3, Attribut Period) oder City.Districts.Kiesplatz wippen und drehen sich dezent (prozedural,
 --                 Serverzeit, eigener Takt je Figur; nur bis 150 Studs von der Kamera). CityClient kennt die Art nicht und
 --                 soll sie überspringen (wie conveyor/stamp), sonst meldet er sie einmal als unbekannt.
--- Alles verschwindet, solange das Minispiel-Panel, das 2.4.0-Tablet, QTE/Diagnose (ctx.IsBlocked) oder der Tacho
--- (ScreenGui "Fahren") zu sehen sind; Prüfung alle 0,2 s und sofort über MissionClient.Refresh (MiniClient). Handy: Karten höchstens Bildschirmbreite − 24 px, Knöpfe 44 px.
+--   Tracker     3.x: Karte „Deine Mission“ (Frame "MissionTracker"), immer zu sehen, solange eine Story-Mission läuft
+--                 (die Story startet nach der Startwahl von selbst): Kapitel, Missionstitel, Text mit dem Ort, Fortschritt,
+--                 „Abholen“ (story_claim {id}) sobald erfüllt, sonst „Hinreisen“ (mini_travel {key}, Ziel aus
+--                 StoryRules.TargetOf). Ist das nächste Kapitel noch gesperrt, nennt sie das Level. Lage: oben links neben
+--                 der 2.4.0-Leiste (CompactProgress); ist dort zu wenig Platz (Handy), unter Toast-Zone und Karten oben rechts,
+--                 nie in HUD-Leiste/Fahrzeugknöpfen (PrestigeUI.FreeRect). Niedrige Bildschirme: ohne Text.
+-- Karten (Mission, Kapitel, Tracker) verschwinden, solange das Minispiel-Panel, das 2.4.0-Tablet, QTE/Diagnose
+-- (ctx.IsBlocked) oder der Tacho (ScreenGui "Fahren") zu sehen sind; die Welt-Marker bleiben beim Fahren an (Lieferfahrt,
+-- Ziel der Mission), nur Panel/Tablet/QTE schalten die ganze ScreenGui aus. Prüfung alle 0,2 s und sofort über
+-- MissionClient.Refresh (MiniClient). Handy: Karten höchstens Bildschirmbreite − 24 px, Knöpfe 44 px.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -47,31 +55,15 @@ MissionClient.NpcCull = 150
 MissionClient.NpcBob = 0.12 -- Studs
 MissionClient.NpcTurn = 0.3 -- rad
 MissionClient.Kinds = { npc_idle = true }
+MissionClient.TrackerWidth = 300 -- Karte „Deine Mission“ (3.x)
+MissionClient.TrackerMinWidth = 220 -- schmaler wird sie oben links nicht (sonst rückt sie unter die Karten oben)
+MissionClient.TrackerNear = 40 -- Studs: so nah am Ziel gibt es keinen „Hinreisen“-Knopf
+MissionClient.TrackerTextLines = 3
 
--- Ziel je Missionsart (zone, Stationsschlüssel, Beschriftung)
-local CITY, PLOT = "city", "plot"
-local TARGETS = {
-	sell = { CITY, "kiesplatz", "KIESPLATZ" },
-	settle = { PLOT, "workshop", "WERKSTATT" },
-	jobsDone = { PLOT, "workshop", "WERKSTATT" },
-	bays = { PLOT, "workshop", "HALLENANBAU" },
-	equipmentAll = { PLOT, "workshop", "WERKSTATT" },
-	build = { PLOT, "workshop", "GRUNDSTÜCK" },
-	car_bought = { CITY, "dealer", "AUTOHAUS" },
-	cars = { CITY, "dealer", "AUTOHAUS" },
-	auction_won = { CITY, "auction", "AUKTIONSHAUS" },
-	auction_consigned = { CITY, "auction_consign", "AUKTIONSHAUS" },
-	["action:mini_auction_bid"] = { CITY, "auction", "AUKTIONSHAUS" },
-	track_finish = { CITY, "track", "TESTSTRECKE" },
-	arcade_round = { CITY, "arcade", "SPIELHALLE" },
-	["action:mini_carwash"] = { CITY, "carwash", "WASCHSTRASSE" },
-	["action:mini_press_exchange"] = { CITY, "scrap_trader", "SCHROTTHÄNDLER" },
-	["action:mini_car_tune"] = { PLOT, "workshop", "GARAGE" },
-	dismantled = { CITY, "scrapyard", "SCHROTTPLATZ" },
-	quizCorrect = { CITY, "quiz", "QUIZ" },
-	parkingSolved = { CITY, "parking", "PARKPLATZ" },
-}
-MissionClient.Targets = TARGETS
+-- Ziel je Missionsart (zone, Stationsschlüssel, Beschriftung, Schnellreise): eine Tabelle für Server und Client
+-- (StoryRules.Targets / StoryRules.TargetOf; 3.x: zone "anchor" = Open-World-Gebäude am eigenen Grundstück)
+local CITY, PLOT, ANCHOR = "city", "plot", "anchor"
+MissionClient.Targets = StoryRules.Targets
 
 local ctx, UI, T
 local gui = nil
@@ -85,6 +77,8 @@ local cardShowing = false
 local cardSerial, chapterSerial = 0, 0
 local chapterPending = nil -- { title, text } wartet, bis Overlays erlaubt sind
 local delivery = nil -- { route, until_ }
+local tracker = {} -- frame, kicker, title, text, bar, fill, count, button, mode ("claim" | "travel" | nil), id, travel
+local cardOn, chapterOn = false, false -- Karte bzw. Kapitel-Intro gerade „an“ (sichtbar, sobald Overlays erlaubt sind)
 local stepTimer, cullTimer, npcSlow = 0, 0, 0
 local npcs = setmetatable({}, { __mode = "k" }) -- [inst] = Datensatz
 local npcList = {}
@@ -137,7 +131,8 @@ local function driveHudVisible(): boolean
 	return drive ~= nil and drive:IsA("LayerCollector") and drive.Enabled == true
 end
 
-local function overlaysAllowed(): boolean
+-- Welt-Marker: aus bei Panel, Tablet und QTE/Diagnose – beim Fahren bleiben sie an (Lieferfahrt, Ziel der Mission)
+local function markersAllowed(): boolean
 	if UI and UI.IsOpen then
 		return false
 	end
@@ -147,7 +142,12 @@ local function overlaysAllowed(): boolean
 	if ctx and ctx.IsBlocked and ctx.IsBlocked() == true then
 		return false
 	end
-	return not driveHudVisible()
+	return true
+end
+
+-- Karten (Mission, Kapitel, Tracker): zusätzlich aus, solange der Tacho zu sehen ist
+local function overlaysAllowed(): boolean
+	return markersAllowed() and not driveHudVisible()
 end
 
 ---------------------------------------------------------------- Aufbau
@@ -280,6 +280,7 @@ end
 
 local function hideChapter()
 	chapterSerial += 1
+	chapterOn = false
 	if chapter.frame then
 		chapter.frame.Visible = false
 	end
@@ -360,11 +361,11 @@ end
 
 local function stationPart(zone: string, key: string): BasePart?
 	local folder = nil
-	if zone == PLOT then
+	if zone == PLOT or zone == ANCHOR then
 		local player = Players.LocalPlayer
 		local plots = workspace:FindFirstChild("PlayerWorkshops")
 		local plot = plots and player and plots:FindFirstChild("Plot_" .. tostring(player.UserId))
-		folder = plot and plot:FindFirstChild("Stations")
+		folder = plot and plot:FindFirstChild(zone == ANCHOR and "OWAnchors" or "Stations")
 	else
 		local city = workspace:FindFirstChild("City")
 		folder = city and city:FindFirstChild("Stations")
@@ -372,41 +373,11 @@ local function stationPart(zone: string, key: string): BasePart?
 	return partOf(folder and folder:FindFirstChild(key))
 end
 
--- Zielbeschreibung einer Missionsdefinition (StoryRules.Mission / SideDef): { zone, key, title } oder nil
+-- Zielbeschreibung einer Missionsdefinition (StoryRules.Mission / SideDef): { zone, key, title, travel } oder nil
+-- (eine Tabelle für Server und Client: StoryRules.TargetOf)
 function MissionClient.TargetOf(def: any): any
-	if type(def) ~= "table" then
-		return nil
-	end
-	local keys = {}
-	if def.kind == "sell" then
-		table.insert(keys, "sell")
-	elseif def.kind == "event" then
-		if type(def.event) == "string" then
-			table.insert(keys, def.event)
-		end
-		for _, e in ipairs(type(def.events) == "table" and def.events or {}) do
-			table.insert(keys, e)
-		end
-	elseif def.kind == "stat" and type(def.stat) == "string" then
-		table.insert(keys, def.stat)
-	elseif def.kind == "build" then
-		table.insert(keys, "build")
-	elseif def.kind == "own" then
-		if def.bays then
-			table.insert(keys, "bays")
-		elseif def.cars then
-			table.insert(keys, "cars")
-		elseif def.equipmentAll then
-			table.insert(keys, "equipmentAll")
-		end
-	end
-	for _, k in ipairs(keys) do
-		local t = TARGETS[k]
-		if t then
-			return { zone = t[1], key = t[2], title = t[3] }
-		end
-	end
-	return nil
+	local ok, t = pcall(StoryRules.TargetOf, def)
+	return ok and t or nil
 end
 
 local function activeDef(): any
@@ -422,9 +393,17 @@ local function activeDef(): any
 	return ok and def or nil
 end
 
--- Heutige Nebenmission „Lieferung“ offen? (kind event, event delivery, nicht abgeholt, nicht erfüllt)
+-- Lieferung gewünscht? Heutige Nebenmission „Lieferung“ offen (kind event, event delivery, nicht abgeholt, nicht erfüllt)
+-- oder 3.x die laufende Story-Mission ist eine Lieferfahrt (Kapitel 1 „Herstellung“)
 local function deliveryWanted(): boolean
 	local st = story(latest)
+	local a = type(st.active) == "table" and st.active or nil
+	if a and a.claimable ~= true and type(a.id) == "string" then
+		local okA, defA = pcall(StoryRules.Mission, a.id)
+		if okA and type(defA) == "table" and defA.kind == "event" and defA.event == "delivery" then
+			return true
+		end
+	end
 	for _, e in ipairs(type(st.side) == "table" and st.side or {}) do
 		if not e.done and not e.claimable then
 			local ok, def = pcall(StoryRules.SideDef, e.id)
@@ -498,7 +477,7 @@ local function updateMarkers()
 	if not gui then
 		return
 	end
-	local allowed = overlaysAllowed() and latest ~= nil and (latest.mode == nil or latest.mode == "openworld") and story(latest).passive ~= true
+	local allowed = markersAllowed() and latest ~= nil and (latest.mode == nil or latest.mode == "openworld") and story(latest).passive ~= true
 	local target, start, finish = markers[1], markers[2], markers[3]
 	if not allowed then
 		setMarker(target, nil, nil)
@@ -576,6 +555,7 @@ local function showNextCard()
 			card.frame.Visible = false
 			cardShowing = false
 			showNextCard()
+			MissionClient.Refresh() -- Tracker (Handy) wieder an seinen Platz
 		end
 	end)
 end
@@ -599,11 +579,13 @@ local function showChapterNow(entry: any)
 	chapter.text.Text = entry.text or ""
 	chapter.text.Visible = entry.text ~= nil and entry.text ~= ""
 	placeChapter()
+	chapterOn = true
 	chapter.frame.Visible = true
 	chapter.scale.Scale = 0.85
 	TweenService:Create(chapter.scale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 	task.delay(MissionClient.ChapterSeconds, function()
 		if serial == chapterSerial and chapter.frame then
+			chapterOn = false
 			chapter.frame.Visible = false
 		end
 	end)
@@ -738,10 +720,12 @@ function MissionClient.Refresh()
 	if not gui then
 		return
 	end
-	local allowed = overlaysAllowed()
-	if gui.Enabled ~= allowed then
-		gui.Enabled = allowed
+	-- ScreenGui: aus bei Panel/Tablet/QTE; beim Fahren bleibt sie an (Marker), nur die Karten tauchen ab
+	local markers = markersAllowed()
+	if gui.Enabled ~= markers then
+		gui.Enabled = markers
 	end
+	local allowed = overlaysAllowed()
 	if allowed then
 		if chapterPending then
 			local e = chapterPending
@@ -749,17 +733,27 @@ function MissionClient.Refresh()
 			showChapterNow(e)
 		end
 		showNextCard()
-		-- niedriger Bildschirm: taucht rechts eine Karte auf, weicht die Missions-Karte, bis sie weg ist
-		if card.frame and cardShowing then
-			local show = not shortAndBusy()
-			if card.frame.Visible ~= show then
-				card.frame.Visible = show
-			end
+	end
+	-- niedriger Bildschirm: taucht rechts eine Karte auf, weicht die Missions-Karte, bis sie weg ist
+	if card.frame then
+		local show = cardShowing and allowed and not shortAndBusy()
+		if card.frame.Visible ~= show then
+			card.frame.Visible = show
 		end
 		-- sichtbare Karte neu legen, falls rechts gerade eine Karte auf- oder abgetaucht ist (schmale Bildschirme)
-		if card.frame and card.frame.Visible then
+		if card.frame.Visible then
 			placeCard()
 		end
+	end
+	if chapter.frame then
+		local show = chapterOn and allowed
+		if chapter.frame.Visible ~= show then
+			chapter.frame.Visible = show
+		end
+	end
+	local okT, errT = pcall(MissionClient.RenderTracker, allowed)
+	if not okT then
+		warnOnce("tracker", "Karte „Deine Mission“: " .. tostring(errT))
 	end
 	updateMarkers()
 end

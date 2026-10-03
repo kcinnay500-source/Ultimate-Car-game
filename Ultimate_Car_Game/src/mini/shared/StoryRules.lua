@@ -8,9 +8,14 @@
 -- offene Mission). Zahlen und Texte: GameConfig.Story.
 -- Geld/XP ändern nur Claim, SideClaim und Sell (über MiniRules.AddMoney/AddIncome/GainXP); MiniRules wird erst beim
 -- Aufruf geladen (MiniRules lädt dieses Modul für Default/Load – kein Ring beim require).
--- Startweg (meta.startPath, GameConfig.Start): ein Kapitel mit PathMissions ersetzt die Mission an Stelle PathSlot je Weg
--- (MissionAt/Missions); ohne Weg gilt Missions[PathSlot]. Eine Stelle ist erledigt, sobald irgendeine ihrer Varianten in
--- done steht; eine schon aktive Variante bleibt die Mission ihrer Stelle, bis sie abgeholt ist.
+-- Startweg (meta.startPath, GameConfig.Start), 3.x: ein Kapitel mit Paths[typ] (Liste, gleich lang wie Missions) hat je
+-- Weg eigene Missionen (MissionAt/Missions); ohne Weg gilt Missions. Stelle i aller Listen ist eine Stelle mit Varianten:
+-- erledigt, sobald irgendeine Variante in done steht; eine schon aktive Variante bleibt die Mission ihrer Stelle, bis sie
+-- abgeholt ist. Die Story läuft ohne „Starten“: AutoStart startet die aktuelle Mission (StoryService nach der Startwahl,
+-- nach jeder Abholung und im Tick). layout = Stand der Kapitel-1-Liste (LAYOUT); ältere Profile werden beim Laden
+-- übernommen: wer das alte Kapitel 1 (c1_m3) oder ein späteres Kapitel geschafft hat, behält Kapitel 1 als erledigt.
+-- sales.repaired = in der Großen Werkstatt reparierte Gebrauchtwagen (Ereignis pw_repair), die am Kiesplatz auf ihren
+-- teureren Verkauf warten (Sale.RepairedBonus, je Reparatur ein Verkauf).
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local Unlocks = require(script.Parent:WaitForChild("Unlocks"))
 local C = require(script.Parent.Parent:WaitForChild("Config"))
@@ -25,28 +30,36 @@ export type Mission = {
 	stat: string?, absolute: boolean?, event: string?, events: { string }?, maxTime: number?,
 	tier: number?, special: boolean?, typ: string?, stage: number?, money: number?, bays: number?, cars: { string }?,
 	equipmentAll: boolean?, credits: number?, xp: number?, chapter: number?, index: number?, side: boolean?, legend: boolean?,
-	unlock: string?, needsCar: boolean?, owTyp: string?, owStat: string?,
+	unlock: string?, needsCar: boolean?, owTyp: string?, owStat: string?, minLevel: number?, repaired: boolean?,
 }
 export type Chapter = {
 	id: number, title: string, intro: string, unlockLevel: number, Missions: { Mission },
-	PathSlot: number?, PathMissions: { [string]: Mission }?,
+	Paths: { [string]: { Mission } }?, PathInfo: { [string]: { title: string?, intro: string? } }?,
 }
 export type Active = { id: string, progress: number, startedAt: number, party: number }
 export type SideEntry = { n: number, day: string, claimed: boolean }
 export type Story = {
 	chapter: number, step: number, done: { [string]: boolean }, side: { [string]: SideEntry }, active: Active | boolean,
-	sales: { n: number, best: number, special: number, serial: number, nextAt: number }, title: string,
+	sales: { n: number, best: number, special: number, serial: number, nextAt: number, repaired: number }, title: string,
+	layout: number,
 }
 export type Change = { id: string, progress: number, target: number, done: boolean, side: boolean, delta: number, title: string }
 export type Offer = {
 	serial: number, customer: string, wants: string, wantsName: string, line: string, special: boolean, roll: number,
 	tiers: { { tier: number, label: string, profit: number, price: number, chance: number, hint: string } },
 }
-export type SellResult = { sold: boolean, credits: number, xp: number, text: string, tier: number, special: boolean, changed: { Change } }
+export type SellResult = { sold: boolean, credits: number, xp: number, text: string, tier: number, special: boolean, changed: { Change }, repaired: boolean? }
 
 local MAX_SAFE = 2 ^ 53
 local DAY_PATTERN = "^%d%d%d%d%-%d%d%-%d%d$"
 local LEGEND_DAY = "legend"
+-- 3.x: Stand der Kapitel-1-Liste (Kapitel 1 je Startweg mit sechs Stellen); Profile ohne layout sind älter (Load)
+local LAYOUT = 2
+StoryRules.Layout = LAYOUT
+-- Kapitel-1-Missionen des alten Stands (drei Stellen: c1_m1 bzw. Weg-Variante, c1_m2, c1_m3)
+local LEGACY_C1_DONE = "c1_m3"
+local LEGACY_C1 = { "c1_m1", "c1_m1_produktion", "c1_m1_schrottplatz", "c1_m2", "c1_m3" }
+local missionXp -- unten definiert (Abholen); UnlockCheck rechnet die XP der vorigen Missionen mit
 
 ---------------------------------------------------------------- Hilfen
 local function finite(v: any): boolean
@@ -114,23 +127,23 @@ local function index(): any
 			ix.chapterOf[m.id] = ci
 			ix.variants[ci][mi] = { m }
 		end
-		-- Varianten je Startweg (PathMissions) an Stelle PathSlot; dieselbe Tabelle wie Missions[slot] zählt nur einmal
-		local slot = type(ch.PathSlot) == "number" and ch.PathSlot or 1
-		if type(ch.PathMissions) == "table" and ix.variants[ci][slot] then
-			local list = ix.variants[ci][slot]
+		-- Varianten je Startweg (Paths[typ][i] an Stelle i); dieselbe Tabelle (z. B. die gemeinsame letzte Mission) zählt
+		-- nur einmal. Stellen über #Missions hinaus gibt es nicht (gleich lange Listen, tests/test_story.lua).
+		if type(ch.Paths) == "table" then
 			local keys = {}
-			for typ in pairs(ch.PathMissions) do
+			for typ in pairs(ch.Paths) do
 				table.insert(keys, typ)
 			end
 			table.sort(keys)
 			for _, typ in ipairs(keys) do
-				local m = ch.PathMissions[typ]
-				if type(m) == "table" and not ix.missionById[m.id] then
-					m.chapter = ci
-					m.index = slot
-					ix.missionById[m.id] = m
-					ix.chapterOf[m.id] = ci
-					table.insert(list, m)
+				for i, m in ipairs(ch.Paths[typ]) do
+					if type(m) == "table" and ix.variants[ci][i] and not ix.missionById[m.id] then
+						m.chapter = ci
+						m.index = i
+						ix.missionById[m.id] = m
+						ix.chapterOf[m.id] = ci
+						table.insert(ix.variants[ci][i], m)
+					end
 				end
 			end
 		end
@@ -198,8 +211,42 @@ local function isVariantOf(def: any, n: number, i: number): boolean
 	return type(def) == "table" and def.chapter == n and def.index == i
 end
 
--- Mission an Stelle i von Kapitel n für dieses Profil: eine aktive Variante dieser Stelle, sonst die Variante des
--- Startwegs (PathMissions[startPath]), sonst Missions[i]
+-- Liste des Startwegs für Kapitel n (Paths[startPath]), sonst Missions
+local function pathList(d: any, ch: Chapter): { Mission }
+	if type(ch.Paths) == "table" then
+		local path = MetaRules.StartPath(d)
+		local list = path ~= "" and ch.Paths[path] or nil
+		if type(list) == "table" then
+			return list
+		end
+	end
+	return ch.Missions
+end
+
+-- Startweg-Liste eines Kapitels nach Weg-Id (Startkarten, Tests); unbekannter Weg = Missions
+function StoryRules.PathMissions(n: number, path: any): { Mission }
+	local ch = StoryRules.Chapter(n)
+	if not ch then
+		return {}
+	end
+	local list = type(ch.Paths) == "table" and type(path) == "string" and ch.Paths[path] or nil
+	return type(list) == "table" and list or ch.Missions
+end
+
+-- Kapitelkopf (Titel, Intro) für dieses Profil: PathInfo des Startwegs, sonst der Kapiteltext
+function StoryRules.ChapterInfo(d: any, n: number): (string, string)
+	local ch = StoryRules.Chapter(n)
+	if not ch then
+		return "", ""
+	end
+	local info = type(ch.PathInfo) == "table" and ch.PathInfo[MetaRules.StartPath(d)] or nil
+	local title = type(info) == "table" and type(info.title) == "string" and info.title or ch.title
+	local intro = type(info) == "table" and type(info.intro) == "string" and info.intro or ch.intro
+	return title, intro
+end
+
+-- Mission an Stelle i von Kapitel n für dieses Profil: eine aktive Variante dieser Stelle, sonst die Mission des
+-- Startwegs (Paths[startPath][i]), sonst Missions[i]
 function StoryRules.MissionAt(d: any, n: number, i: number): Mission?
 	local ch = StoryRules.Chapter(n)
 	if not ch then
@@ -216,13 +263,9 @@ function StoryRules.MissionAt(d: any, n: number, i: number): Mission?
 			return a
 		end
 	end
-	local slot = type(ch.PathSlot) == "number" and ch.PathSlot or 1
-	if i == slot and type(ch.PathMissions) == "table" then
-		local path = MetaRules.StartPath(d)
-		local v = path ~= "" and ch.PathMissions[path] or nil
-		if type(v) == "table" then
-			return v
-		end
+	local v = pathList(d, ch)[i]
+	if type(v) == "table" then
+		return v
 	end
 	return base
 end
@@ -275,6 +318,9 @@ function StoryRules.RequiredLevel(def: Mission): number
 	if type(def.unlock) == "string" then
 		need = math.max(need, keyLevel(def.unlock))
 	end
+	if finite(def.minLevel) then
+		need = math.max(need, math.floor(def.minLevel))
+	end
 	if def.kind == "stat" then
 		need = math.max(need, keyLevel((req.stat or {})[def.stat or ""]))
 	elseif def.kind == "event" then
@@ -302,15 +348,54 @@ function StoryRules.RequiredLevel(def: Mission): number
 	return need
 end
 
--- Kapitel-Missionen, deren Voraussetzung über dem Kapitel-Level liegt (leer = alles erreichbar); für den Test
+-- Level, das ein Spieler sicher hat, der mit Level `level` (0 XP) beginnt und `xp` XP dazubekommt (2.4.0-Kurve
+-- Rules.XPNeeded; Rules erst hier laden – Rules lädt MiniRules, MiniRules lädt dieses Modul)
+local Rules = nil
+function StoryRules.LevelAfterXp(level: number, xp: number): number
+	if not Rules then
+		Rules = require(script.Parent.Parent:WaitForChild("Rules"))
+	end
+	local probe = { level = math.max(1, math.floor(level)) }
+	local left = math.max(0, xp)
+	for _ = 1, 1000 do
+		local need = Rules.XPNeeded(probe)
+		if left < need then
+			break
+		end
+		left -= need
+		probe.level += 1
+	end
+	return probe.level
+end
+
+-- Kapitel-Missionen, die ein Spieler nicht erreichen kann (leer = alles erreichbar); für den Test. Je Liste (Missions und
+-- jeder Startweg) der Reihe nach: das Level, das eine Mission braucht (RequiredLevel), muss das Kapitel-Level sein – oder
+-- das Level, das die XP-Belohnungen der vorigen Missionen derselben Liste sicher bringen (eine Mission läuft erst, wenn
+-- die vorige abgeholt ist). So ist z. B. der Zerlegeplatz (Level 3) als vierte Mission von Kapitel 1 machbar.
 function StoryRules.UnlockCheck(): { string }
 	local out = {}
-	for ci, _ in ipairs(config().Chapters) do
+	for ci, ch in ipairs(config().Chapters) do
 		local open = StoryRules.ChapterLevel(ci)
-		for _, m in ipairs(StoryRules.AllMissions(ci)) do
-			local need = StoryRules.RequiredLevel(m)
-			if need > open then
-				table.insert(out, string.format("%s: braucht Level %d, Kapitel %d öffnet ab %d", m.id, need, ci, open))
+		local lists = { { name = "Missions", list = ch.Missions } }
+		if type(ch.Paths) == "table" then
+			local keys = {}
+			for typ in pairs(ch.Paths) do
+				table.insert(keys, typ)
+			end
+			table.sort(keys)
+			for _, typ in ipairs(keys) do
+				table.insert(lists, { name = typ, list = ch.Paths[typ] })
+			end
+		end
+		for _, entry in ipairs(lists) do
+			local xp = 0
+			for _, m in ipairs(entry.list) do
+				local need = StoryRules.RequiredLevel(m)
+				local have = math.max(open, StoryRules.LevelAfterXp(open, xp))
+				if need > have then
+					table.insert(out, string.format("%s (%s): braucht Level %d, sicher erreicht sind %d (Kapitel %d öffnet ab %d)", m.id, entry.name, need, have, ci, open))
+				end
+				xp += missionXp(m)
 			end
 		end
 	end
@@ -321,8 +406,19 @@ end
 function StoryRules.Default(): Story
 	return {
 		chapter = 1, step = 1, done = {}, side = {}, active = false,
-		sales = { n = 0, best = 0, special = 0, serial = 0, nextAt = 0 }, title = "",
+		sales = { n = 0, best = 0, special = 0, serial = 0, nextAt = 0, repaired = 0 }, title = "", layout = LAYOUT,
 	}
+end
+
+-- Alle Missions-Ids von Kapitel n (alle Stellen, alle Varianten)
+local function chapterIds(n: number): { string }
+	local out = {}
+	for _, list in ipairs(index().variants[n] or {}) do
+		for _, m in ipairs(list) do
+			table.insert(out, m.id)
+		end
+	end
+	return out
 end
 
 -- chapter/step aus done: Kapitel der Reihe nach; step = erste offene Mission; nach dem letzten Kapitel step = Anzahl + 1
@@ -359,9 +455,30 @@ function StoryRules.Load(raw: any, d: any, now: any): Story
 	local st = StoryRules.Default()
 	local r = type(raw) == "table" and raw or {}
 	local ix = index()
+	local legacyIds = {}
+	for _, id in ipairs(LEGACY_C1) do
+		legacyIds[id] = true
+	end
 	for id, v in pairs(type(r.done) == "table" and r.done or {}) do
 		if type(id) == "string" and ix.missionById[id] and v == true then
 			st.done[id] = true
+		end
+	end
+	-- 3.x: Profile von vor Kapitel 1 je Startweg (kein layout): wer das alte Kapitel 1 (c1_m3) oder schon ein späteres
+	-- Kapitel geschafft hat, behält Kapitel 1 als erledigt (keine Sackgasse, keine zweite Belohnung); angefangene
+	-- Stände behalten ihre erledigten Missionen (die Stellen zählen über die Varianten mit)
+	if type(raw) == "table" and r.layout ~= LAYOUT then
+		local complete = st.done[LEGACY_C1_DONE] == true
+		for id in pairs(st.done) do
+			local ci = ix.chapterOf[id]
+			if ci and ci >= 2 then
+				complete = true
+			end
+		end
+		if complete then
+			for _, m in ipairs(config().Chapters[1].Missions) do
+				st.done[m.id] = true
+			end
 		end
 	end
 	recompute(st)
@@ -382,7 +499,8 @@ function StoryRules.Load(raw: any, d: any, now: any): Story
 	local a = r.active
 	if type(a) == "table" and type(a.id) == "string" then
 		local def = ix.missionById[a.id]
-		if def and def.chapter == st.chapter and not st.done[a.id] and not slotDone(st, def.chapter, def.index or 0) then
+		-- nur die Mission der aktuellen Stelle bleibt aktiv (ältere Stände: eine Mission einer anderen Stelle startet neu)
+		if def and def.chapter == st.chapter and def.index == st.step and not st.done[a.id] and not slotDone(st, def.chapter, def.index or 0) then
 			st.active = {
 				id = a.id,
 				progress = loadInt(a.progress, 0, 0, StoryRules.Target(def)),
@@ -397,8 +515,38 @@ function StoryRules.Load(raw: any, d: any, now: any): Story
 	st.sales.special = math.min(st.sales.n, loadInt(s.special, 0, 0, MAX_SAFE))
 	st.sales.serial = loadInt(s.serial, 0, 0, MAX_SAFE)
 	st.sales.nextAt = loadInt(s.nextAt, 0, 0, MAX_SAFE)
+	st.sales.repaired = loadInt(s.repaired, 0, 0, config().Sale.RepairedMax or 3)
 	st.title = type(r.title) == "string" and #r.title <= 40 and r.title or ""
+	st.layout = LAYOUT
 	return st
+end
+
+-- Kapitel 1 von vorn (Entwickler-Menü über StartService.ResetStart): alle Kapitel-1-Missionen (jeder Weg) gelten wieder
+-- als offen, eine laufende Kapitel-1-Mission endet. Spätere Kapitel bleiben erledigt (danach geht es dort weiter).
+-- Rückgabe: true, wenn sich etwas geändert hat.
+function StoryRules.ResetChapter1(d: any): boolean
+	local st = StoryRules.Data(d)
+	if not st then
+		return false
+	end
+	local changed = false
+	for _, id in ipairs(chapterIds(1)) do
+		if st.done[id] then
+			st.done[id] = nil
+			changed = true
+		end
+	end
+	if type(st.active) == "table" and index().chapterOf[st.active.id] == 1 then
+		st.active = false
+		changed = true
+	end
+	if st.sales.repaired ~= 0 then
+		st.sales.repaired = 0
+		changed = true
+	end
+	st.layout = LAYOUT
+	recompute(st)
+	return changed
 end
 
 -- Für MiniRules.DefaultGames / LoadGames
@@ -485,6 +633,21 @@ function StoryRules.Start(d: any, id: any, now: any, party: any, level: any): (b
 	end
 	st.active = { id = def.id, progress = 0, startedAt = finite(now) and math.floor(now) or 0, party = loadInt(party, 0, 0, 8) }
 	return true, def
+end
+
+-- Story ohne „Starten“ (3.x): ist keine Mission aktiv und das Kapitel offen, startet die aktuelle Mission von selbst.
+-- Rückgabe: die gestartete Mission oder nil (aktiv, fertig, Kapitel gesperrt).
+function StoryRules.AutoStart(d: any, now: any, party: any, level: any): Mission?
+	local st = StoryRules.Data(d)
+	if not st or type(st.active) == "table" then
+		return nil
+	end
+	local m = StoryRules.Available(d, level)
+	if not m then
+		return nil
+	end
+	local ok, res = StoryRules.Start(d, m.id, now, party, level)
+	return ok and res or nil
 end
 
 ---------------------------------------------------------------- Fortschritt
@@ -755,17 +918,23 @@ function StoryRules.OnStat(d: any, key: any, delta: any, now: number): { Change 
 	return out
 end
 
--- Ereignis (settle, car_bought, auction_won, auction_consigned, track_finish {time}, delivery, arcade_round,
--- action:<aktion>, ow_built:<typ>, …): aktive Mission (kind event) und heutige Nebenmissionen
+-- Ereignis (settle, settle:<art>, parts_bought, equipment_bought, car_bought, auction_won, auction_consigned,
+-- track_finish {time}, delivery, arcade_round, pw_repair, pw_parts_sold, action:<aktion>, ow_built:<typ>, …): aktive
+-- Mission (kind event; kind sell mit events) und heutige Nebenmissionen. pw_repair merkt außerdem einen reparierten
+-- Gebrauchtwagen für den Kiesplatz (sales.repaired, höchstens Sale.RepairedMax).
 function StoryRules.OnEvent(d: any, event: any, data: any, now: number): { Change }
 	local out = {}
 	local st = StoryRules.Data(d)
 	if not st or type(event) ~= "string" then
 		return out
 	end
+	if event == "pw_repair" then
+		st.sales.repaired = math.min(config().Sale.RepairedMax or 3, st.sales.repaired + 1)
+	end
 	if type(st.active) == "table" then
 		local def = StoryRules.Mission(st.active.id)
-		if def and def.kind == "event" and matchesEvent(def, event, data) then
+		local counts = def and (def.kind == "event" or (def.kind == "sell" and type(def.events) == "table"))
+		if counts and matchesEvent(def, event, data) then
 			table.insert(out, bumpActive(st, def, 1))
 		end
 	end
@@ -777,8 +946,9 @@ function StoryRules.OnEvent(d: any, event: any, data: any, now: number): { Chang
 	return out
 end
 
--- Gelungener Kiesplatz-Verkauf (Stufe tier, Sondermodell-Kunde special): aktive Mission (kind sell)
-function StoryRules.OnSale(d: any, tier: number, special: boolean, now: number): { Change }
+-- Gelungener Kiesplatz-Verkauf (Stufe tier, Sondermodell-Kunde special, frisch reparierter Wagen repaired): aktive
+-- Mission (kind sell; repaired = true zählt nur reparierte Wagen)
+function StoryRules.OnSale(d: any, tier: number, special: boolean, now: number, repaired: boolean?): { Change }
 	local out = {}
 	local st = StoryRules.Data(d)
 	if not st then
@@ -794,7 +964,7 @@ function StoryRules.OnSale(d: any, tier: number, special: boolean, now: number):
 	if type(st.active) == "table" then
 		local def = StoryRules.Mission(st.active.id)
 		if def and def.kind == "sell" then
-			local ok = tier >= (finite(def.tier) and def.tier or 1) and (not def.special or special)
+			local ok = tier >= (finite(def.tier) and def.tier or 1) and (not def.special or special) and (not def.repaired or repaired == true)
 			if ok then
 				table.insert(out, bumpActive(st, def, 1))
 			end
@@ -826,7 +996,7 @@ function StoryRules.WantsEvent(d: any, event: string, now: number): boolean
 end
 
 ---------------------------------------------------------------- Abholen
-local function missionXp(def: Mission): number
+function missionXp(def: Mission): number
 	local r = def.reward or {}
 	if finite(r.xp) then
 		return r.xp
@@ -1065,14 +1235,25 @@ function StoryRules.Sell(d: any, offer: Offer, tier: any, now: number): SellResu
 			text = string.format(texts[(offer.serial % #texts) + 1], offer.customer) }
 	end
 	local M = mini()
-	local credits = M.AddIncome(d, t.profit)
+	-- 3.x: frisch reparierter Gebrauchtwagen aus der Großen Werkstatt (pw_repair) -> Gewinn × RepairedBonus, einmal je Reparatur
+	local repaired = st.sales.repaired > 0
+	local profit = t.profit
+	if repaired then
+		st.sales.repaired -= 1
+		profit = math.floor(profit * (S.RepairedBonus or 1) + 0.5)
+	end
+	local credits = M.AddIncome(d, profit)
 	local xp = finite(S.Xp[tier]) and S.Xp[tier] or 0
 	M.GainXP(d, xp)
 	M.MarkActive(d, now)
-	local changed = StoryRules.OnSale(d, tier, offer.special, now)
+	local changed = StoryRules.OnSale(d, tier, offer.special, now, repaired)
 	local texts = S.Texts.sold
-	return { sold = true, credits = credits, xp = xp, tier = tier, special = offer.special, changed = changed,
-		text = string.format(texts[(offer.serial % #texts) + 1], offer.customer, MiniLocale.Credits(credits)) }
+	local text = string.format(texts[(offer.serial % #texts) + 1], offer.customer, MiniLocale.Credits(credits))
+	if repaired and type(S.Texts.repaired) == "string" then
+		text ..= S.Texts.repaired
+	end
+	return { sold = true, credits = credits, xp = xp, tier = tier, special = offer.special, changed = changed, repaired = repaired,
+		text = text }
 end
 
 -- Kunde weg ohne Verkauf (Geduld zu Ende, Moduswechsel): die laufende Nummer rückt vor, damit der nächste Kunde ein
@@ -1120,6 +1301,86 @@ function StoryRules.CoopApply(dA: any, dB: any, id: any, delta: any, now: number
 	return bumpActive(sb, def, delta)
 end
 
+---------------------------------------------------------------- Ziele (Marker, Wegweiser, Karte „Deine Mission“)
+-- Ziel je Missionsart: { zone, key, title, travel } – zone "city": City.Stations.<key>, "plot": eigenes Grundstück
+-- PlayerWorkshops.Plot_<UserId>.Stations.<key>, "anchor": Plot_<UserId>.OWAnchors.<key> (Open-World-Gebäude);
+-- travel = Schnellreise-Ziel (mini_travel {key}; "workshop" = eigene Werkstatt). Lieferungen haben eigene Marker.
+local CITY, PLOT, ANCHOR = "city", "plot", "anchor"
+local TARGETS = {
+	sell = { CITY, "kiesplatz", "KIESPLATZ", "kiesplatz" },
+	settle = { PLOT, "workshop", "EMPFANG", "workshop" },
+	["settle:oil"] = { PLOT, "workshop", "EMPFANG", "workshop" },
+	["settle:inspection"] = { PLOT, "workshop", "EMPFANG", "workshop" },
+	jobsDone = { PLOT, "workshop", "EMPFANG", "workshop" },
+	parts_bought = { PLOT, "parts", "TEILEHANDEL", "workshop" },
+	equipment_bought = { PLOT, "upgrades", "AUSBAU", "workshop" },
+	bays = { PLOT, "upgrades", "HALLENANBAU", "workshop" },
+	equipmentAll = { PLOT, "upgrades", "AUSBAU", "workshop" },
+	build = { PLOT, "workshop", "GRUNDSTÜCK", "workshop" },
+	["owTyp:autohaus"] = { ANCHOR, "autohaus", "VERKAUFSHAUS", "workshop" },
+	["owTyp:produktion"] = { ANCHOR, "produktion", "HERSTELLUNG", "workshop" },
+	["owTyp:schrottplatz"] = { ANCHOR, "schrottplatz", "SCHROTTPLATZ", "workshop" },
+	pw_repair = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt" },
+	pw_parts_sold = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt" },
+	car_bought = { CITY, "dealer", "AUTOHAUS", "dealer" },
+	cars = { CITY, "dealer", "AUTOHAUS", "dealer" },
+	auction_won = { CITY, "auction", "AUKTIONSHAUS", "auction" },
+	auction_consigned = { CITY, "auction_consign", "AUKTIONSHAUS", "auction" },
+	["action:mini_auction_bid"] = { CITY, "auction", "AUKTIONSHAUS", "auction" },
+	track_finish = { CITY, "track", "TESTSTRECKE", "track" },
+	arcade_round = { CITY, "arcade", "SPIELHALLE", "arcade" },
+	["action:mini_carwash"] = { CITY, "carwash", "WASCHSTRASSE", "carwash" },
+	["action:mini_press_exchange"] = { CITY, "scrap_trader", "SCHROTTHÄNDLER", "scrap_trader" },
+	["action:mini_car_tune"] = { PLOT, "workshop", "GARAGE", "workshop" },
+	["action:mini_car_sell"] = { PLOT, "workshop", "GARAGE", "workshop" },
+	clicks = { CITY, "press", "SCHROTTPRESSE", "press" },
+	pressed = { CITY, "press", "SCHROTTPRESSE", "press" },
+	dismantled = { CITY, "scrapyard", "ZERLEGEPLATZ", "scrapyard" },
+	quizCorrect = { CITY, "quiz", "QUIZ", "quiz" },
+	parkingSolved = { CITY, "parking", "PARKPLATZ", "parking" },
+}
+StoryRules.Targets = TARGETS
+
+-- Ziel einer Missionsdefinition (Story- oder Nebenmission): { zone, key, title, travel } oder nil (z. B. Kontostand,
+-- Lieferung – die hat eigene Start-/Ziel-Marker)
+function StoryRules.TargetOf(def: any): any
+	if type(def) ~= "table" then
+		return nil
+	end
+	local keys = {}
+	if def.kind == "sell" then
+		table.insert(keys, "sell")
+	elseif def.kind == "event" then
+		if type(def.event) == "string" then
+			table.insert(keys, def.event)
+		end
+		for _, e in ipairs(type(def.events) == "table" and def.events or {}) do
+			table.insert(keys, e)
+		end
+	elseif def.kind == "stat" and type(def.stat) == "string" then
+		table.insert(keys, def.stat)
+	elseif def.kind == "build" then
+		table.insert(keys, "build")
+	elseif def.kind == "own" then
+		if type(def.owTyp) == "string" then
+			table.insert(keys, "owTyp:" .. def.owTyp)
+		elseif def.bays then
+			table.insert(keys, "bays")
+		elseif def.cars then
+			table.insert(keys, "cars")
+		elseif def.equipmentAll then
+			table.insert(keys, "equipmentAll")
+		end
+	end
+	for _, k in ipairs(keys) do
+		local t = TARGETS[k]
+		if t then
+			return { zone = t[1], key = t[2], title = t[3], travel = t[4] }
+		end
+	end
+	return nil
+end
+
 ---------------------------------------------------------------- Ansicht (Snapshot)
 function StoryRules.MissionView(d: any, def: Mission, level: any): any
 	local st = StoryRules.Data(d)
@@ -1129,12 +1390,14 @@ function StoryRules.MissionView(d: any, def: Mission, level: any): any
 	local active = st ~= nil and type(st.active) == "table" and st.active.id == def.id
 	local cur = StoryRules.Current(d)
 	local r = def.reward or {}
+	local goal = StoryRules.TargetOf(def) -- Ort (Marker/Wegweiser)
 	return {
 		id = def.id, title = def.title, text = def.text, kind = def.kind, progress = progress, target = target,
 		done = done, active = active, claimable = active and progress >= target,
 		current = cur.mission ~= nil and cur.mission.id == def.id,
 		startable = cur.mission ~= nil and cur.mission.id == def.id and type(cur.active) ~= "table" and StoryRules.ChapterOpen(d, def.chapter or 1, level),
 		credits = finite(r.credits) and r.credits or 0, xp = missionXp(def), cosmetic = r.cosmetic, titleReward = r.title,
+		where = goal and goal.title or "", travel = goal and goal.travel or "",
 	}
 end
 
@@ -1155,19 +1418,26 @@ function StoryRules.View(d: any, now: number, level: any, extra: any, full: bool
 		end
 	end
 	local sale: any = false
+	local repaired = st ~= nil and st.sales.repaired > 0
 	if type(extra) == "table" and type(extra.sale) == "table" then
 		local o = extra.sale
 		local tiers = {}
+		local bonus = repaired and (S.Sale.RepairedBonus or 1) or 1
 		for _, t in ipairs(o.tiers) do
-			table.insert(tiers, { tier = t.tier, label = t.label, profit = t.profit, price = t.price, hint = t.hint })
+			local profit = math.floor(t.profit * bonus + 0.5)
+			table.insert(tiers, { tier = t.tier, label = t.label, profit = profit, price = t.price + (profit - t.profit), hint = t.hint })
 		end
-		sale = { offer = o.serial, customer = o.customer, wants = o.wants, wantsName = o.wantsName, line = o.line, special = o.special, tiers = tiers }
+		sale = { offer = o.serial, customer = o.customer, wants = o.wants, wantsName = o.wantsName, line = o.line, special = o.special, tiers = tiers,
+			repaired = repaired }
 	end
+	local chapterTitle, intro = StoryRules.ChapterInfo(d, cur.chapter)
 	local view = {
 		title = S.Title,
 		chapter = cur.chapter,
-		chapterTitle = ch and ch.title or "",
-		intro = ch and ch.intro or "",
+		chapterTitle = chapterTitle,
+		intro = intro,
+		path = MetaRules.StartPath(d),
+		repaired = st and st.sales.repaired or 0,
 		step = cur.step,
 		count = ch and #ch.Missions or 0,
 		active = activeView,
@@ -1196,7 +1466,7 @@ function StoryRules.View(d: any, now: number, level: any, extra: any, full: bool
 					all = false
 				end
 			end
-			table.insert(chapters, { id = i, title = c.title, level = StoryRules.ChapterLevel(i), done = all, open = StoryRules.ChapterOpen(d, i, lvl) })
+			table.insert(chapters, { id = i, title = (StoryRules.ChapterInfo(d, i)), level = StoryRules.ChapterLevel(i), done = all, open = StoryRules.ChapterOpen(d, i, lvl) })
 		end
 		view.chapters = chapters
 	end

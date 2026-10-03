@@ -4,11 +4,12 @@
 -- meta = { tutorialDone, tutorialStep (1..Anzahl Schritte), tutorialSkipped, beginner, passive, single,
 --          lastMode ("lobby"|"openworld"|"tycoon"), firstSeen (unix), playSeconds, hintsSeen = { [hintId] = true },
 --          startPath ("" = Startwahl offen | "werkstatt" | "autohaus" | "produktion" | "schrottplatz", GameConfig.Start),
---          startOffered (true = die Startwahl wurde diesem Profil schon gezeigt: „Später entscheiden“ bleibt offen,
---          auch wenn der Spieler inzwischen Werkstatt-Aufträge abrechnet) }
--- Startwahl: neue Profile haben startPath = "" und wählen beim ersten Open-World-Beitritt (StartService, start_choose).
--- Veteranen (d.completed > 0, Tutorial beendet/übersprungen, schon im Tutorial weiter als Schritt 1 oder ein
--- Open-World-Gebäude mit Stufe > 0) bekommen beim Laden bzw. über ResolveStartPath automatisch GameConfig.Start.Default.
+--          startOffered (true = die Startwahl wurde diesem Profil schon gezeigt bzw. mit ResetStart neu verlangt: sie bleibt
+--          offen, bis der Spieler wählt – auch wenn er inzwischen Aufträge abrechnet oder ein Gebäude besitzt) }
+-- Startwahl: neue Profile haben startPath = "" und MÜSSEN beim ersten Open-World-Beitritt wählen (StartService,
+-- start_choose; 3.x: kein „Später entscheiden“). Veteranen (d.completed > 0, Tutorial beendet/übersprungen, schon im
+-- Tutorial weiter als Schritt 1 oder ein Open-World-Gebäude mit Stufe > 0 – jeweils bevor die Wahl je gezeigt wurde)
+-- bekommen beim Laden bzw. über ResolveStartPath automatisch GameConfig.Start.Default.
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules"))
 
@@ -87,7 +88,7 @@ function MetaRules.Default(): Meta
 		playSeconds = 0,
 		hintsSeen = {},
 		startPath = "", -- Startwahl offen (StartService fragt beim ersten Open-World-Beitritt)
-		startOffered = false, -- Wahl schon gezeigt (dann machen abgerechnete Aufträge das Profil nicht zum Veteranen)
+		startOffered = false, -- Wahl schon gezeigt (dann machen Aufträge/Gebäude das Profil nicht mehr zum Veteranen)
 	}
 end
 
@@ -104,8 +105,8 @@ function MetaRules.Load(raw: any, d: any, now: any, rawGames: any?): Meta
 	m.tutorialSkipped = r.tutorialSkipped == true
 	m.tutorialDone = r.tutorialDone == true or m.tutorialSkipped or veteran == true -- übersprungen = beendet
 	-- Startweg: gespeicherter Weg (Whitelist); sonst Veteranen automatisch der klassische Weg, neue Profile "" (Wahl offen)
-	-- Wurde die Wahl schon gezeigt (startOffered) und mit „Später entscheiden“ verschoben, zählen abgerechnete Aufträge
-	-- und der Tutorial-Schritt nicht: die Wahl bleibt offen, bis der Spieler wählt.
+	-- Wurde die Wahl schon gezeigt (startOffered, auch nach ResetStart), zählen abgerechnete Aufträge, der Tutorial-Schritt
+	-- und Gebäude nicht: die Wahl bleibt offen, bis der Spieler wählt.
 	if MetaRules.IsStartPath(r.startPath) then
 		m.startPath = r.startPath
 	else
@@ -113,7 +114,7 @@ function MetaRules.Load(raw: any, d: any, now: any, rawGames: any?): Meta
 		local played = not offered and type(d) == "table" and finite(d.completed) and d.completed > 0
 		local midTutorial = not offered and finite(r.tutorialStep) and r.tutorialStep >= 2 -- im klassischen Tutorial schon unterwegs
 		local rawOw = type(rawGames) == "table" and rawGames.ow or nil
-		if played or m.tutorialDone or midTutorial or hasBuilding(rawOw) then
+		if played or m.tutorialDone or midTutorial or (not offered and hasBuilding(rawOw)) then
 			m.startPath = startConfig().Default
 		else
 			m.startOffered = offered
@@ -257,8 +258,8 @@ end
 
 -- Veteran der Startwahl zur Laufzeit (wie beim Laden): abgerechnete Aufträge, Tutorial beendet/übersprungen,
 -- Tutorial schon über Schritt 1 hinaus oder ein Open-World-Gebäude mit Stufe > 0. Hat das Profil die Wahl schon
--- gesehen (startOffered, „Später entscheiden“), zählen Aufträge und Tutorial-Schritt nicht – sonst wäre die
--- versprochene Wahl nach dem ersten Werkstatt-Auftrag für immer weg.
+-- gesehen (startOffered), zählen Aufträge, Tutorial-Schritt und Gebäude nicht – die Wahl ist Pflicht und bleibt offen,
+-- bis der Spieler wählt (auch wenn er zwischendurch über das Tablet Aufträge abrechnet).
 function MetaRules.IsStartVeteran(d: any): boolean
 	if type(d) ~= "table" then
 		return false
@@ -272,7 +273,7 @@ function MetaRules.IsStartVeteran(d: any): boolean
 		return true
 	end
 	local g = d.games
-	return type(g) == "table" and hasBuilding(g.ow)
+	return not offered and type(g) == "table" and hasBuilding(g.ow)
 end
 
 -- Veteranen ohne Weg bekommen den klassischen Weg (idempotent). Rückgabe: Weg ("" = Wahl offen)
@@ -319,6 +320,23 @@ function MetaRules.SetStartPath(d: any, typ: any): (boolean, string)
 	m.startPath = typ
 	m.startOffered = false -- gewählt: nichts mehr offen
 	return true, "ok"
+end
+
+-- Startwahl zurücksetzen (Entwickler-Menü über StartService.ResetStart): Weg wieder offen, die Wahl gilt als gezeigt
+-- (startOffered – sonst machten Aufträge/Gebäude das Profil sofort wieder zum Veteranen), das Tutorial wartet wieder
+-- auf die Wahl und beginnt danach mit Schritt 1 (die Belohnung bleibt verbucht: tutorialRewarded wird nicht
+-- zurückgesetzt). Rückgabe: true, wenn meta da war.
+function MetaRules.ResetStart(d: any): boolean
+	local m = MetaRules.Meta(d)
+	if not m then
+		return false
+	end
+	m.startPath = ""
+	m.startOffered = true
+	m.tutorialStep = 1
+	m.tutorialDone = false
+	m.tutorialSkipped = false
+	return true
 end
 
 ---------------------------------------------------------------- Beginner-Hinweise

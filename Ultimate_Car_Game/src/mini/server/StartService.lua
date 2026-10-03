@@ -1,8 +1,10 @@
 -- StartService: Startwahl in der Open World (wie im Tycoon) auf dem Server. Zahlen und Texte: GameConfig.Start.
--- Beim ersten Open-World-Beitritt eines NEUEN Profils (meta.startPath = "") wählt der Spieler einen von vier Startwegen
--- – werkstatt, autohaus, produktion, schrottplatz – in StartUI; erst danach beginnt das Tutorial (TutorialRules.Waiting).
--- Veteranen (abgerechnete Aufträge, Tutorial beendet, ein Open-World-Gebäude …) bekommen automatisch "werkstatt" und
--- sehen die Wahl nie (MetaRules.Load / MetaRules.ResolveStartPath).
+-- Beim ersten Open-World-Beitritt MUSS ein NEUES Profil (meta.startPath = "") einen von vier Startwegen wählen –
+-- Werkstatt (werkstatt), Verkaufshaus (autohaus), Herstellung (produktion), Schrottplatz (schrottplatz) – in StartUI.
+-- 3.x: kein „Später entscheiden“ mehr; die Wahl bleibt offen (meta.startOffered), bis gewählt ist. Erst danach beginnen
+-- Tutorial (TutorialRules.Waiting) und Story. Veteranen (abgerechnete Aufträge, Tutorial beendet, ein Open-World-Gebäude
+-- …, bevor die Wahl je gezeigt wurde) bekommen automatisch "werkstatt" und sehen die Wahl nie (MetaRules.Load /
+-- MetaRules.ResolveStartPath); wer schon einen Weg hat, behält ihn.
 --
 -- Schnittstelle für MiniService:
 --   Register(Actions, api)            start_choose {path} (einmalig; MiniNet.Actions: start_choose = { path = "string" })
@@ -10,16 +12,21 @@
 --   OnJoin(ms, d, now)                Veteranen ohne Weg -> werkstatt; Sitzung zurücksetzen
 --   OnMode(ms, d, mode)               Open World betreten und Wahl offen: mini_notice { kind = "start", event = "offer" }
 --                                     (merkt meta.startOffered: die Wahl bleibt offen, bis der Spieler wählt)
---   OnArrive(ms, d)                   Figur in der Open World erschienen: verschobene Wahl erneut anbieten
+--   OnArrive(ms, d)                   Figur in der Open World erschienen (Respawn): ist die Wahl noch offen, kommt das
+--                                     Angebot erneut (die Karte steht ohnehin, solange snapshot.start.pending gilt)
+--   ResetStart(ms, d) -> ok           Entwickler-Menü (DevService): Startwahl wieder offen, Kapitel 1 der Story von vorn,
+--                                     Tutorial wartet wieder; in der Open World kommt die Wahl sofort (s. unten)
 --   SnapshotFields(ms, d, now, full)  { start = { path, pending, choices[] } } (choices nur, solange die Wahl offen ist)
 --   Choices()                         die vier Karten (sendbar) – auch für Tests
 -- Wirkung von start_choose {path}:
 --   meta.startPath = path (MetaRules.SetStartPath, Whitelist, nur einmal); autohaus/produktion/schrottplatz:
 --   OWRules.GrantStart schenkt Stufe 1 (sofort fertig, ohne Preis und Level-Sperre); direkt danach OWService.Tick
 --   (Settle -> Stufenmodell am Anker, mini_notice ow_ready + Toast), sonst holt es der nächste Tick nach.
---   Danach startet das Tutorial des Wegs (TutorialService.OnStartChosen). Die Story wählt die erste Mission von
---   Kapitel 1 nach dem Weg (StoryRules.MissionAt). Kein Geld, keine XP (das geschenkte Gebäude ist der Bonus).
+--   Danach startet das Tutorial des Wegs (TutorialService.OnStartChosen) und sofort Kapitel 1 der Story mit Mission 1
+--   des Wegs (StoryService.OnStartChosen -> StoryRules.AutoStart; Karte „Deine Mission“ in MissionClient).
+--   Kein Geld, keine XP (das geschenkte Gebäude ist der Bonus).
 -- Hinweise: mini_notice { kind = "start", event = "offer", choices } | { kind = "start", event = "chosen", path, name, gift }
+--           | { kind = "start", event = "reset" } (ResetStart)
 local MiniShared = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local GameConfig = require(MiniShared:WaitForChild("GameConfig"))
 local MetaRules = require(MiniShared:WaitForChild("MetaRules"))
@@ -28,6 +35,7 @@ local OWRules = require(MiniShared:WaitForChild("OWRules"))
 local Server = script.Parent
 local TutorialService = require(Server:WaitForChild("TutorialService"))
 local OWService = require(Server:WaitForChild("OWService"))
+local StoryService = require(Server:WaitForChild("StoryService"))
 
 local StartService = {}
 
@@ -88,6 +96,7 @@ function StartService.Choices(): { any }
 			table.insert(out, {
 				id = typ, name = p.name, short = p.short, desc = p.desc, first = p.first, bonus = p.bonus,
 				color = p.color, building = p.building or false, gift = p.building ~= nil,
+				icon = p.icon or typ, chapter = p.chapter or "",
 			})
 		end
 	end
@@ -139,6 +148,11 @@ local function choose(ms: any, data: any, d: any, t: number?): boolean?
 	if not okT then
 		warn("[Startwahl] Tutorial: " .. tostring(errT))
 	end
+	-- 3.x: die Story beginnt sofort – Kapitel 1 des Wegs, Mission 1 aktiv (kein Weg zum Kiesplatz nötig)
+	local okS, errS = pcall(StoryService.OnStartChosen, ms, d, t)
+	if not okS then
+		warn("[Startwahl] Story: " .. tostring(errS))
+	end
 	dirty(ms)
 	return true
 end
@@ -183,8 +197,8 @@ function StartService.OnMode(ms: any, d: any, mode: any): boolean
 	return true
 end
 
--- Ankunft in der Spielermeile (Figur erschienen, Mini.OnCharacter): Wer die Wahl mit „Später entscheiden“
--- verschoben hat, bekommt sie hier wieder angeboten (auch im kombinierten Place ohne Lobby-Rundreise).
+-- Ankunft in der Spielermeile (Figur erschienen, Mini.OnCharacter): ist die Wahl noch offen (z. B. nach ResetStart oder
+-- wenn der Client den ersten Hinweis verpasst hat), kommt das Angebot hier erneut (auch im kombinierten Place).
 function StartService.OnArrive(ms: any, d: any): boolean
 	if not ms or not inOpenWorld(ms) then
 		return false
@@ -195,6 +209,34 @@ function StartService.OnArrive(ms: any, d: any): boolean
 	end
 	ms.startOffered = nil
 	return StartService.OnMode(ms, d, modeOf(ms))
+end
+
+---------------------------------------------------------------- Entwickler-Menü
+-- Startwahl zurücksetzen (DevService, Aktion dev_reset_start o. Ä.; nur vom Server nach dessen Berechtigungsprüfung
+-- aufrufen): meta.startPath = "" (Wahl gilt als gezeigt, bleibt Pflicht), Tutorial wartet wieder und beginnt nach der
+-- Wahl bei Schritt 1 (ohne zweite Belohnung), Kapitel 1 der Story beginnt von vorn (StoryService.ResetChapter1; spätere
+-- Kapitel bleiben erledigt). Schon geschenkte Gebäude bleiben stehen (die neue Wahl schenkt ihr eigenes dazu). In der
+-- Open World kommt die Wahl sofort (mini_notice start/offer), sonst beim nächsten Betreten. Rückgabe: true = zurückgesetzt.
+function StartService.ResetStart(ms: any, d: any): boolean
+	if not MetaRules.ResetStart(d) then
+		return false
+	end
+	local okS, errS = pcall(StoryService.ResetChapter1, ms, d)
+	if not okS then
+		warn("[Startwahl] Story zurücksetzen: " .. tostring(errS))
+	end
+	if ms then
+		ms.startOffered = nil
+		ms.tutorialStarted = nil -- nach der neuen Wahl startet das Tutorial des Wegs wieder (TutorialService.Start)
+		ms.tutorialRewardPending = nil
+		if api then
+			api.notice(ms, "start", { event = "reset" })
+		end
+		toast(ms, S().Texts.reset)
+		StartService.OnMode(ms, d, modeOf(ms))
+		dirty(ms)
+	end
+	return true
 end
 
 ---------------------------------------------------------------- Snapshot
