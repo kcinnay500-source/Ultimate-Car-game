@@ -8,8 +8,10 @@
 --           startedAt, endsAt, hardEnd, changedAt, state = "open" | "closing" | "sold" | "unsold" | "canceled",
 --           bids = { {userId, name, amount, at, npc = <Index in npcs> | nil}, ... }  (streng steigend),
 --           npcs = { {name, style, limit, think}, ... }, skipped = { [userId] = Grund }, result, endedAt, reason }
--- Profil (d.games.auction): { won = <int>, sold = <int>, partners = { {u = <userId>, at = <unix>} }, received = { <tid> } }
---   partners: Handelspartner der letzten 24 h (Käufer ↔ Verkäufer), received: zuletzt erhaltene Übergaben (tid)
+-- Profil (d.games.auction): { won = <int>, sold = <int>, partners = { {u = <userId>, at = <unix>} }, received = { <tid> },
+--                             doneAt = <unix> }
+--   partners: Handelspartner der letzten 24 h (Käufer ↔ Verkäufer), received: zuletzt erhaltene Übergaben (tid),
+--   doneAt: Marke „alle Übergaben bis zu diesem Zeitpunkt sind erledigt“ (Zeit der jüngsten aus received verdrängten tid)
 --
 -- Schutz gegen Scheingebote: beim Bieten zählt nur das freie Guthaben (Guthaben − eigene Höchstgebote auf anderen
 -- Losen). Fällt das Höchstgebot beim Zuschlag weg (nicht gedeckt, Bieter weg), läuft das Los ReopenSeconds weiter,
@@ -163,7 +165,25 @@ end
 
 ---------------------------------------------------------------- Profil (d.games.auction)
 function AuctionRules.Default()
-	return { won = 0, sold = 0, partners = {}, received = {} }
+	return { won = 0, sold = 0, partners = {}, received = {}, doneAt = 0 }
+end
+
+-- Zeitpunkt einer Übergabe aus ihrer Kennung (TransferId: "<Verkäufer>_<Auto>_<Zeit>")
+local function tidTime(tid)
+	if type(tid) ~= "string" then
+		return nil
+	end
+	return tonumber(string.match(tid, "_(%d+)$"))
+end
+
+-- Eine tid fällt aus dem received-Fenster: Marke nachziehen. Was so alt ist wie eine verdrängte Übergabe (oder älter),
+-- gilt als erledigt – sonst hielte ReconcileBuyer einen Buch-Eintrag, den received nicht mehr kennt, bei jedem Laden
+-- erneut für „nicht gespeichert“ (Buch und received sind zwei unabhängig gekürzte Fenster).
+local function markDone(st, tid)
+	local at = tidTime(tid)
+	if at and at > (finite(st.doneAt) and st.doneAt or 0) then
+		st.doneAt = math.floor(math.min(at, MAX_SAFE))
+	end
 end
 
 -- raw = gespeichertes d.games.auction (auch das ganze games-Table wird erkannt). Idempotent, NaN/negativ -> 0.
@@ -177,6 +197,7 @@ function AuctionRules.Load(raw, d, now)
 	end
 	out.won = loadInt(raw.won)
 	out.sold = loadInt(raw.sold)
+	out.doneAt = loadInt(raw.doneAt)
 	if type(raw.partners) == "table" then
 		for _, e in ipairs(raw.partners) do
 			if type(e) == "table" and finite(e.u) and e.u >= 1 and finite(e.at) and e.at >= 0 then
@@ -196,8 +217,22 @@ function AuctionRules.Load(raw, d, now)
 				table.insert(out.received, tid)
 			end
 		end
+		-- Profil von vor der Marke (Feld fehlt) mit vollem Fenster: ältere Übergaben können schon verdrängt sein ->
+		-- alles vor der ältesten gemerkten Übergabe gilt als erledigt
+		if raw.doneAt == nil and #out.received >= AuctionRules.MaxReceived then
+			local oldest
+			for _, tid in ipairs(out.received) do
+				local at = tidTime(tid)
+				if at and (oldest == nil or at < oldest) then
+					oldest = at
+				end
+			end
+			if oldest and oldest >= 1 then
+				out.doneAt = math.floor(math.min(oldest - 1, MAX_SAFE))
+			end
+		end
 		while #out.received > AuctionRules.MaxReceived do
-			table.remove(out.received, 1)
+			markDone(out, table.remove(out.received, 1))
 		end
 	end
 	return out
@@ -214,6 +249,9 @@ function AuctionRules.Stats(d)
 	end
 	if type(st.received) ~= "table" then
 		st.received = {}
+	end
+	if not finite(st.doneAt) or st.doneAt < 0 then
+		st.doneAt = 0
 	end
 	return st
 end
@@ -278,6 +316,8 @@ end
 
 -- Käufer: fehlt die Übergabe (tid) in received, wurde sein Speichern nicht geschrieben -> Auto hinzufügen, Preis
 -- abziehen (höchstens bis 0). Garage voll: Übergabe gilt als erledigt, nichts wird abgezogen.
+-- Einträge bis zur Marke doneAt sind erledigt, auch wenn received sie nicht mehr kennt (verdrängt): eine erledigte
+-- Übergabe wird nie erneut nachgeholt, egal wie Buch und received gekürzt wurden.
 function AuctionRules.ReconcileBuyer(d, entries)
 	local n = 0
 	if type(d) ~= "table" or type(d.games) ~= "table" or type(entries) ~= "table" then
@@ -289,7 +329,9 @@ function AuctionRules.ReconcileBuyer(d, entries)
 		seen[tid] = true
 	end
 	for _, e in ipairs(entries) do
-		if type(e) == "table" and type(e.tid) == "string" and not seen[e.tid] then
+		local at = type(e) == "table" and (tidTime(e.tid) or (finite(e.at) and e.at)) or nil
+		local done = st.doneAt > 0 and at ~= nil and at <= st.doneAt
+		if type(e) == "table" and type(e.tid) == "string" and not seen[e.tid] and not done then
 			seen[e.tid] = true
 			AuctionRules.NoteReceived(d, e.tid)
 			local car = CarRules.AddCar(d, e.car)
@@ -304,10 +346,11 @@ function AuctionRules.ReconcileBuyer(d, entries)
 end
 
 function AuctionRules.NoteReceived(d, tid)
-	local list = AuctionRules.Stats(d).received
+	local st = AuctionRules.Stats(d)
+	local list = st.received
 	table.insert(list, tid)
 	while #list > AuctionRules.MaxReceived do
-		table.remove(list, 1)
+		markDone(st, table.remove(list, 1))
 	end
 end
 

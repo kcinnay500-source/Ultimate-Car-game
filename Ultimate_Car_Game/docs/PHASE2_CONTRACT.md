@@ -23,7 +23,7 @@ d.games.carSerial = <int>
 d.games.activeCar = <int id oder 0>
 d.games.track     = { best=<Sekunden oder 0>, rewardedBest=<Sekunden oder 0>, runs=<int> }
 d.games.arcade    = { day=<"YYYY-MM-DD">, earned=<Cr heute>, best={ [gameKey]=<score> } }
-d.games.auction   = { won=<int>, sold=<int>, partners={ {u=<userId>, at=<unix>} } (≤ 20, 24 h), received={ <tid> } (≤ 20) }
+d.games.auction   = { won=<int>, sold=<int>, partners={ {u=<userId>, at=<unix>} } (≤ 20, 24 h), received={ <tid> } (≤ 20), doneAt=<unix> (Übergaben bis hierhin sind erledigt; Standard 0) }
 ```
 
 - Jedes Modul liefert `Default()` und `Load(raw, d, now)` (normalisiert, idempotent, NaN/negativ → Standard, unbekannte Modell-IDs verworfen). `MiniRules.DefaultGames/LoadGames` rufen sie auf.
