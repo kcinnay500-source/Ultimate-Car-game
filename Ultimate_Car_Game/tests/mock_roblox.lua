@@ -3248,7 +3248,13 @@ function PS.methods:GetPlayerFromCharacter(ch)
 	end
 	return nil
 end
+-- Players.__data.nameFromUserId = function(id) (optional, je Testumgebung): eigener Namensdienst, darf werfen
+-- (Ausfall des Web-Aufrufs wie in Roblox). Ohne Hook: "Nutzer<id>".
 function PS.methods:GetNameFromUserIdAsync(id)
+	local hook = rawget(self, "__data").nameFromUserId
+	if hook then
+		return hook(id)
+	end
 	return "Nutzer" .. tostring(id)
 end
 function PS.methods:GetUserIdFromNameAsync(name)
