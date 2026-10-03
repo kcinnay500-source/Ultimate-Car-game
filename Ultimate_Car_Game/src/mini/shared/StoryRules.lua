@@ -767,7 +767,8 @@ end
 
 -- Heutige Auswahl (deterministisch je UTC-Tag wie GoalRules.DailyGoals): Side.Daily verschiedene Ids aus dem Teil des
 -- Pools, den der Spieler auf diesem Level schon kann (level nil = ganzer Pool). s_jobs ist immer dabei, darum gibt es
--- jeden Tag mindestens eine machbare Nebenmission; mit einem Levelaufstieg kann die Auswahl am selben Tag wechseln.
+-- jeden Tag mindestens eine machbare Nebenmission; mit einem Levelaufstieg kann die Auswahl am selben Tag wechseln
+-- (heute schon angefangene/erfüllte Missionen bleiben trotzdem gelistet, siehe todaysDefs).
 function StoryRules.DailyIds(day: string, level: any): { string }
 	local ix = index()
 	local pool = {}
@@ -874,8 +875,31 @@ local function bumpSide(d: any, st: Story, def: Mission, delta: number, now: num
 end
 
 -- Heutige Nebenmissionen des Spielers als Definitionsliste (Auswahl nach Tag und Level)
+-- Dazu bleiben Missionen, die heute schon Fortschritt haben oder abgeholt sind (Eintrag in st.side mit dem heutigen Tag –
+-- den gibt es nur für Missionen, die heute schon einmal in der Auswahl waren), bis zum Tageswechsel gelistet: wechselt
+-- die Auswahl durch einen Levelaufstieg, verschwindet so keine erfüllte Nebenmission vor dem Abholen (B-008). Das
+-- Tageslimit (Side.DailyLimit) zählt weiter über alle Einträge des Tages.
 local function todaysDefs(d: any, now: number, level: any): { Mission }
-	return StoryRules.DailyDefs(dayKey(now), levelOf(d, level))
+	local today = dayKey(now)
+	local out = StoryRules.DailyDefs(today, levelOf(d, level))
+	local st = StoryRules.Data(d)
+	if not st then
+		return out
+	end
+	local have = {}
+	for _, def in ipairs(out) do
+		have[def.id] = true
+	end
+	for _, id in ipairs(index().poolIds) do
+		local e = st.side[id]
+		if not have[id] and type(e) == "table" and e.day == today and (e.claimed == true or (finite(e.n) and e.n > 0)) then
+			local def = StoryRules.SideDef(id)
+			if def and not def.legend then
+				table.insert(out, def)
+			end
+		end
+	end
+	return out
 end
 
 ---------------------------------------------------------------- Ereignisse (Statistik, Ereignis, Verkauf)
