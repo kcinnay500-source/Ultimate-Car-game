@@ -14,7 +14,7 @@ C.LeaseSeconds = 180
 C.StartMoney = 800
 C.MaxBays = 4
 C.MaxPlots = 8
--- 3.0: Grundstücks-Pivots an der Werkstattmeile (docs/CITY_SPEC.md §4.2; x, z in Studs, rot um Y in Grad).
+-- 3.0: Grundstücks-Pivots an der Spielermeile (docs/CITY_SPEC.md §4.2; x, z in Studs, rot um Y in Grad).
 -- rot=0: Nordseite, Front (+Z) zur Meile; rot=180: Südseite. Reihenfolge = Belegung (nahe am Stadtplatz zuerst).
 C.PlotSlots = {
     {x=262,z=-109,rot=0}, {x=-262,z=109,rot=180}, {x=-234,z=-109,rot=0}, {x=234,z=109,rot=180},

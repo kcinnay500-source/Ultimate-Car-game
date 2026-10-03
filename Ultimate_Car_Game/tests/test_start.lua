@@ -611,7 +611,7 @@ return {
 		T.check(d.completed >= 1, "d.completed gezählt")
 		T.eq(MR.StartPending(d), true, "Startwahl nach dem Auftrag weiter offen")
 		T.eq(SS.SnapshotFields(ms, d, g:Now(), true).start.pending, true, "Snapshot: weiter offen")
-		-- nächste Ankunft in der Werkstattmeile (neue Figur): erneutes Angebot
+		-- nächste Ankunft in der Spielermeile (neue Figur): erneutes Angebot
 		local function offers()
 			local n = 0
 			for _, x in ipairs(S.log.notices) do

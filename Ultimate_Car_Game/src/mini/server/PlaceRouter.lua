@@ -56,7 +56,7 @@ local TEXT = {
 	zoneMissing = "Dieser Bereich ist in diesem Place nicht vorhanden. Du bleibst hier.",
 	noCharacter = "Warte kurz, bis deine Figur da ist.",
 	teleportFailed = "Der Teleport hat nicht geklappt. Wir wechseln den Ort hier im Server.",
-	arrived = { lobby = "Willkommen in der Lobby!", openworld = "Willkommen in der Werkstattmeile!", tycoon = "Tycoon: Viel Erfolg bei deiner Tycoon-Runde!" },
+	arrived = { lobby = "Willkommen in der Lobby!", openworld = "Willkommen in der Spielermeile!", tycoon = "Tycoon: Viel Erfolg bei deiner Tycoon-Runde!" },
 	tycoonSoon = "Der Tycoon eröffnet bald! Zurück geht's mit M → Tab „Lobby“ → „Zurück zur Lobby“.",
 }
 PlaceRouter.Text = TEXT

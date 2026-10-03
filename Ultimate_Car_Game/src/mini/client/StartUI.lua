@@ -11,7 +11,7 @@
 -- Breite ≥ 700 px: zwei Spalten, sonst eine (Handy). Touch-Flächen ≥ 44 px, Schrift ≥ 14 px; die Tafel passt sich bei
 -- jeder Größenänderung an (16 px Rand, nie breiter als 760 px).
 -- Sichtbar, solange snapshot.start.pending = true und der Modus die Open World ist (oder kein Modus bekannt ist).
--- „Später entscheiden“ blendet die Wahl aus, bis der Spieler das nächste Mal in der Werkstattmeile ankommt (neue Figur
+-- „Später entscheiden“ blendet die Wahl aus, bis der Spieler das nächste Mal in der Spielermeile ankommt (neue Figur
 -- oder Moduswechsel: der Server schickt dann wieder mini_notice start/offer) oder sie im Handy unter „Einstellungen“
 -- → „Startweg wählen“ öffnet (StartUI.Reopen). Der Server wartet mit dem Tutorial, bis gewählt ist; abgerechnete
 -- Aufträge machen die Wahl nicht hinfällig (meta.startOffered). Nach dem Tippen auf eine Karte warten die Karten auf den Server; kommt nach

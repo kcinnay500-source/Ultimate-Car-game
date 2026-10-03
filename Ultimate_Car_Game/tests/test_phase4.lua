@@ -81,7 +81,7 @@ return {
 		local mLobby = g:Mark()
 		T.eq(g:Act(pl, "tutorial_next", { step = 1, rid = 90 }), "ok", "tutorial_next in der Lobby -> Toast")
 		T.eq(step(g, d), 1, "Lobby: kein Fortschritt")
-		T.check(g:HasToast(pl, "Werkstattmeile", mLobby), "Toast: Tutorial läuft in der Werkstattmeile")
+		T.check(g:HasToast(pl, "Spielermeile", mLobby), "Toast: Tutorial läuft in der Spielermeile")
 		T.eq(#g:Notices(pl, "hint", mLobby), 0, "kein Tutorial-Hinweis in der Lobby")
 		-- Einstellungen (nur Booleans, sofort im Profil)
 		T.eq(g:Act(pl, "lobby_settings", { single = false, passive = true, beginner = true, rid = 1 }), "ok", "lobby_settings")

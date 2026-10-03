@@ -1,4 +1,4 @@
-# Layout data for the "Werkstattmeile" city (design angle: player flow).
+# Layout data for the "Spielermeile" city (design angle: player flow).
 # X east, Z south (+Z = front/road side of rot-0 plots), Y up. 1 unit = 1 stud.
 import math, json
 
@@ -36,7 +36,7 @@ NORD_Z = -342; SUED_Z = 200
 RB = [(-518, 0), (518, 0)]; RB_ISLAND = 12; RB_ROAD = 38; RB_WALK = 46
 
 ROADS = [  # name, (x0,z0)->(x1,z1) centerline, half carriageway, sidewalk width
-    ("Werkstattmeile", (-480, 0), (480, 0), 13, 10),
+    ("Spielermeile", (-480, 0), (480, 0), 13, 10),
     ("Marktstrasse West", (-152, -342), (-152, 200), 13, 9),
     ("Marktstrasse Ost", (152, -342), (152, 200), 13, 9),
     ("Nordring", (-152, -342), (152, -342), 13, 9),

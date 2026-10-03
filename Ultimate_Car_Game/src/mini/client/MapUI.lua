@@ -42,7 +42,7 @@ local NAMES = {
 	scrap_trader = "Schrotthändler",
 	dyno = "Leistungsprüfstand",
 	testdrive = "Probefahrt",
-	meile_map = "Werkstattmeile",
+	meile_map = "Spielermeile",
 }
 MapUI.Names = NAMES
 MapUI.FallbackName = "Weiteres Reiseziel"

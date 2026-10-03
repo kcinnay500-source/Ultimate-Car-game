@@ -548,7 +548,7 @@ def main(argv):
     suffix = "_plots" if with_plots else ""
     if rect is None:
         p = out / ("city_top%s.png" % suffix)
-        top_view(parts, (-665, 665, -475, 545), p, marks, "Werkstattmeile - Draufsicht", px_per_stud=3.2,
+        top_view(parts, (-665, 665, -475, 545), p, marks, "Spielermeile - Draufsicht", px_per_stud=3.2,
                  labels=False, overlays=ovl)
         print(p)
     else:

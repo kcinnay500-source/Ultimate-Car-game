@@ -183,7 +183,7 @@ function StartService.OnMode(ms: any, d: any, mode: any): boolean
 	return true
 end
 
--- Ankunft in der Werkstattmeile (Figur erschienen, Mini.OnCharacter): Wer die Wahl mit „Später entscheiden“
+-- Ankunft in der Spielermeile (Figur erschienen, Mini.OnCharacter): Wer die Wahl mit „Später entscheiden“
 -- verschoben hat, bekommt sie hier wieder angeboten (auch im kombinierten Place ohne Lobby-Rundreise).
 function StartService.OnArrive(ms: any, d: any): boolean
 	if not ms or not inOpenWorld(ms) then

@@ -186,7 +186,7 @@ def _draw_map(lib, g, here, rx, ry, rw, rh, here_text="DU BIST HIER"):
     R("Mittellinie", -470, 470, -1.5, 1.5, AMBER, 5)
     # Beschriftung
     lw, lh = 0.2 * rw, 0.045 * rh
-    L("WERKSTATTMEILE", -330, 0, 0.22 * rw, 0.04 * rh, AMBER)
+    L("SPIELERMEILE", -330, 0, 0.22 * rw, 0.04 * rh, AMBER)
     L("SCHROTTPLATZ", -323, -262, lw, lh)
     L("TUNING", 323, -262, lw, lh)
     L("PARKPLATZ", 0, -275, lw * 0.8, lh, WHITE)
@@ -394,7 +394,7 @@ def build_hall(lib, dm, anim):
              name="Innenschild", bolts=False, sub="Prüfstand · Projekt-Buchten")
     lib.sign(shell, "PARKPLATZ-CHAOS", (14, 2.8), CF.at(0, 14.0, HZ0 + WT + 0.3, 0), (90, 160, 240), SLATE,
              name="Innenschild", bolts=False, sub="Rätsel-Raster · Parkhaus · Aussicht")
-    s_in = lib.sign(shell, "STADTPLATZ · AUTOHAUS · WERKSTATTMEILE", (18, 2.4), CF.at(0, 13.6, zo - 1.0, 180), AMBER,
+    s_in = lib.sign(shell, "STADTPLATZ · AUTOHAUS · SPIELERMEILE", (18, 2.4), CF.at(0, 13.6, zo - 1.0, 180), AMBER,
                     SLATE, name="Innenschild", bolts=False, sub="Brunnen · Bestenliste · Werkstätten Nr. 1–8")
     for s in (-1, 1):
         _cyl_y(lib, shell, "Haenger", s * 7.5, 14.8, CEIL, zo - 1.0, 0.18, STEEL, "Metal", deco=True)
@@ -501,7 +501,7 @@ def build_hall(lib, dm, anim):
     scr = _box(lib, inner, "Infobildschirm", -40, -18, 5, 13, wi + 0.2, wi + 0.4, BLACK, "SmoothPlastic")
     g = _gui(lib, scr, "Back", 40)
     _frame(lib, g, "Grund", 0.01, 0.02, 0.98, 0.96, SCREEN, 0, 1)
-    _label(lib, g, "Titel", "WILLKOMMEN IN DER WERKSTATTMEILE", 0.03, 0.05, 0.94, 0.14, AMBER, "GothamBlack",
+    _label(lib, g, "Titel", "WILLKOMMEN IN DER SPIELERMEILE", 0.03, 0.05, 0.94, 0.14, AMBER, "GothamBlack",
            "center", 3)
     rows = [(AMBER, "SÜDTÜR", "Stadtplatz · Brunnen · Werkstätten Nr. 1–8"),
             (LWHITE, "SÜDTÜR", "Autohaus · Teststrecke"),
@@ -521,8 +521,8 @@ def build_hall(lib, dm, anim):
     g = _gui(lib, sp, "Back", 40)
     _frame(lib, g, "Rahmen", 0, 0, 1, 1, (18, 24, 30), 0, 1)
     _label(lib, g, "Titel", "STADTPLAN", 0.02, 0.05, 0.3, 0.14, AMBER, "GothamBlack", "left", 3)
-    _label(lib, g, "Untertitel", "Werkstattmeile · Stadtmitte", 0.02, 0.19, 0.3, 0.07, WHITE, "GothamBold", "left", 3)
-    legend = [(AMBER, "Werkstattmeile"), (LWHITE, "Autohaus"), (MAGENTA, "Spielhalle"), (LIME, "Meisterschule"),
+    _label(lib, g, "Untertitel", "Spielermeile · Stadtmitte", 0.02, 0.19, 0.3, 0.07, WHITE, "GothamBold", "left", 3)
+    legend = [(AMBER, "Spielermeile"), (LWHITE, "Autohaus"), (MAGENTA, "Spielhalle"), (LIME, "Meisterschule"),
               (BRASS, "Auktionshaus"), (PURPLE, "Credit-Center"), (RUST_L, "Schrottplatz"), (TEAL, "Tuning"),
               (BLUE, "Parkplatz-Chaos")]
     for i, (col, txt) in enumerate(legend):
@@ -581,7 +581,7 @@ def build_hall(lib, dm, anim):
         ux, uz = math.cos(a), math.sin(a)
         pnl = lib.part(ring, "Ringtafel", (pw, 2, 0.2), CF.at(ux * rr, 19, -201 + uz * rr, math.degrees(math.atan2(ux, uz))),
                        SLATE, "SmoothPlastic", collide=False, cast_shadow=False)
-        txt = "WILLKOMMEN" if k % 2 == 0 else "WERKSTATTMEILE"
+        txt = "WILLKOMMEN" if k % 2 == 0 else "SPIELERMEILE"
         lib.surface_text(pnl, txt, face="Back", text_color=AMBER, font="GothamBlack", name="Aussen")
         lib.surface_text(pnl, txt, face="Front", text_color=AMBER, font="GothamBlack", name="Innen")
     for k in range(4):
@@ -874,7 +874,7 @@ def build_boards(lib, p):
             _draw_map(lib, back, (-30, -150), 0.03, 0.13, 0.94, 0.84)
         else:
             _label(lib, back, "Titel", "WEGWEISER", 0.04, 0.035, 0.92, 0.12, AMBER, "GothamBlack", "center", 3)
-            ways = [(AMBER, "Werkstattmeile Nr. 1–8", "Süden · Meile"),
+            ways = [(AMBER, "Spielermeile Nr. 1–8", "Süden · Meile"),
                     (LWHITE, "Autohaus · Teststrecke", "Süden · über die Meile"),
                     (MAGENTA, "Spielhalle", "Westseite des Platzes"),
                     (LIME, "Meisterschule", "Westseite · Nord"),
@@ -980,7 +980,7 @@ def build_wayfinding(lib, dm):
         return -201 + math.sqrt(8.5 ** 2 - xi ** 2) + 0.02
 
     # Innen (Hallenboden 0..0.05), vom Startring zu den Türen
-    inner = [("Spielhalle", MAGENTA, -5), ("Meisterschule", LIME, -7), ("Werkstattmeile", AMBER, -3),
+    inner = [("Spielhalle", MAGENTA, -5), ("Meisterschule", LIME, -7), ("Spielermeile", AMBER, -3),
              ("Autohaus", LWHITE, 3), ("Auktionshaus", BRASS, 5), ("Credit-Center", PURPLE, 7)]
     m_in = lib.model(fl, "Halle")
     for nm, col, x in inner:
@@ -997,8 +997,8 @@ def build_wayfinding(lib, dm):
     line("Auktionshaus", BRASS, [(5, HZ1), (5, -175), (52, -175), (52, -76), (66.5, -76)], LINE_OUT, [(68, -76, g)])
     line("Credit-Center", PURPLE, [(7, HZ1), (7, -177), (54, -177), (54, -152), (66.5, -152)], LINE_OUT,
          [(68, -152, g)])
-    # Amber: Werkstattmeile (um den Meile-Pylon herum), dann entlang des Nordgehwegs zu beiden Toren
-    am = line("Werkstattmeile", AMBER, [(-3, HZ1), (-3, -173), (-18.6, -173), (-18.6, -135), (-32, -135), (-32, -65),
+    # Amber: Spielermeile (um den Meile-Pylon herum), dann entlang des Nordgehwegs zu beiden Toren
+    am = line("Spielermeile", AMBER, [(-3, HZ1), (-3, -173), (-18.6, -173), (-18.6, -135), (-32, -135), (-32, -65),
                                          (-18.6, -65), (-18.6, -22.4)], LINE_OUT)
     zl = -21.8
     for x0, x1 in ((-182.5, -165), (-139, 1.4), (2.6, 139), (165, 182.5)):

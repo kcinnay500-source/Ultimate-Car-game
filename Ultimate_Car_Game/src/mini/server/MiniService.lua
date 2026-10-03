@@ -997,7 +997,7 @@ function Mini.OnCharacter(p)
 	if not ok then
 		warn("[Minispiele] Figur: " .. tostring(err))
 	end
-	-- „Später entscheiden“: bei der nächsten Ankunft in der Werkstattmeile kommt die Startwahl wieder
+	-- „Später entscheiden“: bei der nächsten Ankunft in der Spielermeile kommt die Startwahl wieder
 	local okS, errS = pcall(StartService.OnArrive, ms, p.profile.data)
 	if not okS then
 		warn("[Minispiele] Startwahl: " .. tostring(errS))

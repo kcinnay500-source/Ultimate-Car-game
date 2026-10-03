@@ -1,4 +1,4 @@
-# Ultimate Car Game 3.x – Werkstattmeile (Roblox)
+# Ultimate Car Game 3.x – Spielermeile (Roblox)
 
 Aufbauend auf **Ultimate Car Game 2.4.0** (Schrauberwerkstatt mit 3D-Reparaturen) ist das Spiel eine **begehbare Stadt**
 mit Lobby, Story, einem Tycoon-Modus und einem fairen Shop.
@@ -38,7 +38,7 @@ P = Handy · M = Menü · TAB = Tablet.
 
 ## Stadt und Minispiele (3.0)
 
-- **Werkstattmeile**: Jeder Spieler hat seine eigene 2.4.0-Werkstatt (Empfang, Bühnen, Anbauten, Geräte) – acht
+- **Spielermeile**: Jeder Spieler hat seine eigene 2.4.0-Werkstatt (Empfang, Bühnen, Anbauten, Geräte) – acht
   Grundstücke an der Hauptstraße.
 - **Stadtplatz** mit Ankunftshalle, Bestenliste und Farbleitsystem; **Schrottplatz** mit Presse und Kran
   (*Schrottpresse*, *Schrottplatz*), **Tuning-Zentrum** (*Tuning-Projekte*), **Meisterschule** (*Quiz*),

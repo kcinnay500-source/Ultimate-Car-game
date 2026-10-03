@@ -1,9 +1,9 @@
-# Stadtplan „Werkstattmeile“
+# Stadtplan „Spielermeile“
 
 ## Konzept
 
-"Werkstattmeile", final synthesis. The base is the winning "flow" plan: a compact city shaped like a plus sign on two axes.
-- **East–west axis:** the 960-stud Werkstattmeile (Z 0) holds the 8 private workshops, 4 on each side. Roundabouts close both ends.
+"Spielermeile", final synthesis. The base is the winning "flow" plan: a compact city shaped like a plus sign on two axes.
+- **East–west axis:** the 960-stud Spielermeile (Z 0) holds the 8 private workshops, 4 on each side. Roundabouts close both ends.
 - **North–south spine (X 0):** Parkplatz-Chaos, then the Ankunftshalle, then the Stadtplatz, then a signalised crossing, then the Autohaus, then the Teststrecke.
 - **Arrival:** the city EMPFANG (Ankunftshalle) is a real walk-in hall with the CitySpawn and a 64-stud clock tower. Each of its 4 doors frames one destination:
   - south: plaza, gear fountain, Autohaus glass rotunda;
@@ -146,7 +146,7 @@ Streets
 - `z` crosswalk
 - `+` signalised junction (K-West / K-Ost)
 - `^` roundabout island
-- `=` WERKSTATTMEILE gate arches (X ±186)
+- `=` SPIELERMEILE gate arches (X ±186)
 - `*` hedge ring with invisible walls
 
 Workshop plots
@@ -205,7 +205,7 @@ Beyond the walls (not drawn): 8 skyline towers.
 
 ## Spezifikation
 
-# Stadtplan "Werkstattmeile": final synthesized spec (build-ready)
+# Stadtplan "Spielermeile": final synthesized spec (build-ready)
 
 Base: proposal "flow" (winner of both judges).
 - Grafted from "visual": rotunda, gear fountain + Kandelaber + festoons, sawtooth press hall + chimney, crane reach and feeder story, Auktionshaus portico + tiered seating, directory pylon, skyline, night Lighting and Neon switch.
@@ -299,7 +299,7 @@ Node plates: at every road node, one asphalt plate covers carriageway plus sidew
 | District | Colours and materials |
 |---|---|
 | Stadtplatz / Ankunftshalle | slate + amber |
-| Werkstattmeile | amber arches, teal/amber pylons |
+| Spielermeile | amber arches, teal/amber pylons |
 | Schrottplatz | rust (140,70,40) CorrodedMetal; safety yellow (240,190,40); corrugated grey (104,110,114); dirt (92,84,72) |
 | Tuning | slate + teal neon; white racing stripes; black floor (22,26,31) Refl 0.12 |
 | Autohaus | white (235,238,240), glass, polished floor (205,208,212) Refl 0.12 |
@@ -377,7 +377,7 @@ One asphalt Part per segment (top −0.95) and one Part per sidewalk strip (top 
 
 | Id | Name | Carriageway | Sidewalks |
 |---|---|---|---|
-| R1 | Werkstattmeile | X −484..484, Z −13..13 | Z −23..−13 and 13..23, X −480..480. Split at the K-nodes and at curb cuts. |
+| R1 | Spielermeile | X −484..484, Z −13..13 | Z −23..−13 and 13..23, X −480..480. Split at the K-nodes and at curb cuts. |
 | R2 | Marktstraße West | X −165..−139, Z −355..213 | X −174..−165 and −139..−130, Z −364..222 (minus nodes) |
 | R3 | Marktstraße Ost | X 139..165 | X 130..139 and 165..174 |
 | R4 | Nordring | Z −355..−329, X −165..165 | Z −364..−355 and −329..−320 |
@@ -587,7 +587,7 @@ Local → world points:
 - It is the only enabled spawn, so the player stands on a safe floor from frame 1.
 
 **First join.**
-- Spawn in the city Empfang. After the plot exists, wait 3 s, then show the toast "Willkommen in der Stadt! Deine Werkstatt: Werkstattmeile Nr. X".
+- Spawn in the city Empfang. After the plot exists, wait 3 s, then show the toast "Willkommen in der Stadt! Deine Werkstatt: Spielermeile Nr. X".
 - Then `moveTo(Stations.home)`. Every later respawn goes straight home, as in 2.4.0.
 - During the 3 s the player looks out the open south doors: fountain, plaza, and the Autohaus rotunda with its turning car.
 
@@ -617,7 +617,7 @@ Local → world points:
 | Brass (201,162,90) | Auktionshaus | (3,−194) → (3,−181) → (54,−170) → (54,−76) → (66,−76) |
 | Purple | Credit-Center | (5,−194) → (5,−181) → (52,−172) → (52,−152) → (70,−152) |
 | White | Autohaus | (18,−181) → (18,−30) → [Z1] → (0,23) → (0,38.75) |
-| Amber | Werkstattmeile | (−18,−181) → (−18,−26) → along the north sidewalk Z −20 to both arches (±186) |
+| Amber | Spielermeile | (−18,−181) → (−18,−26) → along the north sidewalk Z −20 to both arches (±186) |
 | Blue | Parkplatz-Chaos | (0,−208) → (0,−221) → (−65,−232) |
 
 **Signposts** (steel post with amber-on-slate arrow blades that show distances):
@@ -627,7 +627,7 @@ Local → world points:
 
 The arches carry "STADTPLATZ ←" on their plot-side faces.
 
-**Meile-Verzeichnis pylon** (graft from visual): slate 6 × 20 × 1.5 at (−16, 9.5, −34), faces N and S, amber Neon edges. SurfaceGui "WERKSTATTMEILE" lists Nr. 1–8 with the owner or "FREI". Station `meile_map` (MiniTab `map`, quick travel) at (−16,2.5,−31.5); player side S.
+**Meile-Verzeichnis pylon** (graft from visual): slate 6 × 20 × 1.5 at (−16, 9.5, −34), faces N and S, amber Neon edges. SurfaceGui "SPIELERMEILE" lists Nr. 1–8 with the owner or "FREI". Station `meile_map` (MiniTab `map`, quick travel) at (−16,2.5,−31.5); player side S.
 
 ---
 
@@ -1125,10 +1125,10 @@ The arches carry "STADTPLATZ ←" on their plot-side faces.
 **Arrival** `track` (0,−0.5,218), looking S.
 **Lights** 4. **Parts** ≈ 131.
 
-### Werkstattmeile dressing
+### Spielermeile dressing
 **Gate arches** at X ±186
 - Pillars 2 × 22 × 2 at (±186,·,±18); beam Y 18..22; amber Neon underside.
-- Signs: E "WERKSTATTMEILE · Nr. 5–8", W "Nr. 1–4". Back faces: "STADTPLATZ ←".
+- Signs: E "SPIELERMEILE · Nr. 5–8", W "Nr. 1–4". Back faces: "STADTPLATZ ←".
 - Each pillar head carries a PointLight (4 in total).
 
 **Kreisel sculptures**

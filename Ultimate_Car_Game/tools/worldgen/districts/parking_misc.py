@@ -75,7 +75,7 @@ Y_MARK = -0.90
 
 def build(city, lib, tree):
     """Baut Parkplatz, Tankstelle, Stadtpark und Meile-Deko (docs/CITY_SPEC.md §2, §6 D7/D11/D12,
-    Werkstattmeile-Deko) - je Bezirk ein eigenes Model unter City.Districts (§1.5, bereit für ModelStreaming)."""
+    Spielermeile-Deko) - je Bezirk ein eigenes Model unter City.Districts (§1.5, bereit für ModelStreaming)."""
     districts = lib.folder(city, "Districts")
     anim_root = lib.folder(city, "Animated")
     dm = lib.model(districts, NAME)
@@ -446,7 +446,7 @@ def build_price_pylon(parent, lib):
     box(lib, m, "Kappe", x - 2.7, x + 2.7, 25, 25.6, z - 1.2, z + 1.2, AMBER, "Neon", deco=True)
     for face_z, yaw in ((z + 1.06, 0), (z - 1.06, 180)):
         panel(lib, m, "Logo", 4.6, 4.6, CF.at(x, 22.1, face_z, yaw), TEAL,
-              [("TANKSTELLE", (255, 255, 255), 1.0), ("Werkstattmeile", SLATE, 0.6)])
+              [("TANKSTELLE", (255, 255, 255), 1.0), ("Spielermeile", SLATE, 0.6)])
         panel(lib, m, "Preise", 4.6, 8.4, CF.at(x, 14.9, face_z, yaw), BLACK,
               [("SUPER", (255, 255, 255), 0.7), ("1,79", AMBER, 1.3), ("DIESEL", (255, 255, 255), 0.7),
                ("1,69", AMBER, 1.3), ("E-LADEN", GREEN_EV, 0.7), ("0,39", AMBER, 1.3)])
@@ -463,8 +463,8 @@ def build_canopy(parent, lib):
            box(lib, m, "Blende_Sued", x0, x1, 11.6, 14.4, z1 - f, z1, TEAL, "SmoothPlastic"),
            box(lib, m, "Blende_West", x0, x0 + f, 11.6, 14.4, z0 + f, z1 - f, TEAL, "SmoothPlastic"),
            box(lib, m, "Blende_Ost", x1 - f, x1, 11.6, 14.4, z0 + f, z1 - f, TEAL, "SmoothPlastic")]
-    lib.surface_text(fas[0], "TANKSTELLE · WERKSTATTMEILE", face="Front", text_color=(255, 255, 255))
-    lib.surface_text(fas[1], "TANKSTELLE · WERKSTATTMEILE", face="Back", text_color=(255, 255, 255))
+    lib.surface_text(fas[0], "TANKSTELLE · SPIELERMEILE", face="Front", text_color=(255, 255, 255))
+    lib.surface_text(fas[1], "TANKSTELLE · SPIELERMEILE", face="Back", text_color=(255, 255, 255))
     lib.surface_text(fas[2], "TANKEN · SHOP · WASCHEN", face="Left", text_color=(255, 255, 255))
     lib.surface_text(fas[3], "TANKEN · SHOP · WASCHEN", face="Right", text_color=(255, 255, 255))
     s = 0.12
@@ -844,7 +844,7 @@ def build_photo_spot(parent, lib):
     m = lib.model(parent, "Fotopunkt")
     box(lib, m, "Sockel", -225, -219, Y_GRASS, 0.5, 172.5, 197.5, SLATE, "Slate")
     sk = lib.part(m, "Sockelschild", (0.1, 1.2, 20), CF(-218.95, -0.15, 185), SLATE, "SmoothPlastic", deco=True)
-    lib.surface_text(sk, "ULTIMATE CAR GAME · WERKSTATTMEILE", face="Right", text_color=AMBER)
+    lib.surface_text(sk, "ULTIMATE CAR GAME · SPIELERMEILE", face="Right", text_color=AMBER)
     x0, x1 = -222.75, -221.25
     y0, y1 = 0.5, 10.5
     s = 1.5
@@ -973,7 +973,7 @@ def build_skyline(anim, lib):
     return anim
 
 
-# ================================================================ Werkstattmeile-Deko
+# ================================================================ Spielermeile-Deko
 def build_meile(dm, anim, lib):
     m = lib.model(dm, "Meile")
     bus_stop(lib, m, 80, -20, 0, "Haltestelle_Nord")

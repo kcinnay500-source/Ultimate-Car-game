@@ -216,7 +216,7 @@ def build_slots(city, lib):
             gui = lib.surface_text(body, None, face="Back", name="StreetGui", canvas=(180, 480))
             lib.text_label(gui, str(house), AMBER, "GothamBlack", "Number", None, (0.9, 0.5), (0.05, 0.04))
             lib.text_label(gui, "FREI", WHITE, "GothamBold", "Owner", None, (0.9, 0.16), (0.05, 0.58))
-            lib.text_label(gui, "WERKSTATTMEILE", TEAL, "GothamBold", "Street", None, (0.9, 0.08), (0.05, 0.82))
+            lib.text_label(gui, "SPIELERMEILE", TEAL, "GothamBold", "Street", None, (0.9, 0.08), (0.05, 0.82))
             gui2 = lib.surface_text(body, None, face="Front", name="PlotGui", canvas=(180, 480))
             lib.text_label(gui2, "FREI – Werkstatt Nr. %d" % house, AMBER, "GothamBold", "Welcome", None,
                            (0.9, 0.4), (0.05, 0.3))

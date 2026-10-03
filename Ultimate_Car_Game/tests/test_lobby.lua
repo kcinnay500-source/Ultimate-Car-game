@@ -789,7 +789,7 @@ return {
 		T.check(withText(page, "Tycoon") ~= nil, "Karte Tycoon")
 		T.check(withText(page, "Open World") ~= nil, "Karte Open World")
 		T.check(withText(page, "Tycoon-Runde") ~= nil, "Beschreibung Tycoon")
-		T.check(withText(page, "Werkstattmeile") ~= nil, "Beschreibung Open World")
+		T.check(withText(page, "Spielermeile") ~= nil, "Beschreibung Open World")
 		T.eq(byName(page, "ReturnButton").Visible, false, "in der Lobby kein Zurück")
 		T.eq(byName(page, "Simulation").Visible, true, "Simulationshinweis sichtbar")
 		T.check(byName(page, "Simulation").Text == GC.SimulationNotice, "Simulationstext aus GameConfig")

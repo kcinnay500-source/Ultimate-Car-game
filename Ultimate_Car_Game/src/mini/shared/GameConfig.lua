@@ -71,7 +71,7 @@ local function car(level: number, id: string, fallbackName: string, special: boo
 end
 
 GameConfig.Unlocks = {
-	entry(1, "mode:openworld", "mode", "Open World", "Die Werkstattmeile: deine Werkstatt, die Stadt und alle Minispiele.", "lobby"),
+	entry(1, "mode:openworld", "mode", "Open World", "Die Spielermeile: deine Werkstatt, die Stadt und alle Minispiele.", "lobby"),
 	entry(1, "mode:tycoon", "mode", "Tycoon", "Eine Tycoon-Runde mit Bargeld: bau dein Gebäude bis Stufe 5 aus.", "lobby"),
 	entry(1, "story:1", "story", "Kapitel 1: Der Kiesplatz", "Verkaufe am Kiesplatz deine ersten Gebrauchtwagen.", "story"),
 	entry(2, "feature:press", "feature", "Schrottpresse", "Klick Schrott zusammen und tausch ihn beim Schrotthändler gegen Credits.", "press"),
@@ -277,7 +277,7 @@ GameConfig.Start = {
 	Order = { "werkstatt", "autohaus", "produktion", "schrottplatz" },
 	Default = "werkstatt",
 	Title = "Wie willst du starten?",
-	Intro = "Such dir aus, womit du in der Werkstattmeile loslegst. Deine Werkstatt hast du immer – alles andere kannst du später auch noch bauen.",
+	Intro = "Such dir aus, womit du in der Spielermeile loslegst. Deine Werkstatt hast du immer – alles andere kannst du später auch noch bauen.",
 	Paths = {
 		werkstatt = {
 			id = "werkstatt", name = "Werkstatt", color = "blue", building = nil, yieldHours = 0,
@@ -313,11 +313,11 @@ GameConfig.Start = {
 		gift = "Geschenk: %s Stufe 1 steht schon fertig auf deinem Grundstück!",
 		already = "Deinen Start hast du schon gewählt.",
 		invalid = "Diesen Start gibt es nicht. Tipp auf eine der vier Karten.",
-		notHere = "Deinen Start wählst du in der Werkstattmeile (Open World).",
+		notHere = "Deinen Start wählst du in der Spielermeile (Open World).",
 		choose = "Das wähle ich!",
 		waiting = "Einen Moment …",
 		later = "Später entscheiden",
-		laterHint = "Kein Problem! Die Startwahl kommt wieder, wenn du das nächste Mal in der Werkstattmeile ankommst. Oder öffne sie im Handy (Taste P) unter „Einstellungen“.",
+		laterHint = "Kein Problem! Die Startwahl kommt wieder, wenn du das nächste Mal in der Spielermeile ankommst. Oder öffne sie im Handy (Taste P) unter „Einstellungen“.",
 	},
 }
 GameConfig.Start.PathSet = {}

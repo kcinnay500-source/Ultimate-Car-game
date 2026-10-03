@@ -1,4 +1,4 @@
-"""Welt-Generator: Stadt "Werkstattmeile" (docs/CITY_SPEC.md, docs/MERGE_CONTRACT.md §4) und die Zonen der
+"""Welt-Generator: Stadt "Spielermeile" (docs/CITY_SPEC.md, docs/MERGE_CONTRACT.md §4) und die Zonen der
 Ausbaustufe 4 (docs/PHASE4_CONTRACT.md §1): Lobby-Halle (lobby.py) und Tycoon-Gelände (tycoon.py).
 
 tools/build_place.py ruft apply(tree, new_referent, place) auf dem Basisbaum auf; place ist die PlaceKind:
@@ -49,7 +49,7 @@ def apply(tree, new_referent, place="all"):
     city = None
     plot_log = []
     if "openworld" in wanted:
-        city = lib.model(ws, "City", attrs={"Spec": "Werkstattmeile", "Version": "3.0"})
+        city = lib.model(ws, "City", attrs={"Spec": "Spielermeile", "Version": "3.0"})
         for nm in TOP:
             lib.folder(city, nm)
         ground_roads.build(city, lib, tree)

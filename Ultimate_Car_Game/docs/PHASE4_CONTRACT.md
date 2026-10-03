@@ -5,7 +5,7 @@ Remotes) und `docs/PHASE2_CONTRACT.md` (Autos, Auktion, Spielhalle) auf. Alles, 
 
 Entscheidungen des Auftraggebers (Chat, 2026-09-29):
 
-1. Die bestehende Stadt („Werkstattmeile“) **ist** die Open World. „Tycoon“ ist ein eigener Place. Die
+1. Die bestehende Stadt („Spielermeile“) **ist** die Open World. „Tycoon“ ist ein eigener Place. Die
    2.4.0-Werkstatt am Grundstück ist das Gebäude „Werkstatt“ der Open World.
 2. **Zwei Währungen**: Credits (persistent, überall) und **Bargeld** (nur innerhalb eines Tycoon-Durchlaufs).
 3. **Prestige = Rang** ohne Level-Reset (Level, Credits, Autos bleiben). Die Freischaltkurve ist gestreckt: das
@@ -192,7 +192,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 - Story Kapitel 1, Mission an `PathSlot`: je Weg eine eigene erste Mission (`PathMissions`).
 - Client: ScreenGui `StartChoice` (DisplayOrder 40, voller Hintergrund), sichtbar solange `snapshot.start.pending`
   und Modus `openworld`; sie blendet sich aus, solange ein 2.4.0-Dialog (QTE/Diagnose), das Tablet oder das
-  Minispiel-Panel offen ist. „Später entscheiden“ blendet sie bis zur nächsten Ankunft in der Werkstattmeile aus
+  Minispiel-Panel offen ist. „Später entscheiden“ blendet sie bis zur nächsten Ankunft in der Spielermeile aus
   (`StartService.OnArrive`, auch nach Respawn) oder bis zum Knopf **„Startweg wählen“** in der Handy-App Einstellungen
   (`StartUI.Reopen`); `meta.startOffered` hält die Wahl offen, auch wenn inzwischen Aufträge abgerechnet wurden.
 

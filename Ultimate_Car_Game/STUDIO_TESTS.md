@@ -73,7 +73,7 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 ## 3. Tutorial und Beginner-Hinweise
 
 - [ ] Erster Wechsel in die Open World mit neuem Profil: die **Startwahl** „Wie willst du starten?“ (vier Karten).
-      **„Später entscheiden“** blendet sie aus; sie kommt wieder, wenn du das nächste Mal in der Werkstattmeile ankommst
+      **„Später entscheiden“** blendet sie aus; sie kommt wieder, wenn du das nächste Mal in der Spielermeile ankommst
       (z. B. nach einem Respawn) oder im Handy unter **Einstellungen → „Startweg wählen“** – auch nachdem du schon
       Werkstatt-Aufträge abgerechnet hast.
 - [ ] Nach der Wahl „Werkstatt“: Tutorial-Karte erscheint (Schritt 1 von 11). Du stehst in deiner Werkstatt.
@@ -84,7 +84,7 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 - [ ] Ende: **500 Credits + 60 XP**, Tab „Story“ öffnet sich.
 - [ ] **„Überspringen“** beendet das Tutorial sofort (ohne Belohnung).
 - [ ] Lobby → Tutorial-Kiosk → **„Tutorial erneut starten“** → beginnt bei Schritt 1, am Ende **keine** zweite Belohnung.
-- [ ] Während man in Lobby oder Schnellem Spiel ist, ruht das Tutorial („es geht in der Werkstattmeile weiter“).
+- [ ] Während man in Lobby oder Schnellem Spiel ist, ruht das Tutorial („es geht in der Spielermeile weiter“).
 - [ ] Beginner-Modus an: Beim ersten Besuch einer Station/einer neuen Freischaltung erscheint oben rechts eine Hinweiskarte,
       jede nur einmal. Mehrere Karten kommen nacheinander, keine überdeckt eine andere oder die Toasts.
 - [ ] Beginner-Modus aus: keine Hinweiskarten mehr.

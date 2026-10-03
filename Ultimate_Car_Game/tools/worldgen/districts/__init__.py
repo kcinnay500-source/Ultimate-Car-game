@@ -1,4 +1,4 @@
-"""District-Module der Stadt "Werkstattmeile". Jedes Modul hat build(city, lib, tree).
+"""District-Module der Stadt "Spielermeile". Jedes Modul hat build(city, lib, tree).
 
 Regeln für alle Module (siehe tools/worldgen/lib.py und docs/CITY_SPEC.md):
 * Jeder District ist ein Model unter City.Districts (lib.model(lib.folder(city, "Districts"), NAME)).

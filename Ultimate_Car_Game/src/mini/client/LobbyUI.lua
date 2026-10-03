@@ -25,11 +25,11 @@ local settingsRows = {}
 local MODES = {
 	{
 		key = "tycoon", title = "Tycoon", color = nil,
-		desc = "Eine Tycoon-Runde mit Bargeld: Wähle ein Gebäude, kauf Upgrades und bau es bis Stufe 5 aus. Fertige Runden bringen Boni für die Werkstattmeile.",
+		desc = "Eine Tycoon-Runde mit Bargeld: Wähle ein Gebäude, kauf Upgrades und bau es bis Stufe 5 aus. Fertige Runden bringen Boni für die Spielermeile.",
 	},
 	{
 		key = "openworld", title = "Open World", color = nil,
-		desc = "Die Werkstattmeile: deine Werkstatt, die Stadt mit Autohaus, Teststrecke, Auktion und Spielhalle – und die Story vom Kiesplatzhändler zum Mega-Verkäufer.",
+		desc = "Die Spielermeile: deine Werkstatt, die Stadt mit Autohaus, Teststrecke, Auktion und Spielhalle – und die Story vom Kiesplatzhändler zum Mega-Verkäufer.",
 	},
 }
 
@@ -41,7 +41,7 @@ local SETTINGS = {
 
 local MODE_TEXT = {
 	lobby = "Du bist in der Lobby.",
-	openworld = "Du bist in der Werkstattmeile (Open World).",
+	openworld = "Du bist in der Spielermeile (Open World).",
 	tycoon = "Du bist im Tycoon.",
 }
 
@@ -350,7 +350,7 @@ function LobbyUI.Render(s)
 			refs.tutorialHint.Text = tut.rewarded and "Noch einmal von vorn – die Belohnung hattest du schon."
 				or "Noch einmal von vorn: Am Ende warten " .. tostring(GameConfig.Tutorial.Reward.credits) .. " Credits und " .. tostring(GameConfig.Tutorial.Reward.xp) .. " XP."
 		else
-			refs.tutorialStatus.Text = "Das Tutorial läuft: Schritt " .. tostring(meta.tutorialStep or tut.step or 1) .. " von " .. tostring(count) .. (inLobby and " – es geht in der Werkstattmeile weiter." or ".")
+			refs.tutorialStatus.Text = "Das Tutorial läuft: Schritt " .. tostring(meta.tutorialStep or tut.step or 1) .. " von " .. tostring(count) .. (inLobby and " – es geht in der Spielermeile weiter." or ".")
 			refs.tutorialHint.Text = "Die Tutorial-Karte siehst du in der Open World."
 		end
 		UI.SetEnabled(refs.tutorialRestart, done, T.blue)

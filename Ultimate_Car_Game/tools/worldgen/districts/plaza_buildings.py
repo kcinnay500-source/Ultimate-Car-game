@@ -479,7 +479,7 @@ def build_spielhalle(lib, dm, anim):
                 "GothamBlack", sub="Nur Können zählt – keine Glücksspiele", sub_color=CYAN)
     for z, txt, col in ((-54, "RENNFIEBER", CYAN), (-102, "BOXENCREW", VIOLET)):
         _sign_plain(lib, inn, txt, (7, 3.2), CF.at(x0 + WT + 0.06, 12.4, z, 90), col, (22, 14, 34), "GothamBlack",
-                    sub="Spielhalle · Werkstattmeile", sub_color=WHITE, name="Poster")
+                    sub="Spielhalle · Spielermeile", sub_color=WHITE, name="Poster")
     return h
 
 

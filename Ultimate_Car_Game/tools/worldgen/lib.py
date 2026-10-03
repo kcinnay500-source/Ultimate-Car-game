@@ -1,4 +1,4 @@
-"""Kleine Bau-API für die Stadt "Werkstattmeile" (tools/worldgen).
+"""Kleine Bau-API für die Stadt "Spielermeile" (tools/worldgen).
 
 Alle District-Module bauen ausschließlich über diese Funktionen, damit Eigenschaften, Stil und Zählung
 einheitlich bleiben. Das XML-Format entspricht exakt den Parts im 2.4.0-Basisplace

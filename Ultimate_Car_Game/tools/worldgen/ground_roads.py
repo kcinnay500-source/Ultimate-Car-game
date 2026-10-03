@@ -1,5 +1,5 @@
 """Boden, Rand, Straßen, Markierungen, Zebrastreifen, Kreisel, Laternen, Ampeln und Verkehrsschleifen
-(CITY_SPEC §1.2, §2, §3, §6 "Werkstattmeile dressing" (Tore, Kreisel-Skulpturen), §9.1).
+(CITY_SPEC §1.2, §2, §3, §6 "Spielermeile dressing" (Tore, Kreisel-Skulpturen), §9.1).
 
 Höhen-Stapel (§1.2, nie zwei überlappende Oberseiten auf gleicher Höhe):
   Gras-Platte -1.10 | Bodenplatten -1.00 | Kreiselscheibe -1.00 (Spec -0.98; 0.05 unter der Fahrbahn, die über
@@ -26,9 +26,9 @@ TUNING_GROUND = (52, 58, 66)
 # ---------------------------------------------------------------- Geometrie-Daten (§3)
 # Fahrbahn-Stücke außerhalb der Knoten (x0,x1,z0,z1)
 CARRIAGEWAYS = [
-    ("Werkstattmeile West", -484, -175, -13, 13),
-    ("Werkstattmeile Mitte", -129, 129, -13, 13),
-    ("Werkstattmeile Ost", 175, 484, -13, 13),
+    ("Spielermeile West", -484, -175, -13, 13),
+    ("Spielermeile Mitte", -129, 129, -13, 13),
+    ("Spielermeile Ost", 175, 484, -13, 13),
     ("Marktstrasse West Nord", -165, -139, -320, -23),
     ("Marktstrasse West Sued", -165, -139, 23, 178),
     ("Marktstrasse Ost Nord", 139, 165, -320, -23),
@@ -624,7 +624,7 @@ def build_arches(roads, lights, lib):
             lib.point_light(head, 26, 0.9)
         lib.box(m, "Torbalken", x - 1, x + 1, 18, 22, -17, 17, SLATE, "Metal")
         lib.box(m, "Neonkante", x - 0.8, x + 0.8, 17.8, 18, -17, 17, AMBER, "Neon", deco=True)
-        inner = "WERKSTATTMEILE · Nr. " + ("1–4" if sx < 0 else "5–8")
+        inner = "SPIELERMEILE · Nr. " + ("1–4" if sx < 0 else "5–8")
         outer = "ZUM STADTPLATZ"
         # Innenseite (zur Stadtmitte) und Außenseite (zu den Werkstätten)
         yaw_in = 90 if sx < 0 else -90

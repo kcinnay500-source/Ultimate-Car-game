@@ -44,7 +44,7 @@ local TutorialService = {}
 local api -- MiniService-api: now, toast, notice, dirty, changed, alive
 
 local TEXT = {
-	finished = "Tutorial geschafft! +%s und +%d XP – viel Spaß in der Werkstattmeile!",
+	finished = "Tutorial geschafft! +%s und +%d XP – viel Spaß in der Spielermeile!",
 	skipped = TutorialRules.Text.skipped,
 	started = "Willkommen! Das Tutorial zeigt dir die Werkstatt. Du kannst es jederzeit überspringen.",
 	-- je Startweg (werkstatt = started)

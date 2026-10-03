@@ -623,7 +623,7 @@ def build_track(dm, anim, lib):
     for x in (-6, 6):
         lib.box(m, "Plakatstuetze", x - 0.3, x + 0.3, -0.9, 5, 340.15, 340.75, STEEL, "Metal")
     bb = lib.sign(m, "ULTIMATE CAR GAME", (16, 6), CF.at(0, 8, 340, 180), AMBER, SLATE, name="Plakatwand",
-                  thickness=0.3, font="GothamBlack", sub="TESTSTRECKE · WERKSTATTMEILE", sub_color=WHITE)
+                  thickness=0.3, font="GothamBlack", sub="TESTSTRECKE · SPIELERMEILE", sub_color=WHITE)
     lib.surface_text(bb, "ULTIMATE CAR GAME", face="Front", text_color=AMBER, font="GothamBlack", name="Rueckseite")
     return m
 

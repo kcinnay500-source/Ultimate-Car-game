@@ -38,7 +38,7 @@ SKIN = (222, 184, 150)
 GLASS_T = 0.3
 PORTALS = {                        # key: (x, Farbe, Titel, Unterzeile)
     "mode_tycoon": (-38.0, TEAL, "TYCOON", "Tycoon-Runde mit Bargeld · Stufe 1–5"),
-    "mode_openworld": (38.0, AMBER, "OPEN WORLD", "Werkstattmeile · Stadt · Minispiele"),
+    "mode_openworld": (38.0, AMBER, "OPEN WORLD", "Spielermeile · Stadt · Minispiele"),
 }
 PORTAL_Z = -738.0                  # Portalfläche (Anker der Stationen mode_*)
 
