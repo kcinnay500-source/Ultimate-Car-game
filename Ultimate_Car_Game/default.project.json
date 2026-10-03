@@ -1,0 +1,27 @@
+{
+  "name": "Ultimate_Car_Game",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "GarageShared": {
+        "$path": "src/garage/shared",
+        "$ignoreUnknownInstances": true,
+        "Mini": { "$path": "src/mini/shared" }
+      }
+    },
+    "ServerScriptService": {
+      "Garage": {
+        "$path": "src/garage/server",
+        "$ignoreUnknownInstances": true,
+        "Mini": { "$path": "src/mini/server" }
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "$path": "src/garage/client",
+        "$ignoreUnknownInstances": true,
+        "Mini": { "$path": "src/mini/client" }
+      }
+    }
+  }
+}

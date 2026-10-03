@@ -1,0 +1,83 @@
+TESTBERICHT – Ultimate Car Game 3.x mit Ausbaustufe 4 (Lobby, Tutorial, Prestige, Tycoon, Open World, Story, Shop)
+             + Werkstatt-Update (freie Hand, OBD-Tester, Fahrzeug-Check mit Fehlerspeicher und Handy)
+             + Spielermeile-Update (Entwickler-Menü, Startwahl mit Story ab Start, Große Werkstatt, Flitzer,
+               neue Teststrecke, Weltrand und Horizont, Verkehr und Ampeln)
+=====================================================================================================================
+
+Datum: 2026-10-03
+Befehle:
+  python3 tools/build_place.py Ultimate_Car_Game.rbxlx
+  python3 tools/build_place.py --place lobby     Ultimate_Car_Game_Lobby.rbxlx
+  python3 tools/build_place.py --place openworld Ultimate_Car_Game_OpenWorld.rbxlx
+  python3 tools/build_place.py --place tycoon    Ultimate_Car_Game_Tycoon.rbxlx
+  python3 tools/export_fixture.py
+  python3 tools/validate.py Ultimate_Car_Game.rbxlx        (Laufzeit 10 Min. 35 s)
+  python3 tools/economy_sim.py --check
+
+Ergebnis: 2.295 Validierungsprüfungen + 85.824 Testprüfungen, 0 Fehler, 0 Warnungen
+Balance:  tools/economy_sim.py --check → 0 Verstöße (docs/BALANCE.md)
+
+Place-Dateien (alle vier gebaut, gleicher Code, Attribut PlaceKind)
+  - Ultimate_Car_Game.rbxlx            all       (Lobby + Stadt + Tycoon) – die Datei für Roblox Studio
+  - Ultimate_Car_Game_Lobby.rbxlx      lobby     (nur Lobby-Halle)
+  - Ultimate_Car_Game_OpenWorld.rbxlx  openworld (nur Stadt)
+  - Ultimate_Car_Game_Tycoon.rbxlx     tycoon    (nur Tycoon-Gelände)
+  Nichts veröffentlicht: Place-, Produkt- und Pass-IDs sind 0 (Studio-Simulation, „noch nicht eingerichtet“).
+
+Basis
+  - Place = Original 2.4.0 + Skripte aus src/ + Welt aus tools/worldgen (Stadt, Lobby, Tycoon-Gelände).
+  - 97 Skripte im Place. Roundtrip: gegenüber 2.4.0 nur Skripte geändert (10 Skripte, jede Änderung mit "-- 3.0:" markiert).
+  - Luau-Compiler: 172 Dateien, 0 Fehler.
+  - 81 Minispiel-Aktionen, 81 Server-Handler, alle vom Client gesendet, 313 requires geprüft. Keine neuen Remotes.
+  - Test-Fixtures aktuell. Alle drei Einzel-Places werden bei jeder Validierung mitgebaut und geprüft.
+
+Welt (Budgets)
+  - Stadt:  12.669 Parts im Place „alles“ / 12.463 im Open-World-Place (Budget 13.000, darin Verkehr 484),
+            112 Lichter (Budget 120); darin Große Werkstatt 334 Parts, Teststrecke 545, Skyline 635+72, Randbäume 729.
+  - Lobby:     774 Parts (Budget 1.500),    9 Lichter (Budget 12).
+  - Tycoon:    482 Parts (Budget 2.500),   12 Lichter (Budget 20).
+  - Welt-Prüfungen von tools/worldgen/checks.py (Überlappungen, Z-Fighting, schwebende Teile, Stationen) sind Teil der
+    2.295 Validierungsprüfungen: 0 Fehler, 0 Warnungen.
+
+Tests (69 Dateien; die Roblox-Nachbildung führt den echten GarageServer und GarageClient aus)
+  - 2.4.0-Ablauf: Beitritt, Grundstück, Auftrag, Diagnose, Reparatur-QTE, Endkontrolle, Abrechnen, Speichern.
+  - Werkstatt-Update (Spielerbericht „Endkontrolle und Ölfilter hängen“):
+      alle Aufträge nur mit E (Werkzeug, Gerät, Hebebühne, Motorhaube automatisch; Ölwechsel Schritt 2 Ölfilter mit
+      Öl-Werkzeug in der Hand; Endkontrolle mit gehobener Bühne/offener Haube), geschützter 0,5-s-Takt (Fehler in
+      W.Sync/Takt einer Sitzung hält weder sie noch andere an, Abgleich wird nachgeholt), E-Druck an Station während
+      OBD-Scan bricht nichts ab (test_workshop_flow, test_workshop_stuck);
+      OBD-Tester-Seiten und Klicktreffer (test_obd_ui); Fahrzeug-Check: Fehlerspeicher, Phase approval, Kundenanruf
+      per Handy (Ja/Nein, deterministisch, kein Neu-Würfeln durch Abbrechen, Salz nie im Client), phone_call-Prüfungen
+      (test_phone); freie Hand auf Taste 1, Werkzeuge 2–6, Start/Respawn mit freier Hand; Studio-Klicktest
+      (test_studio_play, 6 Bildschirmgrößen) spielt beide Aufträge und den Anruf über echte GUI-Klicks.
+  - Profil: Hülle {version=2,data,receipts,lock} inkl. games, Migration, NaN-Schutz, Sperre (Warten bei Ortswechsel).
+  - Minispiele, Autos/Fahren/Tuning, Auktionshaus, Spielhalle (wie 3.0, siehe frühere Berichte).
+  - Ausbaustufe 4:
+      Lobby/Einstellungen/Party (2–4 Spieler, Leiter/Mitglied, Nachholen), PlaceRouter (Simulation, TeleportData-Prüfung,
+      Teleport-Fehler), Tutorial (11 Schritte, Überspringen, Neustart ohne zweite Belohnung, nur Open World),
+      Beginner-Hinweise, Freischaltungen (Elys ab Level 90), Prestige ohne Reset,
+      Tycoon (4 Gebäudetypen, Pads, Bargeld, Stufen 1–5, Handel, Rebirth, Bonus in der Open World),
+      Open-World-Gebäude (Bauzeit offline, Abholen, Perks, Passiv-Modus), Story Kapitel 1–5, Kiesplatz-Verkauf,
+      Nebenmissionen, Lieferfahrt, Co-op, Shop (Kosmetik, DLC-Autos, Pässe, Profiles.GrantReceipt, keine Zufallsboxen),
+      Spielbarkeits-Fixes (Reisen aus Lobby/Tycoon in die Stadt wechseln den Modus).
+  - Spielermeile-Update:
+      Entwickler-Menü (test_dev: nur Studio/Ersteller/AllowedUserIds, Level/XP/Credits/Bargeld gedeckelt, Startweg
+      zurücksetzen, fremde Spieler bekommen keine Antwort), Startwahl Pflicht und Story Kapitel 1 je Startweg
+      (test_start, test_story, test_phase4_story, test_story_ui), Große Werkstatt (test_public_workshop: Reparatur,
+      Reichweite, Pause/Fortsetzen, Wertbonus ≤ ×1,35, kein Gewinn aus Kauf+Reparatur+Verkauf, Teile-Ankauf mit
+      Tageslimit), Flitzer und Auto rufen (test_starter_car, test_cars), Teststrecke (test_track), Weltrand/Horizont
+      (test_world_edges, test_world), Verkehr und Ampeln (test_traffic: weiches Bremsen, Abstand, Haltelinie,
+      Kollision mit Spielern), Bugfixes B-001…B-024 (test_bug_b0xx).
+  - End-to-End: Lobby → Einstellungen → Reise (Simulation) → Tutorial → Story Kapitel 1 → Tycoon-Runde → Rebirth →
+    Bonus in der Werkstatt → Shop-Kauf mit Quittung.
+
+Balance (tools/economy_sim.py --check)
+  - Level 50 nach 8,2 Std., Level 90 nach 25,3 Std. gemischtem Spiel (Ziel ≈ 8 Std. bzw. 25–35 Std.).
+  - Tycoon: ein Durchlauf bis Stufe 5 komplett ≈ 4,9–5,0 Std. je Gebäudetyp (Ziel 4,0–6,5 Std.).
+  - Missions-Belohnungen höchstens 39 % der Werkstatt-Einnahme je Minute (Grenze 40 %); Kapitel 1 je Startweg 29–35 %.
+  - Alle Bonus-Deckel eingehalten (Prestige +30 %, Tycoon-Boni, OW-Perks ≤ 25 %, Werkstatt-Deckel ×1,60).
+  - DLC-Autos: gleiche Fahrwerte wie das Basismodell, Credits-Preis ×1,5.
+
+Nur in Studio prüfbar: siehe STUDIO_TESTS.md – Grafik, Licht, echte Fahrphysik, Netzwerk mit 2 Spielern, Touch.
+Hinweis: In Studio wird absichtlich nicht gespeichert; Gebäude bauen, Tycoon-Handel und Spieler-Auktionen zeigen dort
+einen Hinweis statt zu laufen (sie brauchen ein gespeichertes Profil).

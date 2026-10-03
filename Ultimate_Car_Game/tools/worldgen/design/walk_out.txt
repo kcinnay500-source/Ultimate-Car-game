@@ -1,0 +1,42 @@
+FROM CitySpawn (0, -201)
+  Stadtplatz (Brunnenrand)     (0, -118) path=80 studs  t=4.2s
+  Spielhalle Tuer              (-66, -72) path=152 studs  t=8.0s
+  Meisterschule Tuer           (-66, -148) path=90 studs  t=4.7s
+  Auktionshaus Tuer            (66, -76) path=148 studs  t=7.8s
+  Credit-Center Tuer           (66, -152) path=89 studs  t=4.7s
+  Parkplatz-Chaos Haeuschen    (-62, -240) path=80 studs  t=4.2s
+  Schrottplatz Tor             (-174, -201) path=170 studs  t=8.9s
+  Schrottpresse (Station)      (-318, -204) path=314 studs  t=16.5s
+  Schrotthaendler (Station)    (-220, -212) path=218 studs  t=11.5s
+  Zerlegeplatz (Station)       (-262, -192) path=260 studs  t=13.7s
+  Tuning-Zentrum Tuer          (210, -201) path=206 studs  t=10.8s
+  Tuning Auftragstresen        (228, -208) path=225 studs  t=11.8s
+  Pruefstand                   (290, -214) path=289 studs  t=15.2s
+  Autohaus Tuer                (0, 37) path=244 studs  t=12.8s
+  Autohaus Verkauf             (-40, 104) path=325 studs  t=17.1s
+  Tankstelle                   (190, 188) path=463 studs  t=24.4s
+  Waschstrasse Terminal        (304, 206) path=556 studs  t=29.3s
+  Stadtpark Eingang            (-180, 168) path=439 studs  t=23.1s
+  Stadtpark Teich              (-290, 265) path=580 studs  t=30.6s
+  Teststrecke Tribuene         (0, 226) path=434 studs  t=22.8s
+plots (arrival points):
+  slot 1 Nr.5 Nord-Ost innen     arr=(198, -77.5) path=255 t=13.4s
+  slot 2 Nr.4 Sued-West innen    arr=(-198, 77.5) path=367 t=19.3s
+  slot 3 Nr.3 Nord-West innen    arr=(-298, -77.5) path=354 t=18.6s
+  slot 4 Nr.6 Sued-Ost innen     arr=(298, 77.5) path=434 t=22.9s
+  slot 5 Nr.7 Nord-Ost aussen    arr=(348, -77.5) path=405 t=21.3s
+  slot 6 Nr.2 Sued-West aussen   arr=(-348, 77.5) path=465 t=24.4s
+  slot 7 Nr.1 Nord-West aussen   arr=(-448, -77.5) path=504 t=26.5s
+  slot 8 Nr.8 Sued-Ost aussen    arr=(448, 77.5) path=566 t=29.8s
+FROM slot 7 arrival (-448, -77.5)
+   Stadtplatz (Brunnenrand)     464
+   Schrottplatz Tor             359
+   Tuning-Zentrum Tuer          708
+   Autohaus Tuer                491
+   Spielhalle Tuer              435
+FROM slot 8 arrival (448, 77.5)
+   Stadtplatz (Brunnenrand)     528
+   Schrottplatz Tor             731
+   Tuning-Zentrum Tuer          408
+   Autohaus Tuer                461
+   Spielhalle Tuer              570

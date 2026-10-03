@@ -1,0 +1,28 @@
+Key,Source,Context,Example,de
+menu_button,Minispiele,,,Minispiele
+tab_overview,Übersicht,,,Übersicht
+tab_press,Schrottpresse,,,Schrottpresse
+tab_tuning,Tuning-Garage,,,Tuning-Garage
+tab_scrapyard,Schrottplatz,,,Schrottplatz
+tab_quiz,Mechaniker-Quiz,,,Mechaniker-Quiz
+tab_parking,Parkplatz-Chaos,,,Parkplatz-Chaos
+tab_goals,Ziele,,,Ziele
+tab_leaderboard,Bestenliste,,,Bestenliste
+tab_shop,Shop,,,Shop
+tab_map,Stadtplan,,,Stadtplan
+tab_workshop,Werkstatt,,,Werkstatt
+close,Schließen,,,Schließen
+not_enough_credits,Nicht genug Credits.,,,Nicht genug Credits.
+not_enough_scrap,Nicht genug Schrott.,,,Nicht genug Schrott.
+not_enough_parts,Nicht genug Altteile.,,,Nicht genug Altteile.
+offline_press,Während du weg warst: +{1},,,Während du weg warst: +{1}
+leaderboard_unavailable,Bestenliste gerade nicht verfügbar,,,Bestenliste gerade nicht verfügbar
+leaderboard_loading,Bestenliste wird geladen …,,,Bestenliste wird geladen …
+leaderboard_title,Bestenliste · Schrott gepresst,,,Bestenliste · Schrott gepresst
+rebirth_confirm,"Rebirth durchführen? Schrott und Presse-Upgrades werden zurückgesetzt. Du erhältst dauerhaft ×{1} Schrott. Werkstatt, Credits, Level, Tuning und Meilensteine bleiben.",,,"Rebirth durchführen? Schrott und Presse-Upgrades werden zurückgesetzt. Du erhältst dauerhaft ×{1} Schrott. Werkstatt, Credits, Level, Tuning und Meilensteine bleiben."
+pass_not_configured,Dieser Game Pass ist noch nicht eingerichtet.,,,Dieser Game Pass ist noch nicht eingerichtet.
+pass_owned,Du besitzt diesen Game Pass bereits.,,,Du besitzt diesen Game Pass bereits.
+pass_thanks,Danke! Game Pass aktiv.,,,Danke! Game Pass aktiv.
+coming_soon,{1} eröffnet bald.,,,{1} eröffnet bald.
+travel_unknown,Dieses Ziel ist gerade nicht erreichbar.,,,Dieses Ziel ist gerade nicht erreichbar.
+travel_blocked,Reisen ist gerade nicht möglich.,,,Reisen ist gerade nicht möglich.

@@ -1,0 +1,248 @@
+-- CrossBonus: Querboni der Minispiele auf die 2.4.0-Werkstatt (HTML workshopBonus, diagReduction,
+-- customerBonus, clickerWorkshopMultiplier). Benötigt nur MiniConfig, GameConfig und PrestigeRules (alle
+-- ohne Rückbezug auf Rules/MiniRules), damit GarageShared.Rules es ohne Ringabhängigkeit laden kann.
+-- Alle Funktionen sind nil-sicher: der Client ruft R.Reward auf state.data auf, und Profile ohne
+-- games (oder ein fehlendes d) ergeben neutrale Werte (1 bzw. 0).
+-- Ausbaustufe 4 (docs/PHASE4_CONTRACT.md §4, §8): Prestige-Einnahmenbonus (PrestigeIncome), Tycoon-Durchläufe
+-- (TycoonWorkshop), Open-World-Perks (OWPerk: Werkstatt-Bühnen, Autohaus, Schrottplatz, Produktion). Gedeckelt (GameConfig.WorkshopRewardCap,
+-- Standard ×1,6) ist NUR der Ausbaustufe-4-Faktor Tycoon × OW-Perk (CareerCapped); die 2.4.0/3.x-Querboni
+-- (Presse, Tuning-Abteilung, Kundenbonus) bleiben wie bisher ungedeckelt, sonst sänken die Einnahmen bestehender
+-- Profile. Der Prestige-Bonus (+2 % je Rang, Deckel +30 %) gilt auf alle Einnahmen (MiniRules.AddIncome) und wird
+-- in der Werkstatt außerhalb des Deckels multipliziert, damit jeder Rang messbar wirkt.
+local MiniConfig = require(script.Parent:WaitForChild("MiniConfig"))
+local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
+local PrestigeRules = require(script.Parent:WaitForChild("PrestigeRules"))
+local C = require(script.Parent.Parent:WaitForChild("Config")) -- MaxBays (rein, ohne Rückbezug)
+
+local CrossBonus = {}
+
+local function finite(v)
+	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+end
+
+local function games(d)
+	local g = type(d) == "table" and d.games
+	return type(g) == "table" and g or nil
+end
+
+local function sub(d, key)
+	local g = games(d)
+	local t = g and g[key]
+	return type(t) == "table" and t or nil
+end
+
+-- Summe aller Presse-Upgrade-Stufen
+function CrossBonus.PressLevels(d)
+	local press = sub(d, "press")
+	local ups = press and press.upgrades
+	if type(ups) ~= "table" then
+		return 0
+	end
+	local total = 0
+	for _, lvl in pairs(ups) do
+		if finite(lvl) and lvl > 0 then
+			total += lvl
+		end
+	end
+	return total
+end
+
+-- HTML clickerGlobalMultiplier
+function CrossBonus.PressGlobal(d)
+	return 1 + CrossBonus.PressLevels(d) * MiniConfig.PressGlobalPerLevel
+end
+
+-- Presse -> Werkstatt: 60 % des Presse-Multiplikators
+function CrossBonus.PressWorkshop(d)
+	return 1 + (CrossBonus.PressGlobal(d) - 1) * MiniConfig.PressWorkshopShare
+end
+
+-- Presse -> Tuning: 80 % des Presse-Multiplikators
+function CrossBonus.PressTuning(d)
+	return 1 + (CrossBonus.PressGlobal(d) - 1) * MiniConfig.PressTuningShare
+end
+
+-- Tuning-Stufe -> Werkstatt: +4,5 % je Stufe über 1
+function CrossBonus.TuningWorkshop(d)
+	local g = games(d)
+	local lvl = g and g.tuningLevel
+	if not finite(lvl) or lvl < 1 then
+		return 1
+	end
+	return 1 + (lvl - 1) * 0.045
+end
+
+-- Diagnosepunkte aus dem Quiz verkürzen Reparaturen: min(35 %, Punkte × 1,5 %)
+function CrossBonus.DiagReduction(d)
+	local quiz = sub(d, "quiz")
+	local points = quiz and quiz.diagPoints
+	if not finite(points) or points <= 0 then
+		return 0
+	end
+	return math.min(MiniConfig.DiagReductionCap, points * MiniConfig.DiagReductionPerPoint)
+end
+
+-- Parkplatz-Serie -> Kundenbonus auf die Vergütung, höchstens ×1,7
+function CrossBonus.CustomerBonus(d)
+	local parking = sub(d, "parking")
+	local streak = parking and parking.streak
+	if not finite(streak) or streak <= 0 then
+		return 1
+	end
+	return math.min(MiniConfig.CustomerBonusCap, 1 + streak * MiniConfig.CustomerBonusPerStreak)
+end
+
+-- Parkplatz-Serie -> zusätzliche Angebote am Empfang (+1 je 5er-Serie, höchstens +5)
+function CrossBonus.OfferBonus(d)
+	local parking = sub(d, "parking")
+	local streak = parking and parking.streak
+	if not finite(streak) or streak <= 0 then
+		return 0
+	end
+	return math.min(MiniConfig.ParkingOfferBonusMax, math.floor(streak / MiniConfig.ParkingOfferBonusEvery))
+end
+
+---------------------------------------------------------------- Ausbaustufe 4: Prestige, Tycoon, Open World
+-- Deckel des Gesamtfaktors auf die Werkstatt (Vertrag §8: ×1,6). Das Balance-Team stellt ihn über
+-- GameConfig.WorkshopRewardCap ein; fehlt der Eintrag, gilt der Vertragswert.
+CrossBonus.WorkshopCapDefault = 1.6
+-- Tycoon-Bonus werkstatt (Vertrag §8): je abgeschlossenem Durchlauf +2 %, höchstens 5 Durchläufe (+10 %).
+-- Ab Meilenstein 4 liegen die Zahlen in GameConfig.Tycoon.Bonus.werkstatt = { step = 0.02, maxRuns = 5 };
+-- bis dahin gelten die Vertragswerte.
+CrossBonus.TycoonWorkshopDefault = { step = 0.02, maxRuns = 5 }
+
+function CrossBonus.WorkshopCap(): number
+	local cap = GameConfig.WorkshopRewardCap
+	if finite(cap) and cap >= 1 then
+		return cap
+	end
+	return CrossBonus.WorkshopCapDefault
+end
+
+-- Prestige-Rang -> alle Credits-Einnahmen: 1 + 0,02 je Rang, Deckel +30 % (PrestigeRules.IncomeBonus)
+function CrossBonus.PrestigeIncome(d: any): number
+	local ok, factor = pcall(PrestigeRules.IncomeBonus, d)
+	if ok and finite(factor) and factor >= 1 then
+		return factor
+	end
+	return 1
+end
+
+-- Abgeschlossene Tycoon-Durchläufe eines Gebäudetyps (d.games.tycoon.runsDone[typ]); 0, solange es die
+-- Tabelle noch nicht gibt (Meilenstein 4) oder der Wert kein endlicher Zähler ist.
+function CrossBonus.TycoonRuns(d: any, typ: string): number
+	local tycoon = sub(d, "tycoon")
+	local runs = tycoon and tycoon.runsDone
+	local n = type(runs) == "table" and runs[typ] or nil
+	if not finite(n) or n <= 0 then
+		return 0
+	end
+	return math.floor(n)
+end
+
+-- Bonus-Anteil eines Gebäudetyps (Vertrag §8): min(n, maxRuns) × step aus GameConfig.Tycoon.Bonus[typ];
+-- fehlt der Eintrag, gelten für werkstatt die Vertragswerte, sonst 0. Ergebnis 0..(maxRuns × step), nie negativ.
+function CrossBonus.TycoonBonus(d: any, typ: string): number
+	local tycoon = GameConfig.Tycoon
+	local bonus = type(tycoon) == "table" and type(tycoon.Bonus) == "table" and tycoon.Bonus[typ] or nil
+	local step = type(bonus) == "table" and bonus.step or nil
+	local maxRuns = type(bonus) == "table" and bonus.maxRuns or nil
+	if not finite(step) or step < 0 then
+		step = typ == "werkstatt" and CrossBonus.TycoonWorkshopDefault.step or 0
+	end
+	if not finite(maxRuns) or maxRuns < 0 then
+		maxRuns = typ == "werkstatt" and CrossBonus.TycoonWorkshopDefault.maxRuns or 0
+	end
+	return math.min(CrossBonus.TycoonRuns(d, typ), maxRuns) * step
+end
+
+-- Tycoon-Durchläufe „Werkstatt“ -> Werkstatt-Vergütung: 1 + min(n, 5) × 0,02
+function CrossBonus.TycoonWorkshop(d: any): number
+	return 1 + CrossBonus.TycoonBonus(d, "werkstatt")
+end
+
+-- Tycoon-Durchläufe „Autohaus“ -> Händlerrabatt (Anteil 0..0,075, wirkt in CarRules.DealerPrice zusätzlich zum Prestige-Rabatt)
+function CrossBonus.TycoonDealerDiscount(d: any): number
+	return math.min(0.9, CrossBonus.TycoonBonus(d, "autohaus"))
+end
+
+-- Tycoon-Durchläufe „Produktion“ -> Tuning-Tempo: Faktor ≥ 1 (1,15 = Projekte 15 % schneller; TuningRules.Start)
+function CrossBonus.TycoonTuningSpeed(d: any): number
+	return 1 + CrossBonus.TycoonBonus(d, "produktion")
+end
+
+-- Tycoon-Durchläufe „Schrottplatz“ -> Schrott beim Zerlegen: Faktor ≥ 1 (SideGameRules.Dismantle)
+function CrossBonus.TycoonScrap(d: any): number
+	return 1 + CrossBonus.TycoonBonus(d, "schrottplatz")
+end
+
+-- Open-World-Perk eines Karrierewegs (GameConfig.OW.Perks, Meilenstein 6; Vertrag §7): Faktor ≥ 1,
+-- 1 + min(cap, PerkCap, n × per). n = fertig gebaute Stufe (d.games.ow.buildings[typ].built, nie die Baustelle);
+-- werkstatt zählt die Hebebühnen über der ersten (d.bays − 1). Dieselbe Formel wie OWRules.Perk (OWRules wird hier
+-- bewusst nicht geladen: OWRules lädt MiniRules, MiniRules lädt CrossBonus). Nil-sicher: ohne d/games/ow -> 1.
+-- typ: werkstatt (Auftragswert) | autohaus (Händlerrabatt-Anteil) | schrottplatz (Schrott) | produktion (Tuning-Tempo)
+function CrossBonus.OWPerk(d: any, typ: string?): number
+	local ow = GameConfig.OW
+	local perks = type(ow) == "table" and ow.Perks or nil
+	local p = type(perks) == "table" and type(typ) == "string" and perks[typ] or nil
+	if type(p) ~= "table" or not finite(p.per) or not finite(p.cap) then
+		return 1
+	end
+	local n = 0
+	if p.perBay then
+		local bays = type(d) == "table" and d.bays or nil
+		if finite(bays) then
+			local maxBays = finite(C.MaxBays) and C.MaxBays or 4
+			n = math.clamp(math.floor(bays), 1, maxBays) - 1
+		end
+	else
+		local o = sub(d, "ow")
+		local list = o and o.buildings
+		local b = type(list) == "table" and list[typ] or nil
+		local built = type(b) == "table" and b.built or nil
+		n = finite(built) and built or 0
+	end
+	local hard = finite(ow.PerkCap) and ow.PerkCap or 0.25
+	local bonus = math.min(p.cap, hard, math.max(0, n) * p.per)
+	if not finite(bonus) or bonus < 0 then
+		return 1
+	end
+	return 1 + bonus
+end
+
+-- Händlerrabatt-Anteil aus dem Autohaus (0..0,12): CarRules.DealerPrice addiert ihn zu Prestige- und Tycoon-Rabatt
+function CrossBonus.OWDealerDiscount(d: any): number
+	return math.min(0.9, CrossBonus.OWPerk(d, "autohaus") - 1)
+end
+
+-- Faktor der Ausbaustufe 4 (Prestige × Tycoon × Open-World-Perk), ungedeckelt (für Anzeigen)
+function CrossBonus.CareerBonus(d: any): number
+	return CrossBonus.PrestigeIncome(d) * CrossBonus.TycoonWorkshop(d) * CrossBonus.OWPerk(d, "werkstatt")
+end
+
+-- Gedeckelter Ausbaustufe-4-Faktor auf die Werkstatt: min(WorkshopCap, Tycoon × OW-Perk), nie unter 1
+function CrossBonus.CareerCapped(d: any): number
+	local raw = CrossBonus.TycoonWorkshop(d) * CrossBonus.OWPerk(d, "werkstatt")
+	if not finite(raw) or raw < 1 then
+		return 1
+	end
+	return math.min(CrossBonus.WorkshopCap(), raw)
+end
+
+-- Gesamtfaktor auf die Werkstatt-Vergütung ohne jeden Deckel (für Anzeigen, die den Deckel erklären)
+function CrossBonus.WorkshopRewardRaw(d: any): number
+	return CrossBonus.PressWorkshop(d) * CrossBonus.TuningWorkshop(d) * CrossBonus.CustomerBonus(d) * CrossBonus.CareerBonus(d)
+end
+
+-- Gesamtfaktor auf die Werkstatt-Vergütung (R.Reward): Presse × Tuning-Stufe × Kundenbonus (wie 3.x, ungedeckelt)
+-- × min(WorkshopCap, Tycoon × OW-Perk) × Prestige-Einnahmenbonus; nie unter 1.
+function CrossBonus.WorkshopReward(d: any): number
+	local raw = CrossBonus.PressWorkshop(d) * CrossBonus.TuningWorkshop(d) * CrossBonus.CustomerBonus(d)
+		* CrossBonus.CareerCapped(d) * CrossBonus.PrestigeIncome(d)
+	if not finite(raw) or raw < 1 then
+		return 1
+	end
+	return raw
+end
+
+return CrossBonus
