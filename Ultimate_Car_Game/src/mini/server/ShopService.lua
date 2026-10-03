@@ -258,6 +258,14 @@ local function prompt(ms: any, data: any, d: any, t: number): boolean
 		end
 		return true
 	end
+	-- B-014: Sind Robux-Käufe hier gar nicht möglich (Studio, Profil nicht speicherbar – z. B. temporär nach einem
+	-- Ladefehler, dann immer Level 1), kommt dieser Hinweis vor Besitz- und Level-Riegel aus ShopRules.CanPrompt.
+	-- Unbekanntes Produkt und Platzhalter-Id 0 behalten ihre eigenen Hinweise (CanPrompt).
+	local known = ShopRules.Product(data.product)
+	if known and ShopRules.ProductId(known) > 0 and (RunService:IsStudio() or not api.writable(ms)) then
+		toast(ms, TEXT_LOCAL.noRobux)
+		return false
+	end
 	local ok, msg, productId, product = ShopRules.CanPrompt(d, data.product)
 	if not ok then
 		toast(ms, msg)
@@ -265,10 +273,6 @@ local function prompt(ms: any, data: any, d: any, t: number): boolean
 	end
 	if ms.shopDeferred and ms.shopDeferred[product.key] then
 		toast(ms, string.format(TEXT.receiptWaiting, tostring(product.name or product.key)))
-		return false
-	end
-	if RunService:IsStudio() or not api.writable(ms) then
-		toast(ms, TEXT_LOCAL.noRobux)
 		return false
 	end
 	if product.kind == "credits" then
