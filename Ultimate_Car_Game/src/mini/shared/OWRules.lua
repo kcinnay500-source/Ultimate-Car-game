@@ -5,7 +5,7 @@
 --   built       = fertig gebaute Stufe (≤ stage); nur sie zählt für Erträge und Perks. Nur Settle(d, now) hebt built auf
 --                 stage, sobald readyAt erreicht ist – auch für offline fertig gewordene Bauten: Load lässt built wie
 --                 gespeichert, der Dienst ruft Settle beim Beitritt (dann gibt es ow_ready + Toast) und im Tick.
---   collectedAt = Beginn des laufenden Ertragszeitraums (unix); carAt = Beginn des Gutschein-Zeitraums (Produktion 4)
+--   collectedAt = Beginn des laufenden Ertragszeitraums (unix, mit Nachkommastellen – nie abrunden, B-001); carAt = Beginn des Gutschein-Zeitraums (Produktion 4)
 --   partsCarry  = angebrochener Altteil-Rest (0 ≤ x < 1) aus partsPerHour, damit häufiges Abholen keine Teile verliert
 --   packs/partsTotal/collects = Lebenszeit-Zähler (abgeholte Bauteil-Pakete, abgeholte Altteile, Abholungen mit Ertrag)
 --                 für Story-Missionen (kind own, owTyp/owStat); gift = Stufe 1 kam aus der Startwahl (GrantStart)
@@ -51,6 +51,15 @@ local function loadInt(v: any, default: number, min: number, max: number): numbe
 		return default
 	end
 	return math.floor(math.min(v, max))
+end
+
+-- Zeitpunkt mit Nachkommastellen (Serverzeit): wird NICHT abgerundet – ein abgerundeter Beginn des Ertragszeitraums
+-- würde den schon bezahlten Sekundenbruchteil beim nächsten Abholen noch einmal auszahlen (B-001).
+local function loadTime(v: any, default: number, min: number, max: number): number
+	if not finite(v) or v < min then
+		return default
+	end
+	return math.min(v, max)
 end
 
 local function nowOr(now: any): number
@@ -126,7 +135,7 @@ function OWRules.Load(raw: any, d: any, _now: any): OW
 			b.readyAt = 0
 			b.built = 0
 		end
-		b.collectedAt = loadInt(src.collectedAt, 0, 0, MAX_SAFE)
+		b.collectedAt = loadTime(src.collectedAt, 0, 0, MAX_SAFE)
 		b.carAt = loadInt(src.carAt, 0, 0, MAX_SAFE)
 		local carry = src.partsCarry
 		b.partsCarry = finite(carry) and carry >= 0 and carry < 1 and carry or 0
@@ -496,9 +505,11 @@ function OWRules.Collect(d: any, typ: any, now: any, opts: { skipCar: boolean? }
 		local capped = math.min(math.max(0, t - e.collectedAt), capHours() * HOUR)
 		local packs = math.floor(capped / (st.partsEveryHours * HOUR))
 		local leftover = capped - packs * st.partsEveryHours * HOUR
-		e.collectedAt = math.floor(t - leftover)
+		-- nie abrunden und nie zurück: der neue Zeitraum beginnt frühestens am alten Beginn (B-001)
+		e.collectedAt = math.max(e.collectedAt, t - leftover)
 	else
-		e.collectedAt = math.floor(t)
+		-- bezahlt ist genau bis t (Serverzeit mit Nachkommastellen); floor(t) würde den Bruchteil doppelt zahlen (B-001)
+		e.collectedAt = t
 	end
 	if a.car then
 		e.carAt = math.floor(t)
