@@ -19,7 +19,9 @@ local ArcadeUI = {}
 
 local ACTION = "UCG_ArcadeControls"
 local PRIORITY = 3500 -- über Figur/Kamera (2000) und der 2.4.0-Werkzeugleiste (3000), unter Tab (10000)
-local FINISH_RETRY = 4 -- Sekunden ohne Ergebnis, dann Abrechnung erneut anfragen
+local FINISH_RETRY = 4 -- Sekunden ohne Ergebnis, dann Abrechnung erneut anfragen (wiederholt, der Server zahlt je Token nur einmal)
+local FINISH_GIVEUP = 15 -- Sekunden ohne Ergebnis, dann zurück zur Übersicht (die Nachfrage läuft im Hintergrund weiter)
+local FINISH_STOP = 30 -- Sekunden ohne Ergebnis, dann endet auch die Nachfrage (ungültiges Token: Server antwortet nur per Toast)
 local START_GAP = 2.5
 
 local UI, Remote, Toast
@@ -1827,6 +1829,7 @@ finishRound = function()
 	end
 	cur.finishing = true
 	cur.finishAt = os.clock()
+	cur.retryAt = cur.finishAt
 	-- Tasten sofort freigeben: kommt die Auswertung nie an, bliebe die Figur sonst auf der Tastatur eingefroren
 	unbindKeys()
 	if cur.view then
@@ -1851,9 +1854,27 @@ local function onFrame()
 		finishRound()
 	end
 	if cur.finishing then
-		if not cur.result and os.clock() - cur.finishAt > FINISH_RETRY and not cur.retried then
-			cur.retried = true
-			Remote.Send("mini_arcade_finish", { token = cur.token })
+		if not cur.result then
+			-- B-012: Bleibt das Ergebnis aus (Abrechnung verworfen), weiter nachfragen statt für immer „Auswertung …“
+			local c = os.clock()
+			local waited = c - cur.finishAt
+			if waited > FINISH_STOP then
+				disconnect()
+				cur = nil
+				return
+			end
+			if c - cur.retryAt > FINISH_RETRY then
+				cur.retryAt = c
+				Remote.Send("mini_arcade_finish", { token = cur.token })
+			end
+			if waited > FINISH_GIVEUP and not cur.gaveUp then
+				cur.gaveUp = true
+				refs.count.Visible = false
+				if mode == "play" then
+					setMode("lobby")
+					renderHead()
+				end
+			end
 		end
 		return
 	end
@@ -1993,6 +2014,16 @@ local function onResult(data)
 	end
 	if cur.result then
 		return -- schon angezeigt (Wiederholung)
+	end
+	if cur.gaveUp then
+		-- Die Übersicht ist längst wieder frei: Anzeige nicht umreißen, nur das Ergebnis melden
+		cur = nil
+		stopRound()
+		renderHead()
+		if (num(data.credits) or 0) > 0 then
+			Toast("Spielhalle: " .. (num(data.score) or 0) .. " Punkte, +" .. MiniLocale.Credits(num(data.credits) or 0))
+		end
+		return
 	end
 	cur.result = data
 	stopRound()
@@ -2270,10 +2301,12 @@ function ArcadeUI.Select(x)
 	if not def or not refs.intro then
 		return false
 	end
-	if cur and not cur.result then
+	if cur and not cur.result and not cur.gaveUp then
 		return false -- laufende Runde nicht unterbrechen
 	end
-	stopRound()
+	if not (cur and cur.gaveUp) then
+		stopRound() -- nach der Aufgabe (gaveUp) läuft nur noch die Nachfrage – die bleibt
+	end
 	selected = def.key
 	setMode("intro")
 	renderIntro()
@@ -2302,7 +2335,7 @@ function ArcadeUI.OnNotice(data)
 end
 
 function ArcadeUI.IsPlaying()
-	return cur ~= nil and cur.result == nil
+	return cur ~= nil and cur.result == nil and not cur.gaveUp
 end
 
 -- Laufende Runde (für Tests)
