@@ -231,7 +231,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   Zahlen in `C.Inspection` (FindingChance 0,6, ApproveChance 0,8, RingSeconds 2,5, Kundennamen).
 - **Anruf:** `GarageServer.callCustomer(p, jobId?)` → `ok, msg`. Wege: 2.4.0-Aktion `call {id?}` über
   `Remotes.Command` (GarageClient ohne Handy) und Mini-Aktion `phone_call {id}` (`PhoneService`, Abklingzeit 1 s im
-  Netz + 3 s je Spieler, ID-Whitelist `^[%w_%-]+$` ≤ 64, Auftrag muss in `d.jobs` stehen) über `ctx.callCustomer`
+  Netz + 2 s je Spieler, ID-Whitelist `^[%w_%-]+$` ≤ 64, Auftrag muss in `d.jobs` stehen) über `ctx.callCustomer`
   aus `Mini.Init`. Ereignis Server → Client `call`: `{job, state="ringing", customer, car, finding, findingName}`,
   nach `RingSeconds` `{job, state="answer", accepted, text, result, customer}`; `{job, state="ended"}` bei Respawn,
   Verlassen oder wenn der Auftrag nicht mehr wartet. Ein Anruf je Sitzung (`p.calling`).

@@ -12,7 +12,10 @@
 --                            api.hangUpCall(p) -> boolean (true = ein Anruf lief und ist beendet)
 local PhoneService = {}
 
-PhoneService.Cooldown = 3 -- Sekunden zwischen zwei Anrufen eines Spielers (MiniNet.Cooldowns.phone_call ≤ dieser Wert)
+-- Sekunden zwischen zwei Anruf-STARTS eines Spielers (MiniNet.Cooldowns.phone_call ≤ dieser Wert). B-023: muss kürzer
+-- sein als die Klingelzeit (Config.Inspection.RingSeconds = 2,5 s), sonst wird der nächste Kunde direkt nach der Antwort
+-- abgelehnt. Parallele Anrufe verhindert GarageServer (p.calling).
+PhoneService.Cooldown = 2
 PhoneService.MaxIdLength = 64
 
 PhoneService.Text = {

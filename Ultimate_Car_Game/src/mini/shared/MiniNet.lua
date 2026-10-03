@@ -143,7 +143,7 @@ MiniNet.Cooldowns = {
 	side_claim = 0.5,
 	shop_prompt = 3,
 	start_choose = 1,
-	phone_call = 1, -- PhoneService prüft zusätzlich 3 s je Spieler
+	phone_call = 1, -- PhoneService prüft zusätzlich 2 s je Spieler (kürzer als die Klingelzeit)
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",
