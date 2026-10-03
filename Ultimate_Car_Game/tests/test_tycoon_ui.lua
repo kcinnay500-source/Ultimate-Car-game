@@ -1057,7 +1057,7 @@ return {
 		T.check(tyBottom > 130, "Bargeld-Unterkante unter der Toast-Zone (schmal): " .. tostring(tyBottom))
 		-- Freischaltungskarte: unter dem Bargeld-Abzeichen
 		g:InClient(p, function()
-			UnlocksUI.ShowCard("Neu freigeschaltet", "Schnelles Spiel")
+			UnlocksUI.ShowCard("Neu freigeschaltet", "Tycoon")
 		end)
 		local cardsGui = p.PlayerGui:FindFirstChild("UnlockCards")
 		local card = cardsGui and cardsGui:FindFirstChild("UnlockCard")

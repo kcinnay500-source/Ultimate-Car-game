@@ -241609,7 +241609,7 @@ end
 
 GameConfig.Unlocks = {
 	entry(1, "mode:openworld", "mode", "Open World", "Die Werkstattmeile: deine Werkstatt, die Stadt und alle Minispiele.", "lobby"),
-	entry(1, "mode:tycoon", "mode", "Schnelles Spiel", "Eine Tycoon-Runde mit Bargeld: bau dein Gebäude bis Stufe 5 aus.", "lobby"),
+	entry(1, "mode:tycoon", "mode", "Tycoon", "Eine Tycoon-Runde mit Bargeld: bau dein Gebäude bis Stufe 5 aus.", "lobby"),
 	entry(1, "story:1", "story", "Kapitel 1: Der Kiesplatz", "Verkaufe am Kiesplatz deine ersten Gebrauchtwagen.", "story"),
 	entry(2, "feature:press", "feature", "Schrottpresse", "Klick Schrott zusammen und tausch ihn beim Schrotthändler gegen Credits.", "press"),
 	entry(3, "feature:scrapyard", "feature", "Schrottplatz", "Kauf alte Autos, zerleg sie und verkauf die Teile.", "scrapyard"),
@@ -241747,7 +241747,7 @@ GameConfig.Hints = {
 	{ id = "h_story2", when = "unlock:story:2", text = "Neues Story-Kapitel! Öffne den Tab „Story“ und schau, was als Nächstes ansteht." },
 	{ id = "h_map", when = "station:map", text = "Mit dem Stadtplan reist du schnell durch die Stadt – und jederzeit zurück zu deiner Werkstatt." },
 	{ id = "h_shop", when = "station:shop", text = "Im Credit-Center gibt es Credits und Pässe. Alles im Spiel schaffst du auch ohne Robux." },
-	{ id = "h_tycoon", when = "station:mode_tycoon", text = "Schnelles Spiel: eine Tycoon-Runde mit Bargeld. Fertige Runden bringen dauerhafte Boni in der Open World." },
+	{ id = "h_tycoon", when = "station:mode_tycoon", text = "Tycoon: eine Tycoon-Runde mit Bargeld. Fertige Runden bringen dauerhafte Boni in der Open World." },
 } :: { Hint }
 
 ---------------------------------------------------------------- Deckel der Werkstatt-Vergütung (§8)
@@ -241768,7 +241768,7 @@ GameConfig.XP = {
 	OwBuild = 30, -- je gebauter Gebäudestufe in der Open World (Platzhalter)
 }
 
----------------------------------------------------------------- Schnelles Spiel / Tycoon (§8, Meilenstein 4)
+---------------------------------------------------------------- Tycoon / Tycoon (§8, Meilenstein 4)
 -- Alle Zahlen des Tycoon-Modus. Bargeld ist NIE Credits und verlässt den Durchlauf nie.
 -- Feste IDs (Teams arbeiten parallel): Gebäudetypen werkstatt|autohaus|produktion|schrottplatz, Stufen 1..5,
 -- Upgrade-Ids "&lt;typ&gt;_s&lt;stufe&gt;_u&lt;k&gt;" mit k=1 Produzent (+Bargeld/s), k=2 Tempo (×Rate), k=3 Lager (+Behälter,
@@ -243481,7 +243481,7 @@ MiniNet.Actions = {
 	tutorial_restart = {}, -- Tutorial-Kiosk in der Lobby: noch einmal von vorn (ohne zweite Belohnung)
 	prestige_claim = { rank = "number" },
 	unlocks_seen = {},
-	-- Meilenstein 4 (PHASE4_CONTRACT §8, §10): Schnelles Spiel (Tycoon). qty/price sind Absichten in Bargeld
+	-- Meilenstein 4 (PHASE4_CONTRACT §8, §10): Tycoon. qty/price sind Absichten in Bargeld
 	-- (validate.py INTENT_FIELDS), to = UserId des Handelspartners, id der Angebote = Server-Laufnummer.
 	tycoon_choose = { building = "string" },
 	tycoon_collect = {},
@@ -243619,7 +243619,7 @@ local AuctionRules = require(script.Parent:WaitForChild("AuctionRules"))
 local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
 -- Ausbaustufe 4: Einstellungen/Tutorial (games.meta) und Prestige (games.prestige); MetaRules braucht nur GameConfig
 local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
--- Meilenstein 4: Schnelles Spiel (games.tycoon); TycoonRules braucht nur GameConfig, PrestigeRules und Config
+-- Meilenstein 4: Tycoon (games.tycoon); TycoonRules braucht nur GameConfig, PrestigeRules und Config
 local TycoonRules = require(script.Parent:WaitForChild("TycoonRules"))
 -- Meilensteine 6–7: Open-World-Gebäude (games.ow) und Story (games.story); beide laden MiniRules erst beim Aufruf
 local OWRules = require(script.Parent:WaitForChild("OWRules"))
@@ -248067,7 +248067,7 @@ function TutorialRules.View(d: any, mode: any?): View
 end
 
 return TutorialRules
-</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000025"><Properties><string name="Name">TycoonRules</string><ProtectedString name="Source">-- TycoonRules: Schnelles Spiel (Tycoon) als reine Funktionen (docs/PHASE4_CONTRACT.md §2, §8).
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000025"><Properties><string name="Name">TycoonRules</string><ProtectedString name="Source">-- TycoonRules: Tycoon als reine Funktionen (docs/PHASE4_CONTRACT.md §2, §8).
 -- Kein Geld (Credits), keine Instanzen, keine Dienste: alles rechnet auf d.games.tycoon und dem Durchlauf run.
 -- Bargeld (run.cash, run.container) ist NIE Credits und verlässt den Durchlauf nie (Rebirth/Abbruch löschen es).
 --   d.games.tycoon = { runsDone = { [typ] = int }, rebirths = int, xpStage = 0..5 (Stufen-XP schon vergeben),
@@ -253345,7 +253345,7 @@ local ctx -- GarageServer-Kontext (emit, toast, moveTo, now, getSession)
 
 local TEXT = {
 	modeUnknown = "Diesen Modus gibt es nicht.",
-	modeChosen = { tycoon = "Schnelles Spiel ausgewählt. Drück „Los geht's“, wenn du bereit bist.", openworld = "Open World ausgewählt. Drück „Los geht's“, wenn du bereit bist." },
+	modeChosen = { tycoon = "Tycoon ausgewählt. Drück „Los geht's“, wenn du bereit bist.", openworld = "Open World ausgewählt. Drück „Los geht's“, wenn du bereit bist." },
 	settingsSaved = "Einstellungen gespeichert.",
 	settingsSame = "Das ist schon so eingestellt.",
 	alreadyThere = "Du bist schon hier.",
@@ -253371,7 +253371,7 @@ local TEXT = {
 	partyNoCode = "Es ist gerade kein Party-Code frei. Versuch es gleich noch einmal.",
 	partyTooSoon = "Einen Moment, bitte.",
 	arrived = PlaceRouter.Text.arrived,
-	stationHint = { mode_tycoon = "Schnelles Spiel", mode_openworld = "Open World", settings = "Einstellungen", party = "Party", tutorial = "Tutorial" },
+	stationHint = { mode_tycoon = "Tycoon", mode_openworld = "Open World", settings = "Einstellungen", party = "Party", tutorial = "Tutorial" },
 }
 LobbyService.Text = TEXT
 
@@ -253666,7 +253666,7 @@ local function lobbyGo(ms: any, _: any, d: any)
 	if mode == "lobby" or not GameConfig.ModeSet[mode] then
 		mode = "openworld"
 	end
-	-- Party-Mitglied, dessen Leiter schon in der Open World/im Schnellen Spiel ist: Reise dorthin (zum Leiter)
+	-- Party-Mitglied, dessen Leiter schon in der Open World/im Tycoon ist: Reise dorthin (zum Leiter)
 	local party = LobbyService.PartyOf(ms.player)
 	if party and party.leader ~= ms.player then
 		local lm = leaderMode(party)
@@ -254090,7 +254090,7 @@ return MiniPasses
 --                      außerhalb der Open World zur Zonen-Ankunft (Lobby/Tycoon) versetzen
 --   OnStation(p, key)  Ausbaustufe 4: 2.4.0-Plot-Station geöffnet (Tutorial-Schritt, Beginner-Hinweis)
 -- Ausbaustufe 4 (PHASE4_CONTRACT §10–§12): Lobby/Party/Reise (LobbyService, PlaceRouter), Tutorial und
--- Beginner-Hinweise (TutorialService), Level &amp; Prestige, Freischaltungen (PrestigeService), Schnelles Spiel
+-- Beginner-Hinweise (TutorialService), Level &amp; Prestige, Freischaltungen (PrestigeService), Tycoon
 -- (TycoonService), Open-World-Gebäude und Passiv-Modus (OWService, Meilenstein 6), Story/Nebenmissionen/Co-op
 -- (StoryService, Meilenstein 7). Jede Aktion, die etwas Freischaltbares nutzt, prüft Mini.Handle zentral über
 -- Unlocks (ACTION_UNLOCK); Stationen über Unlocks.TabAllowed. Im Passiv-Modus (§5) blockt Mini.Handle Story-Start,
@@ -254129,7 +254129,7 @@ local PrestigeService = require(Server:WaitForChild("PrestigeService"))
 local LobbyService = require(Server:WaitForChild("LobbyService"))
 local PlaceRouter = require(Server:WaitForChild("PlaceRouter"))
 local TutorialService = require(Server:WaitForChild("TutorialService"))
-local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenstein 4: Schnelles Spiel
+local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenstein 4: Tycoon
 local OWService = require(Server:WaitForChild("OWService")) -- Meilenstein 6: Open-World-Gebäude, Passiv-Modus
 local StoryService = require(Server:WaitForChild("StoryService")) -- Meilenstein 7: Story, Kiesplatz, Nebenmissionen, Co-op
 local ShopService = require(Server:WaitForChild("ShopService")) -- Meilenstein 8: Shop (Kosmetik, DLC-Autos, Pässe, Quittungen)
@@ -254559,7 +254559,7 @@ local function checkMode(ms, d)
 			warn("[Minispiele] Tutorial-Start: " .. tostring(err))
 		end
 	end
-	-- Schnelles Spiel: Grundstück belegen/freigeben, Durchlauf fortsetzen (TycoonService.Tick holt es sonst nach)
+	-- Tycoon: Grundstück belegen/freigeben, Durchlauf fortsetzen (TycoonService.Tick holt es sonst nach)
 	local okY, errY = pcall(TycoonService.OnMode, ms, d, mode)
 	if not okY then
 		warn("[Minispiele] Tycoon-Modus: " .. tostring(errY))
@@ -254888,7 +254888,7 @@ function Mini.Tick(p, t)
 		end
 		pcall(LobbyService.Tick, ms, d, t)
 		checkMode(ms, d)
-		-- Schnelles Spiel: Produktion (0,5 s), Anzeigen, Angebots-Ablauf; true = Snapshot fällig (höchstens 1×/s)
+		-- Tycoon: Produktion (0,5 s), Anzeigen, Angebots-Ablauf; true = Snapshot fällig (höchstens 1×/s)
 		local okY, resY = pcall(TycoonService.Tick, ms, d, t)
 		if okY then
 			if resY then
@@ -255838,7 +255838,7 @@ return OWService
 --   PlaceRouter.MoveToZone(p, kind) -&gt; ok, msg    Figur zur Zonen-Ankunft versetzen (ohne Moduswechsel), z. B. nach dem Erscheinen.
 --                                                Open World mit laufendem Tutorial: die eigene Werkstatt (dort beginnt es),
 --                                                sonst die Stadt-Ankunft.
---   PlaceRouter.ArrivedText(kind) -&gt; string      Ankunfts-Toast; Schnelles Spiel ohne Tycoon-Dienst (GameConfig.Tycoon leer):
+--   PlaceRouter.ArrivedText(kind) -&gt; string      Ankunfts-Toast; Tycoon ohne Tycoon-Dienst (GameConfig.Tycoon leer):
 --                                                „eröffnet bald“ mit dem Rückweg.
 --   PlaceRouter.WouldTeleport(kind) -&gt; bool      true, wenn Go einen echten Teleport versuchen würde (für den Snapshot)
 --   PlaceRouter.SanitizeTeleportData(raw) -&gt; table  Whitelist nach GameConfig.TeleportDataKeys (nur string/number/boolean)
@@ -255865,8 +255865,8 @@ local TEXT = {
 	zoneMissing = "Dieser Bereich ist in diesem Place nicht vorhanden. Du bleibst hier.",
 	noCharacter = "Warte kurz, bis deine Figur da ist.",
 	teleportFailed = "Der Teleport hat nicht geklappt. Wir wechseln den Ort hier im Server.",
-	arrived = { lobby = "Willkommen in der Lobby!", openworld = "Willkommen in der Werkstattmeile!", tycoon = "Schnelles Spiel: Viel Erfolg bei deiner Tycoon-Runde!" },
-	tycoonSoon = "Das Schnelle Spiel eröffnet bald! Zurück geht's mit M → Tab „Lobby“ → „Zurück zur Lobby“.",
+	arrived = { lobby = "Willkommen in der Lobby!", openworld = "Willkommen in der Werkstattmeile!", tycoon = "Tycoon: Viel Erfolg bei deiner Tycoon-Runde!" },
+	tycoonSoon = "Der Tycoon eröffnet bald! Zurück geht's mit M → Tab „Lobby“ → „Zurück zur Lobby“.",
 }
 PlaceRouter.Text = TEXT
 
@@ -255889,7 +255889,7 @@ local function emit(p: any, kind: string, data: any)
 	end
 end
 
--- Gibt es das Schnelle Spiel schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
+-- Gibt es den Tycoon schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
 function PlaceRouter.TycoonOpen(): boolean
 	local t = GameConfig.Tycoon
 	return type(t) == "table" and next(t) ~= nil
@@ -258196,7 +258196,7 @@ function TutorialService.SnapshotFields(ms: any, d: any, now: number?, full: boo
 end
 
 return TutorialService
-</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000048"><Properties><string name="Name">TycoonService</string><ProtectedString name="Source">-- TycoonService: Schnelles Spiel (Tycoon) auf dem Server (docs/PHASE4_CONTRACT.md §8, §10–§12).
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000048"><Properties><string name="Name">TycoonService</string><ProtectedString name="Source">-- TycoonService: Tycoon auf dem Server (docs/PHASE4_CONTRACT.md §8, §10–§12).
 -- Regeln und Zahlen: TycoonRules (rein) und GameConfig.Tycoon. Hier nur Grundstücke, Modelle, Pads, Handel und Hinweise.
 -- Bargeld (run.cash/run.container) ist NIE Credits: es verlässt den Durchlauf nie. Credits ändern sich hier nur über
 -- den Level-Bonus von MiniRules.GainXP (XP je Stufe/Durchlauf), nie aus Bargeld.
@@ -258288,7 +258288,7 @@ local COLORS = {
 }
 
 local TEXT = {
-	notTycoon = "Das Schnelle Spiel startest du in der Lobby: Portal „Schnelles Spiel“.",
+	notTycoon = "Den Tycoon startest du in der Lobby: Portal „Tycoon“.",
 	noPlot = "Gerade sind alle Grundstücke belegt. Sobald eins frei wird, gehört es dir.",
 	plotAssigned = "Grundstück %d gehört dir! Geh zum Start-Pad und wähle dein Gebäude.",
 	notMine = "Das ist nicht dein Grundstück. Deins ist Nr. %d.",
@@ -258329,7 +258329,7 @@ local TEXT = {
 		storage = "So viel hast du nicht im Lager.",
 		no_run = "Dafür brauchst du einen laufenden Durchlauf.",
 		partnerMissing = "Diesen Spieler gibt es hier nicht.",
-		partnerNotTycoon = "Dieser Spieler ist gerade nicht im Schnellen Spiel oder hat keinen Durchlauf.",
+		partnerNotTycoon = "Dieser Spieler ist gerade nicht im Tycoon oder hat keinen Durchlauf.",
 		self = "Mit dir selbst kannst du nicht handeln.",
 		tooMany = "Du hast schon " .. tostring(TY.TradeMaxOpen) .. " offene Angebote.",
 		offered = "Angebot an %s geschickt: %d× %s für %d Bargeld (gültig %d s).",
@@ -269569,7 +269569,7 @@ function LeaderboardUI.OnData(view)
 end
 
 return LeaderboardUI
-</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000061"><Properties><string name="Name">LobbyUI</string><ProtectedString name="Source">-- LobbyUI: Tab „Lobby“ (docs/PHASE4_CONTRACT.md §5): große Modus-Karten „Schnelles Spiel“ / „Open World“,
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000061"><Properties><string name="Name">LobbyUI</string><ProtectedString name="Source">-- LobbyUI: Tab „Lobby“ (docs/PHASE4_CONTRACT.md §5): große Modus-Karten „Tycoon“ / „Open World“,
 -- Einstellungen (Einzelspieler/Mehrspieler, Passiv-Modus, Beginner-Modus) mit Erklärungen, Party-Tafel (Code,
 -- Mitglieder, erstellen/beitreten/verlassen, Entfernen für den Leiter), „Los geht's“ und – außerhalb der Lobby –
 -- „Zurück zur Lobby“. Der Client zeigt nur an und sendet Absichten (lobby_mode, lobby_settings, lobby_go, lobby_return,
@@ -269578,7 +269578,7 @@ return LeaderboardUI
 -- mini_notice { kind = "mode" | "party" | "lobby" }. Handy-tauglich: eine Spalte, Knöpfe mindestens 44 px.
 -- Abschnitt „Tutorial“ (Tutorial-Kiosk): die Schritte als Liste und „Tutorial erneut starten“ (tutorial_restart,
 -- nur nach Ende/Überspringen; die Belohnung gibt es nicht noch einmal). Solange GameConfig.Tycoon leer ist
--- (Meilenstein 4), zeigt die Karte „Schnelles Spiel“ den Zustand „Eröffnet bald“.
+-- (Meilenstein 4), zeigt die Karte „Tycoon“ den Zustand „Eröffnet bald“.
 local Players = game:GetService("Players")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local GameConfig = require(Mini:WaitForChild("GameConfig"))
@@ -269595,7 +269595,7 @@ local settingsRows = {}
 
 local MODES = {
 	{
-		key = "tycoon", title = "Schnelles Spiel", color = nil,
+		key = "tycoon", title = "Tycoon", color = nil,
 		desc = "Eine Tycoon-Runde mit Bargeld: Wähle ein Gebäude, kauf Upgrades und bau es bis Stufe 5 aus. Fertige Runden bringen Boni für die Werkstattmeile.",
 	},
 	{
@@ -269605,7 +269605,7 @@ local MODES = {
 }
 
 local SETTINGS = {
-	{ key = "single", title = "Einzelspieler", onText = "Einzelspieler", offText = "Mehrspieler", desc = "Einzelspieler: Du reist in einen eigenen Server ohne andere Spieler. Mehrspieler: Du triffst andere in der Stadt und im Schnellen Spiel." },
+	{ key = "single", title = "Einzelspieler", onText = "Einzelspieler", offText = "Mehrspieler", desc = "Einzelspieler: Du reist in einen eigenen Server ohne andere Spieler. Mehrspieler: Du triffst andere in der Stadt und im Tycoon." },
 	{ key = "passive", title = "Passiv-Modus", onText = "An", offText = "Aus", desc = "An: In der Open World nur zuschauen und handeln – keine Missionen, keine Story, keine Auktionen. Tuning-Projekte und Gebäude verdienen weiter." },
 	{ key = "beginner", title = "Beginner-Modus", onText = "An", offText = "Aus", desc = "An: Hinweise zu neuen Bereichen, Tutorial-Erinnerung und einfachere Erklärungen. Keine Vorteile im Spiel – nur mehr Hilfe." },
 }
@@ -269613,10 +269613,10 @@ local SETTINGS = {
 local MODE_TEXT = {
 	lobby = "Du bist in der Lobby.",
 	openworld = "Du bist in der Werkstattmeile (Open World).",
-	tycoon = "Du bist im Schnellen Spiel (Tycoon).",
+	tycoon = "Du bist im Tycoon.",
 }
 
--- Gibt es das Schnelle Spiel schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
+-- Gibt es den Tycoon schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
 local function tycoonOpen(): boolean
 	local t = GameConfig.Tycoon
 	return type(t) == "table" and next(t) ~= nil
@@ -270495,7 +270495,7 @@ local function onNotice(data)
 	elseif kind == "prestige" then
 		call(Modules.prestige and Modules.prestige.OnNotice, data)
 	elseif kind == "tycoon_market" or kind == "tycoon_stage" or kind == "trade" or kind == "tycoon_choose" or kind == "tycoon" then
-		-- Schnelles Spiel: Marktplatz-Tafel, Stufen/Handel (Neuzeichnen), Start-Pad öffnet den Tab (TycoonClient)
+		-- Tycoon: Marktplatz-Tafel, Stufen/Handel (Neuzeichnen), Start-Pad öffnet den Tab (TycoonClient)
 		call(Modules.tycoon and Modules.tycoon.OnNotice, data)
 		if Tycoon then
 			call(Tycoon.OnNotice, data)
@@ -270599,14 +270599,14 @@ function MiniClient.Start(o)
 		warnOnce("drive", "Fahren nicht geladen: " .. tostring(errDrive))
 	end
 
-	-- Schnelles Spiel (eigene ScreenGui "TycoonHUD", eigener Heartbeat; läuft unabhängig vom Panel)
+	-- Tycoon (eigene ScreenGui "TycoonHUD", eigener Heartbeat; läuft unabhängig vom Panel)
 	local okTy, errTy = pcall(function()
 		Tycoon = require(folder:WaitForChild("TycoonClient", 10))
 		Tycoon.Start(ctx)
 	end)
 	if not okTy then
 		Tycoon = nil
-		warnOnce("tycoon", "Schnelles Spiel nicht geladen: " .. tostring(errTy))
+		warnOnce("tycoon", "Tycoon nicht geladen: " .. tostring(errTy))
 	end
 
 	-- Story-Missionen in der Welt (eigene ScreenGui "Missionen", eigener Heartbeat – MiniClient ruft Step nicht auf)
@@ -270918,7 +270918,7 @@ UI.FontBig = Enum.Font.GothamBlack
 
 UI.Tabs = {
 	{ key = "lobby", label = "Lobby" },
-	{ key = "tycoon", label = "Schnelles Spiel" },
+	{ key = "tycoon", label = "Tycoon" },
 	{ key = "story", label = "Story" },
 	{ key = "map", label = "Stadtplan" }, -- so heißt er im Tutorial („Drück M … Tab „Stadtplan““), gleich sichtbar
 	{ key = "buildings", label = "Gebäude" },
@@ -270941,7 +270941,7 @@ UI.Tabs = {
 }
 UI.TabTitles = {
 	lobby = "Lobby",
-	tycoon = "Schnelles Spiel · Tycoon",
+	tycoon = "Tycoon · Tycoon",
 	story = "Story · Vom Kiesplatzhändler zum Mega-Verkäufer",
 	buildings = "Gebäude · Grundstück",
 	unlocks = "Freischaltungen",
@@ -273181,7 +273181,7 @@ PrestigeUI.ToastHeight = 60
 PrestigeUI.CardGap = 8
 function PrestigeUI.OverlayTop(): number
 	local top = PrestigeUI.HudBottom() + PrestigeUI.CardGap
-	-- Bargeld-Abzeichen des Schnellen Spiels (TycoonClient) hängt unter dem Prestige-Abzeichen: Karten darunter legen
+	-- Bargeld-Abzeichen des Tycoons (TycoonClient) hängt unter dem Prestige-Abzeichen: Karten darunter legen
 	-- (auf schmalen Bildschirmen rückt beides unter die 2.4.0-Leiste; HudBottom ist 0, solange es unsichtbar ist)
 	local okT, tyBottom = pcall(function()
 		local node = script.Parent:FindFirstChild("TycoonClient")
@@ -275983,7 +275983,7 @@ function TutorialUI.Gui()
 end
 
 return TutorialUI
-</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000079"><Properties><string name="Name">TycoonClient</string><ProtectedString name="Source">-- TycoonClient: Client-Seite des Schnellen Spiels außerhalb des Panels (docs/PHASE4_CONTRACT.md §8).
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000079"><Properties><string name="Name">TycoonClient</string><ProtectedString name="Source">-- TycoonClient: Client-Seite des Tycoons außerhalb des Panels (docs/PHASE4_CONTRACT.md §8).
 -- Gestartet von MiniClient: TycoonClient.Start(ctx); danach TycoonClient.OnSnapshot(s) je Snapshot und
 -- TycoonClient.OnNotice(data) je mini_notice (MiniClient reicht beides durch, wie bei DriveClient).
 --   Abzeichen   eigene ScreenGui "TycoonHUD" (DisplayOrder 19, wie ProgressHUD) oben rechts UNTER dem Prestige-Abzeichen
@@ -276810,7 +276810,7 @@ function TycoonClient.PadInfo(part: Instance)
 end
 
 return TycoonClient
-</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000080"><Properties><string name="Name">TycoonUI</string><ProtectedString name="Source">-- TycoonUI: Tab „Schnelles Spiel“ (tycoon) (docs/PHASE4_CONTRACT.md §8, §10, §11).
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBXN0000080"><Properties><string name="Name">TycoonUI</string><ProtectedString name="Source">-- TycoonUI: Tab „Tycoon“ (tycoon) (docs/PHASE4_CONTRACT.md §8, §10, §11).
 -- Ohne Durchlauf: vier Gebäude-Karten (Beschreibung, Spielweise, Open-World-Bonus einer fertigen Runde) → tycoon_choose.
 -- Mit Durchlauf: Kopf (Typ, Stufe n/5, Bargeld, Behälter x/Kapazität, Rate/s), „Sammeln“ (tycoon_collect), Upgrades der
 -- aktuellen Stufe (Name, Wirkung, Kosten, Kaufen/Gekauft, Sperrgrund) → tycoon_buy {id}, Stufen-Karte (Preis + Waren)
@@ -276969,7 +276969,7 @@ local function inTycoon(): boolean
 	return latest == nil or latest.mode == nil or latest.mode == "tycoon"
 end
 
--- Spieler für das Angebot: Snapshot-Liste (tycoon.players: im Schnellen Spiel mit Durchlauf), sonst Absender offener
+-- Spieler für das Angebot: Snapshot-Liste (tycoon.players: im Tycoon mit Durchlauf), sonst Absender offener
 -- Marktangebote (ohne mich). Kein Players:GetPlayers(): der Server lehnt Spieler ohne Durchlauf ohnehin ab.
 local function candidates(): { { userId: number, name: string } }
 	local out, seen = {}, {}
@@ -277010,7 +277010,7 @@ local function typeCard(parent, typ: string, order: number)
 	local b = TY.Buildings[typ]
 	local button = UI.Button(parent, "", T.blue, function()
 		if not inTycoon() then
-			toast("Das Schnelle Spiel startest du auf dem Tycoon-Gelände: Lobby → „Schnelles Spiel“.")
+			toast("Den Tycoon startest du auf dem Tycoon-Gelände: Lobby → „Tycoon“.")
 			return
 		end
 		pendingChoice = typ
@@ -277126,7 +277126,7 @@ function TycoonUI.Build(page, c)
 	-- Status / Rückweg
 	local status = UI.Card(page, 1)
 	status.Name = "StatusCard"
-	UI.Title(status, "Schnelles Spiel", 1)
+	UI.Title(status, "Tycoon", 1)
 	refs.where = UI.Label(status, "", { LayoutOrder = 2, Name = "Where" })
 	refs.modeHint = UI.Small(status, "", 3)
 	refs.modeHint.Name = "ModeHint"
@@ -277200,7 +277200,7 @@ function TycoonUI.Build(page, c)
 	local tr = UI.Card(page, 7)
 	tr.Name = "TradeCard"
 	UI.Title(tr, "Handel · Marktplatz", 1)
-	UI.Small(tr, "Nur Bargeld, nur im Schnellen Spiel. Ein Angebot gilt " .. tostring(TY.TradeTTL) .. " Sekunden.", 2)
+	UI.Small(tr, "Nur Bargeld, nur im Tycoon. Ein Angebot gilt " .. tostring(TY.TradeTTL) .. " Sekunden.", 2)
 	refs.incomingTitle = UI.Label(tr, "Angebote an dich", { Font = UI.FontBold, TextSize = 15, LayoutOrder = 3, Name = "IncomingTitle" })
 	refs.incoming = UI.Pool(tr, function(parent, i)
 		return offerRow(parent, i, "accept", "Annehmen", T.green)
@@ -277230,7 +277230,7 @@ function TycoonUI.Build(page, c)
 	UI.List(list, 4)
 	refs.playerList = list
 	refs.players = UI.Pool(list, playerRow)
-	refs.playersEmpty = UI.Small(list, "Niemand da – andere Spieler müssen im Schnellen Spiel sein.", 99)
+	refs.playersEmpty = UI.Small(list, "Niemand da – andere Spieler müssen im Tycoon sein.", 99)
 	refs.playersEmpty.Name = "PlayersEmpty"
 
 	local items = UI.Frame(tr, { BackgroundTransparency = 1, LayoutOrder = 43, Size = UDim2.new(1, 0, 0, UI.MinTouch), AutomaticSize = Enum.AutomaticSize.None })
@@ -277301,7 +277301,7 @@ function TycoonUI.Build(page, c)
 		end
 		UI.Confirm(
 			"Rebirth: Dein Gebäude wird zurückgesetzt, das Bargeld verfällt. Dafür bekommst du dauerhaft +"
-				.. tostring(TY.Rebirth.boostPct) .. " % Einkommen im Schnellen Spiel und die Runde zählt für den Open-World-Bonus.",
+				.. tostring(TY.Rebirth.boostPct) .. " % Einkommen im Tycoon und die Runde zählt für den Open-World-Bonus.",
 			function()
 				Remote.Send("tycoon_rebirth")
 			end,
@@ -277579,7 +277579,7 @@ function TycoonUI.Render(s)
 	refs.where.Text = r and ("Dein Durchlauf: " .. tostring(r.name or (TY.Buildings[r.building] and TY.Buildings[r.building].name) or r.building) .. ", Stufe " .. tostring(r.stage) .. "/" .. tostring(TY.MaxStage) .. ".")
 		or "Kein Durchlauf – wähle unten ein Gebäude."
 	if not here then
-		refs.modeHint.Text = "Du bist gerade " .. (mode == "lobby" and "in der Lobby" or "in der Open World") .. ". Das Schnelle Spiel läuft auf dem Tycoon-Gelände (Lobby → „Schnelles Spiel“). Deine Runde wartet dort auf dich."
+		refs.modeHint.Text = "Du bist gerade " .. (mode == "lobby" and "in der Lobby" or "in der Open World") .. ". Der Tycoon läuft auf dem Tycoon-Gelände (Lobby → „Tycoon“). Deine Runde wartet dort auf dich."
 	elseif latest and latest.simulated == true then
 		refs.modeHint.Text = GameConfig.SimulationNotice
 	else

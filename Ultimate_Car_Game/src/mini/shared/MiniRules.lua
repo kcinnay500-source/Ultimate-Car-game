@@ -11,7 +11,7 @@ local AuctionRules = require(script.Parent:WaitForChild("AuctionRules"))
 local ArcadeRules = require(script.Parent:WaitForChild("ArcadeRules"))
 -- Ausbaustufe 4: Einstellungen/Tutorial (games.meta) und Prestige (games.prestige); MetaRules braucht nur GameConfig
 local MetaRules = require(script.Parent:WaitForChild("MetaRules"))
--- Meilenstein 4: Schnelles Spiel (games.tycoon); TycoonRules braucht nur GameConfig, PrestigeRules und Config
+-- Meilenstein 4: Tycoon (games.tycoon); TycoonRules braucht nur GameConfig, PrestigeRules und Config
 local TycoonRules = require(script.Parent:WaitForChild("TycoonRules"))
 -- Meilensteine 6–7: Open-World-Gebäude (games.ow) und Story (games.story); beide laden MiniRules erst beim Aufruf
 local OWRules = require(script.Parent:WaitForChild("OWRules"))

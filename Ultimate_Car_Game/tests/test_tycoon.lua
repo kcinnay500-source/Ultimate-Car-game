@@ -1057,7 +1057,7 @@ return {
 		-- Aktionen außerhalb des Tycoon: freundlicher Toast
 		S.act(a, "tycoon_choose", { building = "werkstatt" })
 		T.eq(S.run(a), nil, "kein Durchlauf in der Lobby")
-		T.check(g:HasToast(a, "in der Lobby"), "Toast: Schnelles Spiel in der Lobby starten")
+		T.check(g:HasToast(a, "in der Lobby"), "Toast: Tycoon in der Lobby starten")
 		-- echte Lobby-Aktionen (MiniService-Verkabelung), dann OnMode wie vom Integrator
 		T.eq(g:Act(a, "lobby_mode", { mode = "tycoon", rid = 1 }), "ok", "lobby_mode")
 		T.eq(g:Act(a, "lobby_go", { rid = 2 }), "ok", "lobby_go")

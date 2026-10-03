@@ -8,7 +8,7 @@ Die Tabellen unten schreibt `tools/economy_sim.py`. Das Skript liest die echten 
 python3 tools/economy_sim.py              # Tabellen ausgeben
 python3 tools/economy_sim.py --check      # Ziele aus §7 prüfen (Exit-Code 1 bei Verstoß)
 python3 tools/economy_sim.py --write-doc  # Tabellenblock in diesem Dokument erneuern
-python3 tools/economy_sim.py --tycoon     # nur die Rundendauer des Schnellen Spiels
+python3 tools/economy_sim.py --tycoon     # nur die Rundendauer des Tycoons
 ```
 
 `--check` prüft seit Ausbaustufe 4 zusätzlich die Ziele aus `docs/PHASE4_CONTRACT.md` (Abschnitt „Ziele Ausbaustufe 4“).
@@ -43,11 +43,11 @@ OW-Gebäude und -Perks, Story, Shop).
 | Gestapelte Boni (Prestige + Tycoon + OW-Perks) bleiben unter den Deckeln | Tabelle „Deckel der Boni“ | ja |
 
 **Gemischtes Spiel** (Annahme `MIX` im Skript): Die Spielzeit teilt sich je Spielstunde auf. Bis Level 14: Werkstatt 55 %,
-Minispiele 15 %, Story/Nebenmissionen/Kiesplatz 15 %, Schnelles Spiel 10 %, Freizeit 5 %. Level 15–49: 45 / 10 / 10 / 20 / 15 %.
+Minispiele 15 %, Story/Nebenmissionen/Kiesplatz 15 %, Tycoon 10 %, Freizeit 5 %. Level 15–49: 45 / 10 / 10 / 20 / 15 %.
 Ab Level 50: 30 / 10 / 10 / 25 / 25 %. „Freizeit“ ist Autos fahren und tunen, Auktionen, Waschstraße und Lobby. Sie
 bringt keine XP. Story-Missionen laufen der Reihe nach, sobald das Kapitel-Level erreicht ist (Aufwand = `minutes`).
 Danach kommen bis zu 3 Nebenmissionen je Spieltag (2 Std. Spielzeit je Tag), die restliche Story-Zeit geht an den Kiesplatz.
-Das Schnelle Spiel läuft Durchlauf für Durchlauf (Werkstatt, Autohaus, Produktion, Schrottplatz). Es bringt
+Der Tycoon läuft Durchlauf für Durchlauf (Werkstatt, Autohaus, Produktion, Schrottplatz). Es bringt
 `GameConfig.XP.TycoonStage` je Stufe und `TycoonRun` je Durchlauf, und der Werkstatt-Bonus wirkt in der Werkstatt mit.
 OW-Gebäude werden gebaut, sobald Level und das 1,5-Fache des Preises da sind.
 
@@ -172,7 +172,7 @@ Querboni (Spalte rechts): Parkplatz-Serie gedeckelt (×1,25), Diagnosepunkte ged
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | erreicht nach | 4 Min. | 15 Min. | 34 Min. | 78 Min. | 1,9 Std. | 2,6 Std. | 3,3 Std. | 3,5 Std. |
 
-#### Schnelles Spiel: Zeit bis Stufe 5 komplett (aktiv, gieriger Kauf alle 15 s)
+#### Tycoon: Zeit bis Stufe 5 komplett (aktiv, gieriger Kauf alle 15 s)
 
 | Gebäude | Stufe 2 | Stufe 3 | Stufe 4 | Stufe 5 | **komplett** | 2. Runde (Rebirth +15 %) | Bargeld gesamt |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -185,7 +185,7 @@ Ziel (Vertrag §8): ≈ 5 Std. je Durchlauf (geprüft: 4,0 Std. bis 6,5 Std.); B
 
 ### Ausbaustufe 4 (PHASE4_CONTRACT)
 
-#### Level im gemischten Spiel (Werkstatt + Minispiele + Story/Nebenmissionen/Kiesplatz + Schnelles Spiel)
+#### Level im gemischten Spiel (Werkstatt + Minispiele + Story/Nebenmissionen/Kiesplatz + Tycoon)
 
 | Level | 5 | 10 | 20 | 30 | 40 | 50 | 60 | 72 | 90 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -199,7 +199,7 @@ XP-Quellen in 50 Std. (2 Tycoon-Durchläufe):
 | Minispiele | 11.860 | 5 % |
 | Story-Missionen | 10.490 | 4 % |
 | Nebenmissionen | 1.800 | 1 % |
-| Schnelles Spiel (Stufen + Durchläufe) | 1.040 | 0 % |
+| Tycoon (Stufen + Durchläufe) | 1.040 | 0 % |
 | Kiesplatz-Verkäufe | 709 | 0 % |
 | OW-Gebäude bauen | 360 | 0 % |
 | Tutorial | 60 | 0 % |
@@ -291,7 +291,7 @@ Neben- und Kiesplatz-Zeilen: jeweils das ungünstigste Level (Nebenmissionen wac
 | Nord R4 Nachtfalke | Nord R4 | 14 | 42.000 Cr | 52 Min. | 74 Min. |
 | Vektor RS Blitz | Vektor RS | 45 | 585.000 Cr | 4,1 Std. | 4,8 Std. |
 
-#### Deckel der Boni (Prestige, Schnelles Spiel, OW-Perks)
+#### Deckel der Boni (Prestige, Tycoon, OW-Perks)
 
 | Bonus | Höchstwert | Deckel | ok |
 |---|---:|---:|---|

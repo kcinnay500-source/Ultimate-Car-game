@@ -1,4 +1,4 @@
--- LobbyUI: Tab „Lobby“ (docs/PHASE4_CONTRACT.md §5): große Modus-Karten „Schnelles Spiel“ / „Open World“,
+-- LobbyUI: Tab „Lobby“ (docs/PHASE4_CONTRACT.md §5): große Modus-Karten „Tycoon“ / „Open World“,
 -- Einstellungen (Einzelspieler/Mehrspieler, Passiv-Modus, Beginner-Modus) mit Erklärungen, Party-Tafel (Code,
 -- Mitglieder, erstellen/beitreten/verlassen, Entfernen für den Leiter), „Los geht's“ und – außerhalb der Lobby –
 -- „Zurück zur Lobby“. Der Client zeigt nur an und sendet Absichten (lobby_mode, lobby_settings, lobby_go, lobby_return,
@@ -7,7 +7,7 @@
 -- mini_notice { kind = "mode" | "party" | "lobby" }. Handy-tauglich: eine Spalte, Knöpfe mindestens 44 px.
 -- Abschnitt „Tutorial“ (Tutorial-Kiosk): die Schritte als Liste und „Tutorial erneut starten“ (tutorial_restart,
 -- nur nach Ende/Überspringen; die Belohnung gibt es nicht noch einmal). Solange GameConfig.Tycoon leer ist
--- (Meilenstein 4), zeigt die Karte „Schnelles Spiel“ den Zustand „Eröffnet bald“.
+-- (Meilenstein 4), zeigt die Karte „Tycoon“ den Zustand „Eröffnet bald“.
 local Players = game:GetService("Players")
 local Mini = game:GetService("ReplicatedStorage"):WaitForChild("GarageShared"):WaitForChild("Mini")
 local GameConfig = require(Mini:WaitForChild("GameConfig"))
@@ -24,7 +24,7 @@ local settingsRows = {}
 
 local MODES = {
 	{
-		key = "tycoon", title = "Schnelles Spiel", color = nil,
+		key = "tycoon", title = "Tycoon", color = nil,
 		desc = "Eine Tycoon-Runde mit Bargeld: Wähle ein Gebäude, kauf Upgrades und bau es bis Stufe 5 aus. Fertige Runden bringen Boni für die Werkstattmeile.",
 	},
 	{
@@ -34,7 +34,7 @@ local MODES = {
 }
 
 local SETTINGS = {
-	{ key = "single", title = "Einzelspieler", onText = "Einzelspieler", offText = "Mehrspieler", desc = "Einzelspieler: Du reist in einen eigenen Server ohne andere Spieler. Mehrspieler: Du triffst andere in der Stadt und im Schnellen Spiel." },
+	{ key = "single", title = "Einzelspieler", onText = "Einzelspieler", offText = "Mehrspieler", desc = "Einzelspieler: Du reist in einen eigenen Server ohne andere Spieler. Mehrspieler: Du triffst andere in der Stadt und im Tycoon." },
 	{ key = "passive", title = "Passiv-Modus", onText = "An", offText = "Aus", desc = "An: In der Open World nur zuschauen und handeln – keine Missionen, keine Story, keine Auktionen. Tuning-Projekte und Gebäude verdienen weiter." },
 	{ key = "beginner", title = "Beginner-Modus", onText = "An", offText = "Aus", desc = "An: Hinweise zu neuen Bereichen, Tutorial-Erinnerung und einfachere Erklärungen. Keine Vorteile im Spiel – nur mehr Hilfe." },
 }
@@ -42,10 +42,10 @@ local SETTINGS = {
 local MODE_TEXT = {
 	lobby = "Du bist in der Lobby.",
 	openworld = "Du bist in der Werkstattmeile (Open World).",
-	tycoon = "Du bist im Schnellen Spiel (Tycoon).",
+	tycoon = "Du bist im Tycoon.",
 }
 
--- Gibt es das Schnelle Spiel schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
+-- Gibt es den Tycoon schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
 local function tycoonOpen(): boolean
 	local t = GameConfig.Tycoon
 	return type(t) == "table" and next(t) ~= nil

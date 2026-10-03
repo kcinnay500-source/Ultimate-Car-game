@@ -1,4 +1,4 @@
-TESTBERICHT – Ultimate Car Game 3.x mit Ausbaustufe 4 (Lobby, Tutorial, Prestige, Schnelles Spiel, Open World, Story, Shop)
+TESTBERICHT – Ultimate Car Game 3.x mit Ausbaustufe 4 (Lobby, Tutorial, Prestige, Tycoon, Open World, Story, Shop)
 =====================================================================================================================
 
 Datum: 2026-10-03
@@ -43,7 +43,7 @@ Tests (35 Dateien; die Roblox-Nachbildung führt den echten GarageServer und Gar
       Lobby/Einstellungen/Party (2–4 Spieler, Leiter/Mitglied, Nachholen), PlaceRouter (Simulation, TeleportData-Prüfung,
       Teleport-Fehler), Tutorial (11 Schritte, Überspringen, Neustart ohne zweite Belohnung, nur Open World),
       Beginner-Hinweise, Freischaltungen (Elys ab Level 90), Prestige ohne Reset,
-      Schnelles Spiel (4 Gebäudetypen, Pads, Bargeld, Stufen 1–5, Handel, Rebirth, Bonus in der Open World),
+      Tycoon (4 Gebäudetypen, Pads, Bargeld, Stufen 1–5, Handel, Rebirth, Bonus in der Open World),
       Open-World-Gebäude (Bauzeit offline, Abholen, Perks, Passiv-Modus), Story Kapitel 1–5, Kiesplatz-Verkauf,
       Nebenmissionen, Lieferfahrt, Co-op, Shop (Kosmetik, DLC-Autos, Pässe, Profiles.GrantReceipt, keine Zufallsboxen),
       Spielbarkeits-Fixes (Reisen aus Lobby/Tycoon in die Stadt wechseln den Modus).
@@ -52,7 +52,7 @@ Tests (35 Dateien; die Roblox-Nachbildung führt den echten GarageServer und Gar
 
 Balance (tools/economy_sim.py --check)
   - Level 50 nach 8,2 Std., Level 90 nach 25,3 Std. gemischtem Spiel (Ziel ≈ 8 Std. bzw. 25–35 Std.).
-  - Schnelles Spiel: ein Durchlauf bis Stufe 5 komplett ≈ 4,9–5,0 Std. je Gebäudetyp (Ziel 4,0–6,5 Std.).
+  - Tycoon: ein Durchlauf bis Stufe 5 komplett ≈ 4,9–5,0 Std. je Gebäudetyp (Ziel 4,0–6,5 Std.).
   - Missions-Belohnungen höchstens 39 % der Werkstatt-Einnahme je Minute (Grenze 40 %).
   - Alle Bonus-Deckel eingehalten (Prestige +30 %, Tycoon-Boni, OW-Perks ≤ 25 %, Werkstatt-Deckel ×1,60).
   - DLC-Autos: gleiche Fahrwerte wie das Basismodell, Credits-Preis ×1,5.

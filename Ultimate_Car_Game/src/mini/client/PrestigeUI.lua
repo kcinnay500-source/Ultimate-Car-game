@@ -347,7 +347,7 @@ PrestigeUI.ToastHeight = 60
 PrestigeUI.CardGap = 8
 function PrestigeUI.OverlayTop(): number
 	local top = PrestigeUI.HudBottom() + PrestigeUI.CardGap
-	-- Bargeld-Abzeichen des Schnellen Spiels (TycoonClient) hängt unter dem Prestige-Abzeichen: Karten darunter legen
+	-- Bargeld-Abzeichen des Tycoons (TycoonClient) hängt unter dem Prestige-Abzeichen: Karten darunter legen
 	-- (auf schmalen Bildschirmen rückt beides unter die 2.4.0-Leiste; HudBottom ist 0, solange es unsichtbar ist)
 	local okT, tyBottom = pcall(function()
 		local node = script.Parent:FindFirstChild("TycoonClient")

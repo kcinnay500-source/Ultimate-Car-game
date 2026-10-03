@@ -1,4 +1,4 @@
-"""Stufen-Vorlagen des Schnellen Spiels: ServerStorage.TycoonTemplates.<typ>.Stage_1..5 (PHASE4_CONTRACT §8).
+"""Stufen-Vorlagen des Tycoons: ServerStorage.TycoonTemplates.<typ>.Stage_1..5 (PHASE4_CONTRACT §8).
 
 Der TycoonService klont die Vorlage der aktuellen Stufe und setzt sie mit PivotTo auf den Anker des Grundstücks
 (Tycoon.Plots.Slot_n.Anchor, CFrame (X, 0.5, Z) * Angles(0, rad(Rot), 0)). Jede Vorlage ist plotlokal gebaut:

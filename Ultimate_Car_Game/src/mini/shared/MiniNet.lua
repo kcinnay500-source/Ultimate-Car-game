@@ -62,7 +62,7 @@ MiniNet.Actions = {
 	tutorial_restart = {}, -- Tutorial-Kiosk in der Lobby: noch einmal von vorn (ohne zweite Belohnung)
 	prestige_claim = { rank = "number" },
 	unlocks_seen = {},
-	-- Meilenstein 4 (PHASE4_CONTRACT §8, §10): Schnelles Spiel (Tycoon). qty/price sind Absichten in Bargeld
+	-- Meilenstein 4 (PHASE4_CONTRACT §8, §10): Tycoon. qty/price sind Absichten in Bargeld
 	-- (validate.py INTENT_FIELDS), to = UserId des Handelspartners, id der Angebote = Server-Laufnummer.
 	tycoon_choose = { building = "string" },
 	tycoon_collect = {},

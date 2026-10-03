@@ -1,4 +1,4 @@
--- TycoonClient: Client-Seite des Schnellen Spiels außerhalb des Panels (docs/PHASE4_CONTRACT.md §8).
+-- TycoonClient: Client-Seite des Tycoons außerhalb des Panels (docs/PHASE4_CONTRACT.md §8).
 -- Gestartet von MiniClient: TycoonClient.Start(ctx); danach TycoonClient.OnSnapshot(s) je Snapshot und
 -- TycoonClient.OnNotice(data) je mini_notice (MiniClient reicht beides durch, wie bei DriveClient).
 --   Abzeichen   eigene ScreenGui "TycoonHUD" (DisplayOrder 19, wie ProgressHUD) oben rechts UNTER dem Prestige-Abzeichen

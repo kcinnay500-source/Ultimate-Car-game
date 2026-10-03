@@ -29,7 +29,7 @@
 --   PlaceRouter.MoveToZone(p, kind) -> ok, msg    Figur zur Zonen-Ankunft versetzen (ohne Moduswechsel), z. B. nach dem Erscheinen.
 --                                                Open World mit laufendem Tutorial: die eigene Werkstatt (dort beginnt es),
 --                                                sonst die Stadt-Ankunft.
---   PlaceRouter.ArrivedText(kind) -> string      Ankunfts-Toast; Schnelles Spiel ohne Tycoon-Dienst (GameConfig.Tycoon leer):
+--   PlaceRouter.ArrivedText(kind) -> string      Ankunfts-Toast; Tycoon ohne Tycoon-Dienst (GameConfig.Tycoon leer):
 --                                                „eröffnet bald“ mit dem Rückweg.
 --   PlaceRouter.WouldTeleport(kind) -> bool      true, wenn Go einen echten Teleport versuchen würde (für den Snapshot)
 --   PlaceRouter.SanitizeTeleportData(raw) -> table  Whitelist nach GameConfig.TeleportDataKeys (nur string/number/boolean)
@@ -56,8 +56,8 @@ local TEXT = {
 	zoneMissing = "Dieser Bereich ist in diesem Place nicht vorhanden. Du bleibst hier.",
 	noCharacter = "Warte kurz, bis deine Figur da ist.",
 	teleportFailed = "Der Teleport hat nicht geklappt. Wir wechseln den Ort hier im Server.",
-	arrived = { lobby = "Willkommen in der Lobby!", openworld = "Willkommen in der Werkstattmeile!", tycoon = "Schnelles Spiel: Viel Erfolg bei deiner Tycoon-Runde!" },
-	tycoonSoon = "Das Schnelle Spiel eröffnet bald! Zurück geht's mit M → Tab „Lobby“ → „Zurück zur Lobby“.",
+	arrived = { lobby = "Willkommen in der Lobby!", openworld = "Willkommen in der Werkstattmeile!", tycoon = "Tycoon: Viel Erfolg bei deiner Tycoon-Runde!" },
+	tycoonSoon = "Der Tycoon eröffnet bald! Zurück geht's mit M → Tab „Lobby“ → „Zurück zur Lobby“.",
 }
 PlaceRouter.Text = TEXT
 
@@ -80,7 +80,7 @@ local function emit(p: any, kind: string, data: any)
 	end
 end
 
--- Gibt es das Schnelle Spiel schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
+-- Gibt es den Tycoon schon (TycoonService, Meilenstein 4)? Solange GameConfig.Tycoon leer ist: nein.
 function PlaceRouter.TycoonOpen(): boolean
 	local t = GameConfig.Tycoon
 	return type(t) == "table" and next(t) ~= nil

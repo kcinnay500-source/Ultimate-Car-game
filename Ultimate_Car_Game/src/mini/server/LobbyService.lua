@@ -41,7 +41,7 @@ local ctx -- GarageServer-Kontext (emit, toast, moveTo, now, getSession)
 
 local TEXT = {
 	modeUnknown = "Diesen Modus gibt es nicht.",
-	modeChosen = { tycoon = "Schnelles Spiel ausgewählt. Drück „Los geht's“, wenn du bereit bist.", openworld = "Open World ausgewählt. Drück „Los geht's“, wenn du bereit bist." },
+	modeChosen = { tycoon = "Tycoon ausgewählt. Drück „Los geht's“, wenn du bereit bist.", openworld = "Open World ausgewählt. Drück „Los geht's“, wenn du bereit bist." },
 	settingsSaved = "Einstellungen gespeichert.",
 	settingsSame = "Das ist schon so eingestellt.",
 	alreadyThere = "Du bist schon hier.",
@@ -67,7 +67,7 @@ local TEXT = {
 	partyNoCode = "Es ist gerade kein Party-Code frei. Versuch es gleich noch einmal.",
 	partyTooSoon = "Einen Moment, bitte.",
 	arrived = PlaceRouter.Text.arrived,
-	stationHint = { mode_tycoon = "Schnelles Spiel", mode_openworld = "Open World", settings = "Einstellungen", party = "Party", tutorial = "Tutorial" },
+	stationHint = { mode_tycoon = "Tycoon", mode_openworld = "Open World", settings = "Einstellungen", party = "Party", tutorial = "Tutorial" },
 }
 LobbyService.Text = TEXT
 
@@ -362,7 +362,7 @@ local function lobbyGo(ms: any, _: any, d: any)
 	if mode == "lobby" or not GameConfig.ModeSet[mode] then
 		mode = "openworld"
 	end
-	-- Party-Mitglied, dessen Leiter schon in der Open World/im Schnellen Spiel ist: Reise dorthin (zum Leiter)
+	-- Party-Mitglied, dessen Leiter schon in der Open World/im Tycoon ist: Reise dorthin (zum Leiter)
 	local party = LobbyService.PartyOf(ms.player)
 	if party and party.leader ~= ms.player then
 		local lm = leaderMode(party)

@@ -697,7 +697,7 @@ def main(argv):
     vehicle_checks(tree, city, parts, errors, warns, info, verbose)
     # 9) Zonen der Ausbaustufe 4
     zone_checks(tree, parts, errors, warns, info, verbose)
-    # 10) Stufen-Vorlagen des Schnellen Spiels (ServerStorage.TycoonTemplates)
+    # 10) Stufen-Vorlagen des Tycoons (ServerStorage.TycoonTemplates)
     template_checks(tree, errors, warns, info, verbose)
     # 11) Open World: Plot-Anker, Gebäude-Vorlagen an allen Slots, Lieferrouten, Kiesplatz
     ow_checks(tree, parts, errors, warns, info, verbose)

@@ -6,7 +6,7 @@
    Stadt (Open World) und Tycoon-Gelände sind alle drin.
 2. **Test → Play** (F5). Du startest in der **Lobby**.
 3. Taste **M** (oder Knopf „Minispiele“) öffnet das Menü. Im Tab **Lobby** wählst du **Open World** oder
-   **Schnelles Spiel** und drückst **„Los geht's“**. Du kannst auch zu einem der Portale in der Halle laufen und **E** drücken.
+   **Tycoon** und drückst **„Los geht's“**. Du kannst auch zu einem der Portale in der Halle laufen und **E** drücken.
 4. In der Open World startet beim ersten Mal das Tutorial in deiner eigenen Werkstatt. Danach: Stationen in der Stadt
    mit **E** öffnen, Schnellreise im Tab **Stadtplan**, die Story beginnt am **Kiesplatz**.
 5. Zu zweit testen: **Test → Clients und Server**, 2 Spieler, Start. In der Lobby eine Party erstellen und den Code
@@ -33,7 +33,7 @@ Was du alles ausprobieren kannst, steht als Abhak-Liste in **[STUDIO_TESTS.md](S
 | `Ultimate_Car_Game.rbxlx` | alles in einem (Lobby + Stadt + Tycoon) | **zum Spielen und Testen in Studio** |
 | `Ultimate_Car_Game_Lobby.rbxlx` | nur die Lobby-Halle | späteres Start-Place beim Veröffentlichen |
 | `Ultimate_Car_Game_OpenWorld.rbxlx` | nur die Stadt (Open World) | späteres Place „Open World“ |
-| `Ultimate_Car_Game_Tycoon.rbxlx` | nur das Tycoon-Gelände | späteres Place „Schnelles Spiel“ |
+| `Ultimate_Car_Game_Tycoon.rbxlx` | nur das Tycoon-Gelände | späteres Place „Tycoon“ |
 
 Alle vier enthalten denselben Code; das Attribut `PlaceKind` an `ReplicatedStorage.GarageShared` sagt dem Spiel, welcher
 Teil es ist. Die drei einzelnen Places braucht man erst, wenn das Spiel als Experience mit mehreren Places veröffentlicht wird.

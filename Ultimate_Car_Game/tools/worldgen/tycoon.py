@@ -1,4 +1,4 @@
-"""Tycoon-Gelände "Schnelles Spiel" (PHASE4_CONTRACT §1, §8): Workspace.Tycoon ab Z +700.
+"""Tycoon-Gelände "Tycoon" (PHASE4_CONTRACT §1, §8): Workspace.Tycoon ab Z +700.
 
 Gelände X -220..220, Z 700..1000: zwei Reihen à 4 Grundstücke 70 x 70 (Reihe A bei Z 760 mit Blick nach Süden,
 Reihe B bei Z 940 mit Blick nach Norden), dazwischen eine Straßenschleife (Asphalt) um den Marktplatz in der Mitte
@@ -20,7 +20,7 @@ Hierarchie (alles unter Workspace.Tycoon, Model mit Attribut Zone="tycoon"):
                 (die Vorlagen werden von tycoon_templates.build in ServerStorage gebaut, siehe dort)
     ButtonsRoot Folder (Kaufpads TycoonButton=<upgradeId> legt der TycoonService hier ab)
   Stations (contract.build_station): tycoon_market (MiniTab="tycoon", "Marktplatz · Handel", Anker (0,3,830),
-    Spielerseite S) und tycoon (MiniTab="tycoon", "Infostand · Schnelles Spiel", Anker (-32,3,862), Spielerseite E)
+    Spielerseite S) und tycoon (MiniTab="tycoon", "Infostand · Tycoon", Anker (-32,3,862), Spielerseite E)
   Arrivals: hub (0,-0.45,856) Blick N.  TycoonSpawn: SpawnLocation bei (0,-0.35,850), Enabled=false.
   Animated: Neonbogen (neon), Fahne_1..4 (flag) - ein TycoonClient/LobbyClient hängt Tycoon.Animated wie
   City.Animated an (CityClient hört heute nur auf Workspace.City).
@@ -71,7 +71,7 @@ PAD_TXT = SLATE
 
 STATIONS = {
     "tycoon_market": ("Marktplatz · Handel", (0.0, 3.0, 830.0), "S", -0.45),
-    "tycoon": ("Infostand · Schnelles Spiel", (-32.0, 3.0, 862.0), "E", -0.45),
+    "tycoon": ("Infostand · Tycoon", (-32.0, 3.0, 862.0), "E", -0.45),
 }
 ARRIVALS = {"hub": (0.0, -0.45, 856.0, "N")}
 SPAWN = (0.0, -0.35, 850.0)
@@ -168,7 +168,7 @@ def build_pylon(lib, parent, slot, x, z, yaw):
     gui = lib.surface_text(body, None, face="Back", name="StreetGui", canvas=(180, 480))
     lib.text_label(gui, str(slot), AMBER, "GothamBlack", "Number", None, (0.9, 0.5), (0.05, 0.04))
     lib.text_label(gui, "FREI", WHITE, "GothamBold", "Owner", None, (0.9, 0.16), (0.05, 0.58))
-    lib.text_label(gui, "SCHNELLES SPIEL", TEAL, "GothamBold", "Street", None, (0.9, 0.08), (0.05, 0.82))
+    lib.text_label(gui, "TYCOON", TEAL, "GothamBold", "Street", None, (0.9, 0.08), (0.05, 0.82))
     gui2 = lib.surface_text(body, None, face="Front", name="PlotGui", canvas=(180, 480))
     lib.text_label(gui2, "FREI – Grundstück %d" % slot, AMBER, "GothamBold", "Welcome", None, (0.9, 0.4),
                    (0.05, 0.3))
@@ -249,7 +249,7 @@ def build_market(lib, root, anim):
         lib.text_label(g, "MARKTPLATZ · HANDEL", AMBER, "GothamBlack", "Title", None, (0.94, 0.26), (0.03, 0.04))
         lib.text_label(g, "Angebote der Spieler (Bargeld): noch keine", WHITE, "GothamBold", "Offers", None,
                        (0.9, 0.5), (0.05, 0.36))
-        lib.text_label(g, "Tauschen · Kaufen · Verkaufen – nur im Schnellen Spiel", TEAL, "GothamBold", "Hint",
+        lib.text_label(g, "Tauschen · Kaufen · Verkaufen – nur im Tycoon", TEAL, "GothamBold", "Hint",
                        None, (0.9, 0.12), (0.05, 0.86))
         _box(lib, m, "Tafeldach", -9, 9, 8.0, 8.4, 829.2, 830.8, AMBER, "Neon", deco=True)
         # Infostand (Säule + Bildschirm nach Osten)
@@ -257,7 +257,7 @@ def build_market(lib, root, anim):
         lib.cylinder(m, "Infosaeule", (kx, 1.3, kz), 3.6, 1.2, "Y", STEEL, "Metal")
         scr = _box(lib, m, "Infoschirm", kx - 0.3, kx + 0.3, 3.1, 7.1, kz - 3, kz + 3, BLACK, "SmoothPlastic")
         g = lib.surface_text(scr, None, face="Right", name="Screen")
-        lib.text_label(g, "SCHNELLES SPIEL", AMBER, "GothamBlack", "Title", None, (0.94, 0.34), (0.03, 0.05))
+        lib.text_label(g, "TYCOON", AMBER, "GothamBlack", "Title", None, (0.94, 0.34), (0.03, 0.05))
         lib.text_label(g, "Grundstück wählen · Gebäude bauen · Stufe 5 · Rebirth", WHITE, "GothamBold", "Lines",
                        None, (0.9, 0.45), (0.05, 0.45))
         _box(lib, m, "Infodach", kx - 0.4, kx + 0.4, 7.1, 7.4, kz - 3.2, kz + 3.2, AMBER, "Neon", deco=True)
@@ -266,7 +266,7 @@ def build_market(lib, root, anim):
             for z in (837.5, 862.5):
                 _box(lib, m, "Bankfuss", x - 2.5, x + 2.5, -0.45, -0.05, z - 0.6, z + 0.6, SLATE, "Metal")
                 _box(lib, m, "Banksitz", x - 3, x + 3, -0.05, 0.35, z - 1.2, z + 1.2, (130, 90, 60), "Wood")
-        # Neonbogen "SCHNELLES SPIEL" am Südrand des Platzes (Text beidseitig), Anim neon
+        # Neonbogen "TYCOON" am Südrand des Platzes (Text beidseitig), Anim neon
         am = lib.model(anim, "Neonbogen", attrs={"Anim": "neon", "Period": 3.2, "ColorB": _c3(TEAL)})
         ax, az = 0, 874
         for sx in (-1, 1):
@@ -275,9 +275,9 @@ def build_market(lib, root, anim):
             _box(lib, am, "Neonroehre", x - 0.15, x + 0.15, 0.0, 17.5, az + 0.75, az + 1.05, AMBER, "Neon", deco=True)
         _box(lib, am, "Bogentraeger", ax - 16.25, ax + 16.25, 19, 22, az - 0.75, az + 0.75, SLATE, "Metal")
         _box(lib, am, "Neonroehre", ax - 14.5, ax + 14.5, 18.7, 19.0, az + 0.75, az + 1.05, AMBER, "Neon", deco=True)
-        lib.sign(am, "SCHNELLES SPIEL", (28, 2.6), CF.at(ax, 20.5, az + 0.85, 0), AMBER, SLATE, name="Bogenschild",
+        lib.sign(am, "TYCOON", (28, 2.6), CF.at(ax, 20.5, az + 0.85, 0), AMBER, SLATE, name="Bogenschild",
                  bolts=False)
-        lib.sign(am, "SCHNELLES SPIEL", (28, 2.6), CF.at(ax, 20.5, az - 0.85, 180), AMBER, SLATE, name="Bogenschild",
+        lib.sign(am, "TYCOON", (28, 2.6), CF.at(ax, 20.5, az - 0.85, 180), AMBER, SLATE, name="Bogenschild",
                  bolts=False)
         # Fahnen an den Platzecken (Anim flag)
         k = 0

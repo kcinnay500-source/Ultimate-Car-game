@@ -5,7 +5,7 @@ mit Lobby, Story, einem Tycoon-Modus und einem fairen Shop.
 
 ## Ausbaustufe 4 (neu)
 
-- **Lobby**: Empfangshalle mit zwei Portalen **„Schnelles Spiel“** und **„Open World“**, Einstellungen
+- **Lobby**: Empfangshalle mit zwei Portalen **„Tycoon“** und **„Open World“**, Einstellungen
   (Einzel-/Mehrspieler, Passiv-Modus, Beginner-Modus), **Party** mit 4-stelligem Code (bis 4 Spieler reisen gemeinsam),
   Tutorial-Kiosk. In Studio werden Ortswechsel simuliert (keine echten Teleports).
 - **Tutorial** (11 Schritte, überspringbar, Belohnung einmalig) und **Beginner-Hinweise** als Karten.
@@ -16,7 +16,7 @@ mit Lobby, Story, einem Tycoon-Modus und einem fairen Shop.
 - **Story** „Vom Kiesplatzhändler zum Mega-Verkäufer“: 5 Kapitel, Start am **Kiesplatz** (Gebrauchtwagen an
   NPC-Kunden verkaufen), dazu täglich 3 **Nebenmissionen** (u. a. Lieferfahrt) und der Strang „Werkstatt-Legende“.
   Missionen laufen in einer Party gemeinsam (Co-op).
-- **Schnelles Spiel (Tycoon)**: Gebäude wählen (Werkstatt, Autohaus, Produktion, Schrottplatz), mit **Bargeld** über
+- **Tycoon**: Gebäude wählen (Werkstatt, Autohaus, Produktion, Schrottplatz), mit **Bargeld** über
   Kaufpads bis Stufe 5 ausbauen, mit anderen Spielern handeln, **Rebirth** – jede fertige Runde gibt einen dauerhaften
   Bonus in der Open World.
 - **Shop**: Kosmetik (Folierungen, Felgen, Hupen, Reifenspuren), DLC-Autos mit den gleichen Fahrwerten wie ihr

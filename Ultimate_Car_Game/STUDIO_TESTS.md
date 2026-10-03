@@ -26,14 +26,14 @@ Level darfst du überspringen und später im veröffentlichten Spiel nachholen.
 
 > **Wichtig für Studio-Tests:** Manche Dinge brauchen ein gespeichertes Profil und sind darum in Studio ohne
 > API-Zugriff gesperrt. Dann erscheint eine freundliche Meldung („Dein Profil wird gerade nicht gespeichert …“) –
-> das ist **kein Fehler**. Betroffen: Open-World-Gebäude bauen, Handel im Schnellen Spiel, Spieler-Auktionen,
+> das ist **kein Fehler**. Betroffen: Open-World-Gebäude bauen, Handel im Tycoon, Spieler-Auktionen,
 > Bestenliste, Robux-Käufe.
 
 ---
 
 ## 1. Lobby, Einstellungen und Party
 
-- [ ] Die Lobby-Halle ist hell, hat eine hohe Decke, zwei große Portale **„Schnelles Spiel“** und **„Open World“**,
+- [ ] Die Lobby-Halle ist hell, hat eine hohe Decke, zwei große Portale **„Tycoon“** und **„Open World“**,
       ein Einstellungs-Terminal, eine Party-Tafel und einen Tutorial-Kiosk. Der Drehteller mit dem Ausstellungsauto dreht sich.
 - [ ] Taste **M** (oder Knopf „Minispiele“) öffnet das Menü. Der Tab **„Lobby“** zeigt: Modus-Karten, Einstellungen,
       Party, Tutorial.
@@ -41,7 +41,7 @@ Level darfst du überspringen und später im veröffentlichten Spiel nachholen.
 - [ ] Einstellungen umschalten: **Einzelspieler/Mehrspieler**, **Passiv-Modus An/Aus**, **Beginner-Modus An/Aus**.
       Der Schalter wechselt sofort; ein kurzer Hinweis bestätigt es.
 - [ ] Ohne Party: „Los geht's“ reist in den gewählten Modus (siehe Abschnitt 2).
-- [ ] In der Open World und im Schnellen Spiel gibt es den Knopf **„Zurück zur Lobby“** – er bringt dich zurück.
+- [ ] In der Open World und im Tycoon gibt es den Knopf **„Zurück zur Lobby“** – er bringt dich zurück.
 
 **Party mit 2 Spielern** (Studio: **Test → Clients und Server**, Anzahl **2 Spieler**, **Start**):
 
@@ -62,8 +62,8 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 
 - [ ] Lobby → Open World: kurzer Hinweis **„Studio-Simulation: Ortswechsel ohne Teleport“**, du stehst danach in der Stadt
       (mit laufendem Tutorial: im Empfang deiner eigenen Werkstatt).
-- [ ] Lobby → Schnelles Spiel: Hinweis, du stehst auf dem **Tycoon-Gelände** (Norden).
-- [ ] Aus der Lobby oder dem Schnellen Spiel im Menü **Stadtplan** ein Ziel wählen (oder im Tablet „Zum Empfang“) →
+- [ ] Lobby → Tycoon: Hinweis, du stehst auf dem **Tycoon-Gelände** (Norden).
+- [ ] Aus der Lobby oder dem Tycoon im Menü **Stadtplan** ein Ziel wählen (oder im Tablet „Zum Empfang“) →
       du wechselst automatisch in die Open World und reist hin.
 - [ ] Nach jedem Wechsel ist die Oberfläche vollständig, nichts doppelt, keine roten Fehler.
 - [ ] Optional: die Einzel-Places `Ultimate_Car_Game_Lobby.rbxlx`, `…_OpenWorld.rbxlx`, `…_Tycoon.rbxlx` öffnen und
@@ -186,11 +186,11 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 - [ ] **Co-op** (2 Spieler in einer Party, siehe Abschnitt 1): beide starten Mission 1, ein Verkauf des einen zählt für
       beide (Hinweis „Party: … hat … weitergebracht“), jeder holt selbst ab. Ein Mitglied im Passiv-Modus bekommt nichts.
 
-## 12. Schnelles Spiel (Tycoon)
+## 12. Tycoon
 
-- [ ] Lobby → Modus **„Schnelles Spiel“** → „Los geht's“ → du stehst auf dem Tycoon-Gelände; dein Grundstück trägt ein
+- [ ] Lobby → Modus **„Tycoon“** → „Los geht's“ → du stehst auf dem Tycoon-Gelände; dein Grundstück trägt ein
       Schild mit deinem Namen.
-- [ ] Start-Pad (E) auf deinem Grundstück oder Tab **„Schnelles Spiel“** → **Gebäude wählen**: Werkstatt, Autohaus,
+- [ ] Start-Pad (E) auf deinem Grundstück oder Tab **„Tycoon“** → **Gebäude wählen**: Werkstatt, Autohaus,
       Produktion oder Schrottplatz. Du startest sofort auf Stufe 1 mit 50 Bargeld.
 - [ ] Am Start-Pad eines **fremden** Grundstücks: Hinweis „Das ist nicht dein Grundstück. Deins ist Nr. …“, nichts passiert.
 - [ ] **Kaufpads**: drauflaufen → Upgrade gekauft (Pad wird grün), Bargeld sinkt; zu teure Pads sind orange/grau und
@@ -199,13 +199,13 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
       Bargeld ist nie Credits (Credits-Anzeige ändert sich nicht).
 - [ ] **Stufen**: Wenn alle Upgrades einer Stufe gekauft sind, erscheint das Stufen-Pad → Stufe 2 … 5; jede Stufe ist
       sichtbar größer (Halle, Anbau, Schild, Licht).
-- [ ] Verlassen und wieder ins Schnelle Spiel: Die Runde läuft an derselben Stufe weiter (innerhalb der Studio-Sitzung).
-- [ ] **Handel** (2 Spieler, beide im Schnellen Spiel, nur mit Speichern): Ware, Menge und Preis wählen, „An: Spieler“ →
+- [ ] Verlassen und wieder in den Tycoon: Die Runde läuft an derselben Stufe weiter (innerhalb der Studio-Sitzung).
+- [ ] **Handel** (2 Spieler, beide im Tycoon, nur mit Speichern): Ware, Menge und Preis wählen, „An: Spieler“ →
       der andere sieht das Angebot und kann **„Annehmen“**; Ware und Bargeld wechseln den Besitzer. **„Zurückziehen“**
       löscht das eigene Angebot; nach 120 s verfällt es. Ohne Speichern: freundlicher Hinweis statt Handel.
 - [ ] **Rebirth**: Knopf erst bei Stufe 5 mit allen Upgrades aktiv („Noch: …“ erklärt, was fehlt). Danach Bestätigung →
       Gebäude zurückgesetzt, Bargeld weg, +15 % Einkommen in der nächsten Runde.
-- [ ] **Bonus in der Open World**: Nach einem Rebirth zeigt der Tab „Schnelles Spiel“ den Bonus (z. B. Werkstatt
+- [ ] **Bonus in der Open World**: Nach einem Rebirth zeigt der Tab „Tycoon“ den Bonus (z. B. Werkstatt
       +2 % Vergütung je fertiger Runde, höchstens 5 Runden). In der Werkstatt ist die Abrechnung entsprechend höher.
       (Eine ganze Runde dauert etwa 5 Stunden – in Studio nur, wenn du Zeit hast.)
 - [ ] „Abbrechen“ (mit Bestätigung) beendet die Runde ohne Bonus.

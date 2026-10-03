@@ -61,7 +61,7 @@ return {
 		noErrors(T, g, "travel/target")
 	end },
 
-	{ "Lobby/Schnelles Spiel -> Stadtplan (mini_travel) wechselt den Modus; Ziel in der Lobby bleibt Lobby; einzelner Lobby-Place lehnt ab", function(T, H)
+	{ "Lobby/Tycoon -> Stadtplan (mini_travel) wechselt den Modus; Ziel in der Lobby bleibt Lobby; einzelner Lobby-Place lehnt ab", function(T, H)
 		local g = H.Garage({ placeKind = "all" })
 		local pl, d, p = join(g, 9111, "Lea")
 		T.eq(p.mode, "lobby", "Lobby")
@@ -87,11 +87,11 @@ return {
 		local kpos = kies and (kies:IsA("BasePart") and kies.Position or kies:GetPivot().Position)
 		T.check(kpos and root and (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(kpos.X, 0, kpos.Z)).Magnitude < 12, "Figur am Kiesplatz")
 		T.eq(d.games.meta.lastMode, "openworld", "lastMode")
-		-- Schnelles Spiel -> Stadtplan: Tycoon verlassen
+		-- Tycoon -> Stadtplan: Tycoon verlassen
 		local pl2, _, p2 = join(g, 9112, "Tom")
 		act(T, g, pl2, "lobby_mode", { mode = "tycoon" }, "ok")
 		act(T, g, pl2, "lobby_go", {}, "ok")
-		T.eq(p2.mode, "tycoon", "Tom im Schnellen Spiel")
+		T.eq(p2.mode, "tycoon", "Tom im Tycoon")
 		g:Advance(2)
 		T.check(g:MiniServer("TycoonService").PlotOf(pl2) ~= nil, "Tycoon-Grundstück belegt")
 		act(T, g, pl2, "mini_travel", { key = "workshop" }, "ok")

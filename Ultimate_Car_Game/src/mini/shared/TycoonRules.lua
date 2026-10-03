@@ -1,4 +1,4 @@
--- TycoonRules: Schnelles Spiel (Tycoon) als reine Funktionen (docs/PHASE4_CONTRACT.md §2, §8).
+-- TycoonRules: Tycoon als reine Funktionen (docs/PHASE4_CONTRACT.md §2, §8).
 -- Kein Geld (Credits), keine Instanzen, keine Dienste: alles rechnet auf d.games.tycoon und dem Durchlauf run.
 -- Bargeld (run.cash, run.container) ist NIE Credits und verlässt den Durchlauf nie (Rebirth/Abbruch löschen es).
 --   d.games.tycoon = { runsDone = { [typ] = int }, rebirths = int, xpStage = 0..5 (Stufen-XP schon vergeben),

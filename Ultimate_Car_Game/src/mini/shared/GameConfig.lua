@@ -69,7 +69,7 @@ end
 
 GameConfig.Unlocks = {
 	entry(1, "mode:openworld", "mode", "Open World", "Die Werkstattmeile: deine Werkstatt, die Stadt und alle Minispiele.", "lobby"),
-	entry(1, "mode:tycoon", "mode", "Schnelles Spiel", "Eine Tycoon-Runde mit Bargeld: bau dein Gebäude bis Stufe 5 aus.", "lobby"),
+	entry(1, "mode:tycoon", "mode", "Tycoon", "Eine Tycoon-Runde mit Bargeld: bau dein Gebäude bis Stufe 5 aus.", "lobby"),
 	entry(1, "story:1", "story", "Kapitel 1: Der Kiesplatz", "Verkaufe am Kiesplatz deine ersten Gebrauchtwagen.", "story"),
 	entry(2, "feature:press", "feature", "Schrottpresse", "Klick Schrott zusammen und tausch ihn beim Schrotthändler gegen Credits.", "press"),
 	entry(3, "feature:scrapyard", "feature", "Schrottplatz", "Kauf alte Autos, zerleg sie und verkauf die Teile.", "scrapyard"),
@@ -207,7 +207,7 @@ GameConfig.Hints = {
 	{ id = "h_story2", when = "unlock:story:2", text = "Neues Story-Kapitel! Öffne den Tab „Story“ und schau, was als Nächstes ansteht." },
 	{ id = "h_map", when = "station:map", text = "Mit dem Stadtplan reist du schnell durch die Stadt – und jederzeit zurück zu deiner Werkstatt." },
 	{ id = "h_shop", when = "station:shop", text = "Im Credit-Center gibt es Credits und Pässe. Alles im Spiel schaffst du auch ohne Robux." },
-	{ id = "h_tycoon", when = "station:mode_tycoon", text = "Schnelles Spiel: eine Tycoon-Runde mit Bargeld. Fertige Runden bringen dauerhafte Boni in der Open World." },
+	{ id = "h_tycoon", when = "station:mode_tycoon", text = "Tycoon: eine Tycoon-Runde mit Bargeld. Fertige Runden bringen dauerhafte Boni in der Open World." },
 } :: { Hint }
 
 ---------------------------------------------------------------- Deckel der Werkstatt-Vergütung (§8)
@@ -228,7 +228,7 @@ GameConfig.XP = {
 	OwBuild = 30, -- je gebauter Gebäudestufe in der Open World (Platzhalter)
 }
 
----------------------------------------------------------------- Schnelles Spiel / Tycoon (§8, Meilenstein 4)
+---------------------------------------------------------------- Tycoon / Tycoon (§8, Meilenstein 4)
 -- Alle Zahlen des Tycoon-Modus. Bargeld ist NIE Credits und verlässt den Durchlauf nie.
 -- Feste IDs (Teams arbeiten parallel): Gebäudetypen werkstatt|autohaus|produktion|schrottplatz, Stufen 1..5,
 -- Upgrade-Ids "<typ>_s<stufe>_u<k>" mit k=1 Produzent (+Bargeld/s), k=2 Tempo (×Rate), k=3 Lager (+Behälter,

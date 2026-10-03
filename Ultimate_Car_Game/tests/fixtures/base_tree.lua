@@ -9,7 +9,7 @@ return {
 		{path="base/Ultimate_Car_Game_2.4.0.rbxlx",size=5636778,hash="481beef3348e9985"},
 		{path="tools/build_place.py",size=13830,hash="039c7acf0c9d8a70"},
 		{path="tools/worldgen/__init__.py",size=4914,hash="58ead1af084be078"},
-		{path="tools/worldgen/checks.py",size=94068,hash="6a3937cf2a820d22"},
+		{path="tools/worldgen/checks.py",size=94059,hash="452c6be532ae6567"},
 		{path="tools/worldgen/contract.py",size=6794,hash="7c3bbfab2174e502"},
 		{path="tools/worldgen/design/ascii.py",size=4133,hash="5017d38f2e8d536c"},
 		{path="tools/worldgen/design/check.py",size=8818,hash="202e84ee220d8a3d"},
@@ -30,7 +30,7 @@ return {
 		{path="tools/worldgen/drive.py",size=8454,hash="3a4e1849172535b9"},
 		{path="tools/worldgen/ground_roads.py",size=41576,hash="6a913e671b6b6846"},
 		{path="tools/worldgen/lib.py",size=33885,hash="2702988d2c4eb2ae"},
-		{path="tools/worldgen/lobby.py",size=20657,hash="53f4df522e6f8149"},
+		{path="tools/worldgen/lobby.py",size=20613,hash="4a2a2d951748aac6"},
 		{path="tools/worldgen/ow_buildings.py",size=19869,hash="69e70e070066bf94"},
 		{path="tools/worldgen/plot_slots.json",size=667,hash="7fa2e06029faaee1"},
 		{path="tools/worldgen/plots.py",size=13845,hash="0520d9ff39f3cf7a"},
@@ -38,8 +38,8 @@ return {
 		{path="tools/worldgen/scan.py",size=4429,hash="40a46d932ba1b9e3"},
 		{path="tools/worldgen/test_ow.py",size=5786,hash="436779df25f84575"},
 		{path="tools/worldgen/test_vehicles.py",size=8633,hash="1a630b652a5b5e19"},
-		{path="tools/worldgen/tycoon.py",size=17618,hash="5078507e234b706b"},
-		{path="tools/worldgen/tycoon_templates.py",size=80781,hash="3d526ac90c068aba"},
+		{path="tools/worldgen/tycoon.py",size=17537,hash="24fe61bd1ef7130c"},
+		{path="tools/worldgen/tycoon_templates.py",size=80772,hash="76a056fe11e7816e"},
 		{path="tools/worldgen/vehicles.py",size=6908,hash="06a17ef73aeac52f"}
 	},
 	worldgen = {"__init__.py","checks.py","contract.py","drive.py","ground_roads.py","lib.py","lobby.py","ow_buildings.py","plot_slots.json","plots.py","render.py","scan.py","test_ow.py","test_vehicles.py","tycoon.py","tycoon_templates.py","vehicles.py"},
@@ -14484,8 +14484,8 @@ return {
 {"SpotLight","Showlicht",{Range=30,Brightness=1.4,Color=C3(1,0.956863,0.901961),Angle=60,Face=E.NormalId.Bottom,Shadows=true}}}}}},
 {"Folder","Stations",{},{
 {"Part","mode_tycoon",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-38,3,-738)},{
-{"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Schnelles Spiel · Portal",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="lobby",["MiniTitle"]="Schnelles Spiel · Portal",["PlayerSide"]="S",["LobbyAction"]="mode_tycoon"}},
+{"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Tycoon · Portal",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
+{"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="lobby",["MiniTitle"]="Tycoon · Portal",["PlayerSide"]="S",["LobbyAction"]="mode_tycoon"}},
 {"Part","mode_openworld",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(38,3,-738)},{
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Open World · Portal",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
 {"Attachment","Arrival",{CFrame=CF(0,0.5,6)}}},attrs={["MiniTab"]="lobby",["MiniTitle"]="Open World · Portal",["PlayerSide"]="S",["LobbyAction"]="mode_openworld"}},
@@ -14745,7 +14745,7 @@ return {
 {"Part","Attikaschild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(40,3.6,0.2),Shape=E.PartType.Block,CFrame=CF(0,26.5,-659.05)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(1600,144),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="LOBBY",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}},
-{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL · OPEN WORLD · PARTY",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
+{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="TYCOON · OPEN WORLD · PARTY",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(-19,24.95,-658.91)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(-19,28.05,-658.91)}},
 {"Part","SignBolt",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(0.17,0.17,0.08),Shape=E.PartType.Block,CFrame=CF(19,24.95,-658.91)}},
@@ -14762,11 +14762,11 @@ return {
 {"Part","Sturz",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(31,43,55),Material=E.Material.Metal,Size=V3(16,3,2),Shape=E.PartType.Block,CFrame=CF(-38,17.5,-738.2)}},
 {"Part","Portalschild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(14,2.4,0.2),Shape=E.PartType.Block,CFrame=CF(-38,17.5,-737.08)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(560,96),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}},
+{"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}},
 {"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Tycoon-Runde mit Bargeld · Stufe 1–5",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
 {"Part","Wandschrift",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(16,3,0.2),Shape=E.PartType.Block,CFrame=CF(-38,21.5,-739.88)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(640,120),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}}}},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}}}},
 {"Part","Startring",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(47,169,163),Material=E.Material.Neon,Size=V3(0.05,12,12),Shape=E.PartType.Cylinder,CFrame=CF(-38,0.025,-731,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Startinlay",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(200,204,208),Material=E.Material.SmoothPlastic,Size=V3(0.1,9,9),Shape=E.PartType.Cylinder,CFrame=CF(-38,0.05,-731,0,-1,0,1,0,0,0,0,1)}}}},
 {"Model","Portal_mode_openworld",{},{
@@ -14802,7 +14802,7 @@ return {
 {"Part","Wandschrift",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(26,3,0.2),Shape=E.PartType.Block,CFrame=CF(0,14.5,-739.88)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(1040,120),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Label",{Size=U2(0.96,0,0.56,0),Position=U2(0.02,0,0.05,0),BackgroundTransparency=1,Text="WILLKOMMEN IN DER LOBBY",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}},
-{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Wähle links das Schnelle Spiel oder rechts die Open World",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}}}},
+{"TextLabel","Sub",{Size=U2(0.9,0,0.3,0),Position=U2(0.05,0,0.64,0),BackgroundTransparency=1,Text="Wähle links den Tycoon oder rechts die Open World",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}}}},
 {"Model","Terminals",{},{
 {"Part","Terminalfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(31,43,55),Material=E.Material.Metal,Size=V3(1.4,2.4,4),Shape=E.PartType.Block,CFrame=CF(-59.3,1.2,-700)}},
 {"Part","Terminal",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(1.2,6,6),Shape=E.PartType.Block,CFrame=CF(-59.4,5.4,-700)},{
@@ -15557,7 +15557,7 @@ return {
 {"SurfaceGui","StreetGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Number",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.04,0),BackgroundTransparency=1,Text="1",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Owner",{Size=U2(0.9,0,0.16,0),Position=U2(0.05,0,0.58,0),BackgroundTransparency=1,Text="FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
+{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","PlotGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Welcome",{Size=U2(0.9,0,0.4,0),Position=U2(0.05,0,0.3,0),BackgroundTransparency=1,Text="FREI – Grundstück 1",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}},id="RBXN0018611"},
 {"Part","Cap",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(4.7,0.5,1.4),Shape=E.PartType.Block,CFrame=CF(-45,11.75,799.5)},attrs={["FreeColor"]=C3(0.9686274528503418,0.6901960968971252,0.24705882370471954),["OwnedColor"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
@@ -15584,7 +15584,7 @@ return {
 {"SurfaceGui","StreetGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Number",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.04,0),BackgroundTransparency=1,Text="2",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Owner",{Size=U2(0.9,0,0.16,0),Position=U2(0.05,0,0.58,0),BackgroundTransparency=1,Text="FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
+{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","PlotGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Welcome",{Size=U2(0.9,0,0.4,0),Position=U2(0.05,0,0.3,0),BackgroundTransparency=1,Text="FREI – Grundstück 2",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}},id="RBXN0018638"},
 {"Part","Cap",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(4.7,0.5,1.4),Shape=E.PartType.Block,CFrame=CF(45,11.75,799.5)},attrs={["FreeColor"]=C3(0.9686274528503418,0.6901960968971252,0.24705882370471954),["OwnedColor"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
@@ -15611,7 +15611,7 @@ return {
 {"SurfaceGui","StreetGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Number",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.04,0),BackgroundTransparency=1,Text="3",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Owner",{Size=U2(0.9,0,0.16,0),Position=U2(0.05,0,0.58,0),BackgroundTransparency=1,Text="FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
+{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","PlotGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Welcome",{Size=U2(0.9,0,0.4,0),Position=U2(0.05,0,0.3,0),BackgroundTransparency=1,Text="FREI – Grundstück 3",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}},id="RBXN0018665"},
 {"Part","Cap",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(4.7,0.5,1.4),Shape=E.PartType.Block,CFrame=CF(-45,11.75,900.5,-1,0,0,0,1,0,0,0,-1)},attrs={["FreeColor"]=C3(0.9686274528503418,0.6901960968971252,0.24705882370471954),["OwnedColor"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
@@ -15638,7 +15638,7 @@ return {
 {"SurfaceGui","StreetGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Number",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.04,0),BackgroundTransparency=1,Text="4",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Owner",{Size=U2(0.9,0,0.16,0),Position=U2(0.05,0,0.58,0),BackgroundTransparency=1,Text="FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
+{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","PlotGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Welcome",{Size=U2(0.9,0,0.4,0),Position=U2(0.05,0,0.3,0),BackgroundTransparency=1,Text="FREI – Grundstück 4",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}},id="RBXN0018692"},
 {"Part","Cap",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(4.7,0.5,1.4),Shape=E.PartType.Block,CFrame=CF(45,11.75,900.5,-1,0,0,0,1,0,0,0,-1)},attrs={["FreeColor"]=C3(0.9686274528503418,0.6901960968971252,0.24705882370471954),["OwnedColor"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
@@ -15665,7 +15665,7 @@ return {
 {"SurfaceGui","StreetGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Number",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.04,0),BackgroundTransparency=1,Text="5",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Owner",{Size=U2(0.9,0,0.16,0),Position=U2(0.05,0,0.58,0),BackgroundTransparency=1,Text="FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
+{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","PlotGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Welcome",{Size=U2(0.9,0,0.4,0),Position=U2(0.05,0,0.3,0),BackgroundTransparency=1,Text="FREI – Grundstück 5",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}},id="RBXN0018719"},
 {"Part","Cap",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(4.7,0.5,1.4),Shape=E.PartType.Block,CFrame=CF(-135,11.75,799.5)},attrs={["FreeColor"]=C3(0.9686274528503418,0.6901960968971252,0.24705882370471954),["OwnedColor"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
@@ -15692,7 +15692,7 @@ return {
 {"SurfaceGui","StreetGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Number",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.04,0),BackgroundTransparency=1,Text="6",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Owner",{Size=U2(0.9,0,0.16,0),Position=U2(0.05,0,0.58,0),BackgroundTransparency=1,Text="FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
+{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","PlotGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Welcome",{Size=U2(0.9,0,0.4,0),Position=U2(0.05,0,0.3,0),BackgroundTransparency=1,Text="FREI – Grundstück 6",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}},id="RBXN0018746"},
 {"Part","Cap",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(4.7,0.5,1.4),Shape=E.PartType.Block,CFrame=CF(135,11.75,799.5)},attrs={["FreeColor"]=C3(0.9686274528503418,0.6901960968971252,0.24705882370471954),["OwnedColor"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
@@ -15719,7 +15719,7 @@ return {
 {"SurfaceGui","StreetGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Number",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.04,0),BackgroundTransparency=1,Text="7",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Owner",{Size=U2(0.9,0,0.16,0),Position=U2(0.05,0,0.58,0),BackgroundTransparency=1,Text="FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
+{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","PlotGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Welcome",{Size=U2(0.9,0,0.4,0),Position=U2(0.05,0,0.3,0),BackgroundTransparency=1,Text="FREI – Grundstück 7",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}},id="RBXN0018773"},
 {"Part","Cap",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(4.7,0.5,1.4),Shape=E.PartType.Block,CFrame=CF(-135,11.75,900.5,-1,0,0,0,1,0,0,0,-1)},attrs={["FreeColor"]=C3(0.9686274528503418,0.6901960968971252,0.24705882370471954),["OwnedColor"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
@@ -15746,7 +15746,7 @@ return {
 {"SurfaceGui","StreetGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Number",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.04,0),BackgroundTransparency=1,Text="8",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Owner",{Size=U2(0.9,0,0.16,0),Position=U2(0.05,0,0.58,0),BackgroundTransparency=1,Text="FREI",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
+{"TextLabel","Street",{Size=U2(0.9,0,0.08,0),Position=U2(0.05,0,0.82,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}},
 {"SurfaceGui","PlotGui",{Face=E.NormalId.Front,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(180,480),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Welcome",{Size=U2(0.9,0,0.4,0),Position=U2(0.05,0,0.3,0),BackgroundTransparency=1,Text="FREI – Grundstück 8",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}},id="RBXN0018800"},
 {"Part","Cap",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(4.7,0.5,1.4),Shape=E.PartType.Block,CFrame=CF(135,11.75,900.5,-1,0,0,0,1,0,0,0,-1)},attrs={["FreeColor"]=C3(0.9686274528503418,0.6901960968971252,0.24705882370471954),["OwnedColor"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
@@ -15756,8 +15756,8 @@ return {
 {"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Marktplatz · Handel",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
 {"Attachment","Arrival",{CFrame=CF(0,0.05,6)}}},attrs={["MiniTab"]="tycoon",["MiniTitle"]="Marktplatz · Handel",["PlayerSide"]="S"}},
 {"Part","tycoon",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=true,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(1,1,1),Shape=E.PartType.Block,CFrame=CF(-32,3,862)},{
-{"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Infostand · Schnelles Spiel",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
-{"Attachment","Arrival",{CFrame=CF(6,0.05,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="tycoon",["MiniTitle"]="Infostand · Schnelles Spiel",["PlayerSide"]="E"}}}},
+{"ProximityPrompt","ProximityPrompt",{ActionText="Öffnen",ObjectText="Infostand · Tycoon",HoldDuration=0.25,MaxActivationDistance=10,RequiresLineOfSight=false,ClickablePrompt=true,KeyboardKeyCode=E.KeyCode.E,GamepadKeyCode=E.KeyCode.ButtonA}},
+{"Attachment","Arrival",{CFrame=CF(6,0.05,0,0,0,1,0,1,0,-1,0,0)}}},attrs={["MiniTab"]="tycoon",["MiniTitle"]="Infostand · Tycoon",["PlayerSide"]="E"}}}},
 {"Folder","Arrivals",{},{
 {"Part","hub",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=1,Color=C3u(47,169,163),Material=E.Material.SmoothPlastic,Size=V3(2,1,2),Shape=E.PartType.Block,CFrame=CF(0,-0.45,856)},attrs={["Look"]="N"}}}},
 {"Folder","Animated",{},{
@@ -15770,10 +15770,10 @@ return {
 {"Part","Neonroehre",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(29,0.3,0.3),Shape=E.PartType.Block,CFrame=CF(0,18.85,874.9)}},
 {"Part","Bogenschild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(28,2.6,0.2),Shape=E.PartType.Block,CFrame=CF(0,20.5,874.85)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(1120,104),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}}},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}}},
 {"Part","Bogenschild",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(31,43,55),Material=E.Material.SmoothPlastic,Size=V3(28,2.6,0.2),Shape=E.PartType.Block,CFrame=CF(0,20.5,873.15,-1,0,0,0,1,0,0,0,-1)},{
 {"SurfaceGui","SurfaceGui",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(1120,104),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}}}},attrs={["Anim"]="neon",["Period"]=3.2,["ColorB"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
+{"TextLabel","Label",{Size=U2(0.96,0,0.88,0),Position=U2(0.02,0,0.06,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.968627,0.690196,0.247059)}}}}}}},attrs={["Anim"]="neon",["Period"]=3.2,["ColorB"]=C3(0.18431372940540314,0.6627451181411743,0.6392157077789307)}},
 {"Model","Fahne_1",{PrimaryPart=R("RBXN0018849")},{
 {"Part","Mastfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.Metal,Size=V3(0.6,1.4,1.4),Shape=E.PartType.Cylinder,CFrame=CF(-58,-0.2,826,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Fahnenmast",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(17,0.4,0.4),Shape=E.PartType.Cylinder,CFrame=CF(-58,8.6,826,0,-1,0,1,0,0,0,0,1)}},
@@ -15821,12 +15821,12 @@ return {
 {"SurfaceGui","MarketScreen",{Face=E.NormalId.Back,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(680,240),LightInfluence=0,AlwaysOnTop=false},{
 {"TextLabel","Title",{Size=U2(0.94,0,0.26,0),Position=U2(0.03,0,0.04,0),BackgroundTransparency=1,Text="MARKTPLATZ · HANDEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Offers",{Size=U2(0.9,0,0.5,0),Position=U2(0.05,0,0.36,0),BackgroundTransparency=1,Text="Angebote der Spieler (Bargeld): noch keine",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}},
-{"TextLabel","Hint",{Size=U2(0.9,0,0.12,0),Position=U2(0.05,0,0.86,0),BackgroundTransparency=1,Text="Tauschen · Kaufen · Verkaufen – nur im Schnellen Spiel",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}}}},
+{"TextLabel","Hint",{Size=U2(0.9,0,0.12,0),Position=U2(0.05,0,0.86,0),BackgroundTransparency=1,Text="Tauschen · Kaufen · Verkaufen – nur im Tycoon",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.184314,0.662745,0.639216)}}}}}},
 {"Part","Tafeldach",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(18,0.4,1.6),Shape=E.PartType.Block,CFrame=CF(0,8.2,830)}},
 {"Part","Infosaeule",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(156,170,177),Material=E.Material.Metal,Size=V3(3.6,1.2,1.2),Shape=E.PartType.Cylinder,CFrame=CF(-34,1.3,862,0,-1,0,1,0,0,0,0,1)}},
 {"Part","Infoschirm",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(22,26,31),Material=E.Material.SmoothPlastic,Size=V3(0.6,4,6),Shape=E.PartType.Block,CFrame=CF(-34,5.1,862)},{
 {"SurfaceGui","Screen",{Face=E.NormalId.Right,SizingMode=E.SurfaceGuiSizingMode.FixedSize,CanvasSize=V2(240,160),LightInfluence=0,AlwaysOnTop=false},{
-{"TextLabel","Title",{Size=U2(0.94,0,0.34,0),Position=U2(0.03,0,0.05,0),BackgroundTransparency=1,Text="SCHNELLES SPIEL",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
+{"TextLabel","Title",{Size=U2(0.94,0,0.34,0),Position=U2(0.03,0,0.05,0),BackgroundTransparency=1,Text="TYCOON",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBlack,TextColor3=C3(0.968627,0.690196,0.247059)}},
 {"TextLabel","Lines",{Size=U2(0.9,0,0.45,0),Position=U2(0.05,0,0.45,0),BackgroundTransparency=1,Text="Grundstück wählen · Gebäude bauen · Stufe 5 · Rebirth",TextScaled=true,TextWrapped=true,Font=E.Font.GothamBold,TextColor3=C3(0.878431,0.905882,0.901961)}}}}}},
 {"Part","Infodach",{Anchored=true,CanCollide=false,CanTouch=false,CanQuery=false,CastShadow=false,Transparency=0,Color=C3u(247,176,63),Material=E.Material.Neon,Size=V3(0.8,0.3,6.4),Shape=E.PartType.Block,CFrame=CF(-34,7.25,862)}},
 {"Part","Bankfuss",{Anchored=true,CanCollide=true,CanTouch=true,CanQuery=true,CastShadow=true,Transparency=0,Color=C3u(31,43,55),Material=E.Material.Metal,Size=V3(5,0.4,1.2),Shape=E.PartType.Block,CFrame=CF(-40,-0.25,837.5)}},

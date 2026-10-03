@@ -306,7 +306,7 @@ local function onNotice(data)
 	elseif kind == "prestige" then
 		call(Modules.prestige and Modules.prestige.OnNotice, data)
 	elseif kind == "tycoon_market" or kind == "tycoon_stage" or kind == "trade" or kind == "tycoon_choose" or kind == "tycoon" then
-		-- Schnelles Spiel: Marktplatz-Tafel, Stufen/Handel (Neuzeichnen), Start-Pad öffnet den Tab (TycoonClient)
+		-- Tycoon: Marktplatz-Tafel, Stufen/Handel (Neuzeichnen), Start-Pad öffnet den Tab (TycoonClient)
 		call(Modules.tycoon and Modules.tycoon.OnNotice, data)
 		if Tycoon then
 			call(Tycoon.OnNotice, data)
@@ -410,14 +410,14 @@ function MiniClient.Start(o)
 		warnOnce("drive", "Fahren nicht geladen: " .. tostring(errDrive))
 	end
 
-	-- Schnelles Spiel (eigene ScreenGui "TycoonHUD", eigener Heartbeat; läuft unabhängig vom Panel)
+	-- Tycoon (eigene ScreenGui "TycoonHUD", eigener Heartbeat; läuft unabhängig vom Panel)
 	local okTy, errTy = pcall(function()
 		Tycoon = require(folder:WaitForChild("TycoonClient", 10))
 		Tycoon.Start(ctx)
 	end)
 	if not okTy then
 		Tycoon = nil
-		warnOnce("tycoon", "Schnelles Spiel nicht geladen: " .. tostring(errTy))
+		warnOnce("tycoon", "Tycoon nicht geladen: " .. tostring(errTy))
 	end
 
 	-- Story-Missionen in der Welt (eigene ScreenGui "Missionen", eigener Heartbeat – MiniClient ruft Step nicht auf)

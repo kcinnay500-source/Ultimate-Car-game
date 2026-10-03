@@ -1,4 +1,4 @@
--- tycoon_sim.lua: Rundendauer des Schnellen Spiels (Tycoon) mit den echten Regeln (TycoonRules, GameConfig.Tycoon)
+-- tycoon_sim.lua: Rundendauer des Tycoons (Tycoon) mit den echten Regeln (TycoonRules, GameConfig.Tycoon)
 -- als JSON – für tools/economy_sim.py --tycoon (PHASE4_CONTRACT §8: Ziel ≈ 5 Std. aktiv bis Stufe 5 komplett).
 -- Aufruf (aus dem Projektordner): tools/luaurun/target/release/luaurun run tools/tycoon_sim.lua .
 -- Gieriger Spieler wie in tests/test_tycoon_rules.lua simulate(): alle 15 s sammeln und das teuerste bezahlbare

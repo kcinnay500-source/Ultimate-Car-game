@@ -1,11 +1,11 @@
-# Vertrag Ausbaustufe 4: Lobby, Tutorial, Level & Prestige, Schnelles Spiel (Tycoon), Open World, Story, Shop
+# Vertrag Ausbaustufe 4: Lobby, Tutorial, Level & Prestige, Tycoon, Open World, Story, Shop
 
 Verbindlich für alle Teams dieser Stufe. Er baut auf `docs/MERGE_CONTRACT.md` (ein Eingang, ein Profil, keine neuen
 Remotes) und `docs/PHASE2_CONTRACT.md` (Autos, Auktion, Spielhalle) auf. Alles, was dort steht, gilt weiter.
 
 Entscheidungen des Auftraggebers (Chat, 2026-09-29):
 
-1. Die bestehende Stadt („Werkstattmeile“) **ist** die Open World. „Schnelles Spiel“ ist ein eigener Place. Die
+1. Die bestehende Stadt („Werkstattmeile“) **ist** die Open World. „Tycoon“ ist ein eigener Place. Die
    2.4.0-Werkstatt am Grundstück ist das Gebäude „Werkstatt“ der Open World.
 2. **Zwei Währungen**: Credits (persistent, überall) und **Bargeld** (nur innerhalb eines Tycoon-Durchlaufs).
 3. **Prestige = Rang** ohne Level-Reset (Level, Credits, Autos bleiben). Die Freischaltkurve ist gestreckt: das
@@ -124,7 +124,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 
 ## 5. Lobby (`LobbyService`, `LobbyUI`, Halle `workspace.Lobby`)
 
-- Halle (worldgen `tools/worldgen/lobby.py`): Empfangshalle mit hoher Decke, zwei Portale **„Schnelles Spiel“** und
+- Halle (worldgen `tools/worldgen/lobby.py`): Empfangshalle mit hoher Decke, zwei Portale **„Tycoon“** und
   **„Open World“** (Stationen `Lobby.Stations.mode_tycoon` / `mode_openworld`, Attribute `MiniTab="lobby"` und
   `LobbyAction=<Stationsschlüssel>`, ProximityPrompt), **Einstellungs-Terminal** (`settings`), **Party-Tafel** (`party`),
   **Tutorial-Kiosk** (`tutorial`),
@@ -215,7 +215,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   Dienste (`auction_consigned`), `settle` aus `Mini.OnSettled`, `action:<name>` nach jeder gelungenen Aktion.
 - Beschränkungen: Missions-Belohnungen ≤ 40 % der Werkstatt-Einnahme/Minute des Levels (Balance-Team).
 
-## 8. Schnelles Spiel (Tycoon) (`TycoonRules`, `TycoonService`, `TycoonUI`, Gelände `workspace.Tycoon`)
+## 8. Tycoon (`TycoonRules`, `TycoonService`, `TycoonUI`, Gelände `workspace.Tycoon`)
 
 - 8 Grundstücke (`GameConfig.Tycoon.Slots`, x/z/rot wie `C.PlotSlots`), Vergabe wie `World` (erster freier Slot,
   serverlokal `TycoonService.Plots`), Schild mit Spielername, offenes Gelände (jeder darf jedes Grundstück betreten;
@@ -230,7 +230,7 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   `ServerStorage.TycoonTemplates.<typ>.Stage_1..5` (worldgen `tools/worldgen/tycoon.py`, jede Stufe sichtbar größer:
   Halle, Anbau, Schild, Deko, Licht). Zielzeit **≈ 5 Std. aktiv bis Stufe 5 komplett** (Balance-Team, Simulation in
   `tools/economy_sim.py --tycoon`).
-- Alle Gewinne im Server-Tick (0,5 s) aus `lastTick`; Offline zählt nicht (Schnelles Spiel ist aktiv). `cash` Deckel
+- Alle Gewinne im Server-Tick (0,5 s) aus `lastTick`; Offline zählt nicht (Tycoon ist aktiv). `cash` Deckel
   `C.NumberCap`.
 - **Handel Spieler ↔ Spieler** (nur im Tycoon, nur Bargeld): `tycoon_trade_offer {to, item, qty, price}` (item aus
   `GameConfig.Tycoon.Items`, `qty` 1..999, `price` = gewählter Preis in Bargeld = Absicht; Server prüft Lager und

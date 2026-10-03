@@ -40,7 +40,7 @@ UI.FontBig = Enum.Font.GothamBlack
 
 UI.Tabs = {
 	{ key = "lobby", label = "Lobby" },
-	{ key = "tycoon", label = "Schnelles Spiel" },
+	{ key = "tycoon", label = "Tycoon" },
 	{ key = "story", label = "Story" },
 	{ key = "map", label = "Stadtplan" }, -- so heißt er im Tutorial („Drück M … Tab „Stadtplan““), gleich sichtbar
 	{ key = "buildings", label = "Gebäude" },
@@ -63,7 +63,7 @@ UI.Tabs = {
 }
 UI.TabTitles = {
 	lobby = "Lobby",
-	tycoon = "Schnelles Spiel · Tycoon",
+	tycoon = "Tycoon · Tycoon",
 	story = "Story · Vom Kiesplatzhändler zum Mega-Verkäufer",
 	buildings = "Gebäude · Grundstück",
 	unlocks = "Freischaltungen",

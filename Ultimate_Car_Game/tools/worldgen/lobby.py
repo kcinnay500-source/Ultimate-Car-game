@@ -3,7 +3,7 @@
 Halle 120 x 80 (X -60..60, Z -740..-660), 24 lichte Höhe (Dachplatte 24..25, Attika bis 28), Glasfront nach Süden
 (zur Stadt hin) mit Schiebetüren (Anim door), Vordach, Attika-Schild und Amber-Neonband (Anim neon).
 Innen: Drehteller mit Showcar (Anim turntable) in der Mitte, Empfangstresen mit NPC an der Nordwand, davor links das
-Portal "SCHNELLES SPIEL" (türkis) und rechts das Portal "OPEN WORLD" (amber) - je zwei Pfeiler, Sturz mit Schild,
+Portal "TYCOON" (türkis) und rechts das Portal "OPEN WORLD" (amber) - je zwei Pfeiler, Sturz mit Schild,
 leuchtende Portalfläche (Anim neon) und Startring am Boden. Einstellungs-Terminal an der Westwand, Party-Tafel an der
 Ostwand, Tutorial-Kiosk links neben dem Eingang.
 
@@ -37,14 +37,14 @@ WOOD = (130, 90, 60)
 SKIN = (222, 184, 150)
 GLASS_T = 0.3
 PORTALS = {                        # key: (x, Farbe, Titel, Unterzeile)
-    "mode_tycoon": (-38.0, TEAL, "SCHNELLES SPIEL", "Tycoon-Runde mit Bargeld · Stufe 1–5"),
+    "mode_tycoon": (-38.0, TEAL, "TYCOON", "Tycoon-Runde mit Bargeld · Stufe 1–5"),
     "mode_openworld": (38.0, AMBER, "OPEN WORLD", "Werkstattmeile · Stadt · Minispiele"),
 }
 PORTAL_Z = -738.0                  # Portalfläche (Anker der Stationen mode_*)
 
 # key: (Titel, Anker (x,y,z), Spielerseite, Bodenhöhe)
 STATIONS = {
-    "mode_tycoon": ("Schnelles Spiel · Portal", (-38.0, 3.0, PORTAL_Z), "S", 0.0),
+    "mode_tycoon": ("Tycoon · Portal", (-38.0, 3.0, PORTAL_Z), "S", 0.0),
     "mode_openworld": ("Open World · Portal", (38.0, 3.0, PORTAL_Z), "S", 0.0),
     "settings": ("Einstellungen · Terminal", (-58.0, 3.0, -700.0), "E", 0.0),
     "party": ("Party-Tafel", (58.0, 3.0, -700.0), "W", 0.0),
@@ -153,7 +153,7 @@ def build_shell(lib, root, anim):
         _box(lib, sh, "Attika_O", X1, X1 + WT, CEIL + 1, 28, Z0 - WT, Z1 + WT, SLATE, "Metal")
         # Attika-Schild "LOBBY" (Text nach Süden, yaw 0) und Vordach
         lib.sign(sh, "LOBBY", (40, 3.6), CF.at(0, 26.5, Z1 + WT + 0.15, 0), AMBER, SLATE, name="Attikaschild",
-                 sub="SCHNELLES SPIEL · OPEN WORLD · PARTY", sub_color=WHITE)
+                 sub="TYCOON · OPEN WORLD · PARTY", sub_color=WHITE)
         _box(lib, sh, "Vordach", -13, 13, 15.5, 16.5, Z1 + WT, Z1 + WT + 8, GRAPHITE, "Concrete")
         for x in (-11, 11):
             lib.beam(sh, "Vordachstrebe", (x, 22, Z1 + WT), (x, 16.5, Z1 + WT + 7.5), 0.3, STEEL, "Metal", deco=True)
@@ -212,7 +212,7 @@ def build_reception(lib, parent):
          "SmoothPlastic", deco=True)
     # Wandschrift über dem Empfang
     lib.sign(m, "WILLKOMMEN IN DER LOBBY", (26, 3), CF.at(0, 14.5, Z0 + 0.12, 0), AMBER, SLATE, name="Wandschrift",
-             bolts=False, sub="Wähle links das Schnelle Spiel oder rechts die Open World", sub_color=WHITE)
+             bolts=False, sub="Wähle links den Tycoon oder rechts die Open World", sub_color=WHITE)
     return m
 
 

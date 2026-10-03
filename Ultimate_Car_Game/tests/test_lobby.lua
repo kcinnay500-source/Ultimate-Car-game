@@ -383,7 +383,7 @@ return {
 		T.eq(notices[1] and notices[1].mode, "tycoon", "Hinweis mode")
 		T.eq(notices[1] and notices[1].simulated, true, "Hinweis simulated")
 		T.eq(msA.lobbyChoice, nil, "Auswahl nach Reise leer")
-		T.check(g:HasToast(a, "Schnelles Spiel", mark), "Ankunftstoast")
+		T.check(g:HasToast(a, "Tycoon", mark), "Ankunftstoast")
 		-- noch einmal dorthin: schon da
 		mark = g:Mark()
 		S.act(a, "lobby_mode", { mode = "tycoon" })
@@ -786,7 +786,7 @@ return {
 		local GC = g:MiniShared("GameConfig")
 		-- Lobby, keine Auswahl, keine Party
 		render(g, p, mod, snapshot("lobby"))
-		T.check(withText(page, "Schnelles Spiel") ~= nil, "Karte Schnelles Spiel")
+		T.check(withText(page, "Tycoon") ~= nil, "Karte Tycoon")
 		T.check(withText(page, "Open World") ~= nil, "Karte Open World")
 		T.check(withText(page, "Tycoon-Runde") ~= nil, "Beschreibung Tycoon")
 		T.check(withText(page, "Werkstattmeile") ~= nil, "Beschreibung Open World")
@@ -804,10 +804,10 @@ return {
 		press(g, tycoonCard)
 		T.eq(rec.Count("lobby_mode"), 1, "lobby_mode gesendet")
 		T.eq(rec.Last("lobby_mode").mode, "tycoon", "mode tycoon")
-		T.check(go.Text:find("Schnelles Spiel", 1, true) ~= nil, "Ziel nach Auswahl: " .. go.Text)
+		T.check(go.Text:find("Tycoon", 1, true) ~= nil, "Ziel nach Auswahl: " .. go.Text)
 		T.check(withText(page, "Ausgewählt") ~= nil, "Karte als ausgewählt markiert")
 		render(g, p, mod, snapshot("lobby", { choice = "tycoon" }))
-		T.check(go.Text:find("Schnelles Spiel", 1, true) ~= nil, "Server bestätigt Auswahl")
+		T.check(go.Text:find("Tycoon", 1, true) ~= nil, "Server bestätigt Auswahl")
 		press(g, go)
 		T.eq(rec.Count("lobby_go"), 1, "lobby_go gesendet")
 		T.eq(next(rec.Last("lobby_go")), nil, "lobby_go ohne Felder")
@@ -899,7 +899,7 @@ return {
 			end
 		end
 		T.check(sawSim, "Simulationshinweis als Toast")
-		-- Schnelles Spiel mit Tycoon-Dienst (Meilenstein 4, GameConfig.Tycoon gefüllt): Karte ohne „Eröffnet bald“
+		-- Tycoon mit Tycoon-Dienst (Meilenstein 4, GameConfig.Tycoon gefüllt): Karte ohne „Eröffnet bald“
 		T.check(next(GC.Tycoon) ~= nil, "GameConfig.Tycoon gefüllt (Meilenstein 4)")
 		T.check(withText(page, "Eröffnet bald") == nil, "Modus-Karte: kein „Eröffnet bald“ mehr")
 		-- kicked-Ereignis: die übrigen erfahren es, der eigene Rauswurf kommt vom Server als Toast

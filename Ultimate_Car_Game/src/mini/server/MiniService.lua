@@ -15,7 +15,7 @@
 --                      außerhalb der Open World zur Zonen-Ankunft (Lobby/Tycoon) versetzen
 --   OnStation(p, key)  Ausbaustufe 4: 2.4.0-Plot-Station geöffnet (Tutorial-Schritt, Beginner-Hinweis)
 -- Ausbaustufe 4 (PHASE4_CONTRACT §10–§12): Lobby/Party/Reise (LobbyService, PlaceRouter), Tutorial und
--- Beginner-Hinweise (TutorialService), Level & Prestige, Freischaltungen (PrestigeService), Schnelles Spiel
+-- Beginner-Hinweise (TutorialService), Level & Prestige, Freischaltungen (PrestigeService), Tycoon
 -- (TycoonService), Open-World-Gebäude und Passiv-Modus (OWService, Meilenstein 6), Story/Nebenmissionen/Co-op
 -- (StoryService, Meilenstein 7). Jede Aktion, die etwas Freischaltbares nutzt, prüft Mini.Handle zentral über
 -- Unlocks (ACTION_UNLOCK); Stationen über Unlocks.TabAllowed. Im Passiv-Modus (§5) blockt Mini.Handle Story-Start,
@@ -54,7 +54,7 @@ local PrestigeService = require(Server:WaitForChild("PrestigeService"))
 local LobbyService = require(Server:WaitForChild("LobbyService"))
 local PlaceRouter = require(Server:WaitForChild("PlaceRouter"))
 local TutorialService = require(Server:WaitForChild("TutorialService"))
-local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenstein 4: Schnelles Spiel
+local TycoonService = require(Server:WaitForChild("TycoonService")) -- Meilenstein 4: Tycoon
 local OWService = require(Server:WaitForChild("OWService")) -- Meilenstein 6: Open-World-Gebäude, Passiv-Modus
 local StoryService = require(Server:WaitForChild("StoryService")) -- Meilenstein 7: Story, Kiesplatz, Nebenmissionen, Co-op
 local ShopService = require(Server:WaitForChild("ShopService")) -- Meilenstein 8: Shop (Kosmetik, DLC-Autos, Pässe, Quittungen)
@@ -484,7 +484,7 @@ local function checkMode(ms, d)
 			warn("[Minispiele] Tutorial-Start: " .. tostring(err))
 		end
 	end
-	-- Schnelles Spiel: Grundstück belegen/freigeben, Durchlauf fortsetzen (TycoonService.Tick holt es sonst nach)
+	-- Tycoon: Grundstück belegen/freigeben, Durchlauf fortsetzen (TycoonService.Tick holt es sonst nach)
 	local okY, errY = pcall(TycoonService.OnMode, ms, d, mode)
 	if not okY then
 		warn("[Minispiele] Tycoon-Modus: " .. tostring(errY))
@@ -813,7 +813,7 @@ function Mini.Tick(p, t)
 		end
 		pcall(LobbyService.Tick, ms, d, t)
 		checkMode(ms, d)
-		-- Schnelles Spiel: Produktion (0,5 s), Anzeigen, Angebots-Ablauf; true = Snapshot fällig (höchstens 1×/s)
+		-- Tycoon: Produktion (0,5 s), Anzeigen, Angebots-Ablauf; true = Snapshot fällig (höchstens 1×/s)
 		local okY, resY = pcall(TycoonService.Tick, ms, d, t)
 		if okY then
 			if resY then

@@ -1,4 +1,4 @@
--- TycoonUI: Tab „Schnelles Spiel“ (tycoon) (docs/PHASE4_CONTRACT.md §8, §10, §11).
+-- TycoonUI: Tab „Tycoon“ (tycoon) (docs/PHASE4_CONTRACT.md §8, §10, §11).
 -- Ohne Durchlauf: vier Gebäude-Karten (Beschreibung, Spielweise, Open-World-Bonus einer fertigen Runde) → tycoon_choose.
 -- Mit Durchlauf: Kopf (Typ, Stufe n/5, Bargeld, Behälter x/Kapazität, Rate/s), „Sammeln“ (tycoon_collect), Upgrades der
 -- aktuellen Stufe (Name, Wirkung, Kosten, Kaufen/Gekauft, Sperrgrund) → tycoon_buy {id}, Stufen-Karte (Preis + Waren)
@@ -157,7 +157,7 @@ local function inTycoon(): boolean
 	return latest == nil or latest.mode == nil or latest.mode == "tycoon"
 end
 
--- Spieler für das Angebot: Snapshot-Liste (tycoon.players: im Schnellen Spiel mit Durchlauf), sonst Absender offener
+-- Spieler für das Angebot: Snapshot-Liste (tycoon.players: im Tycoon mit Durchlauf), sonst Absender offener
 -- Marktangebote (ohne mich). Kein Players:GetPlayers(): der Server lehnt Spieler ohne Durchlauf ohnehin ab.
 local function candidates(): { { userId: number, name: string } }
 	local out, seen = {}, {}
@@ -198,7 +198,7 @@ local function typeCard(parent, typ: string, order: number)
 	local b = TY.Buildings[typ]
 	local button = UI.Button(parent, "", T.blue, function()
 		if not inTycoon() then
-			toast("Das Schnelle Spiel startest du auf dem Tycoon-Gelände: Lobby → „Schnelles Spiel“.")
+			toast("Den Tycoon startest du auf dem Tycoon-Gelände: Lobby → „Tycoon“.")
 			return
 		end
 		pendingChoice = typ
@@ -314,7 +314,7 @@ function TycoonUI.Build(page, c)
 	-- Status / Rückweg
 	local status = UI.Card(page, 1)
 	status.Name = "StatusCard"
-	UI.Title(status, "Schnelles Spiel", 1)
+	UI.Title(status, "Tycoon", 1)
 	refs.where = UI.Label(status, "", { LayoutOrder = 2, Name = "Where" })
 	refs.modeHint = UI.Small(status, "", 3)
 	refs.modeHint.Name = "ModeHint"
@@ -388,7 +388,7 @@ function TycoonUI.Build(page, c)
 	local tr = UI.Card(page, 7)
 	tr.Name = "TradeCard"
 	UI.Title(tr, "Handel · Marktplatz", 1)
-	UI.Small(tr, "Nur Bargeld, nur im Schnellen Spiel. Ein Angebot gilt " .. tostring(TY.TradeTTL) .. " Sekunden.", 2)
+	UI.Small(tr, "Nur Bargeld, nur im Tycoon. Ein Angebot gilt " .. tostring(TY.TradeTTL) .. " Sekunden.", 2)
 	refs.incomingTitle = UI.Label(tr, "Angebote an dich", { Font = UI.FontBold, TextSize = 15, LayoutOrder = 3, Name = "IncomingTitle" })
 	refs.incoming = UI.Pool(tr, function(parent, i)
 		return offerRow(parent, i, "accept", "Annehmen", T.green)
@@ -418,7 +418,7 @@ function TycoonUI.Build(page, c)
 	UI.List(list, 4)
 	refs.playerList = list
 	refs.players = UI.Pool(list, playerRow)
-	refs.playersEmpty = UI.Small(list, "Niemand da – andere Spieler müssen im Schnellen Spiel sein.", 99)
+	refs.playersEmpty = UI.Small(list, "Niemand da – andere Spieler müssen im Tycoon sein.", 99)
 	refs.playersEmpty.Name = "PlayersEmpty"
 
 	local items = UI.Frame(tr, { BackgroundTransparency = 1, LayoutOrder = 43, Size = UDim2.new(1, 0, 0, UI.MinTouch), AutomaticSize = Enum.AutomaticSize.None })
@@ -489,7 +489,7 @@ function TycoonUI.Build(page, c)
 		end
 		UI.Confirm(
 			"Rebirth: Dein Gebäude wird zurückgesetzt, das Bargeld verfällt. Dafür bekommst du dauerhaft +"
-				.. tostring(TY.Rebirth.boostPct) .. " % Einkommen im Schnellen Spiel und die Runde zählt für den Open-World-Bonus.",
+				.. tostring(TY.Rebirth.boostPct) .. " % Einkommen im Tycoon und die Runde zählt für den Open-World-Bonus.",
 			function()
 				Remote.Send("tycoon_rebirth")
 			end,
@@ -767,7 +767,7 @@ function TycoonUI.Render(s)
 	refs.where.Text = r and ("Dein Durchlauf: " .. tostring(r.name or (TY.Buildings[r.building] and TY.Buildings[r.building].name) or r.building) .. ", Stufe " .. tostring(r.stage) .. "/" .. tostring(TY.MaxStage) .. ".")
 		or "Kein Durchlauf – wähle unten ein Gebäude."
 	if not here then
-		refs.modeHint.Text = "Du bist gerade " .. (mode == "lobby" and "in der Lobby" or "in der Open World") .. ". Das Schnelle Spiel läuft auf dem Tycoon-Gelände (Lobby → „Schnelles Spiel“). Deine Runde wartet dort auf dich."
+		refs.modeHint.Text = "Du bist gerade " .. (mode == "lobby" and "in der Lobby" or "in der Open World") .. ". Der Tycoon läuft auf dem Tycoon-Gelände (Lobby → „Tycoon“). Deine Runde wartet dort auf dich."
 	elseif latest and latest.simulated == true then
 		refs.modeHint.Text = GameConfig.SimulationNotice
 	else

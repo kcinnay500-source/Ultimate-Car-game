@@ -277,9 +277,9 @@ return {
 		T.check(#travel >= 1 and travel[#travel].event == "travel" and travel[#travel].mode == "tycoon", "Ben erhält travel")
 		g:Advance(1.1)
 		T.eq(g:MiniSnapshot(b).mode, "tycoon", "Snapshot Ben tycoon")
-		-- Schnelles Spiel mit Tycoon-Dienst (Meilenstein 4): Ankunfts-Toast „Viel Erfolg“, die Tycoon-Stationen
+		-- Tycoon mit Tycoon-Dienst (Meilenstein 4): Ankunfts-Toast „Viel Erfolg“, die Tycoon-Stationen
 		-- öffnen den Tab „tycoon“ (kein „eröffnet bald“ mehr)
-		T.check(g:HasToast(a, "Viel Erfolg", m), "Ankunfts-Toast: Schnelles Spiel")
+		T.check(g:HasToast(a, "Viel Erfolg", m), "Ankunfts-Toast: Tycoon")
 		T.check(not g:HasToast(a, "eröffnet bald", m), "kein Toast eröffnet bald")
 		local tst = g:Find("Workspace.Tycoon.Stations.tycoon")
 		T.check(tst ~= nil, "Tycoon-Station tycoon")

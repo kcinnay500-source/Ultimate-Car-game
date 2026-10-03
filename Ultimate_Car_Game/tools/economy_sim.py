@@ -19,7 +19,7 @@ Aufruf (aus dem Projektordner):
     python3 tools/economy_sim.py            # Tabellen ausgeben
     python3 tools/economy_sim.py --check    # zusätzlich Ziele prüfen (Exit-Code 1 bei Verstoß)
     python3 tools/economy_sim.py --write-doc  # Tabellenblock in docs/BALANCE.md ersetzen
-    python3 tools/economy_sim.py --tycoon   # Rundendauer des Schnellen Spiels (tools/tycoon_sim.lua, echte TycoonRules)
+    python3 tools/economy_sim.py --tycoon   # Rundendauer des Tycoons (tools/tycoon_sim.lua, echte TycoonRules)
 
 Die Annahmen über das Spielverhalten stehen gesammelt in ASSUME (unten) und in docs/BALANCE.md.
 """
@@ -705,7 +705,7 @@ def check(rows, cars):
     return errors
 
 
-# ------------------------------------------------------------------ Schnelles Spiel (Tycoon, PHASE4_CONTRACT §8)
+# ------------------------------------------------------------------ Tycoon (Tycoon, PHASE4_CONTRACT §8)
 def tycoon_sim():
     """Rundendauer je Gebäudetyp mit den echten Regeln (tools/tycoon_sim.lua: TycoonRules + GameConfig.Tycoon).
 
@@ -720,7 +720,7 @@ def tycoon_sim():
 
 
 def tycoon_markdown(sim):
-    out = ["#### Schnelles Spiel: Zeit bis Stufe 5 komplett (aktiv, gieriger Kauf alle 15 s)\n",
+    out = ["#### Tycoon: Zeit bis Stufe 5 komplett (aktiv, gieriger Kauf alle 15 s)\n",
            "| Gebäude | Stufe 2 | Stufe 3 | Stufe 4 | Stufe 5 | **komplett** | 2. Runde (Rebirth +15 %) | Bargeld gesamt |",
            "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for t in sim["types"]:
@@ -757,7 +757,7 @@ P4_LEVELS = [1, 5, 10, 15, 20, 30, 40, 50, 72, 90]
 # Annahmen zum gemischten Spiel (Ausbaustufe 4). Anteile der Spielzeit je Level-Abschnitt (bis einschließlich Level):
 #   workshop = 2.4.0-Aufträge, minigames = Quiz/Parkplatz/Schrottplatz/Spielhalle/Teststrecke im Wechsel,
 #   story = Story-Missionen, dann Nebenmissionen (Tageslimit), dann Kiesplatz-Verkäufe,
-#   tycoon = Schnelles Spiel (eigener Place; XP nur je Stufe und Durchlauf),
+#   tycoon = Tycoon (eigener Place; XP nur je Stufe und Durchlauf),
 #   free = Autos fahren/tunen, Auktionen, Waschstraße, Lobby, Party (keine XP)
 MIX = {
     "phases": [
@@ -1080,7 +1080,7 @@ def mixed_progression(tycoon, hours=50, seed=11, ws_timeline=None):
             cr, x = sale_rate(d["level"])
             d["money"] += cr * left
             xp("sale", x * left)
-        # Schnelles Spiel (eigener Durchlauf, XP je Stufe und je Durchlauf)
+        # Tycoon (eigener Durchlauf, XP je Stufe und je Durchlauf)
         tsec = sh["tycoon"] * block
         while tsec > 1e-9:
             typ = MIX["tycoon_order"][ty_done_total % len(MIX["tycoon_order"])]
@@ -1177,7 +1177,7 @@ def phase4_markdown(p4, rows):
     out = ["### Ausbaustufe 4 (PHASE4_CONTRACT)\n"]
     mixed = p4["mixed"]
     marks = [5, 10, 20, 30, 40, 50, 60, 72, 90]
-    out.append("#### Level im gemischten Spiel (Werkstatt + Minispiele + Story/Nebenmissionen/Kiesplatz + Schnelles Spiel)\n")
+    out.append("#### Level im gemischten Spiel (Werkstatt + Minispiele + Story/Nebenmissionen/Kiesplatz + Tycoon)\n")
     out.append("| Level | " + " | ".join(str(L) for L in marks) + " |")
     out.append("|---|" + "---:|" * len(marks))
     out.append("| erreicht nach | " + " | ".join(fmt_time(time_to_level(mixed, L)) if time_to_level(mixed, L) is not None
@@ -1185,7 +1185,7 @@ def phase4_markdown(p4, rows):
     out.append("")
     total = sum(p4["src"].values())
     names = {"workshop": "Werkstatt-Aufträge (inkl. Ausbau-XP)", "minigames": "Minispiele", "story": "Story-Missionen",
-             "side": "Nebenmissionen", "sale": "Kiesplatz-Verkäufe", "tycoon": "Schnelles Spiel (Stufen + Durchläufe)",
+             "side": "Nebenmissionen", "sale": "Kiesplatz-Verkäufe", "tycoon": "Tycoon (Stufen + Durchläufe)",
              "ow": "OW-Gebäude bauen", "other": "Tutorial"}
     out.append(f"XP-Quellen in 50 Std. ({p4['runs']} Tycoon-Durchläufe):\n")
     out.append("| Quelle | XP | Anteil |")
@@ -1243,7 +1243,7 @@ def phase4_markdown(p4, rows):
     out.append("")
     # Boni
     caps, stacked = p4["caps"]
-    out.append("#### Deckel der Boni (Prestige, Schnelles Spiel, OW-Perks)\n")
+    out.append("#### Deckel der Boni (Prestige, Tycoon, OW-Perks)\n")
     out.append("| Bonus | Höchstwert | Deckel | ok |")
     out.append("|---|---:|---:|---|")
     for n, v, c, ok in caps:

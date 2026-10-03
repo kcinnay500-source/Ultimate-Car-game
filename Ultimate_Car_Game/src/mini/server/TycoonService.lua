@@ -1,4 +1,4 @@
--- TycoonService: Schnelles Spiel (Tycoon) auf dem Server (docs/PHASE4_CONTRACT.md §8, §10–§12).
+-- TycoonService: Tycoon auf dem Server (docs/PHASE4_CONTRACT.md §8, §10–§12).
 -- Regeln und Zahlen: TycoonRules (rein) und GameConfig.Tycoon. Hier nur Grundstücke, Modelle, Pads, Handel und Hinweise.
 -- Bargeld (run.cash/run.container) ist NIE Credits: es verlässt den Durchlauf nie. Credits ändern sich hier nur über
 -- den Level-Bonus von MiniRules.GainXP (XP je Stufe/Durchlauf), nie aus Bargeld.
@@ -90,7 +90,7 @@ local COLORS = {
 }
 
 local TEXT = {
-	notTycoon = "Das Schnelle Spiel startest du in der Lobby: Portal „Schnelles Spiel“.",
+	notTycoon = "Den Tycoon startest du in der Lobby: Portal „Tycoon“.",
 	noPlot = "Gerade sind alle Grundstücke belegt. Sobald eins frei wird, gehört es dir.",
 	plotAssigned = "Grundstück %d gehört dir! Geh zum Start-Pad und wähle dein Gebäude.",
 	notMine = "Das ist nicht dein Grundstück. Deins ist Nr. %d.",
@@ -131,7 +131,7 @@ local TEXT = {
 		storage = "So viel hast du nicht im Lager.",
 		no_run = "Dafür brauchst du einen laufenden Durchlauf.",
 		partnerMissing = "Diesen Spieler gibt es hier nicht.",
-		partnerNotTycoon = "Dieser Spieler ist gerade nicht im Schnellen Spiel oder hat keinen Durchlauf.",
+		partnerNotTycoon = "Dieser Spieler ist gerade nicht im Tycoon oder hat keinen Durchlauf.",
 		self = "Mit dir selbst kannst du nicht handeln.",
 		tooMany = "Du hast schon " .. tostring(TY.TradeMaxOpen) .. " offene Angebote.",
 		offered = "Angebot an %s geschickt: %d× %s für %d Bargeld (gültig %d s).",
