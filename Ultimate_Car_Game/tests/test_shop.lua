@@ -558,6 +558,7 @@ return {
 		end })
 		local w = wire(g)
 		local p = w.join(711, { name = "Kim" })
+		g:D(p).level = 8 -- Studio lädt nicht aus dem Speicher: Level fürs Sondermodell setzen (Level-Riegel vor dem Prompt)
 		local m = g:Mark()
 		w.act(p, "shop_prompt", { product = "car_komet_sunset", rid = 1 })
 		T.check(g:HasToast(p, "noch nicht verfügbar", m), "Studio: Hinweis")

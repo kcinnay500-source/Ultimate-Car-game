@@ -1,41 +1,62 @@
-TESTBERICHT – Ultimate Car Game 3.0.0 (Werkstattmeile, Ausbaustufen 1–3)
-=====================================================
+TESTBERICHT – Ultimate Car Game 3.x mit Ausbaustufe 4 (Lobby, Tutorial, Prestige, Schnelles Spiel, Open World, Story, Shop)
+=====================================================================================================================
 
-Datum: 2026-09-29
+Datum: 2026-10-03
 Befehle:
-  python tools/build_place.py Ultimate_Car_Game.rbxlx
-  python tools/export_fixture.py
-  python tools/validate.py Ultimate_Car_Game.rbxlx
+  python3 tools/build_place.py Ultimate_Car_Game.rbxlx
+  python3 tools/build_place.py --place lobby     Ultimate_Car_Game_Lobby.rbxlx
+  python3 tools/build_place.py --place openworld Ultimate_Car_Game_OpenWorld.rbxlx
+  python3 tools/build_place.py --place tycoon    Ultimate_Car_Game_Tycoon.rbxlx
+  python3 tools/export_fixture.py
+  python3 tools/validate.py Ultimate_Car_Game.rbxlx        (Laufzeit 8 Min. 29 s)
+  python3 tools/economy_sim.py --check
 
-Ergebnis: 1.227 Validierungsprüfungen + 54.111 Testprüfungen, 0 Fehler, 0 Warnungen
-Balance: tools/economy_sim.py --check → 0 Verstöße (docs/BALANCE.md)
+Ergebnis: 2.058 Validierungsprüfungen + 65.171 Testprüfungen, 0 Fehler, 0 Warnungen
+Balance:  tools/economy_sim.py --check → 0 Verstöße (docs/BALANCE.md)
+
+Place-Dateien (alle vier gebaut, gleicher Code, Attribut PlaceKind)
+  - Ultimate_Car_Game.rbxlx            all       (Lobby + Stadt + Tycoon) – die Datei für Roblox Studio
+  - Ultimate_Car_Game_Lobby.rbxlx      lobby     (nur Lobby-Halle)
+  - Ultimate_Car_Game_OpenWorld.rbxlx  openworld (nur Stadt)
+  - Ultimate_Car_Game_Tycoon.rbxlx     tycoon    (nur Tycoon-Gelände)
+  Nichts veröffentlicht: Place-, Produkt- und Pass-IDs sind 0 (Studio-Simulation, „noch nicht eingerichtet“).
 
 Basis
-  - Place = Original 2.4.0 + Skripte aus src/ + Stadt aus tools/worldgen.
-  - Roundtrip: gegenüber 2.4.0 nur Skripte geändert (9 Skripte, jede Änderung mit "-- 3.0:" markiert).
-  - Luau-Compiler: 85 Dateien, 0 Fehler.
-  - 38 Minispiel-Aktionen, 38 Server-Handler, alle vom Client gesendet, 107 requires geprüft.
+  - Place = Original 2.4.0 + Skripte aus src/ + Welt aus tools/worldgen (Stadt, Lobby, Tycoon-Gelände).
+  - 89 Skripte im Place. Roundtrip: gegenüber 2.4.0 nur Skripte geändert (10 Skripte, jede Änderung mit "-- 3.0:" markiert).
+  - Luau-Compiler: 129 Dateien, 0 Fehler.
+  - 71 Minispiel-Aktionen, 71 Server-Handler, alle vom Client gesendet, 277 requires geprüft. Keine neuen Remotes.
+  - Test-Fixtures aktuell. Alle drei Einzel-Places werden bei jeder Validierung mitgebaut und geprüft.
 
-Tests (Roblox-Mock führt den echten GarageServer und GarageClient aus)
+Welt (Budgets)
+  - Stadt:  10.781 Parts (Budget 12.000), 108 Lichter (Budget 120).
+  - Lobby:     774 Parts (Budget 1.500),    9 Lichter (Budget 12).
+  - Tycoon:    482 Parts (Budget 2.500),   12 Lichter (Budget 20).
+  - Welt-Prüfungen von tools/worldgen/checks.py (Überlappungen, Z-Fighting, schwebende Teile, Stationen) sind Teil der
+    2.058 Validierungsprüfungen: 0 Fehler, 0 Warnungen.
+
+Tests (35 Dateien; die Roblox-Nachbildung führt den echten GarageServer und GarageClient aus)
   - 2.4.0-Ablauf: Beitritt, Grundstück, Auftrag, Diagnose, Reparatur-QTE, Endkontrolle, Abrechnen, Speichern.
-  - Profil: echte Hülle {version=2,data,receipts,lock} inkl. games, Migration, NaN-Schutz, Sperre.
-  - Robux-Kauf während Minispiel-Aktion verliert kein Geld; Minispiele während "transacting" gesperrt.
-  - Schrottpresse, Bestenliste (nur mit schreibbarem Profil), Tuning, Schrottplatz, Quiz, Parkplatz, Ziele.
-  - Grundstücke: 8 Slots überlappen weder sich noch die Stadt; Drehung 180° für Ankunft, Rolltor, Bühne.
-  - Client: alle Bereiche rendern, Tasten senden nur Absichten, 10.000 Klicks ohne Instanzflut.
-  - Mehrspieler: 8 Spieler getrennt, 9. Spieler ohne Grundstück.
-  - Autos: Kauf/Verkauf/Tuning idempotent, fahrbares Fahrzeug strukturell (Schweißungen, Achsen, Motoren, Lenkung, Sitz),
-    Besitzer-Schutz, Probefahrt, Zeitfahren mit Plausibilitätsprüfung, Aussteigen vor Teleport.
-  - Auktionshaus: Überbieten, Deckung bei Abrechnung, Verkäufer/Bieter verlässt, Auktionsbuch gegen Duplikate.
-  - Spielhalle: Bewertung aus Serverzeit, ein Token = eine Auszahlung, Tageslimit.
+  - Profil: Hülle {version=2,data,receipts,lock} inkl. games, Migration, NaN-Schutz, Sperre (Warten bei Ortswechsel).
+  - Minispiele, Autos/Fahren/Tuning, Auktionshaus, Spielhalle (wie 3.0, siehe frühere Berichte).
+  - Ausbaustufe 4:
+      Lobby/Einstellungen/Party (2–4 Spieler, Leiter/Mitglied, Nachholen), PlaceRouter (Simulation, TeleportData-Prüfung,
+      Teleport-Fehler), Tutorial (11 Schritte, Überspringen, Neustart ohne zweite Belohnung, nur Open World),
+      Beginner-Hinweise, Freischaltungen (Elys ab Level 90), Prestige ohne Reset,
+      Schnelles Spiel (4 Gebäudetypen, Pads, Bargeld, Stufen 1–5, Handel, Rebirth, Bonus in der Open World),
+      Open-World-Gebäude (Bauzeit offline, Abholen, Perks, Passiv-Modus), Story Kapitel 1–5, Kiesplatz-Verkauf,
+      Nebenmissionen, Lieferfahrt, Co-op, Shop (Kosmetik, DLC-Autos, Pässe, Profiles.GrantReceipt, keine Zufallsboxen),
+      Spielbarkeits-Fixes (Reisen aus Lobby/Tycoon in die Stadt wechseln den Modus).
+  - End-to-End: Lobby → Einstellungen → Reise (Simulation) → Tutorial → Story Kapitel 1 → Tycoon-Runde → Rebirth →
+    Bonus in der Werkstatt → Shop-Kauf mit Quittung.
 
-Stadt (tools/worldgen/checks.py)
-  - 10.477 Parts (Budget 12.000), 105 Lichter (Budget 120), alles verankert.
-  - 0 Überlappungen, 0 Z-Fighting-Kandidaten, keine schwebenden Teile,
-    freie Fläche und Kamera-Raum an jeder Station geprüft.
+Balance (tools/economy_sim.py --check)
+  - Level 50 nach 8,2 Std., Level 90 nach 25,3 Std. gemischtem Spiel (Ziel ≈ 8 Std. bzw. 25–35 Std.).
+  - Schnelles Spiel: ein Durchlauf bis Stufe 5 komplett ≈ 4,9–5,0 Std. je Gebäudetyp (Ziel 4,0–6,5 Std.).
+  - Missions-Belohnungen höchstens 39 % der Werkstatt-Einnahme je Minute (Grenze 40 %).
+  - Alle Bonus-Deckel eingehalten (Prestige +30 %, Tycoon-Boni, OW-Perks ≤ 25 %, Werkstatt-Deckel ×1,60).
+  - DLC-Autos: gleiche Fahrwerte wie das Basismodell, Credits-Preis ×1,5.
 
-Reviews
-  - Adversariales Code-Review Stufe 1: 14 bestätigte Befunde, Stufe 2+3: 13 bestätigte Befunde – alle behoben mit Regressionstest.
-  - Visuelle Prüfung anhand gerenderter Ansichten: 46 Befunde, 38 behoben, Rest begründet.
-
-Nur in Studio prüfbar: siehe STUDIO_TESTS.md – vor allem das echte Fahrverhalten (Physik), Rendering, Licht, Netzwerk, Touch.
+Nur in Studio prüfbar: siehe STUDIO_TESTS.md – Grafik, Licht, echte Fahrphysik, Netzwerk mit 2 Spielern, Touch.
+Hinweis: In Studio wird absichtlich nicht gespeichert; Gebäude bauen, Tycoon-Handel und Spieler-Auktionen zeigen dort
+einen Hinweis statt zu laufen (sie brauchen ein gespeichertes Profil).

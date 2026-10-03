@@ -1,21 +1,44 @@
-# Ultimate Car Game 3.0 – Werkstattmeile (Roblox)
+# Ultimate Car Game 3.x – Werkstattmeile (Roblox)
 
-Aufbauend auf **Ultimate Car Game 2.4.0** (Schrauberwerkstatt mit 3D-Reparaturen) ist das Spiel jetzt eine **begehbare Stadt**:
+Aufbauend auf **Ultimate Car Game 2.4.0** (Schrauberwerkstatt mit 3D-Reparaturen) ist das Spiel eine **begehbare Stadt**
+mit Lobby, Story, einem Tycoon-Modus und einem fairen Shop.
 
-- **Werkstattmeile**: Jeder Spieler hat seine eigene Schrauberwerkstatt aus 2.4.0 (Empfang, Bühnen, Anbauten, Geräte) – acht Grundstücke an der Hauptstraße, Hausnummer-Pylon mit „WILLKOMMEN, Name“.
-- **Ankunftshalle (Empfang)** mit Uhrturm am **Stadtplatz** (Zahnradbrunnen, Bestenliste, Farbleitsystem zu allen Zielen).
-- **Schrottplatz** mit animierter Presse-Halle, Magnetkran und Schrotthändler → Minispiele *Schrottpresse* und *Schrottplatz*.
-- **Tuning-Zentrum** mit hoher Halle und Leistungsprüfstand → *Idle Tuning Garage*.
-- **Meisterschule** → *Mechaniker-Quiz*; **Parkplatz/Parkhaus** → *Parkplatz-Chaos*.
-- **Autohaus** (Glasrotunde mit Drehteller): 9 Modelle von Komet C1 bis Nord Elys E9 kaufen, Probefahrt, „Meine Autos“ – eigene Autos **selbst fahren** (Federung, Antrieb, Lenkung, Nitro, Tacho).
-- **Tuning-Zentrum**: eigene Autos tunen – Motor, Getriebe, Reifen, Fahrwerk, Nitro sowie Lack, Felgen, Unterbodenlicht, Spoiler.
-- **Teststrecke**: Zeitfahren mit Checkpoints, Belohnung für neue Bestzeiten. **Waschstraße** für Glanz.
-- **Auktionshaus**: NPC-Versteigerungen seltener Sondermodelle und Auktionen eigener Autos an Mitspieler.
-- **Spielhalle**: 8 Geschicklichkeits-Automaten (Blitz-Reaktion, Bremsweg-Profi, Boxenstopp, Drehmoment, Motor-Ohr, Einpark-Profi, 2 Rennsimulatoren) – Credits nur für Können, Tageslimit, kein Glücksspiel.
-- **Credit-Center**: Credits mit Robux (2.4.0-Credits-Shop) und Game Passes.
-- Tankstelle, Stadtpark, Balance: siehe [docs/BALANCE.md](docs/BALANCE.md) – die Werkstatt bleibt die beste Einnahmequelle.
-- Belebte Straßen: NPC-Verkehr, Ampeln, Kreisverkehre, Straßenlaternen für die Nacht.
+## Ausbaustufe 4 (neu)
 
-Alle Minispiele teilen Profil, Level und Credits mit der Werkstatt und verstärken sich gegenseitig (Querboni). Der Server rechnet alles; der Spielstand bleibt im 2.4.0-Profil (`UltimateCarGame_v2`, nichts geht verloren).
+- **Lobby**: Empfangshalle mit zwei Portalen **„Schnelles Spiel“** und **„Open World“**, Einstellungen
+  (Einzel-/Mehrspieler, Passiv-Modus, Beginner-Modus), **Party** mit 4-stelligem Code (bis 4 Spieler reisen gemeinsam),
+  Tutorial-Kiosk. In Studio werden Ortswechsel simuliert (keine echten Teleports).
+- **Tutorial** (11 Schritte, überspringbar, Belohnung einmalig) und **Beginner-Hinweise** als Karten.
+- **Freischaltungen** nach Level (Tab „Freischaltungen“) – das letzte Auto, der Nord Elys E9, kommt ab **Level 90**.
+- **Prestige-Ränge** ab Level 100 **ohne Reset**: Titel, Kosmetik, kleine Boni; Level, Credits und Autos bleiben.
+- **Open World**: eigene Gebäude auf dem Grundstück (Autohaus, Schrottplatz, Produktion) mit Bauzeit, passiven
+  Einnahmen und Vorteilen in der Stadt; **Passiv-Modus** zum entspannten Spielen.
+- **Story** „Vom Kiesplatzhändler zum Mega-Verkäufer“: 5 Kapitel, Start am **Kiesplatz** (Gebrauchtwagen an
+  NPC-Kunden verkaufen), dazu täglich 3 **Nebenmissionen** (u. a. Lieferfahrt) und der Strang „Werkstatt-Legende“.
+  Missionen laufen in einer Party gemeinsam (Co-op).
+- **Schnelles Spiel (Tycoon)**: Gebäude wählen (Werkstatt, Autohaus, Produktion, Schrottplatz), mit **Bargeld** über
+  Kaufpads bis Stufe 5 ausbauen, mit anderen Spielern handeln, **Rebirth** – jede fertige Runde gibt einen dauerhaften
+  Bonus in der Open World.
+- **Shop**: Kosmetik (Folierungen, Felgen, Hupen, Reifenspuren), DLC-Autos mit den gleichen Fahrwerten wie ihr
+  Basismodell, kosmetische Pässe. Alles auch mit Credits oder als Belohnung erreichbar, **keine Zufallsboxen,
+  kein Pay-to-win**. Alle Produkt-IDs sind Platzhalter – nichts ist veröffentlicht.
 
-**Loslegen:** [START_HIER.md](START_HIER.md) · **Studio-Prüfliste:** [STUDIO_TESTS.md](STUDIO_TESTS.md) · **Stadtplan:** [docs/CITY_SPEC.md](docs/CITY_SPEC.md) · **Schnittstellen:** [docs/MERGE_CONTRACT.md](docs/MERGE_CONTRACT.md) · **Ansichten:** [docs/renders](docs/renders)
+## Stadt und Minispiele (3.0)
+
+- **Werkstattmeile**: Jeder Spieler hat seine eigene 2.4.0-Werkstatt (Empfang, Bühnen, Anbauten, Geräte) – acht
+  Grundstücke an der Hauptstraße.
+- **Stadtplatz** mit Ankunftshalle, Bestenliste und Farbleitsystem; **Schrottplatz** mit Presse und Kran
+  (*Schrottpresse*, *Schrottplatz*), **Tuning-Zentrum** (*Tuning-Projekte*), **Meisterschule** (*Quiz*),
+  **Parkhaus** (*Parkplatz-Chaos*).
+- **Autohaus** mit 9 Modellen und Probefahrt; eigene Autos **selbst fahren** (Federung, Lenkung, Nitro, Tacho) und tunen.
+- **Teststrecke**, **Waschstraße**, **Auktionshaus** (NPC- und Spieler-Auktionen), **Spielhalle** mit 8
+  Geschicklichkeits-Automaten (Credits nur für Können, Tageslimit, kein Glücksspiel).
+- Belebte Straßen: NPC-Verkehr, Ampeln, Kreisverkehre, Licht bei Nacht.
+
+Der Server rechnet alles; der Spielstand bleibt im 2.4.0-Profil (`UltimateCarGame_v2`, nichts geht verloren).
+Balance: [docs/BALANCE.md](docs/BALANCE.md) – die Werkstatt bleibt die beste Einnahmequelle.
+
+**Loslegen:** [START_HIER.md](START_HIER.md) · **Studio-Prüfliste:** [STUDIO_TESTS.md](STUDIO_TESTS.md) ·
+**Testbericht:** [TESTBERICHT.txt](TESTBERICHT.txt) · **Schnittstellen:** [docs/PHASE4_CONTRACT.md](docs/PHASE4_CONTRACT.md),
+[docs/MERGE_CONTRACT.md](docs/MERGE_CONTRACT.md), [docs/PHASE2_CONTRACT.md](docs/PHASE2_CONTRACT.md) ·
+**Stadtplan:** [docs/CITY_SPEC.md](docs/CITY_SPEC.md)

@@ -2,30 +2,78 @@
 
 ## Spielen in Roblox Studio
 
-1. `Ultimate_Car_Game.rbxlx` in Roblox Studio öffnen. Die Stadt ist schon im Editor sichtbar.
-2. **Play** (F5). Du erscheinst in der Ankunftshalle, danach bringt dich das Spiel in den Empfang deiner eigenen Werkstatt.
-3. Minispiele: zu einer Station gehen und **E** drücken, oder Taste **M** / Knopf „Minispiele“. Der Tab **Stadtplan** bietet Schnellreise.
+1. **`Ultimate_Car_Game.rbxlx`** in Roblox Studio öffnen (Datei → Öffnen). Das ist die Datei zum Spielen: Lobby,
+   Stadt (Open World) und Tycoon-Gelände sind alle drin.
+2. **Test → Play** (F5). Du startest in der **Lobby**.
+3. Taste **M** (oder Knopf „Minispiele“) öffnet das Menü. Im Tab **Lobby** wählst du **Open World** oder
+   **Schnelles Spiel** und drückst **„Los geht's“**. Du kannst auch zu einem der Portale in der Halle laufen und **E** drücken.
+4. In der Open World startet beim ersten Mal das Tutorial in deiner eigenen Werkstatt. Danach: Stationen in der Stadt
+   mit **E** öffnen, Schnellreise im Tab **Stadtplan**, die Story beginnt am **Kiesplatz**.
+5. Zu zweit testen: **Test → Clients und Server**, 2 Spieler, Start. In der Lobby eine Party erstellen und den Code
+   beim zweiten Spieler eingeben.
 
-In Studio wird nicht gespeichert (wie in 2.4.0). Nach dem Veröffentlichen speichert das Spiel im DataStore `UltimateCarGame_v2`.
+Was du alles ausprobieren kannst, steht als Abhak-Liste in **[STUDIO_TESTS.md](STUDIO_TESTS.md)**.
+
+**Gut zu wissen**
+
+- **Nichts ist veröffentlicht.** Es gibt keine Place-IDs, keine Produkt-IDs, keine Game-Pass-IDs (alles 0).
+  Ortswechsel laufen darum in Studio als **Simulation** innerhalb der einen Datei („Studio-Simulation: Ortswechsel ohne
+  Teleport“), Robux-Knöpfe zeigen „noch nicht eingerichtet“.
+- **In Studio wird nicht gespeichert** (Status „Nur diese Sitzung“). Nach Stop und Play beginnt alles neu. Darum sind in
+  Studio auch Dinge gesperrt, die ein gespeichertes Profil brauchen (Gebäude bauen, Handel, Spieler-Auktionen) – du
+  bekommst dann einen freundlichen Hinweis. Wer Speichern in Studio testen will: Spiel privat bei Roblox anlegen,
+  *Game Settings → Security → Enable Studio Access to API Services* einschalten und in
+  `src/garage/shared/Config.lua` `C.SaveInStudio = true` setzen (Studio nutzt dann den eigenen Test-Speicher
+  `UltimateCarGame_Studio_v2`). Das veröffentlichte Spiel speichert im DataStore `UltimateCarGame_v2`.
+
+## Die vier Place-Dateien
+
+| Datei | Inhalt | Wofür |
+|---|---|---|
+| `Ultimate_Car_Game.rbxlx` | alles in einem (Lobby + Stadt + Tycoon) | **zum Spielen und Testen in Studio** |
+| `Ultimate_Car_Game_Lobby.rbxlx` | nur die Lobby-Halle | späteres Start-Place beim Veröffentlichen |
+| `Ultimate_Car_Game_OpenWorld.rbxlx` | nur die Stadt (Open World) | späteres Place „Open World“ |
+| `Ultimate_Car_Game_Tycoon.rbxlx` | nur das Tycoon-Gelände | späteres Place „Schnelles Spiel“ |
+
+Alle vier enthalten denselben Code; das Attribut `PlaceKind` an `ReplicatedStorage.GarageShared` sagt dem Spiel, welcher
+Teil es ist. Die drei einzelnen Places braucht man erst, wenn das Spiel als Experience mit mehreren Places veröffentlicht wird.
+
+## Später beim Veröffentlichen: wo die IDs hingehören
+
+Alle Platzhalter stehen auf `0`. Nach dem Eintragen einmal neu bauen (siehe unten).
+
+| Was | Datei | Stelle |
+|---|---|---|
+| Place-IDs (Lobby, Open World, Tycoon) | `src/mini/shared/GameConfig.lua` | `GameConfig.Places = { lobby = 0, openworld = 0, tycoon = 0 }` |
+| DLC-Autos und Kosmetik (Developer Products) | `src/mini/shared/GameConfig.lua` | `Shop.Products` → `productId` je Eintrag |
+| Kosmetik-Game-Passes („Neon-Paket“, „Werkstatt-Deko“) | `src/mini/shared/GameConfig.lua` | `Shop.Passes` → `id` |
+| Credits-Pakete (Robux) | `src/garage/shared/Config.lua` | `C.CreditProducts` → `productId` |
+| Presse-Game-Passes | `src/mini/shared/MiniConfig.lua` | `MiniConfig.GamePasses` → `id` |
+
+Robux-Preise stellt man nur auf der Roblox-Website ein; das Spiel liest sie von dort.
 
 ## Am Code arbeiten
 
 Voraussetzungen: Python 3 (mit `matplotlib` nur für Vorschaubilder) und Rust/cargo (für den Luau-Runner der Tests).
 
 ```bash
-python tools/build_place.py Ultimate_Car_Game.rbxlx    # Basisplace 2.4.0 + src/ + Stadt (tools/worldgen)
-python tools/export_fixture.py                         # Test-Fixture nach Welt-Änderungen erneuern
-python tools/validate.py Ultimate_Car_Game.rbxlx       # Place, Luau-Compiler, statische Prüfungen, Tests
-python tools/worldgen/render.py Ultimate_Car_Game.rbxlx --plots   # Draufsicht nach /tmp/claude-0/renders
+python3 tools/build_place.py Ultimate_Car_Game.rbxlx                                   # alles in einem
+python3 tools/build_place.py --place lobby     Ultimate_Car_Game_Lobby.rbxlx
+python3 tools/build_place.py --place openworld Ultimate_Car_Game_OpenWorld.rbxlx
+python3 tools/build_place.py --place tycoon    Ultimate_Car_Game_Tycoon.rbxlx
+python3 tools/export_fixture.py                         # Test-Fixture nach Welt-Änderungen erneuern
+python3 tools/validate.py Ultimate_Car_Game.rbxlx       # Place, Luau-Compiler, statische Prüfungen, alle Tests
+python3 tools/economy_sim.py --check                    # Balance-Grenzen (docs/BALANCE.md)
+tools/luaurun/target/release/luaurun run tests/run_tests.lua . <Teil des Testnamens>     # einzelne Tests
 ```
 
 | Ordner | Inhalt |
 |---|---|
 | `base/` | Original-Place 2.4.0 (Welt, Autos, Geräte, Licht) |
 | `src/garage` | 2.4.0-Skripte (Änderungen mit `-- 3.0:` markiert) |
-| `src/mini` | Minispiele: shared (Regeln), server (Dienste), client (UI, Stadt-Animationen) |
-| `tools/worldgen` | Python-Generator der Stadt; `design/` = geprüfter Stadtplan |
-| `tests` | Roblox-Mock, der den echten GarageServer/Client ausführt |
-| `docs` | Stadtplan, Schnittstellen-Vertrag, Analyse von 2.4.0, Vorschaubilder |
+| `src/mini` | alles Neue: `shared` (Regeln, `GameConfig`, `MiniConfig`, `CarCatalog`), `server` (Dienste), `client` (Oberfläche) |
+| `tools/worldgen` | Python-Generator für Stadt, Lobby und Tycoon-Gelände |
+| `tests` | Roblox-Nachbildung, die den echten GarageServer/Client ausführt |
+| `docs` | Verträge (Schnittstellen), Balance, Stadtplan, Analyse von 2.4.0, Vorschaubilder |
 
-Game Passes: IDs in `src/mini/shared/MiniConfig.lua` eintragen. Credits-Produkte (Robux): IDs in `src/garage/shared/Config.lua` → `C.CreditProducts`.
+Alle Zahlen (Preise, Level, Belohnungen) stehen in `GameConfig.lua`, `MiniConfig.lua` und `CarCatalog.lua` – nie im Code.

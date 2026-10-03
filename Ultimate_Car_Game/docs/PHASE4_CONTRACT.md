@@ -57,19 +57,24 @@ d.games.meta     = { tutorialDone=bool, tutorialStep=int, tutorialSkipped=bool, 
                      hintsSeen={ [hintId]=true } }   -- tutorialRewarded: Belohnung verbucht (Neustart am Kiosk ohne zweite)
 d.games.prestige = { claimed={ [rank:int]=true }, titleRank=int }          -- Rang = PrestigeRules.RankFor(d.level)
 d.games.tycoon   = { runsDone={ werkstatt=int, autohaus=int, produktion=int, schrottplatz=int },
-                     rebirths=int,
-                     run=false | { building=<typ>, stage=1..5, cash=number, upgrades={ [id]=int }, startedAt=unix,
-                                   lastTick=unix, produced=number, rebirthBoost=number, storage={ [item]=int } } }
-d.games.ow       = { buildings={ [typ]={ stage=int, built=int, readyAt=unix, collectedAt=unix, carAt=unix } },
+                     rebirths=int, xpStage=0..5,       -- xpStage: Stufen-XP dieses Durchlaufs schon vergeben (kein XP-Farmen)
+                     run=false | { building=<typ>, stage=1..5, cash=number, container=number, upgrades={ [id]=int },
+                                   startedAt=unix, lastTick=unix, produced=number, rebirthBoost=number,
+                                   storage={ [item]=int }, itemAcc={ [item]=number } } }
+                     -- container = Bargeld im Sammelbehälter (noch nicht eingesammelt), itemAcc = angebrochene Handelsware
+d.games.ow       = { buildings={ [typ]={ stage=int, built=int, readyAt=unix, collectedAt=unix, carAt=unix, partsCarry=number } },
                      passive=bool, lastPassiveAt=unix }   -- typ: autohaus|produktion|schrottplatz (werkstatt = d.bays, nicht gespeichert);
                                                           -- stage = gekaufte Stufe, built = fertig gebaute Stufe (stage > built: Baustelle bis readyAt);
                                                           -- passive spiegelt meta.passive (eine Quelle: meta)
 d.games.story    = { chapter=int, step=int, done={ [missionId]=true },
                      side={ [missionId]={ n=int, day="YYYY-MM-DD", claimed=bool } },   -- Legende: day="legend"
                      active=false | { id=string, progress=number, startedAt=unix, party=int },
-                     sales={ n=int, best=int, special=int, serial=int }, title=string }   -- chapter/step werden aus done neu bestimmt
+                     sales={ n=int, best=int, special=int, serial=int, nextAt=unix }, title=string }
+                     -- chapter/step werden aus done neu bestimmt; sales.nextAt = nächster Kiesplatz-Kunde (übersteht Ortswechsel/Rejoin);
+                     -- side-Einträge nur mit n > 0 oder claimed; ow.buildings[typ].partsCarry = Altteil-Rest (0 ≤ x < 1)
 d.games.shop     = { owned={ [itemId]=true }, equipped={ wrap=string|"", rims=string|"", horn=string|"", trail=string|"" },
-                     dlcCars={ [modelId]=true } }
+                     dlcCars={ [modelId]=true } }   -- dlcCars = Kauf-Historie; Besitz = Auto in d.games.cars (§9)
+                     -- Game-Pass-Besitz wird nicht gespeichert (Sitzung: ms.shopPasses aus UserOwnsGamePassAsync)
 d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): missionsDone, tycoonRuns, prestigeClaims
 ```
 
@@ -120,8 +125,9 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 ## 5. Lobby (`LobbyService`, `LobbyUI`, Halle `workspace.Lobby`)
 
 - Halle (worldgen `tools/worldgen/lobby.py`): Empfangshalle mit hoher Decke, zwei Portale **„Schnelles Spiel“** und
-  **„Open World“** (Stationen `Lobby.Stations.mode_tycoon` / `mode_openworld`, Attribut `MiniTab="lobby"`,
-  ProximityPrompt), **Einstellungs-Terminal** (`settings`), **Party-Tafel** (`party`), **Tutorial-Kiosk** (`tutorial`),
+  **„Open World“** (Stationen `Lobby.Stations.mode_tycoon` / `mode_openworld`, Attribute `MiniTab="lobby"` und
+  `LobbyAction=<Stationsschlüssel>`, ProximityPrompt), **Einstellungs-Terminal** (`settings`), **Party-Tafel** (`party`),
+  **Tutorial-Kiosk** (`tutorial`),
   Ankunft `Lobby.Arrivals.hub`, `Lobby.LobbySpawn` (SpawnLocation; im `all`-Place ist `City.CitySpawn` weiterhin da –
   der Server versetzt beim Beitritt nach Modus). Animierte Deko (Anim-Attribute wie in der Stadt: `neon`, `door`,
   `turntable` mit Showcar).
@@ -310,12 +316,20 @@ unlocks_seen
 Events: `mini_notice` mit `kind` ∈ { `mode`, `party`, `tutorial`, `unlock`, `prestige`, `story`, `mission`,
 `ow_ready`, `tycoon_market`, `tycoon_stage`, `trade`, `shop` }. Snapshot-Felder (§11).
 
+**Stand nach Umsetzung (Meilenstein 9):** Die Aktionsnamen und Felder oben sind genau so in `MiniNet.Actions`
+umgesetzt. Zusätzlich gesendete `mini_notice`-Arten: `lobby` (Lobby-Station geöffnet: `action`, `hint?`), `hint`
+(Beginner-Karte: `id`, `text`, `trigger`), `tycoon_choose` (Start-Pad: `slot`, `hasRun`, `building`, `types`),
+`ow_build` / `ow_collect` / `ow_passive` (Ergebnis der Gebäude-Aktionen; `ow_build` → Story-Ereignis
+`ow_built:<typ>`). Tycoon-Gelände (worldgen `tools/worldgen/tycoon.py`): je Grundstück `StartPad` (Attribut
+`TycoonSlot=n`, Prompt „Durchlauf starten“ → `tycoon_choose`-Hinweis), `CollectPad` (`TycoonPad="collect"`, Prompt
+„Sammeln“), Kaufpads unter `ButtonsRoot` (`TycoonButton=<upgradeId>`, vom `TycoonService` gesetzt und eingefärbt).
+
 Neue Tabs: `lobby`, `unlocks`, `story` (Missionen + Nebenmissionen), `tycoon`, `buildings` (OW-Gebäude), `prestige`;
 `shop` wird erweitert (Credits, Autos, Kosmetik, Pässe).
 
 ## 11. Snapshot-Felder (zusätzlich zu MiniSnapshot)
 
-`mode`, `placeKind`, `meta {beginner, passive, single, tutorialDone, tutorialStep}`, `party {code, leader, members[]}`,
+`mode`, `placeKind`, `meta {beginner, passive, single, tutorialDone, tutorialStep}`, `party {code, leader, leaderMode, away, members[]}`,
 `prestige {rank, next, claimable[], claimed[]}`, `unlocks {next, list[] (nur bei full)}`,
 `tutorial {step, text, target, done}`, `story {chapter, active, missions[], side[]}`, `ow {buildings{}, passive}`,
 `tycoon {run, slot, offers[], bonus{}}`, `shop {owned[], equipped{}, dlcCars[], passes{}, catalog{} (full)}`.
@@ -335,7 +349,18 @@ Sticky (nur bei full): `unlocks.list`, `shop.catalog`, `story.missions`.
 - Unlock-Sperren decken alle Aktionen eines Bereichs: Presse (Klick, Maschinen, Händler, Rebirth, keine Produktion
   vor Level 2), Tuning (Start, Abholen, passive Einnahmen – vor Level 6 wird nichts angespart), Ausbau
   (`mini_upgrade` je Bereich), Gebote auf **Spieler-Lose** erst mit `auction:player` (NPC-Lose ab `feature:auction`).
-- `lobby_return` ist auch für Party-Mitglieder erlaubt (allein zurück, Party bleibt); nur `lobby_go` ist Leitersache.
+- `lobby_return` ist auch für Party-Mitglieder erlaubt (allein zurück, Party bleibt); `lobby_go` ist Leitersache –
+  außer: ein Mitglied darf allein zum Modus des Leiters reisen, wenn dieser schon in Open World/Tycoon ist, und das
+  `lobby_go` eines Leiters, der schon am Ziel ist, holt Mitglieder aus anderen Modi nach (Snapshot
+  `party.leaderMode`, `party.away`, `members[].mode`).
+- Reisen in die Stadt (2.4.0-Tablet `travel`/`target`, `mini_travel` zu Werkstatt/Stadtzielen, `mini_car_spawn`,
+  `mini_car_testdrive`, `mini_track_start`, `mini_carwash`) aus Lobby oder Schnellem Spiel: im `all`-Place wechselt
+  der Server zuerst in die Open World (`PlaceRouter.Simulate`, Tutorial/Tycoon/Story über den Moduswechsel), in
+  einzelnen Lobby-/Tycoon-Places Hinweis statt Reise (`Mini.EnsureOpenWorld`).
+- DLC-Autos: auch der Robux-Prompt erst ab dem Level des Modells (`ShopRules.PromptBlock`); eine bezahlte Quittung
+  wird immer geliefert.
+- `Profiles.Load` wartet bei einer fremden, frischen Sperre (Ortswechsel) bis zu `GameConfig.ProfileLockRetries` ×
+  `ProfileLockRetryWait` Sekunden, bevor die Sitzung nur temporär läuft.
 - Alle Texte Deutsch, junges Publikum, keine externen Assets (`rbxassetid`), keine Glücksspielmechanik.
 - Neue Luau-Dateien mit Typannotationen an Funktionssignaturen (keine `--!strict`-Pflicht, aber `--!nonstrict` ok),
   ModuleScripts, Kommentare Deutsch.
