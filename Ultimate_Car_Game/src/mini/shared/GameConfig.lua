@@ -163,8 +163,9 @@ GameConfig.Party = {
 --   "next"            reiner Lese-Schritt, der Client sendet tutorial_next {step}
 --   "station:<key>"   2.4.0-Plot-Station geöffnet (World.Create -> callback("station", key)); zone = "plot"
 --   "tab:<tab>"       Stadt-Station mit Attribut MiniTab = <tab> geöffnet (MiniService-Prompt); zone = "city"
---   "job:accepted"    ein Auftrag liegt in d.jobs (Phase diagnose oder später)
---   "job:repair"      ein Auftrag hat die Diagnose hinter sich (Phase repair, working, verify oder invoice)
+--   "job:accepted"    ein Auftrag liegt in d.jobs (Phase diagnose, approval oder später)
+--   "job:repair"      ein Auftrag hat Diagnose und Freigabe hinter sich (Phase repair, working, verify oder invoice);
+--                     beim Fahrzeug-Check mit Fehlern im Fehlerspeicher erst nach dem Kundenanruf mit dem Handy (approval)
 --   "job:invoice"     ein Auftrag ist fertig repariert und geprüft (Phase invoice)
 --   "settled"         Mini.OnSettled (Abrechnung)
 --   "action:<name>"   eine Mini-Aktion war erfolgreich (z. B. mini_travel)
@@ -181,15 +182,17 @@ local TUTORIAL_STEPS: { [string]: TutorialStep } = {
 	menu = { id = "menu", text = "Öffne das Menü mit der Taste M oder dem Knopf „Minispiele“. Dort findest du alles Wichtige.", target = nil, zone = nil, event = "next" },
 	-- werkstatt: die 2.4.0-Aufträge
 	reception = { id = "reception", text = "Geh zum Empfang deiner Werkstatt und drück E.", target = "workshop", zone = "plot", event = "station:workshop" },
-	accept = { id = "accept", text = "Nimm am Empfang einen Auftrag an. Ein Kunde bringt dir sein Auto.", target = "workshop", zone = "plot", event = "job:accepted" },
-	obd = { id = "obd", text = "Steck das OBD-Gerät ans Auto und finde den Fehler.", target = nil, zone = nil, event = "job:repair" },
-	repair = { id = "repair", text = "Repariere das Auto Schritt für Schritt bis zur Endkontrolle.", target = nil, zone = nil, event = "job:invoice" },
+	accept = { id = "accept", text = "Nimm am Empfang einen Auftrag an, zum Beispiel den Fahrzeug-Check. Ein Kunde bringt dir sein Auto.", target = "workshop", zone = "plot", event = "job:accepted" },
+	-- 3.0: OBD-Tester liest den Fehlerspeicher; Fehler gefunden -> Kunde per Handy (Taste P) fragen; Werkzeug kommt automatisch
+	obd = { id = "obd", text = "Geh zum Auto und drück E am OBD-Anschluss: Der OBD-Tester liest den Fehlerspeicher. Findet er Fehler, ruf den Kunden mit dem Handy an (Taste P) und frag, ob du reparieren darfst.", target = nil, zone = nil, event = "job:repair" },
+	repair = { id = "repair", text = "Repariere das Auto: Geh zum leuchtenden Punkt und drück E. Werkzeug, Hebebühne und Motorhaube macht dein Mechaniker selbst. Zum Schluss die Endkontrolle mit E am OBD-Anschluss. Mit Taste 1 hast du die Hände frei.", target = nil, zone = nil, event = "job:invoice" },
 	settle = { id = "settle", text = "Rechne den Auftrag am Empfang ab – die Credits gehören dir!", target = "workshop", zone = "plot", event = "settled" },
 	map = { id = "map", text = "Drück M (oder den Knopf „Minispiele“) und öffne den Tab „Stadtplan“ – reise damit in die Stadt.", target = nil, zone = nil, event = "action:mini_travel" },
 	dealer = { id = "dealer", text = "Schau im Autohaus vorbei und drück dort E. Kaufen kannst du ab Level 3 – ansehen darfst du jetzt schon.", target = "dealer", zone = "city", event = "tab:dealer", at = "city" },
 	goals = { id = "goals", text = "Sieh dir an der Infotafel deine Tagesziele an – jeden Tag gibt es neue.", target = "goals", zone = "city", event = "tab:goals", at = "city" },
 	-- Meilenstein 7: Anschluss an die Story (Kapitel 1 „Der Kiesplatz“, Station City.Stations.kiesplatz, Tab story)
-	kiesplatz = { id = "kiesplatz", text = "Zum Schluss: Reise mit dem Stadtplan zum Kiesplatz am Stadtrand und drück dort E. Da beginnt deine Story – vom Kiesplatzhändler zum Mega-Verkäufer. Viel Spaß in der Werkstattmeile!", target = "kiesplatz", zone = "city", event = "tab:story" },
+	-- gemeinsamer End-Schritt: beim Autohaus folgt noch ah_sell, daher kein „Zum Schluss“ (die Endkarte sagt „Viel Spaß!“)
+	kiesplatz = { id = "kiesplatz", text = "Reise mit dem Stadtplan zum Kiesplatz am Stadtrand und drück dort E. Da beginnt deine Story – vom Kiesplatzhändler zum Mega-Verkäufer!", target = "kiesplatz", zone = "city", event = "tab:story" },
 	-- autohaus: das geschenkte Autohaus (OWRules.GrantStart), Händler, erster Verkauf am Kiesplatz
 	ah_buildings = { id = "ah_buildings", text = "Dein Autohaus steht schon fertig auf deinem Grundstück! Öffne mit M das Menü und dort den Tab „Gebäude“. Schau es dir an und tipp danach hier auf „Weiter“.", target = nil, zone = nil, event = "next", openTab = "buildings" },
 	ah_collect = { id = "ah_collect", text = "Hol im Tab „Gebäude“ beim Autohaus deine ersten Credits ab – tipp dort auf „Abholen“.", target = nil, zone = nil, event = "action:ow_collect" },
@@ -314,7 +317,7 @@ GameConfig.Start = {
 		choose = "Das wähle ich!",
 		waiting = "Einen Moment …",
 		later = "Später entscheiden",
-		laterHint = "Kein Problem! Die Startwahl kommt wieder, wenn du das nächste Mal in die Werkstattmeile reist.",
+		laterHint = "Kein Problem! Die Startwahl kommt wieder, wenn du das nächste Mal in der Werkstattmeile ankommst. Oder öffne sie im Handy (Taste P) unter „Einstellungen“.",
 	},
 }
 GameConfig.Start.PathSet = {}
@@ -324,10 +327,13 @@ end
 
 ---------------------------------------------------------------- Beginner-Hinweise (§6)
 -- when: "unlock:<key>" (Level mit Freischaltung erreicht), "station:<key>" (Station geöffnet, Plot oder Stadt
--- oder Lobby), "first:<stat>" (Statistik aus MiniRules.STAT_KEYS zum ersten Mal > 0). Je einmal
+-- oder Lobby), "first:<stat>" (Statistik aus MiniRules.STAT_KEYS zum ersten Mal > 0), "job:<phase>" (ein 2.4.0-Auftrag
+-- ist zum ersten Mal in dieser Phase: accepted = angenommen, approval = Kunde muss per Handy freigeben; TutorialService.Tick). Je einmal
 -- (meta.hintsSeen), nur bei meta.beginner = true, Anzeige als Karte oben rechts.
 GameConfig.Hints = {
 	{ id = "h_workshop", when = "station:workshop", text = "Am Empfang nimmst du Aufträge an und rechnest fertige Autos ab." },
+	{ id = "h_hand", when = "job:accepted", text = "Werkzeug musst du nicht wechseln: Beim Drücken von E nimmt dein Mechaniker das richtige selbst. Mit dem Hand-Knopf links in der Werkzeugleiste (Taste 1) hast du die Hände frei." },
+	{ id = "h_phone", when = "job:approval", text = "Der OBD-Tester hat Fehler gefunden! Nimm dein Handy (Taste P oder der Handy-Knopf rechts) und ruf den Kunden an. Er entscheidet, ob du reparieren darfst." },
 	{ id = "h_first_job", when = "first:jobsDone", text = "Super, dein erster Auftrag! Jeder Auftrag bringt Credits und XP – mit XP steigst du im Level auf." },
 	{ id = "h_first_dismantle", when = "first:dismantled", text = "Zerlegte Autos bringen Altteile. Altteile brauchst du für Tuning-Projekte." },
 	{ id = "h_press", when = "unlock:feature:press", text = "Neu: die Schrottpresse! Klick Schrott zusammen und tausch ihn beim Schrotthändler gegen Credits." },

@@ -579,6 +579,64 @@ return {
 		T.eq(g:ErrorText(), "", "keine Skriptfehler")
 	end },
 
+	{ "Später entscheiden: Wahl bleibt nach abgerechneten Aufträgen offen, kommt bei der nächsten Ankunft wieder", function(T, H)
+		local S = setup(H)
+		local g, SS = S.g, S.SS
+		local M = mods(g)
+		local MR = M.MR
+		local Flow = H.Load("tests/lib/garage_flow.lua")
+		-- Regeln: einmal gezeigt -> Aufträge/Tutorial-Schritt machen das Profil nicht zum Veteranen
+		local d0 = profile(g)
+		T.eq(MR.MarkStartOffered(d0), true, "Wahl gezeigt gemerkt")
+		T.eq(MR.MarkStartOffered(d0), false, "idempotent")
+		d0.completed = 3
+		d0.games.meta.tutorialStep = 2
+		T.eq(MR.StartPending(d0), true, "gezeigt + Aufträge: Wahl bleibt offen")
+		T.eq(MR.ResolveStartPath(d0), "", "kein automatischer Weg")
+		local loaded = MR.Load(H.Copy(d0.games.meta), d0, NOW)
+		T.eq(loaded.startPath, "", "Laden: Wahl bleibt offen")
+		T.eq(loaded.startOffered, true, "Laden: startOffered bleibt")
+		T.eq(MR.Load({ tutorialStep = 2 }, d0, NOW).startPath, "werkstatt", "ohne startOffered: Veteran wie bisher")
+		T.eq(MR.Load({ startOffered = true, tutorialDone = true }, d0, NOW).startPath, "werkstatt", "Tutorial beendet: Veteran")
+		T.eq(MR.SetStartPath(d0, "produktion"), true, "später gewählt")
+		T.eq(d0.games.meta.startOffered, false, "nach der Wahl nichts mehr offen")
+		T.check(M.MiniRules.IsClean(loaded), "sauber")
+		-- Server: Wahl angeboten, „Später entscheiden“ (nur Client), Auftrag abgerechnet -> Wahl weiter offen
+		local pl, ms, d = S.join(7311, "Lena")
+		ms.greeted = true -- wie nach dem „hello“ des Clients (sonst wartet der Hinweis)
+		T.eq(SS.OnMode(ms, d, "openworld"), true, "Angebot beim Betreten")
+		T.eq(d.games.meta.startOffered, true, "Angebot gemerkt")
+		local receipt = Flow.CompleteInspection(T, g, pl)
+		T.check(receipt ~= nil, "Werkstatt-Auftrag abgerechnet")
+		T.check(d.completed >= 1, "d.completed gezählt")
+		T.eq(MR.StartPending(d), true, "Startwahl nach dem Auftrag weiter offen")
+		T.eq(SS.SnapshotFields(ms, d, g:Now(), true).start.pending, true, "Snapshot: weiter offen")
+		-- nächste Ankunft in der Werkstattmeile (neue Figur): erneutes Angebot
+		local function offers()
+			local n = 0
+			for _, x in ipairs(S.log.notices) do
+				if x.kind == "start" and x.data.event == "offer" then -- nur ein Spieler in diesem Fall
+					n += 1
+				end
+			end
+			return n
+		end
+		local before = offers()
+		SS.OnArrive(ms, d) -- erste Figur der Sitzung zählt nicht (Angebot kam schon beim Betreten)
+		g:Respawn(pl)
+		g:Advance(0.5)
+		T.eq(offers(), before + 1, "nach dem Respawn kommt die Startwahl wieder")
+		ms.p.mode = "lobby"
+		T.eq(SS.OnArrive(ms, d), false, "in der Lobby kein Angebot")
+		ms.p.mode = "openworld"
+		T.eq(S.choose(pl, "schrottplatz"), true, "Wahl nach Aufträgen noch möglich")
+		T.eq(MR.StartPath(d), "schrottplatz", "Weg gespeichert")
+		g:Respawn(pl)
+		g:Advance(0.5)
+		T.eq(offers(), before + 1, "gewählt: kein weiteres Angebot")
+		T.eq(g:ErrorText(), "", "keine Skriptfehler")
+	end },
+
 	{ "StartUI: große Karten, Handy einspaltig ohne Überstand, Klick sendet start_choose, verschwindet nach der Wahl", function(T, H)
 		for _, vp in ipairs({ Vector2.new(390, 700), Vector2.new(1280, 650) }) do
 			local g = H.Garage({ viewport = vp })
@@ -650,6 +708,16 @@ return {
 			T.eq(mod.IsOpen(), true, "wieder offen (Test)")
 			g:Click(gui:FindFirstChild("Later", true))
 			T.eq(mod.IsOpen(), false, "später entscheiden")
+			-- Handy → Einstellungen → „Startweg wählen“ (StartUI.Reopen) holt sie jederzeit zurück
+			local reopened = false
+			g:InClient(p, function()
+				reopened = mod.Reopen()
+			end)
+			T.eq(reopened, true, "Reopen zeigt die Startwahl")
+			T.eq(mod.IsOpen(), true, "wieder offen über Reopen")
+			g:Advance(0.6)
+			g:Click(gui:FindFirstChild("Later", true))
+			T.eq(mod.IsOpen(), false, "wieder später entscheiden")
 			g:InClient(p, function()
 				mod.OnSnapshot({ mode = "lobby", start = { pending = true, path = "", choices = choices } })
 				mod.OnSnapshot({ mode = "openworld", start = { pending = true, path = "", choices = choices } })

@@ -19,6 +19,20 @@ local function id(d,prefix) d.serial=d.serial+1;return prefix..d.serial end
 local function round(n) return math.floor(n+0.5) end
 local function finiteCost(base,growth,level) return math.min(C.NumberCap,round(base*growth^math.min(level,1000))) end
 function R.Snapshot(d) return clone(d) end
+-- 3.0: Schnappschuss für den Client: Würfel-Salz (salt) nie, Befund des Fahrzeug-Checks erst nach dem OBD-Scan.
+-- 3.0: So steht weder der Fehlerspeicher noch die Kundenantwort vor dem Auslesen auf dem Client (kein Annehmen/Abbrechen-Würfeln).
+function R.ClientSnapshot(d)
+    local s=clone(d)
+    for _,list in ipairs({s.jobs or {},s.parkedJobs or {},s.offers or {}}) do
+        for _,j in ipairs(list) do
+            if type(j)=="table" then
+                j.salt=nil
+                if j.phase==nil or j.phase=="diagnose" then j.finding=nil;j.approved=nil end
+            end
+        end
+    end
+    return s
+end
 function R.DayClock(at,epoch)
     local hours=C.DayStartHour+math.max(0,at-epoch)*24/C.DaySeconds
     return hours%24,math.floor(hours/24)
@@ -51,7 +65,7 @@ function R.LoadData(raw,_,now)
         d.loadout={};local seen={}
         for i=1,C.HotbarSize do
             local key=raw.loadout[i]
-            if type(key)=="string" and C.Tools[key] and not seen[key] then
+            if type(key)=="string" and C.Tools[key] and key~=C.HandTool and not seen[key] then -- 3.0: freie Hand ist kein Leistenplatz
                 table.insert(d.loadout,key);seen[key]=true
             end
         end
@@ -77,10 +91,17 @@ function R.LoadData(raw,_,now)
                 end
                 if bay or #d.parkedJobs<2 then
                     seen[j.id]=true;if bay then occupied[bay]=true end
-                    local phase=({diagnose=true,repair=true,working=true,verify=true,invoice=true})[j.phase] and j.phase or "diagnose"
+                    local phase=({diagnose=true,repair=true,working=true,verify=true,invoice=true,approval=true})[j.phase] and j.phase or "diagnose" -- 3.0: approval
                     local entry={id=j.id,kind=j.kind,carId=j.carId,bay=bay,phase=phase,
                         step=integer(j.step,1,1,#def.steps+1),quality=integer(j.quality,100,0,100),scanReady=j.scanReady==true,
                         workUntil=number(j.workUntil,now,0,now+120),selectedParts={},usedParts={}}
+                    -- 3.0: Fahrzeug-Check: Befund, Kundenentscheidung und Check-Bonus (whitelist; alte Saves ohne Befund = kein Befund)
+                    local finding=type(j.finding)=="string" and C.JobById[j.finding] and j.finding~="inspection" and j.finding or nil
+                    if finding and (j.kind=="inspection" or j.kind==finding) then entry.finding=finding end
+                    if type(j.salt)=="number" and j.salt==j.salt and j.salt%1==0 and j.salt>=1 and j.salt<=2147483646 then entry.salt=j.salt end -- 3.0: server-geheimes Würfel-Salz
+                    if type(j.approved)=="boolean" and entry.finding then entry.approved=j.approved end
+                    if entry.finding and j.kind==entry.finding and j.approved==true then entry.inspectionBonus=integer(j.inspectionBonus,0,0,1000000) end
+                    if phase=="approval" and not (j.kind=="inspection" and entry.finding) then entry.phase=j.kind=="inspection" and "repair" or "diagnose" end
                     if entry.step>#def.steps and phase~="invoice" then entry.phase="verify" end
                     if type(j.selectedParts)=="table" then
                         for kind,sku in pairs(j.selectedParts) do
@@ -155,6 +176,7 @@ function R.FindJob(d,jobId)
     for i,j in ipairs(d.jobs) do if j.id==jobId then return j,i end end
 end
 function R.ToolActive(d,key)
+    if key==C.HandTool then return true end -- 3.0: freie Hand ist immer verfügbar (fester Extra-Platz)
     for _,id in ipairs(d.loadout) do if id==key then return true end end
     return false
 end
@@ -166,7 +188,7 @@ function R.ToolMatches(step,key)
     return step and (step.tool==key or (step.alternatives and step.alternatives[key])) or false
 end
 function R.SwapTool(d,slot,key)
-    if type(slot)~="number" or slot%1~=0 or slot<1 or slot>C.HotbarSize or not C.Tools[key] then return false,"Ungültiger Werkzeugplatz." end
+    if type(slot)~="number" or slot%1~=0 or slot<1 or slot>C.HotbarSize or not C.Tools[key] or key==C.HandTool then return false,"Ungültiger Werkzeugplatz." end -- 3.0: Hand nicht in die Leiste
     if not R.ToolUnlocked(d,key) then return false,"Kaufe zuerst das zugehörige Werkstattgerät." end
     for i,id in ipairs(d.loadout) do
         if id==key then d.loadout[i],d.loadout[slot]=d.loadout[slot],id;return true,"Werkzeugplätze getauscht." end
@@ -189,7 +211,8 @@ function R.RefreshOffers(d,random)
     -- Always retain a free, equipment-independent service job so progression cannot stall.
     local hasInspection=false
     for _,o in ipairs(d.offers) do if o.kind=="inspection" then hasInspection=true end end
-    if not hasInspection then table.insert(d.offers,{id=id(d,"offer_"),kind="inspection",carId=cars[random(1,#cars)].id}) end
+    -- 3.0: salt (server-geheim, nie im Client-Schnappschuss) legt Befund und Kundenantwort des Checks fest
+    if not hasInspection then table.insert(d.offers,{id=id(d,"offer_"),kind="inspection",carId=cars[random(1,#cars)].id,salt=random(1,2147483646)}) end
     while #d.offers<target do
         local j=jobs[random(1,#jobs)]
         local eligible={}
@@ -221,8 +244,103 @@ function R.Accept(d,offerId)
     local bay=1;while used[bay] do bay=bay+1 end
     local job={id=id(d,"job_"),kind=offer.kind,carId=offer.carId,bay=bay,phase="diagnose",step=1,
         quality=100,scanReady=false,selectedParts={},usedParts={}}
+    if job.kind=="inspection" then -- 3.0: Fehlerspeicher (deterministisch je Angebot + server-geheimem Salz)
+        job.salt=type(offer.salt)=="number" and offer.salt or math.random(1,2147483646)
+        job.finding=R.InspectionFinding(d,job.id,job.carId,job.salt)
+    end
     table.insert(d.jobs,job);table.remove(d.offers,index)
     return job
+end
+-- 3.0: Fahrzeug-Check mit Fehlerspeicher. Alles deterministisch aus der Auftrags-ID (Random.new(seed)).
+local function mul32(a,b) -- 3.0: exakte 32-Bit-Multiplikation (ohne Genauigkeitsverlust bei Doubles)
+    local aHi,aLo=math.floor(a/65536),a%65536
+    return ((aHi*(b%65536)+aLo*math.floor(b/65536))%65536*65536+aLo*(b%65536))%4294967296
+end
+local function seedOf(text,salt) -- 3.0: FNV-1a + Murmur-Finalizer, gut gestreut auch für job_1, job_2, …
+    local h=bit32.bxor(2166136261,(salt or 0)*2654435761%4294967296)
+    text=tostring(text)
+    for i=1,#text do h=mul32(bit32.bxor(h,string.byte(text,i)),16777619) end
+    h=mul32(bit32.bxor(h,bit32.rshift(h,16)),0x85ebca6b)
+    h=mul32(bit32.bxor(h,bit32.rshift(h,13)),0xc2b2ae35)
+    h=bit32.bxor(h,bit32.rshift(h,16))
+    return h%2147483646+1
+end
+R.SeedOf=seedOf -- 3.0
+local function rngFor(text,salt) -- 3.0: ähnliche IDs (job_1, job_2) sollen nicht ähnlich würfeln
+    local rng=Random.new(seedOf(text,salt))
+    for _=1,4 do rng:NextNumber() end
+    return rng
+end
+local electricJobs={inspection=true,tire=true,brakes=true,battery=true,hv=true} -- 3.0: wie R.RefreshOffers
+local function partAvailable(d,carId,kind) -- 3.0: Teil im Lager oder bestellbar (Level)
+    local family=C.CarById[carId] and C.CarById[carId].family
+    for _,p in ipairs(C.Parts) do
+        if p.kind==kind and p.family==family and ((d.inventory[p.id] or 0)>0 or p.level<=d.level) then return true end
+    end
+    return false
+end
+-- 3.0: Mögliche Befunde: freigeschaltete Auftragsarten außer dem Check, passend zum Auto, Geräte vorhanden,
+-- Teile im Lager oder bestellbar. Gewicht 1/Vergütung (günstige Arbeiten häufiger).
+function R.FindingCandidates(d,carId)
+    local out={}
+    for _,def in ipairs(C.Jobs) do
+        local ok=def.id~="inspection" and def.level<=d.level and C.CarById[carId]~=nil and not R.RequiredEquipment(d,def)
+        if ok and carId=="elys" and not electricJobs[def.id] then ok=false end
+        if ok and def.id=="hv" and carId~="elys" then ok=false end
+        if ok then for _,step in ipairs(def.steps) do if step.part and not partAvailable(d,carId,step.part) then ok=false end end end
+        if ok then table.insert(out,{id=def.id,weight=1/math.max(1,def.reward)}) end
+    end
+    return out
+end
+function R.InspectionFinding(d,jobId,carId,salt) -- 3.0: mit salt nur vom Angebot abhängig (Abbrechen würfelt nicht neu)
+    local rng=salt and rngFor("check:"..tostring(salt),0) or rngFor(jobId,0)
+    if rng:NextNumber()>=C.Inspection.FindingChance then return nil end
+    local list=R.FindingCandidates(d,carId)
+    if #list==0 then return nil end
+    local total=0;for _,c in ipairs(list) do total=total+c.weight end
+    local roll=rng:NextNumber()*total
+    for _,c in ipairs(list) do roll=roll-c.weight;if roll<0 then return c.id end end
+    return list[#list].id
+end
+function R.CustomerName(job) -- 3.0
+    local names=C.Inspection.Customers
+    return names[rngFor(job.id,11):NextInteger(1,#names)]
+end
+function R.CustomerDecision(job) -- 3.0: true = Kunde gibt die Reparatur frei
+    return rngFor(job.salt and "check:"..tostring(job.salt) or job.id,23):NextNumber()<C.Inspection.ApproveChance -- 3.0: salt bleibt auf dem Server
+end
+-- 3.0: Ergebnis des OBD-Scans eines Fahrzeug-Checks: mit Befund -> Kundenfreigabe, sonst direkt zur Sichtprüfung.
+function R.InspectionScanned(job)
+    if job.kind~="inspection" or job.phase~="diagnose" then return false end
+    job.scanReady=true
+    job.phase=job.finding and "approval" or "repair";job.step=1
+    return true
+end
+function R.Approve(d,job,accepted) -- 3.0
+    if not job or job.phase~="approval" or job.kind~="inspection" or not job.finding or not C.JobById[job.finding] then return false,"Für diesen Auftrag ist keine Freigabe offen." end
+    local finding=C.JobById[job.finding]
+    job.approved=accepted==true;job.step=1;job.phase="repair";job.scanReady=true
+    if job.approved then
+        local car=C.CarById[job.carId]
+        job.inspectionBonus=round(C.JobById.inspection.reward*(car and car.reward or 1))
+        job.kind=job.finding;job.selectedParts={}
+        return true,"Kunde sagt Ja: „"..finding.name.."“ ist freigegeben. Der Check wird mitbezahlt."
+    end
+    return true,"Kunde sagt Nein: nur den Fahrzeug-Check fertig machen."
+end
+-- 3.0: Daten für den OBD-Tester (Fehlerspeicher und Live-Daten). Nach der Reparatur ist der Speicher leer.
+function R.Tester(job)
+    local kind=job.kind=="inspection" and job.finding or job.kind
+    -- Abgelehnter Befund bleibt gespeichert; reparierte Fehler sind nach der Arbeit gelöscht.
+    local cleared=(job.phase=="verify" or job.phase=="invoice") and not (job.kind=="inspection" and job.approved==false)
+    local codes={}
+    if kind and not cleared then for _,c in ipairs(C.FaultCodes[kind] or {}) do table.insert(codes,{code=c.code,text=c.text}) end end
+    local faults=(not cleared and kind and C.LiveFaults[kind]) or {}
+    local live,seen={},{}
+    for _,v in ipairs(C.LiveValues) do table.insert(live,{name=v.name,value=faults[v.name] or v.value});seen[v.name]=true end
+    local extra={};for name in pairs(faults) do if not seen[name] then table.insert(extra,name) end end
+    table.sort(extra);for _,name in ipairs(extra) do table.insert(live,{name=name,value=faults[name]}) end
+    return codes,live
 end
 function R.Diagnose(job,choice)
     if job.phase~="diagnose" or not job.scanReady then return false,"Lies zuerst die Messwerte aus." end
@@ -295,23 +413,33 @@ function R.Reward(d,job)
     if #job.usedParts>0 then partQuality=partQuality/#job.usedParts end
     -- 3.0: Querboni (Presse-Anteil ×0,6, Tuning-Stufe +4,5 %/Stufe, Parkplatz-Kundenbonus ≤ ×1,7), nil-sicher.
     local base=def.reward*car.reward*CrossBonus.WorkshopReward(d)
-    local reward=round(base*(1+job.quality*0.0025+partQuality*0.01))
+    local reward=round(base*(1+job.quality*0.0025+partQuality*0.01))+(job.inspectionBonus or 0) -- 3.0: Check-Bonus bei freigegebenem Befund
     return math.min(C.NumberCap,reward),round(def.xp*car.xp)
 end
 function R.Settle(d,jobId,now)
-    local job,index=R.FindJob(d,jobId)
+    local job,index=R.FindJob(d,jobId) -- 3.0: Auftrag für das Check-Salz
     if not job or job.phase~="invoice" then return nil,"Die Endkontrolle ist noch nicht abgeschlossen." end
     local reward,xp=R.Reward(d,job)
     table.remove(d.jobs,index) -- Remove before granting anything: replay-safe.
     restoreParked(d)
     add(d,"money",reward);add(d,"completed",1);add(d,"reputation",2)
     local levels=R.GainXP(d,xp)
-    return {money=reward,xp=xp,levels=levels,name=C.JobById[job.kind].name,quality=job.quality}
+    local name=C.JobById[job.kind].name;if job.inspectionBonus then name=C.JobById.inspection.name.." + "..name end -- 3.0
+    return {money=reward,xp=xp,levels=levels,name=name,quality=job.quality,inspectionBonus=job.inspectionBonus} -- 3.0: Check-Bonus
 end
 function R.CancelJob(d,jobId)
-    local _,index=R.FindJob(d,jobId)
+    local job,index=R.FindJob(d,jobId) -- 3.0: Auftrag für das Check-Salz
     if not index then return false end
-    table.remove(d.jobs,index);restoreParked(d);return true
+    table.remove(d.jobs,index);restoreParked(d)
+    -- 3.0: Ein abgebrochener Fahrzeug-Check kommt mit demselben Salz als Angebot zurück (statt eines frisch gewürfelten),
+    -- 3.0: damit Annehmen und Abbrechen keinen neuen Befund bringt.
+    if type(job.salt)=="number" and (job.kind=="inspection" or job.inspectionBonus or job.finding) then
+        local restored={id=id(d,"offer_"),kind="inspection",carId=job.carId,salt=job.salt}
+        local replaced=false
+        for i,o in ipairs(d.offers) do if o.kind=="inspection" then d.offers[i]=restored;replaced=true;break end end
+        if not replaced then table.insert(d.offers,1,restored) end
+    end
+    return true
 end
 function R.EquipmentCost(d,key)
     local e=C.EquipmentById[key]

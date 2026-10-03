@@ -551,6 +551,8 @@ return {
 				T.check(U.Known(arg), "unlock-Auslöser bekannt " .. h.when)
 			elseif kind == "first" then
 				T.check(statSet[arg], "Statistik bekannt " .. h.when)
+			elseif kind == "job" then
+				T.check(arg == "accepted" or arg == "approval", "Auftrags-Auslöser bekannt " .. h.when)
 			else
 				T.eq(kind, "station", "Auslöser " .. h.when)
 			end

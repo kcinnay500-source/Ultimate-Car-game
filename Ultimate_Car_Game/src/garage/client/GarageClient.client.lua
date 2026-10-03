@@ -25,6 +25,8 @@ local MiniClient do
     if ok and type(mod)=="table" then MiniClient=mod else warn("[3.0] Minispiele nicht geladen: "..tostring(mod));MiniClient={IsOpen=function() return false end,Open=function() end,Toggle=function() end,Start=function() end} end
 end
 local inputControl
+local eventListeners={} -- 3.0: Abonnenten (MiniClient-Handy) für Server-Ereignisse "call"
+local tester,nextHint,handButton -- 3.0: OBD-Tester, Hinweis zum nächsten Handgriff, Slot „Hand“
 local productInfo={}
 local productLoading={}
 local colors={bg=Color3.fromRGB(11,16,25),panel=Color3.fromRGB(20,29,43),card=Color3.fromRGB(28,40,57),line=Color3.fromRGB(49,67,87),
@@ -99,16 +101,33 @@ local foot=text(tablet,"",22,height-30,-44,23,12,colors.muted)
 local hud=frame(gui,UDim2.new(0.96,0,0,132),UDim2.new(0.02,0,1,-138),colors.bg)
 hud.Visible=false
 local objective=text(hud,"Lade deine Werkstatt …",12,5,-24,39,16)
+objective.Name="ObjectiveLine" -- 3.0: Ziel + nächster Handgriff immer direkt über der Werkzeugleiste
 local go=button(hud,"Zum Ziel",12,47,110,function() send("target",{id=state and state.selected}) end,colors.blue)
 local workButton=button(hud,"Arbeiten [E]",130,47,140,function() if state then send("work",{id=state.selected}) end end)
 local menu=button(hud,"Menü [Tab]",278,47,120,function() visible=not visible;tablet.Visible=visible;if visible and rebuild then rebuild() end end,colors.card)
 local miniButton=button(hud,"Minispiele [M]",406,47,140,function() MiniClient.Toggle() end,colors.card);miniButton.Name="MiniGames" -- 3.0: Einstieg neben "Menü" (Größe in resize)
 local toolButtons={}
 for i=1,C.HotbarSize do
-    toolButtons[i]=button(hud,i.." · —",12+(i-1)*98,90,92,function()
+    toolButtons[i]=button(hud,(i+1).." · —",12+i*98,90,92,function() -- 3.0: Platz i liegt auf Taste i+1 (Taste 1 = Hand)
         if state and not overlay.Visible then send("tool",{id=state.data.loadout[i]}) end
     end,colors.card)
     toolButtons[i].Name="ToolSlot"..i;toolButtons[i].Size=UDim2.fromOffset(92,30)
+end
+-- 3.0: fester erster Slot „Hand“ (Taste 1): freie Hand, kein Werkzeug. Gezeichnet aus Frames (keine Asset-IDs).
+handButton=button(hud,"",12,90,92,function() -- 3.0
+    if state and not overlay.Visible then send("tool",{id="hand"}) end -- 3.0
+end,colors.card);handButton.Name="ToolSlotHand";handButton.Size=UDim2.fromOffset(92,30) -- 3.0
+do -- 3.0: Symbol offene Hand (Handfläche, vier Finger, Daumen) + Tastenziffer
+    local key=make("TextLabel",handButton,{Name="Key",Text="1",Position=UDim2.fromOffset(4,0),Size=UDim2.new(0,14,1,0),BackgroundTransparency=1,Font=Enum.Font.GothamBold,TextSize=13,TextColor3=colors.text}) -- 3.0
+    local icon=make("Frame",handButton,{Name="HandIcon",AnchorPoint=Vector2.new(0,0.5),Position=UDim2.new(0,18,0.5,0),Size=UDim2.fromOffset(22,22),BackgroundTransparency=1,BorderSizePixel=0}) -- 3.0: links, daneben das Wort „Hand“
+    make("TextLabel",handButton,{Name="HandLabel",Text=t("Hand"),Position=UDim2.fromOffset(42,0),Size=UDim2.new(1,-44,1,0),BackgroundTransparency=1,Font=Enum.Font.GothamBold,TextSize=13,TextColor3=colors.text,TextXAlignment=Enum.TextXAlignment.Left,TextScaled=false}) -- 3.0: Klartext statt nur Symbol
+    local skin=Color3.fromRGB(246,214,178) -- 3.0
+    local palm=make("Frame",icon,{Name="Palm",Position=UDim2.fromOffset(6,10),Size=UDim2.fromOffset(12,11),BackgroundColor3=skin,BorderSizePixel=0});corner(palm,4) -- 3.0
+    for f,spec in ipairs({{6,3,8},{9,1,10},{12,1,10},{15,3,8}}) do -- 3.0: x, y, Höhe je Finger
+        local finger=make("Frame",icon,{Name="Finger"..f,Position=UDim2.fromOffset(spec[1],spec[2]),Size=UDim2.fromOffset(3,spec[3]+2),BackgroundColor3=skin,BorderSizePixel=0});corner(finger,2) -- 3.0
+    end
+    local thumb=make("Frame",icon,{Name="Thumb",Position=UDim2.fromOffset(1,11),Size=UDim2.fromOffset(7,3),Rotation=-35,BackgroundColor3=skin,BorderSizePixel=0});corner(thumb,2) -- 3.0
+    key.ZIndex=handButton.ZIndex -- 3.0
 end
 local toastPanel=frame(gui,UDim2.fromOffset(330,60),UDim2.new(0.5,0,0,62),colors.panel);toastPanel.AnchorPoint=Vector2.new(0.5,0);toastPanel.Visible=false
 local toastLabel=text(toastPanel,"",14,3,-28,54,14)
@@ -123,7 +142,7 @@ overlay=make("Frame",gui,{Name="InteractionOverlay",Size=UDim2.fromScale(1,1),Ba
 local modal=frame(overlay,UDim2.fromOffset(580,440),UDim2.fromScale(0.5,0.5),colors.panel);modal.AnchorPoint=Vector2.new(0.5,0.5)
 local modalScale=make("UIScale",modal,{Scale=1})
 local function clearModal() for _,v in ipairs(modal:GetChildren()) do if not v:IsA("UIScale") and not v:IsA("UICorner") then v:Destroy() end end end
-local function dismiss() challenge=nil;diagnosis=nil;overlay.Visible=false;effects.StopWork();if inputControl then inputControl.Unlock() end end
+local function dismiss() challenge=nil;diagnosis=nil;overlay.Visible=false;effects.StopWork();if inputControl then inputControl.Unlock() end;if tester then tester.Hide() end end -- 3.0: schließt auch den OBD-Tester
 local function submitChallenge()
     if not challenge or challenge.submitted then return end
     challenge.submitted=true
@@ -131,6 +150,7 @@ local function submitChallenge()
     send("hit",{token=challenge.token,at=workspace:GetServerTimeNow()})
 end
 local function modalTitle(value)
+    if tester then tester.Hide() end;modal.Visible=true -- 3.0: andere Dialoge ersetzen den OBD-Tester
     clearModal();overlay.Visible=true;local h=text(modal,value,24,17,-48,40,24);h.Font=Enum.Font.GothamBold
 end
 local function bind(obj,getter) table.insert(bindings,{obj=obj,getter=getter});obj.Text=t(getter()) end
@@ -151,7 +171,7 @@ local function timer(at) return math.max(0,math.ceil((at or 0)-workspace:GetServ
 local function phase(j)
     if j.phase=="working" then return t("Arbeit läuft: {s} s",{s=timer(j.workUntil)}) end
     if j.phase=="repair" then return t(C.JobById[j.kind].steps[j.step].name) end
-    return t(({diagnose="Diagnose offen",verify="Endkontrolle offen",invoice="Bereit zur Abrechnung"})[j.phase] or j.phase)
+    return t(({diagnose="Diagnose offen",verify="Endkontrolle offen",invoice="Bereit zur Abrechnung",approval="Freigabe offen: Kunden mit dem Handy anrufen (P)"})[j.phase] or j.phase) -- 3.0: Phase approval (Kundenfreigabe)
 end
 local function viewport(parent,carId,x,yy,w,h,paintId)
     local previews=Shared:FindFirstChild("PreviewCars")
@@ -210,12 +230,12 @@ local function workshopPage()
     end
 end
 local function toolsPage()
-    note("Fünf aktive Werkzeuge: Wähle einen Platz und dann ein Werkzeug. Alles andere bleibt in der Kiste. Tauschen geht nur hier vor Ort.")
+    note("Taste 1 ist deine freie Hand. Die Tasten 2–6 sind fünf Werkzeugplätze: Wähle einen Platz und dann ein Werkzeug. Tauschen geht nur hier vor Ort.") -- 3.0: Hand-Slot
     local c=card(112);heading(c,"Deine Werkzeugleiste")
     local bw=math.min(176,(width-80)/5-6)
     for i=1,C.HotbarSize do
         local id=d().loadout[i]
-        button(c,i.." · "..C.Tools[id].short,16+(i-1)*(bw+6),54,bw,function() toolSlot=i;rebuild() end,toolSlot==i and colors.green or colors.card)
+        button(c,(i+1).." · "..C.Tools[id].short,16+(i-1)*(bw+6),54,bw,function() toolSlot=i;rebuild() end,toolSlot==i and colors.green or colors.card) -- 3.0: Tastenziffer (Taste 1 = Hand)
     end
     for _,id in ipairs(C.ToolOrder) do
         local def=C.Tools[id];local unlocked=R.ToolUnlocked(d(),id)
@@ -223,7 +243,7 @@ local function toolsPage()
         local description=def.description or ({scanner="Fehlerspeicher, Diagnose und Endkontrolle.",ratchet="Befestigungen und Reparaturen am Fahrzeug.",oil="Ölservice und Flüssigkeitswechsel.",tire="Reifenmontage mit der Montiermaschine.",meter="Elektrische Messungen und Fehlersuche."})[id]
         c=card(184);heading(c,def.name,description)
         text(c,unlocked and status or ("Benötigt: "..C.EquipmentById[def.equipment].name),16,89,-32,30,14,colors.muted)
-        button(c,"Auf Platz "..toolSlot.." legen",16,132,220,function() send("swapTool",{slot=toolSlot,id=id}) end,unlocked and colors.green or colors.card)
+        button(c,"Auf Taste "..(toolSlot+1).." legen",16,132,220,function() send("swapTool",{slot=toolSlot,id=id}) end,unlocked and colors.green or colors.card) -- 3.0: Taste statt Platznummer
     end
 end
 local function partsPage()
@@ -330,6 +350,44 @@ showPage=function(key)
     if not pages[key] then return end
     local different=page~=key;page=key;visible=true;tablet.Visible=true;rebuild(different)
 end
+-- 3.0: Klartext für den nächsten Handgriff (Bühne, Haube, Werkzeug) aus dem Server-Zustand. Zeigt, woran ein
+-- Arbeitsschritt gerade scheitert (sonst nur ein kurzer Toast) – gegen „ich stecke fest“.
+nextHint=function() -- 3.0
+    -- 3.0: Werkzeug, Hebebühne, Motorhaube und Gerät stellt der Server beim E-Druck selbst (prepare/autoTool).
+    -- 3.0: Der Hinweis nennt darum nur Hürden, die E nicht lösen kann (Werkzeug nicht in der Leiste, Gerät/Teil fehlt).
+    local j=job();if not j then return nil end
+    local def=C.JobById[j.kind];local v=state.visuals and state.visuals[j.id] or {}
+    local data=d()
+    local function inBar(id) -- 3.0
+        if id==C.HandTool then return true end
+        for _,x in ipairs(data.loadout or {}) do if x==id then return true end end
+        return false
+    end
+    local function toolBlocker(step) -- 3.0: nil = Server nimmt das Werkzeug selbst
+        if R.ToolMatches(step,state.tool) and inBar(state.tool) then return nil end
+        if inBar(step.tool) and R.ToolUnlocked(data,step.tool) then return nil end
+        for key in pairs(step.alternatives or {}) do if inBar(key) and R.ToolUnlocked(data,key) then return nil end end
+        local tool=C.Tools[step.tool];local name=tool and tool.name or tostring(step.tool)
+        if tool and not R.ToolUnlocked(data,step.tool) and tool.equipment and C.EquipmentById[tool.equipment] then
+            return t("{tool} fehlt: Kaufe {device} an der Ausbau-Werkbank",{tool=name,device=C.EquipmentById[tool.equipment].name})
+        end
+        return t("{tool} an der Werkzeugkiste in die Leiste legen",{tool=name})
+    end
+    if v.moving then return t("Warte, bis die Bühne stillsteht.") end
+    if j.phase=="approval" then return t("Kunden mit dem Handy anrufen (P) und die Reparatur freigeben lassen") end
+    if j.phase=="diagnose" then return toolBlocker({tool="scanner"}) or t("Am OBD-Anschluss (Fahrerseite) E drücken") end
+    if j.phase=="verify" then return toolBlocker({tool="scanner"}) or t("Endkontrolle: am OBD-Anschluss E drücken") end -- 3.0: Bühne/Haube macht E selbst
+    if j.phase=="repair" then
+        local step=def and def.steps[j.step];if not step then return nil end
+        if step.equipment and (data.equipment[step.equipment] or 0)<(step.equipmentLevel or 1) and C.EquipmentById[step.equipment] then
+            return t("{device} fehlt: an der Ausbau-Werkbank kaufen",{device=C.EquipmentById[step.equipment].name})
+        end
+        local blocker=toolBlocker(step);if blocker then return blocker end
+        if step.part and not R.ChoosePart(data,j,step.part) then return t("Ersatzteil fehlt: im Teilehandel kaufen oder eine andere Marke wählen") end
+        return t("Am markierten Bauteil E drücken – Werkzeug, Bühne und Haube kommen automatisch")
+    end
+    return nil
+end
 refresh=function()
     hud.Visible=not visible and not overlay.Visible and not MiniClient.IsOpen() -- 3.0: HUD weicht dem Minispiel-Panel
     if not state then return end
@@ -337,7 +395,10 @@ refresh=function()
     local clock=R.DayClock(workspace:GetServerTimeNow(),state.dayEpoch)
     headline.Text=t("TAG {day} · {hour}:{minute}",{day=d().days+1,hour=string.format("%02d",math.floor(clock)),minute=string.format("%02d",math.floor(clock%1*60))})
     xpFill.Size=UDim2.new(math.clamp(d().xp/state.neededXP,0,1),0,1,0)
-    objective.Text=t(state.objective);foot.Text=t(state.saveStatus).." · v"..C.Version.." · "..t("TAB Menü · 1–5 Werkzeug · E Arbeit · H Haube · F Bühne")
+    local okHint,hint=pcall(nextHint) -- 3.0: Ziel + nächster Handgriff (pcall: ein Anzeigefehler darf refresh nicht abbrechen)
+    local goal=t(state.objective or "");if okHint and type(hint)=="string" and hint~="" and hint~=goal then goal=goal.."\n→ "..hint end -- 3.0
+    objective.Text=goal;objective.TextSize=(#goal>95 or hud.AbsoluteSize.X<520) and 12 or #goal>60 and 14 or 16 -- 3.0: passt immer in die Zeile
+    foot.Text=t(state.saveStatus).." · v"..C.Version.." · "..t("TAB Menü · 1 Hand · 2–6 Werkzeug · E Arbeit · H Haube · F Bühne") -- 3.0: Hand-Slot
     local current=job();local visual=current and state.visuals[current.id]
     workButton.Text=t("Arbeiten [E]")
     if current then
@@ -348,10 +409,12 @@ refresh=function()
     end
     for i,b in ipairs(toolButtons) do
         local id=d().loadout[i];local unlocked=R.ToolUnlocked(d(),id)
-        b.Text=i.." · "..C.Tools[id].short;b.BackgroundColor3=state.tool==id and colors.green or colors.card
+        b.Text=(i+1).." · "..(C.Tools[id] and C.Tools[id].short or "—");b.BackgroundColor3=state.tool==id and colors.green or colors.card -- 3.0: Taste i+1
         b.TextColor3=unlocked and colors.text or colors.muted
     end
     for _,binding in ipairs(bindings) do if binding.obj.Parent then binding.obj.Text=t(binding.getter()) end end
+    local handOn=state.tool==nil or state.tool=="hand" or not C.Tools[state.tool] -- 3.0: Hand-Slot hervorheben
+    handButton.BackgroundColor3=handOn and colors.green or colors.card -- 3.0
 end
 -- HUD action follows the currently marked station/part.
 workButton:Destroy()
@@ -367,6 +430,7 @@ workButton=button(hud,"Arbeiten [E]",130,47,140,function()
 end)
 local marker=make("BillboardGui",gui,{Name="Ziel",Size=UDim2.fromOffset(170,38),StudsOffset=Vector3.new(0,2,0),AlwaysOnTop=true,Enabled=false})
 local markerText=make("TextLabel",marker,{Size=UDim2.fromScale(1,1),Text=t("▼ DEIN NÄCHSTER SCHRITT"),Font=Enum.Font.GothamBold,TextSize=12,TextColor3=colors.green,BackgroundTransparency=1})
+marker.Active=false;markerText.Active=false -- 3.0: Zielmarke über dem Auto schluckt nie Klicks/Touches
 local highlight=make("Highlight",gui,{Name="WorkPartHighlight",Enabled=false,FillTransparency=0.75,OutlineColor=colors.green,FillColor=colors.green,DepthMode=Enum.HighlightDepthMode.AlwaysOnTop})
 -- Reuse native prompt input/availability, but lay out E/F/H in fixed screen rows.
 -- World-space billboards can overlap at any camera angle despite UI offsets.
@@ -382,12 +446,30 @@ for index,entry in ipairs({{"E","work"},{"F","lift"},{"H","hood"}}) do
     end,entry[1]=="E" and colors.green or colors.card)
     record.button.Name="VehicleAction_"..entry[1];record.button.Size=UDim2.new(1,-12,0,36)
 end
+-- 3.0: Roblox blendet einen Prompt bei RequiresLineOfSight/Exclusivity (z. B. unter der gehobenen Bühne) gar nicht ein;
+-- dann käme kein PromptShown und es gäbe keinen E/F/H-Knopf. Darum zusätzlich die Fahrzeug-Prompts des eigenen
+-- Grundstücks (state.plot) direkt prüfen (Liste alle 1,5 s neu, Reichweite/Enabled wie beim eingeblendeten Prompt).
+local plotPrompts,plotPromptsAt,plotPromptsFor={},0,nil -- 3.0
+local function candidatePrompts() -- 3.0
+    local plot=state and state.plot
+    if typeof(plot)=="Instance" and plot.Parent and (os.clock()>=plotPromptsAt or plotPromptsFor~=plot) then
+        plotPrompts={};plotPromptsAt=os.clock()+1.5;plotPromptsFor=plot
+        local cars=plot:FindFirstChild("ActiveCars");local bays=plot:FindFirstChild("Bays")
+        for _,folder in ipairs({cars,bays}) do
+            if folder then for _,x in ipairs(folder:GetDescendants()) do if x:IsA("ProximityPrompt") and x:GetAttribute("VehicleAction") then table.insert(plotPrompts,x) end end end
+        end
+    end
+    local out={};for prompt in pairs(shownPrompts) do out[prompt]=true end
+    for _,prompt in ipairs(plotPrompts) do if prompt.Parent then out[prompt]=true end end
+    return out
+end
 local function refreshVehicleActions()
     local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     local count=0
+    local candidates=candidatePrompts() -- 3.0
     for _,record in ipairs(vehicleButtons) do
         local chosen,nearest=nil,math.huge
-        for prompt in pairs(shownPrompts) do
+        for prompt in pairs(candidates) do -- 3.0: eingeblendete + eigene Fahrzeug-Prompts
             if not prompt.Parent or not prompt:IsDescendantOf(workspace) then shownPrompts[prompt]=nil
             elseif root and prompt.Enabled and prompt:GetAttribute("VehicleAction")==record.action then
                 local distance=(root.Position-prompt.Parent.Position).Magnitude
@@ -417,6 +499,330 @@ local function markTarget()
     end
     highlight.Adornee=part;highlight.Enabled=part~=nil and not overlay.Visible
 end
+-- 3.0: OBD-Tester „UCG-Tester 3000“: robustes Handgerät im selben Overlay (ScreenGui UltimateCarGame, DisplayOrder 20).
+-- 3.0: Seiten Fehlerspeicher, Messwerte, Befund (Antworten der Diagnose), Endkontrolle (Prüfliste, danach der bisherige
+-- 3.0: scan) und „Verbinden/Auslesen“, solange der Server-Scan läuft. Aktionen unverändert: scan, diagnose, abortInteraction.
+-- 3.0: Felder im diagnose-Ereignis (Server 3.0): codes = {{code, text} | "P0302: …"}, live (oder values) = {{name, value, unit?} |
+-- 3.0: "Name: Wert"}, message, finding/findingName, customer, approved, phase "approval" (Kunde muss freigeben).
+-- 3.0: Fehlen codes/live, liest der Tester Codes und Werte aus report (Zeilen „P0302: …“ bzw. „Name: Wert“).
+tester=(function() -- 3.0
+    local api={page=nil,data=nil,jobId=nil,scanStart=nil,scanDuration=2.5,scanSerial=0,verifyAnim=nil} -- 3.0
+    local mono=Enum.Font.RobotoMono -- 3.0
+    local G={green=Color3.fromRGB(96,255,150),dim=Color3.fromRGB(58,168,98),amber=Color3.fromRGB(255,196,64),red=Color3.fromRGB(255,96,96), -- 3.0
+        screen=Color3.fromRGB(8,22,13),body=Color3.fromRGB(44,47,53),key=Color3.fromRGB(64,69,78),keyOn=Color3.fromRGB(236,152,32),bumper=Color3.fromRGB(236,152,32),dark=Color3.fromRGB(20,22,26)} -- 3.0
+    local W,H,portrait=640,440,false -- 3.0
+    local root=make("Frame",overlay,{Name="ObdTester",AnchorPoint=Vector2.new(0.5,0.5),Position=UDim2.fromScale(0.5,0.5),Size=UDim2.fromOffset(W,H),BackgroundColor3=G.body,BorderSizePixel=0,Visible=false,Active=true,ZIndex=11}) -- 3.0
+    local scaleObj=make("UIScale",root,{Scale=1}) -- 3.0
+    corner(root,26);make("UIStroke",root,{Color=G.bumper,Thickness=5}) -- 3.0: gummierter Rahmen
+    make("UIGradient",root,{Rotation=90,Color=ColorSequence.new(Color3.fromRGB(255,255,255),Color3.fromRGB(170,170,170))}) -- 3.0
+    local pads={} -- 3.0: Eckpuffer
+    for i=1,4 do pads[i]=make("Frame",root,{Name="Bumper"..i,Size=UDim2.fromOffset(30,30),BackgroundColor3=G.bumper,BorderSizePixel=0});corner(pads[i],10) end -- 3.0
+    local brand=make("TextLabel",root,{Name="Brand",Text="UCG-Tester 3000",Position=UDim2.fromOffset(28,10),Size=UDim2.fromOffset(240,22),BackgroundTransparency=1,Font=Enum.Font.GothamBlack,TextSize=19,TextColor3=G.bumper,TextXAlignment=Enum.TextXAlignment.Left}) -- 3.0
+    local model=make("TextLabel",root,{Name="Model",Text="OBD-II · Profi-Diagnose",Position=UDim2.fromOffset(28,30),Size=UDim2.fromOffset(240,14),BackgroundTransparency=1,Font=Enum.Font.Gotham,TextSize=11,TextColor3=Color3.fromRGB(170,176,186),TextXAlignment=Enum.TextXAlignment.Left}) -- 3.0
+    local leds=make("Frame",root,{Name="Leds",Size=UDim2.fromOffset(200,24),BackgroundTransparency=1,BorderSizePixel=0}) -- 3.0
+    local led={} -- 3.0
+    for i,spec in ipairs({{"power","PWR"},{"link","LINK"},{"fault","FEHLER"}}) do -- 3.0
+        local dot=make("Frame",leds,{Name="Led_"..spec[1],Position=UDim2.fromOffset((i-1)*68,6),Size=UDim2.fromOffset(12,12),BackgroundColor3=G.dark,BorderSizePixel=0});corner(dot,6) -- 3.0
+        make("UIStroke",dot,{Color=Color3.fromRGB(12,12,14),Thickness=1}) -- 3.0
+        make("TextLabel",leds,{Name="LedLabel_"..spec[1],Text=spec[2],Position=UDim2.fromOffset((i-1)*68+16,0),Size=UDim2.fromOffset(50,24),BackgroundTransparency=1,Font=Enum.Font.GothamBold,TextSize=10,TextColor3=Color3.fromRGB(170,176,186),TextXAlignment=Enum.TextXAlignment.Left}) -- 3.0
+        led[spec[1]]=dot -- 3.0
+    end
+    local screen=make("Frame",root,{Name="TesterScreen",BackgroundColor3=G.screen,BorderSizePixel=0,ClipsDescendants=true}) -- 3.0: grün auf dunkel
+    corner(screen,8);make("UIStroke",screen,{Color=Color3.fromRGB(18,20,22),Thickness=4}) -- 3.0: Display-Einfassung
+    local function mlabel(parent,name,value,x,y,w,h,size,color) -- 3.0: Monospace-Zeile
+        return make("TextLabel",parent,{Name=name,Text=value,Position=UDim2.fromOffset(x,y),Size=UDim2.new(1,w,0,h),BackgroundTransparency=1,Font=mono,TextSize=size or 15,TextColor3=color or G.green,TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Center}) -- 3.0
+    end
+    local titleLabel=mlabel(screen,"TesterTitle","Fahrzeugdiagnose · OBD",10,4,-20,22,16,G.green);titleLabel.Font=Enum.Font.Code -- 3.0
+    local subLabel=mlabel(screen,"TesterPage","",10,26,-20,18,13,G.dim) -- 3.0
+    local rule=make("Frame",screen,{Name="Rule",Position=UDim2.fromOffset(8,47),Size=UDim2.new(1,-16,0,1),BackgroundColor3=G.dim,BorderSizePixel=0}) -- 3.0
+    local content=make("ScrollingFrame",screen,{Name="TesterContent",Position=UDim2.fromOffset(8,52),Size=UDim2.new(1,-16,1,-82),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=4,ScrollBarImageColor3=G.dim,CanvasSize=UDim2.new()}) -- 3.0
+    local status=mlabel(screen,"TesterStatus","",10,0,-20,24,12,G.amber);status.AnchorPoint=Vector2.new(0,1);status.Position=UDim2.new(0,10,1,-4) -- 3.0
+    local keys,keyOrder={}, {"codes","values","finding","verify","close"} -- 3.0
+    local keyNames={codes="Fehlerspeicher",values="Messwerte",finding="Befund",verify="Endkontrolle",close="Schließen"} -- 3.0
+    local function tkey(parent,name,value,callback,color) -- 3.0: große Gerätetaste (≥ 44 px auch auf dem Handy)
+        local b=make("TextButton",parent,{Name=name,Text=t(value),BackgroundColor3=color or G.key,TextColor3=colors.text,Font=Enum.Font.GothamBold,TextSize=14,TextWrapped=true,AutoButtonColor=true,BorderSizePixel=0}) -- 3.0
+        corner(b,10);make("UIStroke",b,{Color=Color3.fromRGB(16,17,20),Thickness=2,ApplyStrokeMode=Enum.ApplyStrokeMode.Border}) -- 3.0
+        local press=make("UIScale",b,{Scale=1}) -- 3.0
+        b.Activated:Connect(function() press.Scale=0.94;Tween:Create(press,TweenInfo.new(0.16,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Scale=1}):Play();callback() end) -- 3.0
+        return b -- 3.0
+    end
+    local render -- 3.0
+    local function now() return workspace:GetServerTimeNow() end -- 3.0
+    local function currentJob() return state and api.jobId and R.FindJob(d(),api.jobId) or nil end -- 3.0
+    local function codesOf(v) -- 3.0: Fehlercodes aus codes oder aus report
+        local out={}
+        if type(v)~="table" then return out end
+        if type(v.codes)=="table" then
+            for _,c in ipairs(v.codes) do
+                if type(c)=="string" then local code,txt=c:match("^(%u%d%d%d%d)%s*[:%-]?%s*(.*)$");table.insert(out,{code=code or "",text=code and txt or c})
+                elseif type(c)=="table" then table.insert(out,{code=tostring(c.code or c.id or ""),text=tostring(c.text or c.name or c.description or "")}) end
+            end
+            return out
+        end
+        for line in tostring(v.report or ""):gmatch("[^\n]+") do
+            local code,txt=line:match("^([PBCU]%d%d%d%d)%s*:%s*(.*)$")
+            if code then table.insert(out,{code=code,text=txt}) end
+        end
+        return out
+    end
+    local function memoryNote(v) -- 3.0: „Fehlerspeicher: …“-Zeile des Berichts
+        for line in tostring(type(v)=="table" and v.report or ""):gmatch("[^\n]+") do local rest=line:match("^Fehlerspeicher:%s*(.*)$");if rest then return rest end end
+        return nil
+    end
+    local function valuesOf(v) -- 3.0: Messwerte aus values oder den übrigen Berichtszeilen
+        local out={}
+        if type(v)~="table" then return out end
+        local list=type(v.live)=="table" and v.live or v.values -- 3.0: Server liefert live
+        if type(list)=="table" then
+            for _,x in ipairs(list) do
+                if type(x)=="string" then local n,val=x:match("^(.-):%s*(.*)$");table.insert(out,{name=n or x,value=n and val or ""})
+                elseif type(x)=="table" then table.insert(out,{name=tostring(x.name or ""),value=tostring(x.value or "")..(x.unit and (" "..tostring(x.unit)) or "")}) end
+            end
+        end
+        return out
+    end
+    local function reportLines(v) -- 3.0: Prüfbericht ohne Codes und Fehlerspeicher-Zeile
+        local out={}
+        for line in tostring(type(v)=="table" and v.report or ""):gmatch("[^\n]+") do
+            local n,val=line:match("^(.-):%s*(.*)$")
+            if n and not n:match("^[PBCU]%d%d%d%d$") and n~="Fehlerspeicher" then table.insert(out,{name=n,value=val}) elseif not n then table.insert(out,{name=line,value=""}) end
+        end
+        return out
+    end
+    function api.NeedsCall() -- 3.0: Befund mit Fehlern -> Kunde muss am Handy freigeben
+        local v=api.data;if type(v)~="table" then return false end
+        if v.needsApproval==true or v.phase=="approval" then return true end
+        local j=currentJob();return j~=nil and j.phase=="approval"
+    end
+    local function setLed(name,color) led[name].BackgroundColor3=color or G.dark end -- 3.0
+    local function clearContent() for _,c in ipairs(content:GetChildren()) do if c:IsA("GuiObject") then c:Destroy() end end end -- 3.0
+    local cy=0 -- 3.0: Schreibposition im Inhalt
+    local function line(name,value,color,size,h) -- 3.0
+        local l=mlabel(content,name,value,0,cy,-8,h or 22,size or (portrait and 14 or 15),color);cy=cy+(h or 22)+2;return l
+    end
+    local function contentWidth() return (W-36)-16-8 end -- 3.0
+    local function contentKey(name,value,callback,color,h) -- 3.0: Taste im Bildschirm (Antworten, Handy, Abbrechen)
+        local hh=math.max(h or 56,math.ceil(44/math.max(0.1,scaleObj.Scale))+2) -- 3.0: nach UIScale immer ≥ 44 px (Handy quer)
+        local b=tkey(content,name,value,callback,color);b.Position=UDim2.fromOffset(0,cy);b.Size=UDim2.fromOffset(contentWidth(),hh);cy=cy+hh+8;return b
+    end
+    local function hint(name,value,color) -- 3.0: hervorgehobener Hinweis (z. B. Kundenfreigabe)
+        local f=make("Frame",content,{Name=name,Position=UDim2.fromOffset(0,cy),Size=UDim2.fromOffset(contentWidth(),portrait and 74 or 56),BackgroundColor3=Color3.fromRGB(64,46,8),BorderSizePixel=0});corner(f,8) -- 3.0
+        make("UIStroke",f,{Color=color or G.amber,Thickness=2}) -- 3.0
+        local l=make("TextLabel",f,{Name="Text",Text=t(value),Position=UDim2.fromOffset(10,4),Size=UDim2.new(1,-20,1,-8),BackgroundTransparency=1,Font=Enum.Font.GothamBold,TextSize=15,TextWrapped=true,TextColor3=color or G.amber,TextXAlignment=Enum.TextXAlignment.Left}) -- 3.0
+        cy=cy+f.Size.Y.Offset+8;return f,l -- 3.0
+    end
+    local function verifyChecks() -- 3.0: Prüfliste der Endkontrolle aus dem Server-Zustand
+        local j=currentJob();local v=j and state.visuals and state.visuals[j.id] or {}
+        local phaseName=j and j.phase or (api.data and api.data.phase)
+        local done=phaseName=="verify" or phaseName=="invoice"
+        return {
+            {ok=done,text=done and "Alle Arbeitsschritte erledigt" or "Arbeitsschritte noch offen",fix=j and phaseName=="repair" and t(C.JobById[j.kind].steps[j.step] and C.JobById[j.kind].steps[j.step].name or "") or nil},
+            -- 3.0: Bühne, Haube und Tester stellt der Server beim Start der Endkontrolle selbst (work scanOnly): kein Blocker
+            {ok=not v.lifted,auto=true,text="Hebebühne unten",fix="wird automatisch abgesenkt"},
+            {ok=not v.hood,auto=true,text="Motorhaube geschlossen",fix="wird automatisch geschlossen"},
+            {ok=state and state.tool=="scanner",auto=true,text="OBD-Tester angeschlossen",fix="wird automatisch angeschlossen"},
+        },phaseName -- 3.0
+    end
+    local liveLabels={} -- 3.0
+    local function liveValues(at) -- 3.0: simulierte Live-Daten (Leerlauf)
+        return {
+            {"Motordrehzahl",string.format("%4d 1/min",math.floor(790+math.sin(at*2.1)*22+math.sin(at*7.3)*6))},
+            {"Bordspannung",string.format("%.2f V",14.05+math.sin(at*1.3)*0.06)},
+            {"Kühlmittel",string.format("%d °C",math.floor(89+math.sin(at*0.4)*1.5))},
+            {"Öltemperatur",string.format("%d °C",math.floor(94+math.sin(at*0.3)*1.2))},
+            {"Ansaugluft",string.format("%d °C",math.floor(27+math.sin(at*0.7)))},
+            {"Lambda",string.format("%.3f",1+math.sin(at*5)*0.012)},
+        }
+    end
+    local function pad(s,n) s=tostring(s);return s..string.rep(" ",math.max(1,n-utf8.len(s))) end -- 3.0
+    local pageTitles={codes="FEHLERSPEICHER",values="MESSWERTE (LIVE)",finding="BEFUND",verify="ENDKONTROLLE",scan="VERBINDUNG"} -- 3.0
+    render=function() -- 3.0
+        clearContent();cy=0;liveLabels={}
+        local v=api.data;local j=currentJob()
+        local car=(type(v)=="table" and v.car) or (j and C.CarById[j.carId] and C.CarById[j.carId].name) or ""
+        subLabel.Text="» "..(pageTitles[api.page] or "").."  ·  "..t(car)
+        for _,key in ipairs(keyOrder) do local b=keys[key];if b then local on=key==api.page;b.BackgroundColor3=key=="close" and Color3.fromRGB(150,52,60) or on and G.keyOn or G.key;b.TextColor3=on and G.dark or colors.text end end
+        local codes=codesOf(v);local call=api.NeedsCall()
+        setLed("power",G.green);setLed("link",api.page=="scan" and G.amber or (v and G.green) or G.dark);setLed("fault",(#codes>0 or call) and G.red or nil)
+        if api.page=="scan" then
+            local verify=api.scanVerify
+            line("ScanHead",verify and "Endkontrolle läuft …" or "Verbinde mit Fahrzeug …",G.green,16,24)
+            local track=make("Frame",content,{Name="ScanTrack",Position=UDim2.fromOffset(0,cy+4),Size=UDim2.fromOffset(contentWidth(),18),BackgroundColor3=Color3.fromRGB(16,44,26),BorderSizePixel=0});corner(track,4)
+            api.scanFill=make("Frame",track,{Name="ScanFill",Size=UDim2.fromScale(0,1),BackgroundColor3=G.green,BorderSizePixel=0});corner(api.scanFill,4)
+            cy=cy+30;api.scanPercent=line("ScanPercent","  0 %",G.green,14,20)
+            api.scanSteps={}
+            for i,s in ipairs(verify and {"Steuergeräte abfragen","Hebebühne unten","Motorhaube geschlossen","Fehlerspeicher leer","Messwerte im Sollbereich"} or {"Verbindung aufbauen","Steuergeräte suchen: Motor, ABS, Airbag","Fehlerspeicher lesen","Messwerte erfassen"}) do
+                api.scanSteps[i]={label=line("ScanStep"..i,"[ ] "..s,G.dim,14,20),text=s}
+            end
+        elseif api.page=="codes" then
+            line("CodesHead",#codes>0 and t("{n} Fehler gespeichert",{n=#codes}) or "Keine Fehler gespeichert",#codes>0 and G.red or G.green,16,24)
+            for i,c in ipairs(codes) do line("Code"..i,pad(c.code,7)..t(c.text),G.amber,15,portrait and 40 or 24) end
+            if #codes==0 then line("CodesNote",memoryNote(v) and ("Status: "..memoryNote(v)) or "Status: 0 Einträge",G.dim,14,22) end
+            if type(v)=="table" and v.findingName and v.approved==true then line("Approved",t("Freigegeben: {name}",{name=v.findingName}),G.green,14,portrait and 40 or 22) end
+            if type(v)=="table" and v.findingName and v.approved==false then line("Declined","Kunde hat abgelehnt: nur den Check fertig machen.",G.amber,14,portrait and 40 or 22) end
+            if call then
+                cy=cy+4;hint("ApprovalHint","Kunde muss die Reparatur freigeben – ruf ihn mit dem Handy an (P)")
+                if type(v)=="table" and (v.findingName or v.customer) then line("ApprovalWho",t("Befund: {f} · Kunde: {c}",{f=v.findingName or "–",c=v.customer or "–"}),G.amber,13,portrait and 40 or 22) end
+                -- 3.0: Handy der Minispiele, falls vorhanden; sonst direkt die bestehende Aktion call über Command
+                contentKey("CallCustomer","Kunden anrufen (P)",function()
+                    local id=api.jobId;dismiss()
+                    local okPhone,opened=false,false;if type(MiniClient.OpenPhone)=="function" then okPhone,opened=pcall(MiniClient.OpenPhone,{job=id}) end -- 3.0: nur wenn das Handy wirklich offen ist
+                    if okPhone and opened==true then return end -- 3.0: sonst den Anruf selbst senden
+                    send("call",{id=id})
+                end,Color3.fromRGB(46,98,170),48)
+            end
+        elseif api.page=="values" then
+            local list=valuesOf(v) -- 3.0: Werte des Servers; ohne sie simulierte Leerlauf-Werte (live)
+            if #list>0 then
+                local base=C.LiveValues and {} or nil;for _,x in ipairs(C.LiveValues or {}) do base[x.name]=x.value end
+                for i,x in ipairs(list) do local off=base and base[x.name]~=nil and base[x.name]~=x.value or (base and base[x.name]==nil);line("Value"..i,x.value~="" and (pad(x.name,22)..x.value) or x.name,off and G.amber or G.green,14,portrait and 38 or 20) end
+            else
+                for i,x in ipairs(liveValues(now())) do liveLabels[i]=line("Live"..i,pad(x[1],16)..x[2],G.green,14,20) end
+            end
+            local lines=reportLines(v)
+            if #lines>0 then cy=cy+4;line("ReportHead","PRÜFBERICHT",G.dim,12,16);for i,x in ipairs(lines) do line("Report"..i,x.value~="" and (x.name..": "..x.value) or x.name,G.dim,13,portrait and 36 or 20) end end
+        elseif api.page=="finding" then
+            local answers=type(v)=="table" and v.phase=="diagnose" and type(v.answers)=="table" and v.answers or {}
+            if #answers>0 then
+                line("FindingHead","Welche Ursache passt zum Befund?",G.green,15,portrait and 40 or 24)
+                for i,answer in ipairs(answers) do contentKey("Answer_"..i,answer,function() send("diagnose",{id=v.job,choice=i}) end,colors.blue,portrait and 54 or 56) end
+            else
+                for i,x in ipairs(reportLines(v)) do line("Report"..i,x.value~="" and (x.name..": "..x.value) or x.name,G.dim,14,portrait and 38 or 22) end
+                cy=cy+4
+                local done="Diagnose bestätigt. Folge den markierten Arbeitsschritten." -- 3.0: Text je Phase
+                if type(v)=="table" and v.phase=="invoice" then done="Endkontrolle bestanden. Rechnung am Empfang abschließen."
+                elseif call then done=t("Befund: {f}. Erst reparieren, wenn der Kunde zustimmt.",{f=v.findingName or "Fehler gespeichert"})
+                elseif type(v)=="table" and v.kind=="inspection" and not v.finding then done="Keine Fehler gespeichert. Jetzt die Sichtprüfung am Auto durchführen." end
+                line("FindingDone",done,G.green,15,48)
+                if call then hint("ApprovalHint","Kunde muss die Reparatur freigeben – ruf ihn mit dem Handy an (P)") end
+            end
+        elseif api.page=="verify" then
+            local checks,phaseName=verifyChecks()
+            if phaseName=="invoice" then
+                line("VerifyHead","Endkontrolle bestanden ✓",G.green,16,24)
+                line("VerifyDone","Endkontrolle bestanden. Rechnung am Empfang abschließen.",G.green,14,44)
+            else
+                local anim=api.verifyAnim;local shown=anim and math.floor((now()-anim.start)/0.25) or #checks
+                line("VerifyHead",anim and "Prüfe …" or "Prüfliste vor der Endkontrolle",G.green,16,24)
+                for i,c in ipairs(checks) do
+                    local mark=(anim and i>shown) and "[ ]" or (c.ok and "[✓]" or c.auto and "[»]" or "[✗]") -- 3.0: [»] = macht E automatisch
+                    line("Check"..i,mark.." "..t(c.text)..((not c.ok and c.fix and c.fix~="" and not (anim and i>shown)) and ("  → "..t(c.fix)) or ""),(anim and i>shown) and G.dim or c.ok and G.green or c.auto and G.amber or G.red,14,portrait and 40 or 22) -- 3.0
+                end
+                if phaseName~="verify" and not anim then line("VerifyNote","Die Endkontrolle startet, wenn alle Arbeitsschritte erledigt sind.",G.amber,13,40) end
+            end
+        end
+        content.CanvasSize=UDim2.fromOffset(0,cy+4)
+        local s=""
+        if api.page=="scan" then s="Bleibe am OBD-Anschluss …"
+        elseif api.page=="codes" and call then s="Nächster Schritt: Kunden anrufen (P)"
+        elseif type(v)=="table" and v.phase=="diagnose" and type(v.answers)=="table" and #v.answers>0 then s="Wähle unter „Befund“ die passende Ursache."
+        else local ok,h=pcall(nextHint);s=ok and h and ("Nächster Schritt: "..h) or "" end
+        status.Text=t(s)
+    end
+    local function show() -- 3.0
+        overlay.Visible=true;modal.Visible=false;root.Visible=true;api.Layout()
+    end
+    function api.Page(name) -- 3.0
+        if name=="close" then return api.Close() end
+        api.page=name;api.verifyAnim=nil;render()
+    end
+    function api.Cancel() -- 3.0: laufenden Scan abbrechen (gleiche Aktion wie der QTE-Abbruch)
+        local token=state and state.interaction and state.interaction.kind=="scan" and state.interaction.token
+        if token then send("abortInteraction",{token=token}) end
+        dismiss()
+    end
+    function api.Close() -- 3.0: Schließen = bisheriges dismiss; während des Scans zusätzlich abbrechen
+        if api.page=="scan" then return api.Cancel() end
+        dismiss()
+    end
+    function api.Verify(retry) -- 3.0: Prüfliste animieren, dann den bisherigen scan senden (retry: höchstens ein Nachstart)
+        api.page="verify";api.verifyAnim=nil
+        local checks,phaseName=verifyChecks();local j=currentJob()
+        local ready=j and phaseName=="verify"
+        for _,c in ipairs(checks) do if not c.ok and not c.auto then ready=false end end -- 3.0: Bühne/Haube/Tester regelt der Server
+        if not ready then return render() end
+        api.scanSerial=api.scanSerial+1;local serial=api.scanSerial;local jobId=j.id
+        api.verifyAnim={start=now()};render()
+        task.delay(#checks*0.25+0.3,function()
+            if api.scanSerial~=serial or not root.Visible or api.page~="verify" then return end
+            api.verifyAnim=nil;send("scan",{id=jobId})
+            local vis=state and state.visuals and state.visuals[jobId]
+            if vis and vis.lifted and not retry then -- 3.0: Server senkt erst die Bühne ab; danach die Endkontrolle selbst noch einmal starten
+                local again=api.scanSerial
+                task.delay(2.8,function() if api.scanSerial==again and root.Visible and api.page=="verify" and not api.verifyAnim then api.Verify(true) end end)
+            end
+        end)
+    end
+    for _,key in ipairs(keyOrder) do -- 3.0
+        keys[key]=tkey(root,"TesterBtn_"..key,keyNames[key],function()
+            if key=="close" then api.Close() elseif api.page=="scan" then return elseif key=="verify" then api.Verify() else api.Page(key) end -- 3.0: während des Scans nur Schließen
+        end)
+    end
+    function api.ShowScan(jobId,duration) -- 3.0: Verbinden/Auslesen, solange der Server scannt
+        api.jobId=jobId or api.jobId;api.scanStart=now();api.scanDuration=tonumber(duration) or 2.5;api.verifyAnim=nil
+        local j=currentJob();api.scanVerify=j~=nil and j.phase=="verify"
+        api.scanSerial=api.scanSerial+1;local serial=api.scanSerial
+        api.page="scan";show();render()
+        task.delay(api.scanDuration+4.5,function() -- 3.0: nie im Verbindungsbild hängen bleiben
+            if api.scanSerial==serial and api.page=="scan" and root.Visible then dismiss();toast("Keine Antwort vom Fahrzeug. Bleibe am OBD-Anschluss und versuche es noch einmal.") end
+        end)
+    end
+    function api.ShowReport(v) -- 3.0: Ergebnis des Scans
+        api.data=v;api.jobId=v.job or api.jobId;api.scanStart=nil;api.verifyAnim=nil;api.scanSerial=api.scanSerial+1
+        if type(v.answers)=="table" and #v.answers>0 and v.phase=="diagnose" then api.page="finding"
+        elseif v.phase=="invoice" then api.page="verify"
+        else api.page="codes" end
+        show();render()
+    end
+    function api.Hide() -- 3.0
+        root.Visible=false;modal.Visible=true;api.page=nil;api.verifyAnim=nil;api.scanSerial=api.scanSerial+1
+    end
+    function api.Visible() return root.Visible end -- 3.0
+    function api.OnState() -- 3.0: Prüfliste und Statuszeile mit dem Zustand nachführen
+        if root.Visible and api.page and api.page~="scan" and not api.verifyAnim then render() end
+    end
+    function api.Layout() -- 3.0: Hochformat (Handy) eigene Anordnung; Maßstab wie modalScale aus der nutzbaren Fläche
+        local size=gui.AbsoluteSize
+        if not size or size.X<=0 or size.Y<=0 then local cam=workspace.CurrentCamera;local vp=cam and cam.ViewportSize or Vector2.new(1280,800);size=Vector2.new(vp.X,vp.Y-36) end
+        local wasPortrait=portrait
+        portrait=size.X<600;W,H=portrait and 360 or 640,portrait and 600 or 440
+        local wasScale=scaleObj.Scale -- 3.0: Tastenhöhen hängen vom Maßstab ab
+        root.Size=UDim2.fromOffset(W,H);scaleObj.Scale=math.max(0.3,math.min(1,(size.X-24)/W,(size.Y-12)/H))
+        pads[1].Position=UDim2.fromOffset(-8,-8);pads[2].Position=UDim2.fromOffset(W-22,-8);pads[3].Position=UDim2.fromOffset(-8,H-22);pads[4].Position=UDim2.fromOffset(W-22,H-22)
+        leds.Position=UDim2.fromOffset(W-24-(portrait and 150 or 200),14);leds.Size=UDim2.fromOffset(portrait and 150 or 200,24)
+        for i,name in ipairs({"power","link","fault"}) do local step=portrait and 50 or 68;led[name].Position=UDim2.fromOffset((i-1)*step,6);leds:FindFirstChild("LedLabel_"..name).Position=UDim2.fromOffset((i-1)*step+15,0) end
+        model.Visible=not portrait
+        local keysTop
+        if portrait then
+            keysTop=H-14-3*52-2*8;local cw=(W-36-8)/2
+            for i,key in ipairs(keyOrder) do
+                local b=keys[key];local row,col=math.floor((i-1)/2),(i-1)%2
+                if key=="close" then b.Position=UDim2.fromOffset(18,keysTop+2*60);b.Size=UDim2.fromOffset(W-36,52)
+                else b.Position=UDim2.fromOffset(18+col*(cw+8),keysTop+row*60);b.Size=UDim2.fromOffset(cw,52) end
+                b.TextSize=15
+            end
+        else
+            keysTop=H-14-62;local bw=(W-36-4*8)/5
+            for i,key in ipairs(keyOrder) do local b=keys[key];b.Position=UDim2.fromOffset(18+(i-1)*(bw+8),keysTop);b.Size=UDim2.fromOffset(bw,62);b.TextSize=13 end
+        end
+        screen.Position=UDim2.fromOffset(18,48);screen.Size=UDim2.fromOffset(W-36,keysTop-8-48)
+        if root.Visible and (wasPortrait~=portrait or wasScale~=scaleObj.Scale) and api.page and api.page~="scan" then render() end -- 3.0
+    end
+    local nextTick=0 -- 3.0
+    Run.RenderStepped:Connect(function() -- 3.0: Fortschritt, Prüfliste, Live-Werte, blinkende LED (10 Hz)
+        if not root.Visible or os.clock()<nextTick then return end
+        nextTick=os.clock()+0.1
+        local at=now()
+        if api.page=="scan" and api.scanStart and api.scanFill and api.scanFill.Parent then
+            local f=math.clamp((at-api.scanStart)/math.max(0.1,api.scanDuration),0,1)
+            api.scanFill.Size=UDim2.fromScale(f,1);api.scanPercent.Text=string.format("%3d %%",math.floor(f*99))
+            for i,s in ipairs(api.scanSteps or {}) do local reached=f>=(i-1)/#api.scanSteps;s.label.Text=(f>=i/#api.scanSteps and "[✓] " or reached and "[»] " or "[ ] ")..t(s.text);s.label.TextColor3=reached and G.green or G.dim end
+            setLed("link",math.floor(at*6)%2==0 and G.amber or G.dark)
+        elseif api.page=="verify" and api.verifyAnim then render()
+        elseif api.page=="values" then for i,x in ipairs(liveValues(at)) do local l=liveLabels[i];if l and l.Parent then l.Text=pad(x[1],16)..x[2] end end end
+    end)
+    return api -- 3.0
+end)() -- 3.0
 Event.OnClientEvent:Connect(function(kind,value)
     if kind=="state" then
         local oldRevision=state and state.revision;local first=not state;local oldLevel=state and state.data.level;state=value
@@ -425,6 +831,7 @@ Event.OnClientEvent:Connect(function(kind,value)
         markTarget()
         refresh()
         if first or oldRevision~=state.revision then rebuild() end
+        if tester then tester.OnState() end -- 3.0: Prüfliste/Status im offenen OBD-Tester nachführen
     elseif kind=="page" then showPage(value)
     elseif kind=="close" then visible=false;tablet.Visible=false
     elseif kind=="toast" then toast(value)
@@ -440,14 +847,23 @@ Event.OnClientEvent:Connect(function(kind,value)
         end)
     elseif kind=="interactionReset" then
         if not challenge or not value or value.token==challenge.token then dismiss() end
-    elseif kind=="diagnosisDone" then if diagnosis and diagnosis.job==value then dismiss() end
+    elseif kind=="diagnosisDone" then if diagnosis and diagnosis.job==value then local call=tester and tester.NeedsCall();dismiss();if call then toast("Kunde muss die Reparatur freigeben – ruf ihn mit dem Handy an (P).") end end -- 3.0: Hinweis aufs Handy
     elseif kind=="scan" then effects.Work(value);if value.tool=="scanner" then toast(t("Messwerte werden ausgelesen … Bleibe am Auto.")) end
-    elseif kind=="diagnose" then
-        effects.StopWork();diagnosis=value;visible=false;tablet.Visible=false;modalTitle("Fahrzeugdiagnose · OBD")
-        text(modal,value.report,24,67,-48,130,18,colors.muted)
-        for i,answer in ipairs(value.answers) do button(modal,answer,24,213+(i-1)*52,532,function() send("diagnose",{id=value.job,choice=i}) end,colors.blue) end
-        if #value.answers==0 then text(modal,value.phase=="invoice" and "Endkontrolle bestanden. Rechnung am Empfang abschließen." or "Diagnose bestätigt. Folge den markierten Arbeitsschritten.",24,220,-48,104,18,colors.green) end
-        button(modal,"Schließen",24,383,150,dismiss,colors.card)
+        -- 3.0: OBD-Scan am DiagnosticPoint: Tester zeigt „Verbinden/Auslesen“ (2,5 s), bis das diagnose-Ereignis kommt
+        local point=type(value)=="table" and value.point
+        if value.tool=="scanner" and typeof(point)=="Instance" and point.Name=="DiagnosticPoint" and not challenge then -- 3.0
+            local jobId=point.Parent and point.Parent:GetAttribute("JobId") or (state and state.selected) -- 3.0
+            visible=false;tablet.Visible=false;diagnosis={job=jobId,scanning=true} -- 3.0: sperrt Minispiele wie der Dialog
+            local ok,err=pcall(tester.ShowScan,jobId,value.duration) -- 3.0
+            if not ok then warn("[3.0] OBD-Tester: "..tostring(err));dismiss() end -- 3.0
+        end
+    elseif kind=="diagnose" then -- 3.0: Handgerät „UCG-Tester 3000“ statt einfachem Dialog (gleiche Aktionen diagnose/scan, Schließen = dismiss)
+        if type(value)~="table" then return end -- 3.0
+        effects.StopWork();diagnosis=value;visible=false;tablet.Visible=false -- 3.0
+        local ok,err=pcall(tester.ShowReport,value) -- 3.0
+        if not ok then warn("[3.0] OBD-Tester: "..tostring(err));dismiss();toast(value.report or "Diagnose fertig.") end -- 3.0: nie ein halber Dialog
+    elseif kind=="call" then -- 3.0: Kundenanruf (Freigabe) an das Handy der Minispiele weiterreichen
+        for _,fn in ipairs(eventListeners) do local ok,err=pcall(fn,kind,value);if not ok then warn("[3.0] call-Abonnent: "..tostring(err)) end end -- 3.0
     elseif kind=="challenge" then
         challenge=value;inputControl.Lock();effects.Work({tool=value.tool,point=value.point,duration=12});visible=false;tablet.Visible=false;modalTitle("Präzise arbeiten")
         text(modal,"Stoppe den Zeiger im grünen Bereich. Tippe auf STOPP oder drücke die Leertaste.",24,70,-48,70,19,colors.muted)
@@ -496,8 +912,10 @@ inputControl=InputController.new(player,{
         visible=not visible;tablet.Visible=visible;if visible then rebuild() end;if protectCoreUI then protectCoreUI() end
     end,
     StopQTE=submitChallenge,
-    SelectTool=function(slot)
-        if state and not overlay.Visible then send("tool",{id=state.data.loadout[slot]}) end
+    SelectTool=function(slot) -- 3.0: Taste 1 = freie Hand, Tasten 2–6 = Werkzeugplätze 1–5
+        if state and not overlay.Visible then
+            if slot==1 then send("tool",{id="hand"}) elseif state.data.loadout[slot-1] then send("tool",{id=state.data.loadout[slot-1]}) end -- 3.0
+        end
     end,
     ToggleMini=function() MiniClient.Toggle() end, -- 3.0: Taste M
 })
@@ -511,6 +929,8 @@ task.spawn(function()
         openTablet=function(key) showPage(key) end,
         hideHud=function() refresh();refreshVehicleActions();if protectCoreUI then protectCoreUI() end end, -- 3.0: Spielerliste sofort mitschalten
         toast=toast,
+        getState=function() return state end, -- 3.0: 2.4.0-Zustand (state.data.jobs inkl. phase "approval") fürs Handy
+        onEvent=function(fn) if type(fn)=="function" then table.insert(eventListeners,fn) end end, -- 3.0: fn(kind, value) für Server-Ereignis "call"
         subscribe=function(fn) for _,o in ipairs({overlay,tablet,vehicleActions}) do o:GetPropertyChangedSignal("Visible"):Connect(fn) end end, -- 3.0: Dialog/Tablet/E-F-H auf oder zu -> Phase-4-Karten sofort neu
     })
     if not ok then warn("[3.0] Minispiele-Start fehlgeschlagen: "..tostring(err)) end
@@ -544,19 +964,33 @@ local function resize()
     tablet.Size=UDim2.fromOffset(width,height);tabletScale.Scale=scale
     closeButton.Position=UDim2.fromOffset(width-60,14);foot.Position=UDim2.fromOffset(22,height-30)
     modalScale.Scale=math.min(1,(screen.X-24)/580,(screen.Y-30)/440)
-    local usable=screen.X*0.96-24;local tw=math.min(92,(usable-24)/5)
-    for i,b in ipairs(toolButtons) do b.Position=UDim2.fromOffset(12+(i-1)*(tw+6),90);b.Size=UDim2.fromOffset(tw,30);b.TextSize=screen.X<500 and 11 or 14 end
+    local usable=screen.X*0.96-24;local tw=math.min(92,(usable-30)/6) -- 3.0: sechs Plätze (Hand + fünf Werkzeuge)
+    -- 3.0: Touch/Handy (schmal oder quer): Werkzeugleiste ≥ 44 px hoch. Die HUD bleibt 132 px (PrestigeUI.GarageHud);
+    -- 3.0: Zielzeile und Knopfzeile rücken dafür etwas nach oben.
+    local big=screen.X*0.96<600 or screen.Y<500 or UIS.TouchEnabled
+    local rowH,rowY,btnY=big and 44 or 30,big and 86 or 90,big and 43 or 47 -- 3.0
+    objective.Position=UDim2.fromOffset(12,big and 3 or 5);objective.Size=UDim2.new(1,-24,0,big and 36 or 39) -- 3.0
+    for _,b in ipairs({go,workButton,menu,miniButton}) do b.Position=UDim2.fromOffset(b.Position.X.Offset,btnY) end -- 3.0
+    handButton.Position=UDim2.fromOffset(12,rowY);handButton.Size=UDim2.fromOffset(tw,rowH) -- 3.0: Hand zuerst
+    do local key,label,icon=handButton:FindFirstChild("Key"),handButton:FindFirstChild("HandLabel"),handButton:FindFirstChild("HandIcon") -- 3.0: schmal: Ziffer weg, „Hand“ bleibt lesbar
+        local narrow=tw<70
+        if key then key.Visible=not narrow end
+        if icon then icon.Position=UDim2.new(0,narrow and 3 or 18,0.5,0) end
+        if label then label.Position=UDim2.fromOffset(narrow and 26 or 42,0);label.Size=UDim2.new(1,narrow and -27 or -44,1,0);label.TextSize=narrow and 11 or 13 end
+    end
+    for i,b in ipairs(toolButtons) do b.Position=UDim2.fromOffset(12+i*(tw+6),rowY);b.Size=UDim2.fromOffset(tw,rowH);b.TextSize=screen.X<500 and 11 or 14 end -- 3.0: ab dem zweiten Platz
     local first=math.min(110,usable*0.26);go.Size=UDim2.fromOffset(first,38)
-    workButton.Position=UDim2.fromOffset(18+first,47);workButton.Size=UDim2.fromOffset(usable*0.35,38)
-    menu.Position=UDim2.fromOffset(24+first+usable*0.35,47);menu.Size=UDim2.fromOffset(math.min(120,usable*0.3-12),38)
+    workButton.Position=UDim2.fromOffset(18+first,btnY);workButton.Size=UDim2.fromOffset(usable*0.35,38)
+    menu.Position=UDim2.fromOffset(24+first+usable*0.35,btnY);menu.Size=UDim2.fromOffset(math.min(120,usable*0.3-12),38)
     -- 3.0: Minispiele-Knopf rechts neben "Menü"; ist die Zeile zu schmal (Handy hoch), teilen sich vier gleich breite Knöpfe die Zeile.
     local menuEnd=24+first+usable*0.35+math.min(120,usable*0.3-12);local room=usable+12-menuEnd-6
-    if room>=110 then miniButton.Position=UDim2.fromOffset(menuEnd+6,47);miniButton.Size=UDim2.fromOffset(math.min(150,room),38);miniButton.TextSize=15
+    if room>=110 then miniButton.Position=UDim2.fromOffset(menuEnd+6,btnY);miniButton.Size=UDim2.fromOffset(math.min(150,room),38);miniButton.TextSize=15
     else
         local w=(usable-18)/4
-        go.Size=UDim2.fromOffset(w,38);workButton.Position=UDim2.fromOffset(18+w,47);workButton.Size=UDim2.fromOffset(w,38)
-        menu.Position=UDim2.fromOffset(24+2*w,47);menu.Size=UDim2.fromOffset(w,38);miniButton.Position=UDim2.fromOffset(30+3*w,47);miniButton.Size=UDim2.fromOffset(w,38);miniButton.TextSize=13
+        go.Size=UDim2.fromOffset(w,38);workButton.Position=UDim2.fromOffset(18+w,btnY);workButton.Size=UDim2.fromOffset(w,38)
+        menu.Position=UDim2.fromOffset(24+2*w,btnY);menu.Size=UDim2.fromOffset(w,38);miniButton.Position=UDim2.fromOffset(30+3*w,btnY);miniButton.Size=UDim2.fromOffset(w,38);miniButton.TextSize=13
     end
+    if tester then tester.Layout() end -- 3.0: OBD-Tester skaliert mit
     if state then rebuild() end
 end
 if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resize) end
@@ -571,11 +1005,12 @@ UIS.InputBegan:Connect(function(input,processed)
     if not car or car==workspace or car:GetAttribute("OwnerUserId")~=player.UserId then return end
     local id=car:GetAttribute("JobId");local point=part:GetAttribute("WorkPoint")
     local current=job(id);local step=current and C.JobById[current.kind].steps[current.step]
-    if state.tool=="scanner" and not (point and current and current.phase=="repair" and step and step.tool=="scanner" and step.point==point) then send("scan",{id=id})
+    local stepHere=point and current and current.phase=="repair" and step and step.point==point -- 3.0: Punkt des aktuellen Schritts
+    if stepHere then send("work",{id=id,point=point}) -- 3.0: egal welches Werkzeug in der Hand ist – das passende nimmt der Server
     elseif point=="HoodPoint" then send("hood",{id=id})
-    elseif point=="DiagnosticPoint" and not (current and current.phase=="repair" and step and step.point==point) then send("scan",{id=id,point=point})
-    elseif point then send("work",{id=id,point=point})
-    elseif state.tool=="scanner" then send("scan",{id=id}) end
+    elseif point=="DiagnosticPoint" then send("scan",{id=id,point=point}) -- 3.0: OBD-Anschluss = Fehlerspeicher/Endkontrolle
+    elseif state.tool=="scanner" then send("scan",{id=id}) -- 3.0: Scanner auf anderem Teil: Bericht wie bisher
+    elseif point then send("work",{id=id,point=point}) end -- 3.0: Server erklärt, was gerade dran ist
 end)
 player.CharacterAdded:Connect(function() dismiss() end)
 PromptService.PromptShown:Connect(function(prompt)

@@ -34,7 +34,9 @@ C.Tools = {
     torque={name="Drehmomentschlüssel",short="Drehmoment",color={74,155,207},description="Alternative zur Ratsche bei Radbefestigung und Radmontage."},
     screwdriver={name="Schraubendreher",short="Schrauber",color={221,84,68},description="Alternative zur Ratsche beim Aus- und Einbau der Zündspule."},
     lamp={name="Prüfleuchte",short="Leuchte",color={107,218,169},description="Alternative zum OBD-Tester bei der Beleuchtungsprüfung."},
+    hand={name="Freie Hand",short="Hand",color={236,196,160},description="Fester Extra-Platz: nichts in der Hand."}, -- 3.0: immer aktiv, nicht Teil von d.loadout
 }
+C.HandTool="hand" -- 3.0: Start- und Respawn-Werkzeug (freie Hand)
 -- Three established marque names, three distinct models each; old IDs retain saved jobs.
 C.CarBrands={"Komet","Nord","Vektor"}
 C.Cars = {
@@ -200,6 +202,29 @@ C.Jobs[6].steps[1].alternatives={screwdriver=true}
 C.Jobs[6].steps[2].alternatives={screwdriver=true}
 C.PointNames={DiagnosticPoint="OBD-Anschluss",EnginePoint="Motorraum",BatteryPoint="Batterie",WheelPoint="Rad vorne links",OilPort="Ölwanne / Ölfilter",HoodPoint="Motorhaube"}
 -- Small yard tasks share the authoritative timing/reward path; no extra game mode.
+-- 3.0: Fahrzeug-Check mit Fehlerspeicher und Kundenfreigabe per Handy (deterministisch je Auftrag).
+C.Inspection={FindingChance=0.6,ApproveChance=0.8,RingSeconds=2.5,
+    Customers={"Frau Becker","Herr Yilmaz","Frau Schulz","Herr Novak","Frau Weber","Herr Krüger","Frau Hoffmann","Herr Petrović","Frau Lange","Herr Schmitt"}}
+-- 3.0: Fehlercodes je Auftragsart (Text nach dem Prüfbericht); leer = „Keine Fehler gespeichert“.
+C.FaultCodes={
+    oil={{code="P0521",text="Ölzustand: stark gealtert"},{code="S1001",text="Serviceintervall überschritten (Öl und Ölfilter)"}},
+    inspection={},
+    tire={{code="C0750",text="Reifendruck vorne links: 1,1 bar"},{code="C0751",text="Druckverlust: Schraube in der Lauffläche"}},
+    battery={{code="P0562",text="Systemspannung zu niedrig: Ruhespannung 11,6 V"},{code="P0563",text="Startspannung 7,8 V"}},
+    brakes={{code="C1095",text="Bremsbeläge vorne: 1 mm"},{code="C1096",text="Bremsflüssigkeitsservice fällig"}},
+    ignition={{code="P0302",text="Zylinder 2: Zündaussetzer erkannt"}},
+    cooling={{code="P2560",text="Kühlmittelstand zu niedrig: Leck am Schlauch"}},
+    turbo={{code="P0299",text="Ladedruck zu niedrig: Turbo-Welle mit starkem Spiel"}},
+    chain={{code="P0016",text="Nocken-/Kurbelwellensignal: Abweichung"}},
+    hv={{code="U0293",text="Kommunikationsfehler am HV-Steuermodul"}},
+}
+-- 3.0: Live-Daten des OBD-Testers: Grundwerte und Abweichungen je Befund.
+C.LiveValues={{name="Motordrehzahl",value="820 1/min"},{name="Kühlmitteltemperatur",value="88 °C"},
+    {name="Batteriespannung",value="12,6 V"},{name="Öltemperatur",value="84 °C"},{name="Reifendruck vorne links",value="2,3 bar"}}
+C.LiveFaults={oil={["Öltemperatur"]="96 °C",["Öl-Restlaufzeit"]="überfällig"},tire={["Reifendruck vorne links"]="1,1 bar"},
+    battery={Batteriespannung="11,6 V"},brakes={["Bremsbelag vorne"]="1 mm"},ignition={["Zündaussetzer Zylinder 2"]="47 pro Minute"},
+    cooling={["Kühlmitteltemperatur"]="104 °C",["Kühlmittelstand"]="zu niedrig"},turbo={Ladedruck="0,4 bar (Soll 1,2 bar)"},
+    chain={["Nockenwellen-Versatz"]="+7,5 °KW"},hv={["HV-Kommunikation"]="gestört"}}
 C.YardTasks={
     pressure={name="Reifendruck prüfen",tool="meter",seconds=4,reward=35,xp=6,cooldown=120},
     recycle={name="Altteile sortieren",tool=nil,seconds=3,reward=25,xp=5,cooldown=120},

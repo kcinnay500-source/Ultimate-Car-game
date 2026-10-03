@@ -23,6 +23,12 @@ local function advanceDays(p,at)
 end
 local function emit(p,kind,data) if p.player.Parent then Event:FireClient(p.player,kind,data) end end
 local function toast(p,message) if message then emit(p,"toast",message) end end
+-- 3.0: W.Sync darf nie den 0,5-s-Takt oder eine Aktion abbrechen. Schlägt er fehl, holt der Takt ihn nach.
+local function safeSync(p)
+    local ok,err=pcall(W.Sync,p.world,p.profile.data)
+    if not ok then p.syncPending=true;if now()>=(p.syncWarnAt or 0) then p.syncWarnAt=now()+5;warn("[Werkstatt] Abgleich der Werkstatt für "..p.player.Name.." fehlgeschlagen: "..tostring(err)) end else p.syncPending=nil end -- 3.0: Warnung höchstens alle 5 s
+    return ok
+end
 local function near(p,part,distance)
     local ch=p.player.Character;local root=ch and ch:FindFirstChild("HumanoidRootPart")
     local humanoid=ch and ch:FindFirstChildOfClass("Humanoid")
@@ -34,7 +40,7 @@ local function resetInteraction(p,expected)
     local active=p.pending
     if expected and active~=expected then return false end
     p.pending=nil;p.world.interactionJob=nil
-    W.Sync(p.world,p.profile.data)
+    safeSync(p) -- 3.0
     emit(p,"interactionReset",active and {token=active.token} or nil)
     return true
 end
@@ -49,23 +55,29 @@ local function beginInteraction(p,c)
     c.character=p.player.Character;c.tool=p.tool
     p.confirm=nil
     p.pending=c;p.world.interactionJob=c.job
-    W.Sync(p.world,p.profile.data)
+    safeSync(p) -- 3.0
     -- Register cleanup before notifying the client. Every kind has a deadline.
     task.delay(math.max(0,c.expires-now())+0.1,function()
         if sessions[p.player]==p and p.pending==c then resetInteraction(p,c) end
     end)
 end
+local function partName(kind) -- 3.0
+    for _,t in ipairs(C.PartTypes) do if t.id==kind then return t.name end end
+    return "Ersatzteil"
+end
 local function objectiveFor(p,job)
     local d=p.profile.data
     local objective,target=W.Objective(p.world,job)
+    if job and job.phase=="approval" and p.calling then objective="Der Kunde wird angerufen …" end -- 3.0
     if job and job.phase=="repair" then
         local step=C.JobById[job.kind].steps[job.step]
-        if step and step.equipment and d.equipmentBays[step.equipment]~=job.bay then
-            local device=p.world.model.Equipment:FindFirstChild(step.equipment)
-            objective="Stelle "..C.EquipmentById[step.equipment].name.." an Bühne "..job.bay.." bereit."
-            target=device and device.Badge or p.world.model.Stations.upgrades
+        -- 3.0: Ein gekauftes Gerät stellt der Server beim E-Druck selbst bereit; nur ein fehlendes Gerät führt zum Ausbau.
+        if step and step.equipment and (d.equipment[step.equipment] or 0)<(step.equipmentLevel or 1) then
+            objective="Kaufe "..C.EquipmentById[step.equipment].name.." an der Ausbau-Werkbank.";target=p.world.model.Stations.upgrades
+        elseif step and step.equipment and d.equipmentBays[step.equipment]~=job.bay then
+            objective=step.name..": E drücken · "..C.EquipmentById[step.equipment].name.." kommt automatisch an Bühne "..job.bay.."."
         end
-        if step and step.part and not R.ChoosePart(d,job,step.part) then objective="Passendes Ersatzteil im Teilehandel bestellen oder eine andere Marke auswählen.";target=p.world.model.Stations.parts end
+        if step and step.part and not R.ChoosePart(d,job,step.part) then objective="Ersatzteil fehlt: "..partName(step.part).." im Teilehandel kaufen oder eine andere Marke wählen.";target=p.world.model.Stations.parts end -- 3.0
     end
     return objective,target
 end
@@ -73,14 +85,15 @@ local function push(p)
     local d=p.profile.data;local job=selected(p)
     if not job then p.selected=d.jobs[1] and d.jobs[1].id;job=selected(p) end
     local objective,target=objectiveFor(p,job)
+    -- 3.0: ClientSnapshot: Befund und Salz des Fahrzeug-Checks bleiben bis zum Scan auf dem Server
     local visuals={};for id,v in pairs(p.world.cars) do visuals[id]={lifted=v.lifted,hood=v.hood,moving=v.moving,model=v.model} end
-    emit(p,"state",{data=R.Snapshot(d),revision=p.revision,selected=p.selected,tool=p.tool,objective=objective,target=target,
+    emit(p,"state",{data=R.ClientSnapshot(d),revision=p.revision,selected=p.selected,tool=p.tool,objective=objective,target=target,
         time=now(),dayEpoch=dayEpoch,interaction=p.pending and {token=p.pending.token,kind=p.pending.kind,expires=p.pending.expires},neededXP=R.XPNeeded(d),shopReady=p.profile.writable and not RunService:IsStudio() and not p.profile.transacting,saveStatus=p.profile.status,visuals=visuals,plot=p.world.model})
     p.player.leaderstats.Credits.Value=math.floor(d.money);p.player.leaderstats.Level.Value=d.level
     p.lastPush=now();p.dirty=false
 end
 local function changed(p)
-    p.revision=p.revision+1;W.Sync(p.world,p.profile.data);push(p)
+    p.revision=p.revision+1;safeSync(p);push(p) -- 3.0: Abgleich geschützt
 end
 local function messageResult(p,ok,message)
     toast(p,message);if ok then changed(p) else push(p) end
@@ -99,42 +112,147 @@ local function moveTo(p,part)
     ch:PivotTo(destination or plot*CFrame.new(here.X,3.5,here.Z+6)) -- 3.0: plotlokal statt Welt-X/Z
     root.AssemblyLinearVelocity=Vector3.new();root.AssemblyAngularVelocity=Vector3.new()
 end
+-- 3.0: Jede Absage sagt genau, was zu tun ist.
+local function pointName(key) return C.PointNames[key] or "markierter Punkt" end
 local function jobConditions(p,j,v)
-    if v.moving then return false,"Warte, bis die Bühne stillsteht." end
+    if v.moving then return false,"Warte kurz, bis die Hebebühne stillsteht, und drücke dann nochmal E." end -- 3.0
     local step=C.JobById[j.kind].steps[j.step]
-    if not step or j.phase~="repair" then return false,"Dieser Arbeitsschritt ist gerade nicht verfügbar." end
-    if v.lifted~=step.lifted then return false,step.lifted and "Hebebühne zuerst anheben." or "Hebebühne zuerst absenken." end
-    if step.hood and not v.hood then return false,"Öffne zuerst die Motorhaube." end
-    if not R.ToolActive(p.profile.data,p.tool) or not R.ToolMatches(step,p.tool) then return false,"Wähle das passende Werkzeug: "..C.Tools[step.tool].name end
-    if step.equipment and (p.profile.data.equipment[step.equipment] or 0)<(step.equipmentLevel or 1) then return false,"Das benötigte Gerät fehlt." end
-    if step.equipment and p.profile.data.equipmentBays[step.equipment]~=j.bay then return false,"Stelle zuerst "..C.EquipmentById[step.equipment].name.." an Bühne "..j.bay.." bereit." end
+    if not step or j.phase~="repair" then return false,"Dieser Arbeitsschritt ist gerade nicht dran. Folge dem Ziel oben im Bild." end -- 3.0
+    if v.lifted~=step.lifted then return false,step.lifted and "Die Bühne muss oben sein: drücke E am Arbeitspunkt oder F am Bühnenschalter." or "Die Bühne muss unten sein: drücke E am Arbeitspunkt oder F am Bühnenschalter." end -- 3.0
+    if step.hood and not v.hood then return false,"Die Motorhaube muss offen sein: drücke E am Arbeitspunkt oder H an der Haube." end -- 3.0
+    if not R.ToolActive(p.profile.data,p.tool) or not R.ToolMatches(step,p.tool) then return false,"Nimm „"..C.Tools[step.tool].name.."“ in die Hand und drücke nochmal E." end -- 3.0
+    if step.equipment and (p.profile.data.equipment[step.equipment] or 0)<(step.equipmentLevel or 1) then return false,"Dir fehlt „"..C.EquipmentById[step.equipment].name.."“. Kaufe es an der Ausbau-Werkbank." end -- 3.0
+    if step.equipment and p.profile.data.equipmentBays[step.equipment]~=j.bay then return false,"Stelle zuerst "..C.EquipmentById[step.equipment].name.." an Bühne "..j.bay.." bereit: am Gerät E drücken." end -- 3.0
     if step.equipment then
         for _,other in ipairs(p.profile.data.jobs) do
             local otherStep=C.JobById[other.kind].steps[other.step]
             if other.id~=j.id and other.phase=="working" and otherStep and otherStep.equipment==step.equipment then
-                return false,"Dieses Gerät ist gerade an einem anderen Auto im Einsatz."
+                return false,"„"..C.EquipmentById[step.equipment].name.."“ arbeitet gerade an einem anderen Auto. Warte, bis der Schritt dort fertig ist." -- 3.0
             end
         end
     end
-    if step.part and not R.ChoosePart(p.profile.data,j,step.part) then return false,"Bestelle zuerst das passende Ersatzteil oder wähle einen vorhandenen Hersteller." end
-    if not near(p,v.model[step.point],8) then return false,"Gehe zum markierten Bauteil am Fahrzeug." end
+    if step.part and not R.ChoosePart(p.profile.data,j,step.part) then return false,"Ersatzteil fehlt: Kaufe „"..partName(step.part).."“ im Teilehandel oder wähle eine vorhandene Marke." end -- 3.0
+    if not near(p,v.model[step.point],8) then return false,"Gehe näher an „"..pointName(step.point).."“ (markiert am Auto) und drücke E." end -- 3.0
     return true
+end
+-- 3.0: Passendes Werkzeug automatisch aus der aktiven Leiste nehmen (step.tool oder erlaubte Alternative).
+local function pickTool(d,step)
+    if R.ToolActive(d,step.tool) and R.ToolUnlocked(d,step.tool) then return step.tool end
+    for _,key in ipairs(d.loadout) do
+        if step.alternatives and step.alternatives[key] and R.ToolUnlocked(d,key) then return key end
+    end
+end
+local function autoTool(p,step) -- 3.0
+    local d=p.profile.data
+    if R.ToolActive(d,p.tool) and R.ToolUnlocked(d,p.tool) and R.ToolMatches(step,p.tool) then return true end
+    local key=pickTool(d,step)
+    if not key then
+        local tool=C.Tools[step.tool]
+        if not R.ToolUnlocked(d,step.tool) then
+            return false,"Dir fehlt „"..tool.name.."“: Kaufe zuerst "..C.EquipmentById[tool.equipment].name.." an der Ausbau-Werkbank."
+        end
+        return false,"„"..tool.name.."“ liegt in der Werkzeugkiste. Geh zur Werkzeugkiste und lege es in deine Werkzeugleiste."
+    end
+    p.tool=key;F.Equip(p.player,key)
+    if p.pending then p.pending.tool=key end -- automatischer Wechsel bricht nichts ab
+    toast(p,"Werkzeug: "..C.Tools[key].name)
+    return true
+end
+local function startLift(p,j) -- 3.0: genau wie die Aktion 'lift'
+    return W.Lift(p.world,j.id,function() if sessions[p.player]==p then changed(p) end end)
+end
+-- 3.0: Vor einem Arbeitsschritt: Abstand, Gerät (automatisch bereitstellen), Teil, Werkzeug, Bühne, Haube.
+-- Liefert ready, message, dirty (dirty = Zustand geändert, changed statt push).
+local function prepare(p,j,v)
+    local d=p.profile.data;local step=C.JobById[j.kind].steps[j.step]
+    if v.moving then return false,"Warte kurz, bis die Hebebühne stillsteht, und drücke dann nochmal E." end
+    if not step then return false,"Dieser Arbeitsschritt ist gerade nicht dran. Folge dem Ziel oben im Bild." end
+    if not near(p,v.model[step.point],8) then return false,"Gehe näher an „"..pointName(step.point).."“ (markiert am Auto) und drücke E." end
+    local dirty=false
+    if step.equipment then
+        local e=C.EquipmentById[step.equipment]
+        if (d.equipment[step.equipment] or 0)<(step.equipmentLevel or 1) then
+            return false,"Dir fehlt „"..e.name.."“"..((step.equipmentLevel or 1)>1 and " (Stufe "..step.equipmentLevel..")" or "")..". Kaufe es an der Ausbau-Werkbank."
+        end
+        if d.equipmentBays[step.equipment]~=j.bay then
+            local oldBay=d.equipmentBays[step.equipment]
+            for _,other in ipairs(d.jobs) do
+                if other.bay==oldBay and p.world.cars[other.id] and p.world.cars[other.id].moving then return false,"Warte kurz, bis die andere Bühne stillsteht, und drücke dann nochmal E." end
+            end
+            -- 3.0: Steht ein anderes Gerät an dieser Bühne, stellt der Mechaniker es selbst ins Lager (sonst blieben Reifen-,
+            -- 3.0: Bremsen- und Ölaufträge nacheinander mit „Geräteplatz belegt“ stecken). Nur ein gerade arbeitendes Gerät bleibt.
+            for other,bay in pairs(d.equipmentBays) do
+                if other~=step.equipment and bay==j.bay then
+                    local otherName=C.EquipmentById[other] and C.EquipmentById[other].name or "Das andere Gerät"
+                    local busy=false
+                    for _,o in ipairs(d.jobs) do
+                        local oStep=o.phase=="working" and C.JobById[o.kind].steps[o.step]
+                        if oStep and oStep.equipment==other then busy=true end
+                    end
+                    if busy then return false,"„"..otherName.."“ arbeitet gerade an Bühne "..j.bay..". Warte, bis der Schritt fertig ist, und drücke dann nochmal E." end
+                    local okStore=R.AssignEquipment(d,other,0)
+                    if not okStore then return false,"„"..otherName.."“ steht an Bühne "..j.bay..". Stelle es am Gerät mit E ins Lager und drücke dann nochmal E." end
+                    toast(p,otherName.." ins Lager gestellt.");dirty=true
+                end
+            end
+            local ok,msg=R.AssignEquipment(d,step.equipment,j.bay)
+            if not ok then if dirty then W.Equipment(p.world,d) end;return false,msg.." Danach „"..e.name.."“ am Gerät mit E an Bühne "..j.bay.." stellen.",dirty end -- 3.0
+            W.Equipment(p.world,d);dirty=true
+            toast(p,e.name.." steht jetzt an Bühne "..j.bay..".")
+        end
+    end
+    if step.part and not R.ChoosePart(d,j,step.part) then return false,"Ersatzteil fehlt: Kaufe „"..partName(step.part).."“ im Teilehandel oder wähle eine vorhandene Marke.",dirty end
+    local ok,msg=autoTool(p,step);if not ok then return false,msg,dirty end
+    if v.lifted~=step.lifted then
+        if not startLift(p,j) then return false,"Warte kurz, bis die Hebebühne stillsteht, und drücke dann nochmal E.",dirty end
+        return false,"Die Bühne fährt "..(step.lifted and "hoch" or "runter").." … gleich nochmal E drücken.",true
+    end
+    if step.hood and not v.hood then W.Hood(v);dirty=true;toast(p,"Motorhaube geöffnet.") end
+    return true,nil,dirty
 end
 local function report(p,j)
     local def=C.JobById[j.kind]
-    emit(p,"diagnose",{job=j.id,car=C.CarById[j.carId].name,report=def.report,answers=j.phase=="diagnose" and def.answers or {},phase=j.phase})
+    local codes,live=R.Tester(j) -- 3.0: OBD-Tester (Fehlerspeicher und Live-Daten)
+    local finding=j.finding and C.JobById[j.finding]
+    local text=def.report
+    if j.kind=="inspection" then text=finding and finding.report or "Fehlerspeicher: Keine Fehler gespeichert\n"..def.report end -- 3.0
+    emit(p,"diagnose",{job=j.id,car=C.CarById[j.carId].name,report=text,answers=j.phase=="diagnose" and j.kind~="inspection" and def.answers or {},phase=j.phase,
+        kind=j.kind,codes=codes,live=live,finding=j.finding,findingName=finding and finding.name or nil,approved=j.approved,
+        message=#codes==0 and "Keine Fehler gespeichert" or (#codes.." Fehler gespeichert"),customer=j.finding and R.CustomerName(j) or nil}) -- 3.0
+end
+-- 3.0: Ergebnis eines Fahrzeug-Check-Scans: mit Befund -> Kundenfreigabe per Handy, sonst direkt die Sichtprüfung.
+local function inspectionResult(p,j)
+    if not R.InspectionScanned(j) then return false end
+    if j.phase=="approval" then
+        toast(p,"Fehler gefunden: "..C.JobById[j.finding].name..". Ruf den Kunden mit dem Handy an (Taste P).")
+    else
+        toast(p,"Keine Fehler gespeichert. Jetzt die Sichtprüfung am Auto durchführen.")
+    end
+    return true
 end
 local function work(p,id,point,scanOnly)
     local j=selected(p,id);if not j then return end
     local v=p.world.cars[j.id];if not v then return end
     if p.pending then return toast(p,"Schließe zuerst die laufende Interaktion ab.") end
     p.selected=j.id
-    if scanOnly or j.phase=="diagnose" or j.phase=="verify" then
+    if scanOnly or j.phase=="diagnose" or j.phase=="verify" or j.phase=="approval" then -- 3.0: approval
         if j.phase=="working" then return toast(p,"Warte, bis der Arbeitsschritt beendet ist.") end
+        if j.phase=="approval" and point and point~="DiagnosticPoint" then toast(p,"Ruf zuerst den Kunden mit dem Handy an (Taste P).");return push(p) end -- 3.0
         if point and point~="DiagnosticPoint" then return toast(p,"Nutze den OBD-Anschluss an der Fahrerseite.") end
-        if v.moving or not near(p,v.model.DiagnosticPoint,8) then return toast(p,"Gehe zum OBD-Anschluss an der Fahrerseite.") end
-        if p.tool~="scanner" or not R.ToolActive(p.profile.data,"scanner") then return toast(p,"Wähle den OBD-Tester aus deiner Werkzeugleiste.") end
-        if j.phase=="verify" and (v.lifted or v.hood) then return toast(p,"Senke die Bühne ab und schließe die Motorhaube.") end
+        if v.moving then return toast(p,"Warte kurz, bis die Hebebühne stillsteht, und drücke dann nochmal E.") end -- 3.0
+        if not near(p,v.model.DiagnosticPoint,8) then return toast(p,"Gehe zum OBD-Anschluss an der Fahrerseite (markiert) und drücke E.") end -- 3.0
+        local okTool,toolMsg=autoTool(p,{tool="scanner"});if not okTool then toast(p,toolMsg);return push(p) end -- 3.0: Tester automatisch
+        if j.phase=="verify" and (v.lifted or v.hood) then
+            -- 3.0: Endkontrolle: Haube schließen und Bühne absenken (automatisch), dann nochmal E.
+            if v.hood then W.Hood(v) end
+            if v.lifted then
+                if not startLift(p,j) then return toast(p,"Warte kurz, bis die Hebebühne stillsteht, und drücke dann nochmal E.") end
+                toast(p,"Haube zu, die Bühne fährt runter … gleich nochmal E drücken.");return changed(p)
+            end
+            toast(p,"Motorhaube geschlossen.");p.revision=p.revision+1
+        end
+        if j.phase=="approval" then report(p,j);toast(p,"Ruf den Kunden mit dem Handy an (Taste P).");return push(p) end -- 3.0
+        if j.scanReady and j.phase=="diagnose" and inspectionResult(p,j) then report(p,j);return changed(p) end -- 3.0: alter Spielstand
         if j.scanReady and j.phase~="verify" then report(p,j);return push(p) end
         local pending={kind="scan",job=j.id,phase=j.phase,step=j.step,token=Http:GenerateGUID(false),point=v.model.DiagnosticPoint,expires=now()+3}
         beginInteraction(p,pending)
@@ -144,18 +262,22 @@ local function work(p,id,point,scanOnly)
             if sessions[p.player]~=p or p.pending~=pending then return end
             resetInteraction(p,pending)
             if p.player.Character~=pending.character or selected(p,j.id)~=j or not near(p,v.model.DiagnosticPoint,8) or v.moving or p.tool~="scanner" then
-                emit(p,"interactionReset");return toast(p,"Prüfung abgebrochen: Gehe zurück zum Fahrzeug.")
+                emit(p,"interactionReset");return toast(p,"Prüfung abgebrochen: Gehe zurück zum OBD-Anschluss und drücke nochmal E.") -- 3.0
             end
             if j.phase=="diagnose" then
-                j.scanReady=true;report(p,j)
+                j.scanReady=true;inspectionResult(p,j);report(p,j) -- 3.0: Fahrzeug-Check ohne Multiple-Choice
             elseif j.phase=="verify" and not v.lifted and not v.hood then
                 j.phase="invoice";toast(p,"Endkontrolle bestanden. Rechnung am Empfang abschließen.");report(p,j)
             else report(p,j) end
             changed(p)
         end)
     elseif j.phase=="repair" then
-        if point and point~=C.JobById[j.kind].steps[j.step].point then return toast(p,"Wähle das markierte Bauteil für diesen Arbeitsschritt.") end
-        local ok,msg=jobConditions(p,j,v);if not ok then return toast(p,msg) end
+        local step=C.JobById[j.kind].steps[j.step]
+        if point and step and point~=step.point then return toast(p,"Falscher Punkt: Gehe zu „"..pointName(step.point).."“ (markiert) und drücke E.") end -- 3.0
+        local ready,msg,dirty=prepare(p,j,v) -- 3.0: Werkzeug, Gerät, Bühne und Haube automatisch
+        if not ready then toast(p,msg);if dirty then return changed(p) end;return push(p) end
+        if dirty then p.revision=p.revision+1 end
+        local ok,msg2=jobConditions(p,j,v);if not ok then return toast(p,msg2) end
         local c={kind="gauge",job=j.id,step=j.step,token=Http:GenerateGUID(false),startAt=now()+0.7,period=1.5,
             center=0.62,width=math.min(0.48,0.28+(p.profile.data.toolLevel-1)*0.006),expires=now()+12}
         c.phase=j.phase;c.point=v.model[C.JobById[j.kind].steps[j.step].point]
@@ -163,6 +285,36 @@ local function work(p,id,point,scanOnly)
     elseif j.phase=="invoice" then toast(p,"Hole die Vergütung am Empfang über Abrechnen ab.")
     else toast(p,"Dieser Arbeitsschritt läuft bereits.") end
     push(p)
+end
+-- 3.0: Kunden per Handy anrufen (Fahrzeug-Check mit Befund). Liefert ok, Meldung.
+local function callCustomer(p,jobId)
+    local d=p.profile.data
+    local j=jobId and R.FindJob(d,jobId)
+    if not jobId then
+        local current=selected(p)
+        if current and current.phase=="approval" then j=current end
+        if not j then for _,candidate in ipairs(d.jobs) do if candidate.phase=="approval" then j=candidate;break end end end
+    end
+    if not j or j.phase~="approval" or not j.finding then return false,"Gerade muss kein Kunde angerufen werden." end
+    if p.calling then return false,"Du telefonierst gerade." end
+    local call={job=j.id};p.calling=call;p.selected=j.id
+    local customer=R.CustomerName(j)
+    emit(p,"call",{job=j.id,state="ringing",customer=customer,car=C.CarById[j.carId].name,finding=j.finding,findingName=C.JobById[j.finding].name})
+    push(p)
+    task.delay(C.Inspection.RingSeconds,function()
+        if sessions[p.player]~=p or p.calling~=call then return end
+        p.calling=nil
+        if p.closing or R.FindJob(p.profile.data,j.id)~=j or j.phase~="approval" then
+            emit(p,"call",{job=j.id,state="ended",customer=customer});return push(p)
+        end
+        local accepted=R.CustomerDecision(j)
+        local _,text=R.Approve(p.profile.data,j,accepted)
+        local answer=accepted and "Ja, bitte gleich mitmachen. Danke!" or "Nein danke, bitte nur den Check."
+        emit(p,"call",{job=j.id,state="answer",accepted=accepted,text=answer,result=text,customer=customer})
+        toast(p,text)
+        changed(p)
+    end)
+    return true,nil
 end
 local function token(p,key,job)
     p.confirm={token=Http:GenerateGUID(false),key=key,job=job,expires=now()+30}
@@ -209,7 +361,12 @@ local function act(p,action,a)
         resetInteraction(p);p.confirm=nil
         local _,target=objectiveFor(p,j);if j then p.selected=j.id end
         if a.car and j then target=p.world.cars[j.id].model.DiagnosticPoint end
-        moveTo(p,target);emit(p,"close");return push(p)
+        moveTo(p,target);emit(p,"close")
+        -- 3.0: passendes Werkzeug gleich in die Hand (OBD-Tester für Diagnose/Endkontrolle, sonst das Schritt-Werkzeug)
+        local step=j and j.phase=="repair" and C.JobById[j.kind].steps[j.step]
+        if j and (j.phase=="diagnose" or j.phase=="verify" or (a.car and not step)) then autoTool(p,{tool="scanner"})
+        elseif step then autoTool(p,step) end
+        return push(p)
     end
     if action=="swapTool" then
         if p.pending then return toast(p,"Beende zuerst die laufende Interaktion.") end
@@ -222,6 +379,10 @@ local function act(p,action,a)
     end
     if action=="tool" then
         local t=C.Tools[a.id];if not t then return end
+        if a.id==C.HandTool then -- 3.0: freie Hand (fester Extra-Platz)
+            if p.pending and a.id~=p.tool then resetInteraction(p) end
+            p.tool=a.id;F.Equip(p.player,p.tool);return push(p)
+        end
         if not R.ToolActive(d,a.id) then return toast(p,"Dieses Werkzeug liegt in der Werkzeugkiste.") end
         if not R.ToolUnlocked(d,a.id) then return toast(p,"Kaufe zuerst das zugehörige Werkstattgerät.") end
         if p.pending and a.id~=p.tool then resetInteraction(p) end
@@ -251,10 +412,17 @@ local function act(p,action,a)
     if action=="diagnose" then
         local j=selected(p,a.id);if not j then return end
         local v=p.world.cars[j.id]
-        if p.pending or not v or v.moving or p.tool~="scanner" or not near(p,v.model.DiagnosticPoint,8) then return end
+        if p.pending or not v or v.moving or not near(p,v.model.DiagnosticPoint,8) then return end
+        if j.phase~="diagnose" then return push(p) end -- 3.0: Fahrzeug-Check hat keine Auswahl mehr (alte Clients)
+        if p.tool~="scanner" and not autoTool(p,{tool="scanner"}) then return push(p) end -- 3.0
         local ok,msg=R.Diagnose(j,a.choice)
         if ok then emit(p,"diagnosisDone",j.id) end
         return messageResult(p,ok,msg)
+    end
+    if action=="call" then -- 3.0: Handy (auch über ctx.callCustomer für Minispiel-Module)
+        local ok,msg=callCustomer(p,type(a.id)=="string" and a.id or nil)
+        if not ok then toast(p,msg);return push(p) end
+        return
     end
     if action=="hit" then
         local c=p.pending
@@ -395,12 +563,13 @@ local function request(player,action,a)
     local changedTime,arrived=R.Advance(p.profile.data,time)
     advanceDays(p,time)
     if arrived>0 then W.Deliver(p.world,arrived);toast(p,"Deine Teilelieferung ist angekommen.") end
-    if changedTime then p.revision=p.revision+1;W.Sync(p.world,p.profile.data) end
+    if changedTime then p.revision=p.revision+1;safeSync(p) end -- 3.0: geschützt
     if Mini.Handles(action) then return Mini.Handle(p,action,a) end -- 3.0
     act(p,action,a)
 end
 -- 3.0: Minispiele an dieselben Wege anbinden (ein Eingang, ein Profil, keine neuen Remotes).
-Mini.Init({emit=emit,toast=toast,changed=changed,push=push,getSession=function(player) return sessions[player] end,moveTo=moveTo,now=now})
+Mini.Init({emit=emit,toast=toast,changed=changed,push=push,getSession=function(player) return sessions[player] end,moveTo=moveTo,now=now,
+    callCustomer=callCustomer}) -- 3.0: Handy-Anruf beim Kunden (Fahrzeug-Check)
 Command.OnServerEvent:Connect(request)
 Purchases.Init(function(player) return sessions[player] end,function(p,product,result)
     emit(p,"purchaseFX",Purchases.FX(product)) -- 3.0: Titel je Art (Credits/Auto/Optik/Paket)
@@ -414,12 +583,16 @@ local function join(player)
     local profile=P.Load(player)
     Mini.Reconcile(player,profile) -- 3.0: Auktions-Übergaben abgleichen, falls nur ein Profil gespeichert wurde
     if not player.Parent then joining[player]=nil;P.Save(profile,true);return end
-    local p={player=player,profile=profile,tool="scanner",revision=1,cooldowns={},lastPush=0}
+    local p={player=player,profile=profile,tool=C.HandTool,revision=1,cooldowns={},lastPush=0} -- 3.0: Start mit freier Hand
     local _,cycle=R.DayClock(now(),dayEpoch);p.dayCycle=cycle
     p.world=W.Create(player,function(kind,value,point)
         if sessions[player]~=p then return end
-        if kind=="station" then if station(p,value) then resetInteraction(p);emit(p,"page",value);push(p);Mini.OnStation(p,value) end -- 3.0: Tutorial-Schritt/Hinweis zur Station
-        elseif kind=="expand" then request(player,"confirm",{key="bays"})
+        -- 3.0: Ein E-Druck löst in Roblox alle sichtbaren E-Prompts aus. Ein Stations-/Ausbau-Prompt darf darum weder
+        -- 3.0: eine laufende Interaktion (OBD-Scan, Endkontrolle, QTE) abbrechen noch direkt nach einem Arbeits-E das Tablet öffnen.
+        if kind=="work" or kind=="hood" or kind=="lift" then p.lastWorkPrompt=now() end -- 3.0
+        local busy=p.pending~=nil or now()-(p.lastWorkPrompt or -10)<0.6 -- 3.0
+        if kind=="station" then if busy then return end;if station(p,value) then resetInteraction(p);emit(p,"page",value);push(p);Mini.OnStation(p,value) end -- 3.0: Tutorial-Schritt/Hinweis zur Station; nie während einer Interaktion
+        elseif kind=="expand" then if busy then return end;request(player,"confirm",{key="bays"}) -- 3.0: nie während einer Interaktion
         elseif kind=="lift" then for _,j in ipairs(p.profile.data.jobs) do if j.bay==value then request(player,"lift",{id=j.id});break end end
         else request(player,kind,{id=value,point=point}) end
     end)
@@ -428,7 +601,7 @@ local function join(player)
     joining[player]=nil
     local stats=Instance.new("Folder");stats.Name="leaderstats";stats.Parent=player
     for _,name in ipairs({"Credits","Level"}) do local n=Instance.new("NumberValue");n.Name=name;n.Parent=stats end
-    R.RefreshOffers(profile.data);W.Sync(p.world,profile.data);W.Equipment(p.world,profile.data)
+    R.RefreshOffers(profile.data);safeSync(p);W.Equipment(p.world,profile.data) -- 3.0: geschützter Abgleich
     Mini.OnJoin(p) -- 3.0: Offline-Presse, Tageswechsel, Game Passes
     local function character(ch)
         local root=ch:WaitForChild("HumanoidRootPart",10)
@@ -436,9 +609,8 @@ local function join(player)
         local hand=ch:FindFirstChild("Right Arm") or ch:WaitForChild("RightHand",10)
         if not root or not humanoid or not hand or sessions[player]~=p or player.Character~=ch then return end
         resetInteraction(p);p.confirm=nil
-        if not R.ToolActive(profile.data,p.tool) or not R.ToolUnlocked(profile.data,p.tool) then
-            for _,key in ipairs(profile.data.loadout) do if R.ToolUnlocked(profile.data,key) then p.tool=key;break end end
-        end
+        if p.calling then emit(p,"call",{job=p.calling.job,state="ended"});p.calling=nil end -- 3.0: Anruf endet beim Respawn
+        p.tool=C.HandTool -- 3.0: nach jedem Respawn freie Hand
         moveTo(p,p.world.model.Stations.home);F.Equip(player,p.tool);push(p)
         Mini.OnCharacter(p) -- 3.0: Lobby/Tycoon-Spieler zur Zonen-Ankunft (Open World bleibt in der Werkstatt)
     end
@@ -458,20 +630,29 @@ end)
 task.spawn(function()
     while true do
         task.wait(0.5)
-        Lighting.ClockTime=R.DayClock(now(),dayEpoch)
+        pcall(function() Lighting.ClockTime=R.DayClock(now(),dayEpoch) end) -- 3.0: Takt darf nie sterben
         for _,p in pairs(sessions) do if not p.closing then
-            advanceDays(p,now())
-            validateInteraction(p)
-            local change,arrived=R.Advance(p.profile.data,now())
-            if change then p.revision=p.revision+1;W.Sync(p.world,p.profile.data) end
-            if arrived>0 then W.Deliver(p.world,arrived);toast(p,"Teilelieferung angekommen. Die Ersatzteile liegen im Lager.") end
-            push(p)
-            Mini.Tick(p,now()) -- 3.0: auch während transacting (nur Schrott, nie Geld)
+            -- 3.0: jede Sitzung geschützt; ein Fehler bei einem Spieler hält weder ihn noch andere an
+            local ok,err=pcall(function()
+                advanceDays(p,now())
+                validateInteraction(p)
+                local change,arrived=R.Advance(p.profile.data,now())
+                if change then p.revision=p.revision+1 end
+                if change or p.syncPending then safeSync(p) end -- 3.0: fehlgeschlagenen Abgleich nachholen
+                if arrived>0 then W.Deliver(p.world,arrived);toast(p,"Teilelieferung angekommen. Die Ersatzteile liegen im Lager.") end
+                push(p)
+            end)
+            if not ok and now()>=(p.tickWarnAt or 0) then p.tickWarnAt=now()+5;warn("[Werkstatt] Fehler im Takt für "..p.player.Name..": "..tostring(err)) end -- 3.0: höchstens alle 5 s
+            local okMini,errMini=pcall(function() Mini.Tick(p,now()) end) -- 3.0: geschützt; auch während transacting (nur Schrott, nie Geld)
+            if not okMini and now()>=(p.miniWarnAt or 0) then p.miniWarnAt=now()+5;warn("[Werkstatt] Fehler im Minispiel-Takt für "..p.player.Name..": "..tostring(errMini)) end
         end end
     end
 end)
 task.spawn(function()
-    while true do task.wait(C.AutosaveSeconds);for _,p in pairs(sessions) do if not p.closing then task.spawn(function() P.Save(p.profile,false) end) end end end
+    while true do task.wait(C.AutosaveSeconds);for _,p in pairs(sessions) do if not p.closing then task.spawn(function() -- 3.0: geschützt
+        local ok,err=pcall(P.Save,p.profile,false)
+        if not ok then warn("[Werkstatt] Automatisches Speichern für "..p.player.Name.." fehlgeschlagen: "..tostring(err)) end
+    end) end end end
 end)
 game:BindToClose(function()
     local remaining=0

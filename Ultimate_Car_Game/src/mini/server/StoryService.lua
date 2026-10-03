@@ -278,6 +278,7 @@ local function storySell(ms: any, data: any, d: any, t: number)
 	announce(ms, res.changed)
 	share(ms, d, res.changed)
 	dirty(ms)
+	return true -- Angebot beantwortet (verkauft oder nicht): Tutorial-Schritt "action:story_sell"
 end
 
 ---------------------------------------------------------------- Aktionen

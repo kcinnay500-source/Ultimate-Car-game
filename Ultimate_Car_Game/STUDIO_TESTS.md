@@ -72,8 +72,13 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 
 ## 3. Tutorial und Beginner-Hinweise
 
-- [ ] Erster Wechsel in die Open World: Tutorial-Karte erscheint (Schritt 1 von 11). Du stehst in deiner Werkstatt.
-- [ ] Die Schritte der Reihe nach: laufen → Menü öffnen (M) → Empfang (E) → Auftrag annehmen → OBD → Reparatur →
+- [ ] Erster Wechsel in die Open World mit neuem Profil: die **Startwahl** „Wie willst du starten?“ (vier Karten).
+      **„Später entscheiden“** blendet sie aus; sie kommt wieder, wenn du das nächste Mal in der Werkstattmeile ankommst
+      (z. B. nach einem Respawn) oder im Handy unter **Einstellungen → „Startweg wählen“** – auch nachdem du schon
+      Werkstatt-Aufträge abgerechnet hast.
+- [ ] Nach der Wahl „Werkstatt“: Tutorial-Karte erscheint (Schritt 1 von 11). Du stehst in deiner Werkstatt.
+- [ ] Die Schritte der Reihe nach: laufen → Menü öffnen (M) → Empfang (E) → Auftrag annehmen → OBD-Tester (bei Fehlern
+      Kunde per Handy anrufen) → Reparatur nur mit E →
       Abrechnen → Stadtplan-Reise → Autohaus ansehen (E) → Ziele an der Infotafel → **Kiesplatz** (Schnellreise, E an der Hütte).
 - [ ] Pfeil/Marker zeigt jeweils zum Ziel; „Weiter“ gibt es nur bei reinen Lese-Schritten.
 - [ ] Ende: **500 Credits + 60 XP**, Tab „Story“ öffnet sich.
@@ -96,10 +101,79 @@ In Studio gibt es keine echten Teleports zwischen Places. Das Spiel versetzt dic
 
 ## 5. Werkstatt (2.4.0)
 
+**Freie Hand und Werkzeugleiste**
+
 - [ ] Empfang (E): Auftrag annehmen → Kundenauto fährt vor.
-- [ ] OBD-Gerät anschließen, Fehler finden; Hebebühne (**F**), Motorhaube (**H**); Reparatur-QTE; Endkontrolle; **Abrechnen**.
+- [ ] Werkzeugleiste: ganz links der feste Platz **„Hand“ (Taste 1)**, danach die fünf Werkzeuge auf **2–6**. Zu Beginn
+      und nach jedem Respawn hältst du **nichts** in der Hand (kein Werkzeugmodell an der Figur).
+- [ ] Taste **1** (oder Klick/Tipp auf „Hand“) legt das Werkzeug weg; der Platz „Hand“ ist hervorgehoben. Die Hand lässt
+      sich nicht in der Werkzeugkiste auf einen anderen Platz legen.
+- [ ] **Nur mit E**: Werkzeug, Hebebühne, Motorhaube und Geräte (Ölauffanggerät, Radheber …) stellt der Mechaniker selbst.
+      Es ist egal, was du gerade in der Hand hast – kurz erscheint „Werkzeug: …“.
+- [ ] Fährt die Bühne gerade, sagt der Hinweis „Die Bühne fährt hoch/runter … gleich nochmal E drücken“ – danach klappt E.
+- [ ] Die Zeile über der Werkzeugleiste sagt nie „Bühne anheben (F)“, „Haube öffnen (H)“ oder „… wählen (Taste N)“, sondern
+      „Am markierten Bauteil E drücken – Werkzeug, Bühne und Haube kommen automatisch“ (oder was wirklich fehlt, z. B.
+      ein Ersatzteil oder ein Gerät, das du erst kaufen musst).
+- [ ] Bühne (**F**) und Haube (**H**) gehen weiterhin auch von Hand; die E/F/H-Knöpfe erscheinen auch unter der gehobenen
+      Bühne (dort, wo Roblox den E-Prompt nicht einblendet).
+
+**Ölwechsel (der gemeldete Fehler)**
+
+- [ ] Ölwechsel annehmen → OBD-Diagnose → Schritt 1 „Öl ablassen“ mit E: Bühne fährt hoch, noch einmal E → QTE.
+- [ ] Schritt 2 **„Ölfilter wechseln“** direkt mit E – **ohne** Werkzeugwechsel (die Ratsche nimmt der Mechaniker selbst).
+- [ ] Alle weiteren Schritte bis zur Endkontrolle laufen nur mit E; nirgends bleibt man „im vorherigen Schritt“ hängen.
+
+**OBD-Tester**
+
+- [ ] Am OBD-Anschluss **E** → der **OBD-Tester „UCG-Tester 3000“** (orangener Gummirahmen, grüner Bildschirm) verbindet
+      sich („Verbinden … Auslesen …“) und zeigt danach seine Seiten.
+- [ ] Seiten-Tasten **Fehlerspeicher**, **Messwerte**, **Befund**, **Endkontrolle**, **Schließen**: alle groß genug
+      (auch am Handy), jede Seite zeigt ihren Inhalt. „Messwerte“ zeigt Werte wie Motordrehzahl, Batteriespannung, Öltemperatur.
+- [ ] Bei einem normalen Auftrag stehen auf „Befund“ die Antworten der Diagnose; die richtige Antwort führt zur Reparatur.
+- [ ] **Schließen** während des Verbindens bricht nur den Scan ab (kein Hängenbleiben, erneut E startet ihn wieder).
+
+**Fahrzeug-Check mit Fehlerspeicher und Handy**
+
+- [ ] Fahrzeug-Check annehmen → E am OBD-Anschluss → der Tester liest den **Fehlerspeicher**.
+- [ ] Steht dort **„Keine Fehler gespeichert“**, geht es gleich mit der Sichtprüfung am Auto weiter.
+- [ ] Stehen dort **Fehler** (Code + Text, z. B. „P0521 Ölzustand: stark gealtert“): Ziel oben „Ruf den Kunden mit dem Handy an
+      (Taste P)“. Arbeitspunkte am Auto sagen „Ruf zuerst den Kunden …“.
+- [ ] „Kunden anrufen (P)“ im Tester antippen (oder Taste **P**, oder Handy → App **Kunden** → „Anrufen“) → das **Handy**
+      fährt unten rechts hoch, „Es klingelt …“, der Kunde (Name) antwortet in einer Sprechblase.
+- [ ] Bei **„Ja“** wird der Fehler mit repariert (z. B. Ölwechsel); Quittung beim Abrechnen „Fahrzeug-Check + …“ mit Check-Bonus.
+      Bei **„Nein“** machst du nur den Check fertig; der Fehler bleibt im Fehlerspeicher stehen.
+- [ ] Auftrag abbrechen und neu annehmen bringt **denselben** Befund und dieselbe Antwort (kein Neu-Würfeln).
+- [ ] **„Fertig“** schließt das Handy (bei „Ja“ geht es nach ein paar Sekunden auch von selbst zu). Ein zweiter Anruf
+      während es klingelt startet keinen neuen Anruf (Hinweis statt Doppelanruf); ein Respawn beendet den Anruf.
+
+**Endkontrolle**
+
+- [ ] Endkontrolle mit gehobener Bühne und offener Haube: E am OBD-Anschluss → „Haube zu, die Bühne fährt runter …“ →
+      noch einmal E → der Tester zeigt die Prüfliste der Endkontrolle → bestanden → **Abrechnen**.
+- [ ] Nach der Reparatur ist der Fehlerspeicher leer („Keine Fehler gespeichert“).
+- [ ] Direkt nach „Zum Auto“ an Bühne 1 (neben der Ausbau-Werkbank) **E** drücken: Der OBD-Scan bzw. die Endkontrolle läuft
+      durch, das Tablet springt **nicht** auf und nichts wird abgebrochen.
+- [ ] **Reifen** und **Bremsen** nur mit E: Steht schon ein anderes Gerät an der Bühne (z. B. der Radheber), stellt der
+      Mechaniker es selbst ins Lager („… ins Lager gestellt.“) und holt das nötige Gerät. Auch ein Ölwechsel direkt nach
+      einem Reifenauftrag klappt nur mit E.
+- [ ] (Ausgabe-Fenster in Studio) Keine roten Fehler „[Werkstatt] …“. Falls doch einmal einer erscheint, läuft die Werkstatt
+      trotzdem weiter (der 0,5-s-Takt ist geschützt) und der nächste Schritt wird freigegeben.
+
+**Handy (wie bei GTA 5)**
+
+- [ ] Taste **P** oder der Handy-Knopf am rechten Rand öffnet/schließt das Handy (fährt unten rechts hoch).
+- [ ] Apps: **Kunden** (wer auf eine Freigabe wartet, „Anrufen“), **Nachrichten** (die letzten Hinweise und Anrufe),
+      **Aufträge** (laufende Aufträge mit Phase), **Karte** (öffnet den Stadtplan), **Konto** (Credits, Level, Rang),
+      **Einstellungen** (Beginner-/Passiv-Modus; solange offen: „Startweg wählen“). Alle Symbole sind gezeichnet.
+- [ ] Am Handy (hoch und quer): „Anrufen“, „Fertig“, Zurück, Home, Schließen, die Schalter und der Platz **„Hand“** sind gut
+      mit dem Finger zu treffen (mindestens fingerbreit).
+- [ ] Das Handy verdeckt weder die Werkzeugleiste noch die E/F/H-Knöpfe und blendet sich bei Tablet, OBD-Tester, QTE,
+      Minispiel-Menü und beim Fahren aus (danach kommt es im selben Zustand wieder).
+
+**Halle**
+
 - [ ] Hallenanbau kaufen (zweite Bühne) → neuer Hallenabschnitt erscheint, zwei Aufträge gleichzeitig möglich.
-- [ ] Rolltor öffnet/schließt; Werkzeugleiste **1–5**, **TAB** öffnet das Tablet.
+- [ ] Rolltor öffnet/schließt; **TAB** öffnet das Tablet.
 - [ ] Werkstätten auf der Südseite (gedreht): Ankunft, Rolltor und Bühnen funktionieren genauso.
 - [ ] Während einer Reparatur-QTE öffnet **M** das Menü nicht; Tablet (TAB) und Menü überlagern sich nicht.
 

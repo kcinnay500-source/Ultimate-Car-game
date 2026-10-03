@@ -23,6 +23,19 @@ mit Lobby, Story, einem Tycoon-Modus und einem fairen Shop.
   Basismodell, kosmetische Pässe. Alles auch mit Credits oder als Belohnung erreichbar, **keine Zufallsboxen,
   kein Pay-to-win**. Alle Produkt-IDs sind Platzhalter – nichts ist veröffentlicht.
 
+## Werkstatt-Update (3.x)
+
+- **Nur mit E reparieren**: Werkzeug, Hebebühne, Motorhaube und Geräte stellt der Mechaniker beim E-Druck selbst
+  (Ölwechsel mit Ölfilter, Endkontrolle mit gehobener Bühne – nichts bleibt mehr hängen).
+- **Freie Hand**: fester Platz „Hand“ ganz links in der Werkzeugleiste (**Taste 1**), Werkzeuge auf **2–6**.
+- **OBD-Tester** „UCG-Tester 3000“ als echtes Handgerät: Fehlerspeicher, Messwerte, Befund, Endkontrolle.
+- **Fahrzeug-Check** liest den Fehlerspeicher. Findet er Fehler, rufst du den Kunden mit dem **Handy** an (**Taste P**,
+  wie bei GTA 5) – sagt er Ja, reparierst du gleich mit und bekommst den Check dazu bezahlt.
+- **Handy** mit den Apps Kunden, Nachrichten, Aufträge, Karte, Konto und Einstellungen.
+
+**Steuerung:** E = benutzen/arbeiten · F = Hebebühne · H = Motorhaube · 1 = freie Hand · 2–6 = Werkzeuge ·
+P = Handy · M = Menü · TAB = Tablet.
+
 ## Stadt und Minispiele (3.0)
 
 - **Werkstattmeile**: Jeder Spieler hat seine eigene 2.4.0-Werkstatt (Empfang, Bühnen, Anbauten, Geräte) – acht

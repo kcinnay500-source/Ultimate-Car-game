@@ -1,9 +1,11 @@
 -- Studio-Spieltest (Fehlerbericht „Ölwechsel und Fahrzeug-Check funktionieren nicht“): ein NEUES Profil im
 -- kombinierten Place (placeKind "all") spielt wie ein Mensch im Studio-Fenster – jeder GUI-Klick läuft durch den
 -- Treffertest (tests/lib/gui_hit.lua): Lobby -> „Open World“ -> „Los geht's“, (Startwahl, falls vorhanden),
--- Tutorial aktiv, dann Fahrzeug-Check und Ölwechsel komplett über den 2.4.0-Client: Empfang/Tablet, OBD-Scan über
--- die Fahrzeugknöpfe (E/F/H) bzw. den Weltklick, Diagnose-Antwort, Reparaturschritte, QTE-Knopf „STOPP“ zur
--- richtigen Serverzeit, Endkontrolle, Abrechnen. Dazu: kein Phase-4-Element (Tutorial-/Hinweis-/Freischaltungs-/
+-- Tutorial aktiv, dann (3.0) drei Werkstatt-Aufträge komplett über den 2.4.0-Client: Fahrzeug-Check mit Befund
+-- (OBD-Tester, Fehlerspeicher, Kunde per Handy anrufen, Freigabe, Ölwechsel, Endkontrolle bei gehobener Bühne und offener
+-- Haube), Fahrzeug-Check ohne Befund (Weltklicks) und Ölwechsel ohne einen Werkzeugwechsel – nur E/Weltklick, Werkzeug,
+-- Bühne, Haube und Gerät stellt der Server; freie Hand über den Hotbar-Platz „Hand“; QTE-Knopf „STOPP“ zur richtigen
+-- Serverzeit; Abrechnen im Tablet. Dazu: kein Phase-4-Element (Tutorial-/Hinweis-/Freischaltungs-/
 -- Missionskarten, Abzeichen) liegt über einem 2.4.0-Knopf oder schluckt dessen Klick.
 local VIEWPORTS = {
 	{ 1280, 650 },
@@ -16,7 +18,7 @@ local VIEWPORTS = {
 
 -- 2.4.0-ScreenGui und die Phase-4-ScreenGuis, die in der Open World gleichzeitig zu sehen sein können
 local GARAGE_GUI = "UltimateCarGame"
-local PHASE4_GUIS = { "Tutorial", "UnlockCards", "Missionen", "ProgressHUD", "TycoonHUD" }
+local PHASE4_GUIS = { "Tutorial", "UnlockCards", "Missionen", "ProgressHUD", "TycoonHUD", "Handy" }
 
 local function prefixed(T, prefix)
 	local P = {}
@@ -347,27 +349,30 @@ local function play(T0, H, vp, path)
 	end
 	T.eq(Tut.View() and Tut.View().id, "reception", "Tutorial beim Schritt Empfang")
 
-	---------------------------------------------------------------- Werkstatt-Auftrag über den 2.4.0-Client
-	local function toolSlot(id)
-		for i, t in ipairs(g:Data(p).loadout) do
-			if t == id then
-				return named(GARAGE_GUI, "ToolSlot" .. i)
-			end
+	---------------------------------------------------------------- Werkstatt-Aufträge über den 2.4.0-Client (3.0)
+	-- Nur GUI-Klicks (Treffertest) und E-Knöpfe/Weltklicks: Werkzeug, Hebebühne, Motorhaube und Gerät stellt der
+	-- Server beim E-Druck selbst (der Spieler wechselt nie von Hand). Drei Aufträge:
+	--   A) Fahrzeug-Check MIT Befund: OBD-Tester -> Fehlerspeicher -> „Kunden anrufen“ -> Handy -> Freigabe ->
+	--      Ölwechsel -> Endkontrolle bei wieder gehobener Bühne und offener Haube (beides automatisch) -> Abrechnen
+	--   B) Fahrzeug-Check OHNE Befund (Weltklicks): Fehlerspeicher leer -> Sichtprüfung -> Endkontrolle -> Abrechnen
+	--   C) Ölwechsel am Empfang angenommen: kein einziger tool/lift/hood/assignEquipment-Befehl vom Client
+	local Flow = H.Load("tests/lib/garage_flow.lua")
+	local sent = {} -- Absichten, die der Client an Remotes.Command schickt (Name)
+	g:Activate()
+	g:Remote("Command").OnServerEvent:Connect(function(pl, action)
+		if pl == p then
+			table.insert(sent, tostring(action))
 		end
-	end
-	local function selectTool(id)
-		if g:State(p).tool == id then
-			return true
-		end
-		click(toolSlot(id), "Werkzeugleiste " .. id)
-		return T.eq(g:State(p).tool, id, "Werkzeug " .. id .. " gewählt")
-	end
+	end)
 	local function goTo(part, offset)
 		g:Teleport(p, part, offset or Vector3.new(0, 0, 1.5))
 		g:Advance(0.4)
 	end
 	local function vehicleButton(key)
 		return named(GARAGE_GUI, "VehicleAction_" .. key)
+	end
+	local function toastsSince(m)
+		return table.concat(g:Toasts(p, m), " | ")
 	end
 	local function openReception()
 		local station = g:Station(p, "workshop")
@@ -381,42 +386,8 @@ local function play(T0, H, vp, path)
 		click(buttonText(GARAGE_GUI, "×", true), "Tablet schließen (×)")
 		T.check(not hasText(GARAGE_GUI, "/ ULTIMATE CAR GAME"), "Tablet zu")
 	end
-	-- Lift (F) bzw. Haube (H) in den gewünschten Zustand bringen
-	local function ensure(jobId, field, want)
-		local v = visuals(jobId)
-		if (v[field] == true) == want then
-			return true
-		end
-		local car = g:Car(p, jobId)
-		local j = job(jobId)
-		if field == "lifted" then
-			local plot = g:Plot(p)
-			goTo(plot.Bays:FindFirstChild("Bay_" .. j.bay).LiftControl, Vector3.new(0, 0, 1.5))
-			click(vehicleButton("F"), "Fahrzeugknopf F (Bühne)")
-			g:Advance(2.6)
-		else
-			goTo(car.HoodPoint, Vector3.new(0, 0, 1.5))
-			click(vehicleButton("H"), "Fahrzeugknopf H (Haube)")
-			g:Advance(0.6)
-		end
-		return T.eq(visuals(jobId)[field] == true, want, field .. " = " .. tostring(want))
-	end
 	local function checkTutorialHidden(stage)
 		T.check(not Tut.CardVisible(), stage .. ": Tutorial-Karte ausgeblendet")
-	end
-	-- OBD am DiagnosticPoint über den Fahrzeugknopf E; liefert das Ergebnis-Dialog-Ereignis
-	local function scan(jobId, what)
-		local car = g:Car(p, jobId)
-		selectTool("scanner")
-		goTo(car.DiagnosticPoint)
-		local m = g:Mark()
-		click(vehicleButton("E"), what .. ": Fahrzeugknopf E (OBD)")
-		g:Advance(2.8)
-		local diag = g:Last(p, "diagnose", m)
-		T.check(diag ~= nil, what .. ": OBD-Dialog")
-		checkTutorialHidden(what .. " (Dialog)")
-		checkOcclusion(what .. " (Dialog)")
-		return diag
 	end
 	local function worldPart(car, point)
 		for _, x in ipairs(car:GetDescendants()) do
@@ -426,7 +397,6 @@ local function play(T0, H, vp, path)
 		end
 		return car:FindFirstChild(point)
 	end
-	-- Reparaturschritt: Gerät bereitstellen, Lift/Haube, Werkzeug, E-Knopf oder Weltklick, QTE „STOPP“
 	-- Alle Karten oben/unten gleichzeitig zeigen (Freischaltung, Hinweis, Mission), während die Fahrzeugknöpfe da sind
 	local function showAllCards(stage)
 		g:FireClient(p, "mini_notice", { kind = "unlock", key = "feature:press", title = "Schrottpresse", level = 2, hint = "Neu: die Schrottpresse! Klick Schrott zusammen und tausch ihn beim Schrotthändler gegen Credits." })
@@ -435,70 +405,31 @@ local function play(T0, H, vp, path)
 		g:Advance(0.4)
 		checkOcclusion(stage)
 	end
-	local function repairStep(jobId, i, useWorld, cards)
-		local j = job(jobId)
-		local def = C.JobById[j.kind]
-		local step = def.steps[i]
-		local what = def.name .. " Schritt " .. i
-		if step.equipment and g:Data(p).equipmentBays[step.equipment] ~= j.bay then
-			local device = g:Plot(p).Equipment:FindFirstChild(step.equipment)
-			goTo(device.Badge, Vector3.new(0, 0, 2))
-			g:Trigger(p, device.Badge:FindFirstChild("AssignPrompt"))
-			g:Advance(0.4)
-			click(buttonText(GARAGE_GUI, "Bühne " .. j.bay .. " ·"), what .. ": Gerät an Bühne " .. j.bay)
-			g:Advance(0.4)
-			T.eq(g:Data(p).equipmentBays[step.equipment], j.bay, what .. ": Gerät bereit")
-		end
-		if step.lifted ~= nil then
-			ensure(jobId, "lifted", step.lifted)
-		end
-		if step.hood then
-			ensure(jobId, "hood", true)
-		end
-		selectTool(step.tool)
+	-- Am Arbeitspunkt E drücken: Fahrzeugknopf E (Treffertest) oder Weltklick auf das Bauteil
+	local function pressAt(jobId, point, what, useWorld)
 		local car = g:Car(p, jobId)
-		goTo(car[step.point])
-		if cards then
-			T.check(named(GARAGE_GUI, "VehicleAction_E") ~= nil, what .. ": Fahrzeugknopf E sichtbar")
-			showAllCards(what .. " (alle Karten + Fahrzeugknöpfe)")
-		end
+		goTo(car[point])
 		local m = g:Mark()
 		if useWorld then
-			Hit.ClickWorld(T, g, p, worldPart(car, step.point), { label = what .. ": Weltklick" })
+			Hit.ClickWorld(T, g, p, worldPart(car, point), { label = what .. ": Weltklick" })
+			g:Advance(0.35)
 		else
-			click(vehicleButton("E"), what .. ": Fahrzeugknopf E")
-		end
-		local c = g:Last(p, "challenge", m)
-		if not T.check(c ~= nil, what .. ": QTE startet (Toasts: " .. table.concat(g:Toasts(p, m), " | ") .. ")") then
-			return false
-		end
-		g:Advance(0.1)
-		checkTutorialHidden(what .. " (QTE)")
-		checkOcclusion(what .. " (QTE)")
-		local stop = buttonText(GARAGE_GUI, "STOPP", true)
-		g:AdvanceTo(c.startAt + c.center * c.period)
-		m = g:Mark()
-		Hit.Click(T, g, p, stop, { label = what .. ": QTE „STOPP“" })
-		if not T.check(g:HasToast(p, "Arbeit läuft", m), what .. ": Treffer (Toasts: " .. table.concat(g:Toasts(p, m), " | ") .. ")") then
-			return false
-		end
-		g:AdvanceTo(job(jobId).workUntil + 0.6)
-		return true
-	end
-
-	local function playJob(kind, useWorld)
-		local def
-		for _, d in ipairs(C.Jobs) do
-			if d.id == kind then
-				def = d
+			local b = vehicleButton("E")
+			if T.check(b ~= nil, what .. ": Fahrzeugknopf E sichtbar") then
+				click(b, what .. ": Fahrzeugknopf E")
 			end
 		end
+		return m
+	end
+
+	-- Auftrag `kind` im Tablet annehmen (Karte „<Auftrag> · <Auto>“); liefert den Job
+	local function acceptJob(kind)
+		local def = C.JobById[kind]
 		local what = def.name
 		if not openReception() then
-			return false
+			return nil
 		end
 		checkOcclusion(what .. ": Tablet")
-		-- Auftrag dieser Art im Tablet annehmen (Karte mit Überschrift „<Auftrag> · <Auto>“)
 		local accept = visibleIn(pg:FindFirstChild(GARAGE_GUI), function(x)
 			if not (x:IsA("GuiButton") and x.Text == "Auftrag annehmen") then
 				return false
@@ -511,7 +442,7 @@ local function play(T0, H, vp, path)
 			return false
 		end)
 		if not T.check(accept ~= nil, what .. ": Angebot im Tablet") then
-			return false
+			return nil
 		end
 		local before = #g:Data(p).jobs
 		click(accept, what .. ": „Auftrag annehmen“")
@@ -523,56 +454,137 @@ local function play(T0, H, vp, path)
 			end
 		end
 		if not T.check(j ~= nil and #g:Data(p).jobs == before + 1, what .. ": angenommen") then
-			return false
+			return nil
 		end
 		closeTablet()
 		checkOcclusion(what .. ": HUD")
-		-- Diagnose
-		local diag = scan(j.id, what .. " Diagnose")
-		if not diag then
-			return false
+		return j
+	end
+
+	-- OBD am DiagnosticPoint ohne Werkzeugwahl: E -> Tester „Verbinden“ -> Fehlerspeicher (diagnose-Ereignis)
+	local function readFaultMemory(jobId, what, useWorld, withAnswers)
+		local m = pressAt(jobId, "DiagnosticPoint", what .. " OBD", useWorld)
+		if not T.check(g:Last(p, "scan", m) ~= nil, what .. ": Scan startet ohne Werkzeugwahl (" .. toastsSince(m) .. ")") then
+			return nil
 		end
-		click(buttonText(GARAGE_GUI, def.answers[def.cause], true), what .. ": Diagnose-Antwort")
-		g:Advance(0.4)
-		if not T.eq(job(j.id).phase, "repair", what .. ": Phase repair") then
-			return false
+		T.check(named(GARAGE_GUI, "ObdTester") ~= nil, what .. ": OBD-Tester verbindet")
+		T.eq(g:State(p).tool, "scanner", what .. ": OBD-Tester automatisch in der Hand")
+		g:Advance(2.8)
+		local diag = g:Last(p, "diagnose", m)
+		if not T.check(diag ~= nil, what .. ": Fehlerspeicher gelesen") then
+			return nil
 		end
-		local close = buttonText(GARAGE_GUI, "Schließen", true)
-		if close then
-			click(close, what .. ": Dialog schließen")
+		T.check(named(GARAGE_GUI, "ObdTester") ~= nil, what .. ": OBD-Tester zeigt das Ergebnis")
+		T.check(hasText(GARAGE_GUI, "Fahrzeugdiagnose · OBD"), what .. ": Tester-Titel")
+		if withAnswers then
+			T.check(#(diag.answers or {}) > 0, what .. ": Befund mit Antwortmöglichkeiten")
+		else
+			T.eq(#(diag.answers or {}), 0, what .. ": Fahrzeug-Check ohne Multiple-Choice-Antworten")
 		end
-		-- Reparatur
-		for i = 1, #def.steps do
-			if not repairStep(j.id, i, useWorld, kind == "oil" and i == 1) then
-				return false
+		checkTutorialHidden(what .. " (Tester)")
+		checkOcclusion(what .. " (Tester)")
+		-- Gerätetasten des Testers: Messwerte und zurück zum Fehlerspeicher
+		click(named(GARAGE_GUI, "TesterBtn_values"), what .. ": Tester „Messwerte“")
+		T.check(hasText(GARAGE_GUI, "Messwerte"), what .. ": Seite Messwerte")
+		click(named(GARAGE_GUI, "TesterBtn_codes"), what .. ": Tester „Fehlerspeicher“")
+		return diag
+	end
+
+	-- Reparaturschritt nur mit E (bzw. Weltklick): fährt die Bühne erst, drückt der Spieler einfach noch einmal
+	local function repairStepE(jobId, i, useWorld, cards)
+		local j = job(jobId)
+		local def = C.JobById[j.kind]
+		local step = def.steps[i]
+		local what = def.name .. " Schritt " .. i
+		if cards then
+			goTo(g:Car(p, jobId)[step.point])
+			T.check(vehicleButton("E") ~= nil, what .. ": Fahrzeugknopf E sichtbar")
+			showAllCards(what .. " (alle Karten + Fahrzeugknöpfe)")
+		end
+		local c, log = nil, {}
+		for _ = 1, 4 do
+			local m = pressAt(jobId, step.point, what, useWorld)
+			c = g:Last(p, "challenge", m)
+			if c then
+				break
 			end
+			table.insert(log, toastsSince(m))
+			g:Advance(2.6) -- Bühne fährt / Haube geht auf
 		end
-		-- Endkontrolle: Haube zu, Bühne unten, OBD
-		ensure(j.id, "hood", false)
-		ensure(j.id, "lifted", false)
-		scan(j.id, what .. " Endkontrolle")
-		if not T.eq(job(j.id) and job(j.id).phase, "invoice", what .. ": Phase invoice") then
+		if not T.check(c ~= nil, what .. ": QTE startet nur mit E (" .. table.concat(log, " || ") .. ")") then
 			return false
 		end
-		click(buttonText(GARAGE_GUI, "Schließen", true), what .. ": Endkontrolle schließen")
-		-- Abrechnen am Empfang im Tablet
+		local tool = g:State(p).tool
+		T.check(tool ~= "hand" and tool ~= nil, what .. ": Werkzeug automatisch in der Hand (" .. tostring(tool) .. ")")
+		T.check(p.Character:FindFirstChild("GarageTool") ~= nil, what .. ": Werkzeug-Modell in der Hand")
+		if step.equipment then
+			T.eq(g:Data(p).equipmentBays[step.equipment], j.bay, what .. ": Gerät automatisch an Bühne " .. tostring(j.bay))
+		end
+		if step.lifted ~= nil then
+			T.eq(visuals(jobId).lifted == true, step.lifted, what .. ": Bühne automatisch richtig")
+		end
+		g:Advance(0.1)
+		checkTutorialHidden(what .. " (QTE)")
+		checkOcclusion(what .. " (QTE)")
+		local stop = buttonText(GARAGE_GUI, "STOPP", true)
+		g:AdvanceTo(c.startAt + c.center * c.period)
+		local m = g:Mark()
+		Hit.Click(T, g, p, stop, { label = what .. ": QTE „STOPP“" })
+		if not T.check(g:HasToast(p, "Arbeit läuft", m), what .. ": Treffer (Toasts: " .. toastsSince(m) .. ")") then
+			return false
+		end
+		g:AdvanceTo(job(jobId).workUntil + 0.6)
+		return true
+	end
+
+	-- Endkontrolle nur mit E am OBD-Anschluss: Haube zu und Bühne runter macht der Server (danach noch einmal E)
+	local function finalCheckE(jobId, what, useWorld)
+		local scanned, log = nil, {}
+		for _ = 1, 4 do
+			local m = pressAt(jobId, "DiagnosticPoint", what .. " Endkontrolle", useWorld)
+			if g:Last(p, "scan", m) then
+				scanned = m
+				break
+			end
+			table.insert(log, toastsSince(m))
+			g:Advance(2.6)
+		end
+		if not T.check(scanned ~= nil, what .. ": Endkontrolle startet mit E (" .. table.concat(log, " || ") .. ")") then
+			return false
+		end
+		g:Advance(2.8)
+		T.check(g:Last(p, "diagnose", scanned) ~= nil, what .. ": Endkontrolle meldet Bericht")
+		local v = visuals(jobId)
+		T.eq(v.lifted == true, false, what .. ": Bühne automatisch unten")
+		T.eq(v.hood == true, false, what .. ": Haube automatisch zu")
+		if not T.eq(job(jobId) and job(jobId).phase, "invoice", what .. ": Phase invoice") then
+			return false
+		end
+		checkOcclusion(what .. ": Endkontrolle")
+		click(buttonText(GARAGE_GUI, "Schließen", true), what .. ": Tester schließen")
+		T.check(named(GARAGE_GUI, "ObdTester") == nil, what .. ": Tester zu")
+		return true
+	end
+
+	-- Abrechnen am Empfang im Tablet (Karte mit „Bühne n“)
+	local function settle(j, what)
 		local money = g:Data(p).money
 		if not openReception() then
-			return false
+			return nil
 		end
-		local settle = visibleIn(pg:FindFirstChild(GARAGE_GUI), function(x)
+		local btn = visibleIn(pg:FindFirstChild(GARAGE_GUI), function(x)
 			if not (x:IsA("GuiButton") and x.Text == "Abrechnen") then
 				return false
 			end
 			for _, s in ipairs(x.Parent:GetChildren()) do
-				if s:IsA("TextLabel") and s.Text:find(def.name, 1, true) and s.Text:find("Bühne " .. j.bay, 1, true) then
+				if s:IsA("TextLabel") and s.Text:find("Bühne " .. j.bay, 1, true) then
 					return true
 				end
 			end
 			return false
 		end)
 		local m = g:Mark()
-		click(settle, what .. ": „Abrechnen“")
+		click(btn, what .. ": „Abrechnen“")
 		local receipt = g:Last(p, "receipt", m)
 		T.check(receipt ~= nil, what .. ": Quittung")
 		T.check(job(j.id) == nil, what .. ": Auftrag abgerechnet")
@@ -582,15 +594,193 @@ local function play(T0, H, vp, path)
 		if hasText(GARAGE_GUI, "/ ULTIMATE CAR GAME") then
 			closeTablet()
 		end
+		return receipt
+	end
+
+	-- Befund des frisch angenommenen Fahrzeug-Checks festlegen (Testkontrolle statt Zufall: R.InspectionFinding)
+	local function forceFinding(j, finding)
+		local live = Flow.LiveJob(g, p, j.id)
+		if T.check(live ~= nil and live.kind == "inspection", "Fahrzeug-Check live") then
+			live.finding = finding
+		end
+	end
+
+	-- A) Fahrzeug-Check mit Befund -> Handy -> Ölwechsel -> Endkontrolle (Bühne hoch, Haube offen) -> Abrechnen
+	local function playCheckWithFinding()
+		local what = "Fahrzeug-Check mit Befund"
+		-- freie Hand: fester Hotbar-Platz (Taste 1), kein Werkzeug in der Hand
+		T.check(named(GARAGE_GUI, "ToolSlotHand") ~= nil, "Hotbar: Platz „Hand“ sichtbar")
+		click(named(GARAGE_GUI, "ToolSlotHand"), "Hotbar: freie Hand")
+		T.eq(g:State(p).tool, "hand", "freie Hand gewählt")
+		T.check(p.Character:FindFirstChild("GarageTool") == nil, "freie Hand: nichts in der Hand")
+		local j = acceptJob("inspection")
+		if not j then
+			return false
+		end
+		forceFinding(j, "oil")
+		local diag = readFaultMemory(j.id, what)
+		if not diag then
+			return false
+		end
+		T.eq(diag.phase, "approval", what .. ": Kunde muss freigeben")
+		T.eq(job(j.id).phase, "approval", what .. ": Phase approval")
+		T.check(type(diag.codes) == "table" and #diag.codes > 0, what .. ": Fehlercodes gespeichert")
+		T.check(hasText(GARAGE_GUI, "Fehler gespeichert"), what .. ": Tester zeigt „Fehler gespeichert“")
+		local code = diag.codes and diag.codes[1]
+		local codeText = type(code) == "table" and code.code or code
+		T.check(codeText ~= nil and hasText(GARAGE_GUI, tostring(codeText)), what .. ": Fehlercode " .. tostring(codeText) .. " im Tester")
+		T.check(hasText(GARAGE_GUI, "ruf ihn mit dem Handy an"), what .. ": Hinweis aufs Handy")
+		-- Kunden anrufen: Knopf im Tester -> Handy öffnet sich und wählt (Antwort: Testkontrolle „ja“)
+		local Phone = g:ClientModule(p, "Mini.PhoneUI")
+		local R = g:Rules()
+		local original = R.CustomerDecision
+		R.CustomerDecision = function()
+			return true
+		end
+		local m = g:Mark()
+		click(named(GARAGE_GUI, "CallCustomer"), what .. ": Tester „Kunden anrufen (P)“")
+		g:Advance(0.3)
+		T.check(named(GARAGE_GUI, "ObdTester") == nil, what .. ": Tester macht dem Handy Platz")
+		T.check(Phone.IsOpen() and Phone.IsVisible(), what .. ": Handy offen")
+		local ringing
+		for _, e in ipairs(g:Events(p, "call", m)) do
+			if e.state == "ringing" then
+				ringing = e
+			end
+		end
+		T.check(ringing ~= nil, what .. ": Es klingelt (" .. toastsSince(m) .. ")")
+		T.check(named("Handy", "CallScreen") ~= nil, what .. ": Anruf-Bildschirm")
+		checkOcclusion(what .. ": Anruf")
+		g:Advance(C.Inspection.RingSeconds + 0.5)
+		R.CustomerDecision = original
+		local answer
+		for _, e in ipairs(g:Events(p, "call", m)) do
+			if e.state == "answer" then
+				answer = e
+			end
+		end
+		if not T.check(answer ~= nil and answer.accepted == true, what .. ": Kunde gibt frei") then
+			return false
+		end
+		T.check(type(answer.text) == "string" and hasText("Handy", answer.text), what .. ": Antwort als Sprechblase im Handy")
+		click(named("Handy", "HangUp"), what .. ": Handy „Fertig“")
+		g:Advance(0.4)
+		T.check(not Phone.IsOpen(), what .. ": „Fertig“ schließt das Handy (Werkstatt wieder frei)")
+		T.check(not Phone.IsOpen(), what .. ": Handy zu")
+		local live = job(j.id)
+		T.eq(live and live.phase, "repair", what .. ": Phase repair nach der Freigabe")
+		T.eq(live and live.kind, "oil", what .. ": Befund wird repariert (Ölwechsel)")
+		T.eq(live and live.step, 1, what .. ": ab Schritt 1")
+		local def = C.JobById.oil
+		for i = 1, #def.steps do
+			if not repairStepE(j.id, i, false, i == 1) then
+				return false
+			end
+		end
+		-- Endkontrolle mit gehobener Bühne und offener Haube: Bühne per Fahrzeugknopf F wieder hoch
+		local plot = g:Plot(p)
+		goTo(plot.Bays:FindFirstChild("Bay_" .. job(j.id).bay).LiftControl, Vector3.new(0, 0, 1.5))
+		click(vehicleButton("F"), what .. ": Fahrzeugknopf F (Bühne hoch)")
+		g:Advance(2.6)
+		T.eq(visuals(j.id).lifted == true, true, what .. ": Bühne vor der Endkontrolle oben")
+		T.eq(visuals(j.id).hood == true, true, what .. ": Haube vor der Endkontrolle offen")
+		if not finalCheckE(j.id, what, false) then
+			return false
+		end
+		local receipt = settle(j, what)
+		T.check(receipt ~= nil and type(receipt.name) == "string" and receipt.name:find("Fahrzeug-Check", 1, true) ~= nil and receipt.name:find("Ölwechsel", 1, true) ~= nil,
+			what .. ": Quittung „Fahrzeug-Check + Ölwechsel“ (" .. tostring(receipt and receipt.name) .. ")")
 		return receipt ~= nil
 	end
 
-	local okCheck = playJob("inspection", true)
-	T.check(okCheck, "Fahrzeug-Check komplett")
-	local okOil = playJob("oil", false)
-	T.check(okOil, "Ölwechsel komplett")
+	-- B) Fahrzeug-Check ohne Befund, alles per Weltklick
+	local function playCheckClean()
+		local what = "Fahrzeug-Check ohne Befund"
+		local j = acceptJob("inspection")
+		if not j then
+			return false
+		end
+		forceFinding(j, nil)
+		local diag = readFaultMemory(j.id, what, true)
+		if not diag then
+			return false
+		end
+		T.eq(diag.phase, "repair", what .. ": ohne Fehler gleich zur Sichtprüfung")
+		T.check(type(diag.codes) == "table" and #diag.codes == 0, what .. ": Fehlerspeicher leer")
+		T.check(hasText(GARAGE_GUI, "Keine Fehler gespeichert"), what .. ": Tester zeigt „Keine Fehler gespeichert“")
+		T.check(named(GARAGE_GUI, "CallCustomer") == nil, what .. ": kein Anruf nötig")
+		click(buttonText(GARAGE_GUI, "Schließen", true), what .. ": Tester schließen")
+		T.eq(job(j.id).phase, "repair", what .. ": Phase repair")
+		local def = C.JobById.inspection
+		for i = 1, #def.steps do
+			if not repairStepE(j.id, i, true, false) then
+				return false
+			end
+		end
+		if not finalCheckE(j.id, what, true) then
+			return false
+		end
+		return settle(j, what) ~= nil
+	end
+
+	-- C) Ölwechsel ohne einen einzigen Werkzeugwechsel des Spielers
+	local function playOilNoToolSwitch()
+		local what = "Ölwechsel ohne Werkzeugwechsel"
+		local j = acceptJob("oil")
+		if not j then
+			return false
+		end
+		local from = #sent
+		local def = C.JobById.oil
+		-- Diagnose: E am OBD-Anschluss, im Tester unter „Befund“ die Ursache antippen
+		local diag = readFaultMemory(j.id, what, false, true)
+		if not diag then
+			return false
+		end
+		click(named(GARAGE_GUI, "TesterBtn_finding"), what .. ": Tester „Befund“")
+		click(named(GARAGE_GUI, "Answer_" .. def.cause), what .. ": Befund „" .. tostring(def.answers[def.cause]) .. "“")
+		g:Advance(0.4)
+		if not T.eq(job(j.id).phase, "repair", what .. ": Phase repair") then
+			return false
+		end
+		local close = buttonText(GARAGE_GUI, "Schließen", true)
+		if close then
+			click(close, what .. ": Tester schließen")
+		end
+		for i = 1, #def.steps do
+			if not repairStepE(j.id, i, false, false) then
+				return false
+			end
+		end
+		if not finalCheckE(j.id, what, false) then
+			return false
+		end
+		local manual = {}
+		for k = from + 1, #sent do
+			local a = sent[k]
+			if a == "tool" or a == "lift" or a == "hood" or a == "assignEquipment" then
+				table.insert(manual, a)
+			end
+		end
+		T.eq(#manual, 0, what .. ": keine Handgriffe nötig (" .. table.concat(manual, ", ") .. ")")
+		return settle(j, what) ~= nil
+	end
+
+	local okA = playCheckWithFinding()
+	T.check(okA, "Fahrzeug-Check mit Befund + Handy + Ölwechsel komplett")
 	local v = Tut.View()
 	T.check(v ~= nil and (v.step or 0) >= 8, "Tutorial bis nach dem Abrechnen weiter (Schritt " .. tostring(v and v.step) .. ")")
+	local okB = okA and playCheckClean()
+	T.check(okB, "Fahrzeug-Check ohne Befund komplett")
+	local okC = okB and playOilNoToolSwitch()
+	T.check(okC, "Ölwechsel ohne Werkzeugwechsel komplett")
+	local toolCmds = 0
+	for _, a in ipairs(sent) do
+		if a == "tool" then
+			toolCmds += 1
+		end
+	end
+	T.eq(toolCmds, 1, "einziger tool-Befehl: die freie Hand")
 	T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
 end
 
@@ -655,7 +845,7 @@ local cases = {
 	end },
 }
 for _, vp in ipairs(VIEWPORTS) do
-	table.insert(cases, { string.format("Studio-Spiel %dx%d: Lobby -> Open World, Startwahl Werkstatt, Tutorial, Fahrzeug-Check und Ölwechsel per Klick", vp[1], vp[2]), function(T, H)
+	table.insert(cases, { string.format("Studio-Spiel %dx%d: Lobby -> Open World, Startwahl Werkstatt, Tutorial, Fahrzeug-Check mit Handy-Freigabe, ohne Befund, Ölwechsel nur mit E", vp[1], vp[2]), function(T, H)
 		play(T, H, vp, "werkstatt")
 	end })
 	table.insert(cases, { string.format("Studio-Spiel %dx%d: Startwahl Autohaus – Gebäude fertig, Tutorial-Weg per Klick", vp[1], vp[2]), function(T, H)

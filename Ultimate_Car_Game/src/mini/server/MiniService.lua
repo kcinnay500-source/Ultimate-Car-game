@@ -1,6 +1,7 @@
 -- MiniService: bindet Minispiele und Stadt an GarageServer (ein Eingang, eine Sitzung, ein Profil).
 -- GarageServer ruft (MERGE_CONTRACT §3):
---   Init(ctx)          nach dem Laden: ctx = { emit, toast, changed, push, getSession, moveTo, now }
+--   Init(ctx)          nach dem Laden: ctx = { emit, toast, changed, push, getSession, moveTo, now, callCustomer }
+--                      (callCustomer(p, jobId) -> ok, msg: Kundenanruf des Handys, PhoneService/phone_call)
 --   Handles(action)    true für jede Aktion aus MiniNet.Actions
 --   Handle(p, a, args) in request() vor act(): Budget, transacting-Sperre und Arg-Filter sind schon geprüft
 --   Hello(p)           act 'hello'
@@ -59,6 +60,7 @@ local OWService = require(Server:WaitForChild("OWService")) -- Meilenstein 6: Op
 local StoryService = require(Server:WaitForChild("StoryService")) -- Meilenstein 7: Story, Kiesplatz, Nebenmissionen, Co-op
 local ShopService = require(Server:WaitForChild("ShopService")) -- Meilenstein 8: Shop (Kosmetik, DLC-Autos, Pässe, Quittungen)
 local StartService = require(Server:WaitForChild("StartService")) -- Startwahl in der Open World (vier Startwege)
+local PhoneService = require(Server:WaitForChild("PhoneService")) -- Handy: Kunden eines Fahrzeug-Checks anrufen (phone_call)
 local StoryRules = require(MiniShared:WaitForChild("StoryRules"))
 local Profiles = require(Server.Parent:WaitForChild("Profiles"))
 
@@ -328,6 +330,13 @@ end
 -- Auktions-Übergabe ins Auktionsbuch schreiben (vor dem Speichern beider Profile; darf warten)
 function api.recordTransfer(transfer)
 	return AuctionLedger.Record(transfer)
+end
+-- Handy (PhoneService): Kunden anrufen über GarageServer.callCustomer (ctx aus Mini.Init). Rückgabe ok, Meldung
+function api.callCustomer(p, id)
+	if ctx and type(ctx.callCustomer) == "function" then
+		return ctx.callCustomer(p, id)
+	end
+	return false, nil
 end
 -- Eingeliefertes Auto von der Straße holen
 function api.releaseCar(ms, id)
@@ -676,10 +685,11 @@ function Mini.Handle(p, action, args)
 		warn("[Minispiele] " .. action .. ": " .. tostring(err))
 	else
 		local succeeded = err == true -- Rückgabe true = Aktion wirklich gelungen (Tausch, Gebot, Wäsche, Tuning …)
-		-- Tutorial-Schritte "action:<name>" (mini_travel meldet sich selbst, nur bei gelungener Reise) und der
-		-- Beginner-Hinweis "first:dismantled"; danach ein eventueller Moduswechsel (lobby_go/lobby_return)
+		-- Tutorial-Schritte "action:<name>" nur nach einer gelungenen Aktion (Handler gibt true zurück, wie bei den
+		-- Nebenmissionen): ein abgelehntes Abholen/Verkaufen erledigt keinen Schritt. mini_travel meldet sich selbst
+		-- (nur bei gelungener Reise). Dazu der Beginner-Hinweis "first:dismantled"; danach ein eventueller Moduswechsel.
 		local okT, errT = pcall(function()
-			if action ~= "mini_travel" then
+			if succeeded and action ~= "mini_travel" then
 				TutorialService.OnEvent(ms, d, "action:" .. action)
 			end
 			if action == "mini_scrapyard_dismantle" then
@@ -987,6 +997,11 @@ function Mini.OnCharacter(p)
 	if not ok then
 		warn("[Minispiele] Figur: " .. tostring(err))
 	end
+	-- „Später entscheiden“: bei der nächsten Ankunft in der Werkstattmeile kommt die Startwahl wieder
+	local okS, errS = pcall(StartService.OnArrive, ms, p.profile.data)
+	if not okS then
+		warn("[Minispiele] Startwahl: " .. tostring(errS))
+	end
 end
 
 -- 2.4.0-Plot-Station geöffnet (World.Create-Rückruf "station" bzw. act 'travel'): Tutorial-Schritt
@@ -1096,6 +1111,7 @@ OWService.Register(Actions, api)
 StoryService.Register(Actions, api)
 ShopService.Register(Actions, api)
 StartService.Register(Actions, api)
+PhoneService.Register(Actions, api)
 
 for name in pairs(MiniNet.Actions) do
 	assert(Mini.Handlers[name], "Kein Handler für " .. name)

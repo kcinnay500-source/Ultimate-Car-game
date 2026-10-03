@@ -38,14 +38,15 @@ function I.new(player,callbacks)
         if state==Enum.UserInputState.Begin and not control.locked then callbacks.ToggleMenu() end
         return Enum.ContextActionResult.Sink
     end,false,10000,Enum.KeyCode.Tab)
-    local keys={Enum.KeyCode.One,Enum.KeyCode.Two,Enum.KeyCode.Three,Enum.KeyCode.Four,Enum.KeyCode.Five}
+    -- 3.0: Taste 1 = freie Hand, 2–6 = die fünf Werkzeugplätze (GarageClient ordnet Slot 1..6 zu)
+    local keys={Enum.KeyCode.One,Enum.KeyCode.Two,Enum.KeyCode.Three,Enum.KeyCode.Four,Enum.KeyCode.Five,Enum.KeyCode.Six} -- 3.0: Six dazu
     CAS:BindActionAtPriority("UCG_Hotbar",function(_,state,input)
         if UIS:GetFocusedTextBox() then return Enum.ContextActionResult.Pass end
         if state==Enum.UserInputState.Begin and not control.locked and callbacks.SelectTool then
             for slot,key in ipairs(keys) do if input.KeyCode==key then callbacks.SelectTool(slot);break end end
         end
         return Enum.ContextActionResult.Sink
-    end,false,3000,Enum.KeyCode.One,Enum.KeyCode.Two,Enum.KeyCode.Three,Enum.KeyCode.Four,Enum.KeyCode.Five)
+    end,false,3000,Enum.KeyCode.One,Enum.KeyCode.Two,Enum.KeyCode.Three,Enum.KeyCode.Four,Enum.KeyCode.Five,Enum.KeyCode.Six) -- 3.0: Taste 6
     -- 3.0: Taste M schaltet die Minispiele um (optional; Tab, 1–5, Leertaste und E/F/H bleiben unverändert)
     if callbacks.ToggleMini then
         CAS:BindActionAtPriority("UCG_Minigames",function(_,state)

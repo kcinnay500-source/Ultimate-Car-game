@@ -42,6 +42,13 @@ for _, mode in ipairs(MODES) do
 			return
 		end
 		local def = C.JobById[job.kind]
+		-- 3.0: Befund des Fahrzeug-Checks hängt am server-geheimen Salz (zufällig): hier „kein Befund“
+		local okLive, live = pcall(function()
+			return g:D(p)
+		end)
+		if okLive and live and live.jobs[1] and live.jobs[1].kind == "inspection" then
+			live.jobs[1].finding = nil
+		end
 		g:Send(p, "target", { id = job.id, car = true })
 		g:Send(p, "scan", { id = job.id })
 		g:Advance(3)

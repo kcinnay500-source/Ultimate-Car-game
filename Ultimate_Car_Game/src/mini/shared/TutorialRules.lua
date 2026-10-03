@@ -30,6 +30,7 @@ export type View = {
 -- Phasen eines 2.4.0-Auftrags (Rules.Accept/Diagnose/StartWork/Advance) -> erfüllte job:-Ereignisse
 local JOB_PHASES = {
 	diagnose = { accepted = true },
+	approval = { accepted = true }, -- Fahrzeug-Check mit Befund: Kunde muss per Handy freigeben (noch keine Reparatur)
 	repair = { accepted = true, repair = true },
 	working = { accepted = true, repair = true },
 	verify = { accepted = true, repair = true },
@@ -156,6 +157,9 @@ function TutorialRules.Restart(d: any): (boolean, string?)
 	if m.tutorialDone ~= true then
 		return false, TutorialRules.Text.restartRunning
 	end
+	-- beendet/übersprungen ohne Startwahl gilt als Veteran: den Weg jetzt festhalten (werkstatt), sonst wartete das
+	-- neu gestartete Tutorial auf eine Startwahl, die der Spieler mit dem Überspringen schon hinter sich gelassen hat
+	MetaRules.ResolveStartPath(d)
 	m.tutorialDone = false
 	m.tutorialSkipped = false
 	m.tutorialStep = 1
@@ -226,6 +230,7 @@ function TutorialRules.Skip(d: any): boolean
 	end
 	m.tutorialSkipped = true
 	m.tutorialDone = true
+	MetaRules.ResolveStartPath(d) -- übersprungen = Veteran der Startwahl (werkstatt, wenn noch keiner gewählt ist)
 	return true
 end
 
@@ -255,6 +260,28 @@ function TutorialRules.PendingJobEvent(d: any): string?
 		return nil
 	end
 	return TutorialRules.JobEvents(d)[step.event] and step.event or nil
+end
+
+-- Beginner-Hinweise zu Werkstatt-Aufträgen ("job:accepted", "job:approval"), die gerade fällig und noch nicht gesehen
+-- sind (TutorialService.Tick sendet sie; ändert nichts)
+function TutorialRules.PendingJobHints(d: any): { string }
+	local out = {}
+	local jobs = type(d) == "table" and d.jobs or nil
+	if type(jobs) ~= "table" or #jobs == 0 then
+		return out
+	end
+	local approval = false
+	for _, j in ipairs(jobs) do
+		if type(j) == "table" and j.phase == "approval" then
+			approval = true
+		end
+	end
+	for _, trigger in ipairs({ "job:accepted", approval and "job:approval" or nil }) do
+		if #TutorialRules.PeekHints(d, trigger) > 0 then
+			table.insert(out, trigger)
+		end
+	end
+	return out
 end
 
 -- Schritt, den der Passiv-Modus unmöglich macht (passiveSkip, z. B. Kiesplatz-Verkauf), bei aktivem Passiv-Modus:

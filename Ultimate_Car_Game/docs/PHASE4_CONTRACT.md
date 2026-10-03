@@ -55,10 +55,12 @@ Schlüssel, Tiefe ≤ 5). `MiniRules.DefaultGames/LoadGames` rufen sie auf. Nich
 d.games.meta     = { tutorialDone=bool, tutorialStep=int, tutorialSkipped=bool, tutorialRewarded=bool, beginner=bool,
                      passive=bool, single=bool, lastMode="lobby"|"openworld"|"tycoon", firstSeen=unix, playSeconds=int,
                      hintsSeen={ [hintId]=true },
-                     startPath=""|"werkstatt"|"autohaus"|"produktion"|"schrottplatz" }
+                     startPath=""|"werkstatt"|"autohaus"|"produktion"|"schrottplatz", startOffered=bool }
                      -- tutorialRewarded: Belohnung verbucht (Neustart am Kiosk ohne zweite)
                      -- startPath: Startwahl (§6a); "" = noch offen; Veteranen (d.completed > 0, Tutorial beendet/übersprungen,
                      -- tutorialStep ≥ 2 oder ein OW-Gebäude mit Stufe > 0) bekommen beim Laden "werkstatt"
+                     -- startOffered: die Wahl wurde schon gezeigt („Später entscheiden“) – dann zählen d.completed und
+                     -- tutorialStep nicht als Veteran, die Wahl bleibt offen, bis der Spieler wählt
 d.games.prestige = { claimed={ [rank:int]=true }, titleRank=int }          -- Rang = PrestigeRules.RankFor(d.level)
 d.games.tycoon   = { runsDone={ werkstatt=int, autohaus=int, produktion=int, schrottplatz=int },
                      rebirths=int, xpStage=0..5,       -- xpStage: Stufen-XP dieses Durchlaufs schon vergeben (kein XP-Farmen)
@@ -163,11 +165,15 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   Verlangt der aktuelle Schritt eine Station mit Level-Sperre (Autohaus ab 3), öffnet der Tab trotzdem (nur
   ansehen; Kauf/Probefahrt bleiben gesperrt). **Tutorial-Kiosk** in der Lobby: `tutorial_restart` startet es nach
   Ende/Überspringen neu (Schritt 1, ohne zweite Belohnung); LobbyUI zeigt dafür den Abschnitt „Tutorial“.
-- Beginner-Hinweise (`GameConfig.Hints`): `{ id, text, when="unlock:<key>"|"station:<key>"|"first:<stat>" }`, je
+- Beginner-Hinweise (`GameConfig.Hints`): `{ id, text, when="unlock:<key>"|"station:<key>"|"first:<stat>"|"job:<phase>" }`, je
   einmal (`meta.hintsSeen`), nur bei `beginner=true`; Anzeige als Karte oben rechts (nicht als Toast, Toasts bleiben
   2.4.0). `first:<stat>` löst nur beim Übergang 0 → 1 aus; 2.4.0-Veteranen (Profil ohne `meta`, `d.completed > 0`)
   bekommen `first:jobsDone`/`station:workshop` als gesehen. Karten (Hinweis, „Neu freigeschaltet“) liegen unter dem
   tatsächlichen Abzeichen und unter der Toast-Zone und laufen als Warteschlange nacheinander (nie überschrieben).
+  `job:accepted` (Hinweis `h_hand`: Werkzeug kommt automatisch, Taste 1 = freie Hand) und `job:approval` (Hinweis
+  `h_phone`: Kunden per Handy anrufen) prüft `TutorialService.Tick` über `TutorialRules.PendingJobHints(d)` – auch
+  ohne laufendes Tutorial. Tutorial-Ereignis `job:accepted` gilt ab Phase `diagnose` **oder `approval`**; `job:repair`
+  erst nach Diagnose **und** Kundenfreigabe (Phase `repair`, `working`, `verify`, `invoice`).
 - Unlock-Anzeige: Tab **„Freischaltungen“** (`unlocks`) mit der Tabelle Level → Freischaltung (erreicht/offen), plus
   HUD-Zeile „Nächste Freischaltung“. Beim Erreichen eines Levels mit Freischaltung: `mini_notice { kind="unlock" }`
   mit Titel (Client zeigt eine Karte mit Effekt).
@@ -186,17 +192,58 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
 - Story Kapitel 1, Mission an `PathSlot`: je Weg eine eigene erste Mission (`PathMissions`).
 - Client: ScreenGui `StartChoice` (DisplayOrder 40, voller Hintergrund), sichtbar solange `snapshot.start.pending`
   und Modus `openworld`; sie blendet sich aus, solange ein 2.4.0-Dialog (QTE/Diagnose), das Tablet oder das
-  Minispiel-Panel offen ist. „Später entscheiden“ blendet sie bis zum nächsten Betreten der Open World aus.
+  Minispiel-Panel offen ist. „Später entscheiden“ blendet sie bis zur nächsten Ankunft in der Werkstattmeile aus
+  (`StartService.OnArrive`, auch nach Respawn) oder bis zum Knopf **„Startweg wählen“** in der Handy-App Einstellungen
+  (`StartUI.Reopen`); `meta.startOffered` hält die Wahl offen, auch wenn inzwischen Aufträge abgerechnet wurden.
 
 ## 6b. Ebenen der Oberflächen (Studio-Klicktest `tests/test_studio_play.lua`)
 
-- Reihenfolge: Missionen 16, Tutorial 17, UnlockCards 18, ProgressHUD/TycoonHUD 19, **2.4.0-UI 20**, Fahren 25,
+- Reihenfolge: Missionen 16, Tutorial 17, UnlockCards 18, ProgressHUD/TycoonHUD/**Handy 19**, **2.4.0-UI 20** (mit dem
+  OBD-Tester „UCG-Tester 3000“ im Diagnose-Overlay), Fahren 25,
   Minispiel-Panel 30, StartChoice 40, GarageCelebrations 45. Alle Phase-4-Karten und -Abzeichen liegen **unter**
   dem 2.4.0-UI, damit Diagnose-/QTE-Dialoge, Tablet und Fahrzeugknöpfe (E/F/H) immer den Klick bekommen.
 - Kartenrahmen sind nicht `Active` (nur echte Knöpfe schlucken Klicks; Weltklicks bleiben frei). Karten werden mit
   `PrestigeUI.FreeRect` platziert (nie über der HUD-Leiste oder den Fahrzeugknöpfen) und blenden sich sofort aus,
   solange `IsBlocked`, das Tablet, das Panel oder der Fahr-HUD sichtbar ist (`MiniClient.RefreshOverlays` über
   GarageClient `opts.subscribe`).
+
+
+## 6c. Werkstatt 3.x: freie Hand, OBD-Tester, Fahrzeug-Check mit Handy (`PhoneService`, `PhoneUI`)
+
+- **Freie Hand:** `C.Tools.hand` + `C.HandTool = "hand"` (GarageShared.Config). Fester Extra-Platz vor der Leiste,
+  **nie** in `d.loadout` (`R.LoadData` filtert ihn, `R.SetLoadout` lehnt ihn ab, `R.ToolActive` ist immer true). Start-
+  und Respawn-Werkzeug der Sitzung; `F.Equip` hängt dafür kein Modell an. Client: Taste **1** = Hand, **2–6** =
+  Leistenplätze 1–5 (`InputController`, `GarageClient.toolButtons`).
+- **Nur mit E:** `work` ruft vor `jobConditions` `prepare()` auf: Gerät an die Bühne (anderes, nicht arbeitendes Gerät
+  wird ins Lager gestellt), Ersatzteil, Werkzeug (`autoTool`: Schritt-Werkzeug oder erlaubte Alternative aus der
+  Leiste), Bühne (`W.Lift`, Antwort „gleich nochmal E“) und Haube. Die Endkontrolle (Phase `verify`) schließt die Haube
+  und senkt die Bühne selbst. Der 0,5-s-Takt, `W.Sync` (`safeSync`, Nachholen über `p.syncPending`), `Mini.Tick` und
+  Autosave laufen je Sitzung in `pcall` – ein Fehler hält keine andere Sitzung und keinen Schritt mehr an.
+  `CarFactory`-Prompts: `Exclusivity = OnePerButton`; verdeckte Arbeitspunkte bedient der E/F/H-Knopf im Client.
+- **Neue Phase `approval`** (zwischen `diagnose` und `repair`, nur `kind = "inspection"`): Der OBD-Scan des Checks
+  (`R.InspectionScanned`) setzt `approval`, wenn `job.finding` gesetzt ist, sonst gleich `repair`. Job-Felder:
+  `finding` (Auftragsart oder nil), `salt` (server-geheim; legt Befund und Kundenantwort fest, Abbrechen gibt das
+  Angebot mit demselben Salz zurück), `approved` (bool), `inspectionBonus` (Check-Vergütung bei Ja, in `R.Settle`
+  addiert). `R.ClientSnapshot(d)` entfernt `salt` immer und `finding`/`approved` vor dem Scan. Bei Ja wird
+  `job.kind = finding` (normale Reparatur, Quittung „Fahrzeug-Check + …“), bei Nein nur der Check.
+  Regeln: `R.InspectionFinding`, `R.CustomerName`, `R.CustomerDecision`, `R.Approve`, `R.Tester` (Fehlercodes
+  `C.FaultCodes`, Live-Werte `C.LiveValues`/`C.LiveFaults`; nach der Reparatur leer, ein abgelehnter Befund bleibt).
+  Zahlen in `C.Inspection` (FindingChance 0,6, ApproveChance 0,8, RingSeconds 2,5, Kundennamen).
+- **Anruf:** `GarageServer.callCustomer(p, jobId?)` → `ok, msg`. Wege: 2.4.0-Aktion `call {id?}` über
+  `Remotes.Command` (GarageClient ohne Handy) und Mini-Aktion `phone_call {id}` (`PhoneService`, Abklingzeit 1 s im
+  Netz + 3 s je Spieler, ID-Whitelist `^[%w_%-]+$` ≤ 64, Auftrag muss in `d.jobs` stehen) über `ctx.callCustomer`
+  aus `Mini.Init`. Ereignis Server → Client `call`: `{job, state="ringing", customer, car, finding, findingName}`,
+  nach `RingSeconds` `{job, state="answer", accepted, text, result, customer}`; `{job, state="ended"}` bei Respawn,
+  Verlassen oder wenn der Auftrag nicht mehr wartet. Ein Anruf je Sitzung (`p.calling`).
+- **Ereignis `diagnose`** (OBD-Tester) zusätzlich: `kind, codes={{code,text}}, live={{name,value}}, finding,
+  findingName, approved, message ("Keine Fehler gespeichert" | "<n> Fehler gespeichert"), customer, phase`.
+  Der Fahrzeug-Check hat keine Multiple-Choice-Antworten mehr. Client: Tester „UCG-Tester 3000“ im 2.4.0-Overlay
+  (ScreenGui `UltimateCarGame`, DisplayOrder 20) mit den Seiten Fehlerspeicher, Messwerte, Befund, Endkontrolle,
+  Schließen; „Kunden anrufen (P)“ ruft `MiniClient.OpenPhone({job})` (ohne Handy: Aktion `call`).
+- **Handy** (`PhoneUI`, ScreenGui `Handy`, DisplayOrder 19, Taste **P** oder Handy-Knopf): Apps Kunden, Nachrichten,
+  Aufträge, Karte, Konto, Einstellungen; alle Symbole aus Frames. Sendet nur `phone_call` und `lobby_settings`.
+  Blendet sich bei QTE/Diagnose/Tester, Tablet, Minispiel-Panel und Fahr-HUD aus. `MiniClient.Start` bekommt dafür
+  `getState()` (2.4.0-Zustand) und `onEvent(fn)` (2.4.0-Ereignis `call`) von `GarageClient`.
 
 ## 7. Open World: Missionen, Story, Gebäude, Passiv-Modus (`OWRules`, `StoryRules`, `OWService`, `StoryService`, `StoryUI`, `BuildingsUI`, `MissionClient`)
 
@@ -339,6 +386,7 @@ lobby_mode {mode}  lobby_settings {single,passive,beginner}  lobby_go  lobby_ret
 party_create  party_join {code}  party_leave  party_kick {userId}
 tutorial_next {step}  tutorial_skip  tutorial_restart
 start_choose {path}                                                 -- Startwahl (§6a), einmalig
+phone_call {id}                                                     -- Handy: Kunden eines Fahrzeug-Checks anrufen (§6c)
 prestige_claim {rank}
 ow_build {typ}  ow_collect {typ}  ow_passive {on}
 story_start {id}  story_claim {id}  story_sell {offer, price}      -- price = Stufe 1..3 (Absicht)

@@ -215,15 +215,18 @@ function W.Objective(w,job)
     if v.moving then return "Die Hebebühne bewegt sich.",v.bay.LiftControl end
     if job.phase=="working" then return "Arbeit läuft · andere Kundenautos können bearbeitet werden.",v.model.EnginePoint end
     if job.phase=="invoice" then return "Rechnung am Empfang abschließen.",w.model.Stations.workshop end
-    if job.phase=="diagnose" then return "Mit dem OBD-Tester die Messwerte auslesen.",v.model.DiagnosticPoint end
+    if job.phase=="diagnose" then return job.kind=="inspection" and "Fahrzeug-Check: Am OBD-Anschluss E drücken und den Fehlerspeicher lesen." or "Mit dem OBD-Tester die Messwerte auslesen.",v.model.DiagnosticPoint end -- 3.0
+    -- 3.0: Kundenfreigabe per Handy; kein Arbeitspunkt am Auto aktiv.
+    if job.phase=="approval" then return "Ruf den Kunden mit dem Handy an (Taste P).",nil end
+    -- 3.0: Der Arbeitspunkt bleibt Ziel (E-Prompt aktiv), auch wenn Bühne oder Haube noch falsch stehen:
+    -- der Server fährt die Bühne bzw. öffnet/schließt die Haube beim E-Druck selbst.
     if job.phase=="verify" then
-        if v.lifted then return "Bühne für die Endkontrolle absenken.",v.bay.LiftControl end
-        if v.hood then return "Motorhaube für die Endkontrolle schließen.",v.model.HoodPoint end
+        if v.lifted or v.hood then return "Endkontrolle: E am OBD-Anschluss · Haube schließt und Bühne senkt sich automatisch.",v.model.DiagnosticPoint end -- 3.0
         return "Endkontrolle mit dem OBD-Tester durchführen.",v.model.DiagnosticPoint
     end
     if step then
-        if v.lifted~=step.lifted then return step.lifted and "Hebebühne anheben." or "Hebebühne absenken.",v.bay.LiftControl end
-        if step.hood and not v.hood then return "Motorhaube öffnen.",v.model.HoodPoint end
+        if v.lifted~=step.lifted then return step.name..": E drücken · die Bühne fährt automatisch "..(step.lifted and "hoch." or "runter."),v.model[step.point] end -- 3.0
+        if step.hood and not v.hood then return step.name..": E drücken · die Motorhaube öffnet automatisch.",v.model[step.point] end -- 3.0
         return step.name.." · "..C.Tools[step.tool].name,v.model[step.point]
     end
     return "",nil
@@ -260,7 +263,7 @@ function W.Sync(w,d)
             if prompt then
                 prompt.Enabled=part==target and not v.moving and j.phase~="working" and w.interactionJob~=j.id
                 prompt.ObjectText=C.CarById[j.carId].name.." · "..(C.PointNames[part.Name] or "")
-                prompt.ActionText=j.phase=="diagnose" and "OBD: Diagnose öffnen" or (j.phase=="verify" and "OBD: Endkontrolle" or (step and step.name or "Arbeiten"))
+                prompt.ActionText=j.phase=="diagnose" and (j.kind=="inspection" and "OBD: Fehlerspeicher lesen" or "OBD: Diagnose öffnen") or (j.phase=="verify" and "OBD: Endkontrolle" or (step and step.name or "Arbeiten")) -- 3.0
             end
         end
         local hood=v.model.HoodPoint.HoodPrompt

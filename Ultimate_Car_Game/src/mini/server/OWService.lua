@@ -493,8 +493,9 @@ function OWService.Collect(ms: any, d: any, typ: any, t: number?): any
 	return a
 end
 
-local function collect(ms: any, data: any, d: any, t: number)
-	OWService.Collect(ms, d, data.typ, t)
+-- Rückgabe true nur, wenn wirklich etwas abgeholt wurde (Tutorial-Schritt "action:ow_collect")
+local function collect(ms: any, data: any, d: any, t: number): boolean?
+	return OWService.Collect(ms, d, data.typ, t) ~= nil or nil
 end
 
 local function passive(ms: any, data: any, d: any, t: number)

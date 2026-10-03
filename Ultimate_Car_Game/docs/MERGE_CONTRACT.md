@@ -52,13 +52,13 @@ Hintergrund: `docs/analysis_2.4.0/*.md` (server, shared, client, world, merge, c
 
 | Stelle | Aufruf |
 |---|---|
-| nach dem Laden der Module | `Mini.Init({emit=emit, toast=toast, changed=changed, push=push, getSession=getSession, moveTo=moveTo, now=now})` |
+| nach dem Laden der Module | `Mini.Init({emit=emit, toast=toast, changed=changed, push=push, getSession=getSession, moveTo=moveTo, now=now, callCustomer=callCustomer})` – `callCustomer(p, jobId) -> ok, msg` (Handy, 3.x: `PhoneService`/`phone_call`, PHASE4_CONTRACT §6c) |
 | `request()` vor `act()` | `if Mini.Handles(action) then return Mini.Handle(p, action, a) end` (Mini-Aktionen sind vom 0,12-s-Namens-Cooldown ausgenommen; Budget, `transacting`-Sperre und Arg-Filter gelten) |
 | `act 'hello'` | `Mini.Hello(p)` |
 | `act 'settle'` nach Erfolg | `Mini.OnSettled(p)` |
 | `act 'yard'` nach Erfolg | `Mini.OnActivity(p)` |
 | `join()` nach Profil und Plot | `Mini.OnJoin(p)` |
-| 0,5-s-Tick je Sitzung | `Mini.Tick(p, now)` (auch während `transacting`: Produktion wird angesammelt, Geld aber nicht verändert) |
+| 0,5-s-Tick je Sitzung | `Mini.Tick(p, now)` (auch während `transacting`: Produktion wird angesammelt, Geld aber nicht verändert). 3.x: Takt, `W.Sync` und `Mini.Tick` laufen je Sitzung in `pcall` (ein Fehler hält keine andere Sitzung an) |
 | `PlayerRemoving` vor `P.Save` | `Mini.OnLeave(p, wasWritable)` |
 | `BindToClose` je Sitzung | `Mini.OnLeave(p, wasWritable)` |
 | `character()` nach `moveTo(home)` (Ausbaustufe 4) | `Mini.OnCharacter(p)` – Lobby/Tycoon-Spieler werden zur Zonen-Ankunft versetzt (`LobbyService.OnCharacter`), Open World bleibt in der Werkstatt |
@@ -75,6 +75,9 @@ Flache Nutzlast (≤ 10 Schlüssel, nur string/number/boolean), dazu optional `r
 
 `mini_press_click {count}`, `mini_press_buy {id, level}`, `mini_press_exchange {index}`, `mini_press_rebirth {rebirths}`, `mini_tuning_start {id}`, `mini_tuning_collect {slot}`, `mini_tuning_idle`, `mini_upgrade {key, level}` (nur `tuningLevel`, `scrapyardLevel`), `mini_scrapyard_buy`, `mini_scrapyard_dismantle`, `mini_scrapyard_sell`, `mini_quiz_new`, `mini_quiz_answer {token, choice}`, `mini_parking_new`, `mini_parking_tap {cell}`, `mini_daily_claim`, `mini_daily_goal_claim {id}`, `mini_milestone_claim {id}`, `mini_leaderboard_refresh`, `mini_pass_prompt {pass}`, `mini_travel {key}`, `mini_sync`.
 
+3.x: `phone_call {id}` (Handy, `PhoneService`). 2.4.0-Aktion (nicht Mini) `call {id?}` über `request()` → `act`:
+Kundenanruf ohne Handy-Modul. Werkzeugwahl `tool {id}` akzeptiert zusätzlich `id = "hand"` (`C.HandTool`, freie Hand).
+
 ### Events (Server → Client, `Event:FireClient(kind, data)`)
 
 | kind | data |
@@ -83,6 +86,7 @@ Flache Nutzlast (≤ 10 Schlüssel, nur string/number/boolean), dazu optional `r
 | `mini_open` | `{tab=string}` |
 | `mini_notice` | `{kind=string, ...}` (offline, quiz, scrapyard, rebirth, leaderboard, levelup wird **nicht** gesendet – 2.4.0 zeigt Level-ups selbst) |
 | `toast` | **String** (2.4.0-Format) |
+| `call` (3.x, 2.4.0-Ereignis) | `{job, state="ringing"\|"answer"\|"ended", customer, …}` – Kundenanruf des Fahrzeug-Checks (PHASE4_CONTRACT §6c) |
 
 ## 4. Welt (Stadt)
 
@@ -99,6 +103,7 @@ Flache Nutzlast (≤ 10 Schlüssel, nur string/number/boolean), dazu optional `r
 
 - `GarageClient` requiret `script.Parent:WaitForChild("Mini"):WaitForChild("MiniClient")` und ruft `MiniClient.Start({ isBlocked = function() ... end, closeTablet = function() ... end, openTablet = ... })` nach dem Aufbau des UI.
 - `MiniClient` hat einen eigenen `Event.OnClientEvent`-Listener für `mini*`-Kinds; 2.4.0 ignoriert unbekannte Kinds.
+- 3.x: `MiniClient.Start` bekommt zusätzlich `getState()` und `onEvent(fn)` (2.4.0-Ereignis `call`) fürs Handy (`PhoneUI`, ScreenGui `Handy`, DisplayOrder 19, Taste **P**); `MiniClient.OpenPhone({job})` öffnet es aus dem OBD-Tester. Werkzeugleiste: Taste **1** = freie Hand, **2–6** = Plätze 1–5.
 - ScreenGui `Minispiele`, DisplayOrder 30. Einstieg: Nav-Knopf „Minispiele“ im Tablet, HUD-Knopf neben „Menü [Tab]“, Taste **M** (über `InputController`), `mini_open` von Stationen.
 - Gegenseitiger Ausschluss: Minispiel-UI öffnet nicht während QTE/Diagnose (`isBlocked`), schließt beim Öffnen das Tablet; 2.4.0-HUD blendet sich bei offenem Minispiel-UI aus.
 - Theme = 2.4.0-Farben und -Schriften; eine Zahlenformatierung (`MiniLocale.Number`).
@@ -109,4 +114,4 @@ Flache Nutzlast (≤ 10 Schlüssel, nur string/number/boolean), dazu optional `r
 
 - `tests/mock_roblox.lua` bildet die für 2.4.0 nötige API nach (siehe `docs/analysis_2.4.0/merge.md` §5). Der Basisbaum (Nicht-Skript-Instanzen) wird für Tests aus dem Place geladen.
 - Tests starten `ServerScriptService.Garage.GarageServer` wie in Roblox und sprechen über `Remotes.Command`.
-- Pflicht-Szenarien: echte Hülle `{version=2,data,receipts,lock}` lädt ohne Verlust inkl. `games`; `version` bleibt 2; Robux-Kauf (`GrantCredits`) während Minispiel-Aktion verliert kein Geld; Minispiel-Aktionen während `transacting` blockiert; Klickpakete passieren den Cooldown; Leaderboard-Schreiben nur mit `writable`; 2.4.0-Reparaturablauf (Annehmen → Diagnose → Reparatur → Endkontrolle → Abrechnen) läuft; Plots aller 8 Slots überlappen weder sich noch die Stadt; Drehung 180° funktioniert für Ankunft, Rolltor und Hebebühne.
+- Pflicht-Szenarien: echte Hülle `{version=2,data,receipts,lock}` lädt ohne Verlust inkl. `games`; `version` bleibt 2; Robux-Kauf (`GrantCredits`) während Minispiel-Aktion verliert kein Geld; Minispiel-Aktionen während `transacting` blockiert; Klickpakete passieren den Cooldown; Leaderboard-Schreiben nur mit `writable`; 2.4.0-Reparaturablauf (Annehmen → Diagnose → [Fahrzeug-Check: Fehlerspeicher → Kundenanruf `approval`] → Reparatur nur mit E → Endkontrolle → Abrechnen) läuft; Plots aller 8 Slots überlappen weder sich noch die Stadt; Drehung 180° funktioniert für Ankunft, Rolltor und Hebebühne.

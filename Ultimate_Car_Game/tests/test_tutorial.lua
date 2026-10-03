@@ -389,21 +389,25 @@ return {
 		T.eq(S.notices(pl, "hint")[1].id, "h_workshop", "h_workshop")
 		-- 4..6: echter Auftrag
 		local money0 = d.money
-		local j = Flow.AcceptInspection(T, g, pl)
+		-- Fahrzeug-Check mit Befund (Ölwechsel): der OBD-Tester findet Fehler, der Kunde muss per Handy freigeben
+		local j = Flow.AcceptInspection(T, g, pl, { finding = "oil" })
 		T.check(j ~= nil, "Auftrag angenommen")
 		T.eq(step(g, d), 4, "vor dem Tick noch 4")
 		T.check(S.tick(pl), "Tick erkennt job:accepted")
 		T.eq(step(g, d), 5, "-> 5 obd")
 		T.check(not S.tick(pl), "nichts Neues")
 		local C = g:Config()
-		local def = C.JobById[j.kind]
-		local diag = Flow.Scan(T, g, pl, j.id)
+		local diag = Flow.Scan(T, g, pl, j.id, { auto = true })
 		T.check(diag ~= nil, "diagnose-Event")
+		T.eq(diag and diag.phase, "approval", "Fehler gespeichert: Freigabe nötig")
 		S.tick(pl)
-		T.eq(step(g, d), 5, "Scan allein reicht nicht (Phase diagnose)")
-		g:Send(pl, "diagnose", { id = j.id, choice = def.cause })
-		T.check(S.tick(pl), "Tick erkennt job:repair")
+		T.eq(step(g, d), 5, "Scan allein reicht nicht (Phase approval: Kunde anrufen)")
+		local answer = Flow.Call(T, g, pl, j.id, { decision = true })
+		T.eq(answer and answer.accepted, true, "Kunde gibt frei")
+		T.check(S.tick(pl) or step(g, d) == 6, "Tick erkennt job:repair")
 		T.eq(step(g, d), 6, "-> 6 repair")
+		local def = C.JobById[Flow.Job(g, pl, j.id).kind]
+		T.eq(def.id, "oil", "freigegebener Befund: Ölwechsel")
 		for i = 1, #def.steps do
 			T.check(Flow.RepairStep(T, g, pl, j.id, i), "Reparaturschritt " .. i)
 			S.tick(pl)
@@ -864,5 +868,38 @@ return {
 		end)
 		T.check(mod.CardVisible() and text.Text:find("noch einmal geschafft", 1, true) ~= nil and text.Text:find("Belohnung", 1, true) == nil, "Endkarte nach Neustart ohne Belohnung: " .. tostring(text.Text))
 		T.check(#g:Errors() == 0, "keine Clientfehler: " .. g:ErrorText())
+	end },
+	{ "Tutorial-Schritt action:<name> nur nach gelungener Aktion (abgelehntes Abholen zählt nicht)", function(T, H)
+		local g = H.Garage({})
+		local p = g:Join(7411, { name = "Abholer" })
+		g:Advance(1)
+		local TR = g:MiniShared("TutorialRules")
+		local d = g:D(p)
+		T.eq(g:Act(p, "start_choose", { path = "autohaus" }), "ok", "Startweg Autohaus")
+		g:Advance(0.5)
+		local guard = 0
+		while TR.Current(d, "openworld") and TR.Current(d, "openworld").event == "next" and guard < 5 do
+			guard += 1
+			g:Act(p, "tutorial_next", { step = d.games.meta.tutorialStep })
+			g:Advance(0.2)
+		end
+		local cur = TR.Current(d, "openworld")
+		if not T.eq(cur and cur.id, "ah_collect", "beim Schritt Abholen") then
+			return
+		end
+		local step = d.games.meta.tutorialStep
+		-- abgelehnt: Gebäude nicht gebaut / unbekannt -> nur Toast, kein Schritt
+		g:Act(p, "ow_collect", { typ = "produktion" })
+		g:Advance(1.1)
+		T.eq(d.games.meta.tutorialStep, step, "Abholen ohne Gebäude erledigt den Schritt nicht")
+		g:Act(p, "ow_collect", { typ = "mars" })
+		g:Advance(1.1)
+		T.eq(d.games.meta.tutorialStep, step, "unbekanntes Gebäude erledigt den Schritt nicht")
+		-- gelungen: Ertrag des geschenkten Autohauses
+		local money = d.money
+		T.eq(g:Act(p, "ow_collect", { typ = "autohaus" }), "ok", "Abholen beim Autohaus")
+		T.check(d.money > money, "Credits abgeholt")
+		T.eq(d.games.meta.tutorialStep, step + 1, "gelungenes Abholen erledigt den Schritt")
+		T.eq(#g:Errors(), 0, "keine Fehler: " .. g:ErrorText())
 	end },
 }

@@ -35,7 +35,7 @@ function Factory.AddPrompt(part, callback)
     prompt.ObjectText = "Kundenauto"
     prompt.MaxActivationDistance = 8
     prompt.HoldDuration = 0.12
-    prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
+    prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton -- 3.0: ein E-Druck löst nur einen Prompt aus (kein Doppel-E mit Stationen); verdeckte Arbeitspunkte deckt der E/F/H-Knopf im Client ab
     prompt.Style = Enum.ProximityPromptStyle.Custom
     prompt:SetAttribute("VehicleAction","work")
     prompt.RequiresLineOfSight = false
@@ -96,6 +96,7 @@ function Factory.Equip(player, toolId)
     if not character then return end
     local previous = character:FindFirstChild("GarageTool")
     if previous then previous:Destroy() end
+    if toolId == Config.HandTool or not Config.Tools[toolId] then return end -- 3.0: freie Hand = kein Werkzeugmodell
     local hand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
     if not hand then return end
     local tool = Instance.new("Model")

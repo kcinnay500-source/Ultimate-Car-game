@@ -90,6 +90,8 @@ MiniNet.Actions = {
 	shop_prompt = { product = "string" },
 	-- Startwahl in der Open World (PHASE4_CONTRACT §10): path = einer der vier Startwege (GameConfig.Start.Order)
 	start_choose = { path = "string" },
+	-- Handy (PhoneService): Kunden eines Fahrzeug-Checks anrufen (id = 2.4.0-Auftrags-Id "job_<n>", kein Betrag)
+	phone_call = { id = "string" },
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -140,6 +142,7 @@ MiniNet.Cooldowns = {
 	side_claim = 0.5,
 	shop_prompt = 3,
 	start_choose = 1,
+	phone_call = 1, -- PhoneService prüft zusätzlich 3 s je Spieler
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",
@@ -169,6 +172,7 @@ MiniNet.Targets = {
 	shop_buy = "item",
 	shop_equip = "slot",
 	shop_prompt = "product",
+	phone_call = "id",
 }
 
 -- Ereignisse Server -> Client

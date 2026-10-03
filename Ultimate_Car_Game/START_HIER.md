@@ -9,7 +9,11 @@
    **Tycoon** und drückst **„Los geht's“**. Du kannst auch zu einem der Portale in der Halle laufen und **E** drücken.
 4. In der Open World startet beim ersten Mal das Tutorial in deiner eigenen Werkstatt. Danach: Stationen in der Stadt
    mit **E** öffnen, Schnellreise im Tab **Stadtplan**, die Story beginnt am **Kiesplatz**.
-5. Zu zweit testen: **Test → Clients und Server**, 2 Spieler, Start. In der Lobby eine Party erstellen und den Code
+5. **Tasten in der Werkstatt:** **E** = am markierten Punkt arbeiten (Werkzeug, Hebebühne und Motorhaube kommen
+   automatisch) · **1** = freie Hand (nichts in der Hand) · **2–6** = Werkzeuge · **P** = Handy (Kunden anrufen,
+   Nachrichten, Aufträge, Karte, Konto, Einstellungen) · **F** = Hebebühne · **H** = Motorhaube · **TAB** = Tablet ·
+   **M** = Menü. Findet der OBD-Tester beim Fahrzeug-Check Fehler, ruf den Kunden mit dem Handy an.
+6. Zu zweit testen: **Test → Clients und Server**, 2 Spieler, Start. In der Lobby eine Party erstellen und den Code
    beim zweiten Spieler eingeben.
 
 Was du alles ausprobieren kannst, steht als Abhak-Liste in **[STUDIO_TESTS.md](STUDIO_TESTS.md)**.

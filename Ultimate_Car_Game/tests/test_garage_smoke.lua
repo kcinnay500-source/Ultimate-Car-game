@@ -38,6 +38,13 @@ local function acceptInspection(T, g, p)
 	T.check(g:HasToast(p, "Auftrag angenommen", m), "Toast 'Auftrag angenommen'")
 	local d = g:Data(p)
 	T.eq(#d.jobs, 1, "ein Auftrag aktiv")
+	-- 3.0: Befund des Fahrzeug-Checks hängt am server-geheimen Salz (zufällig): für diese Abläufe „kein Befund“
+	local ok, live = pcall(function()
+		return g:D(p)
+	end)
+	if ok and live and live.jobs[1] and live.jobs[1].kind == "inspection" and live.jobs[1].phase == "diagnose" then
+		live.jobs[1].finding = nil
+	end
 	return d.jobs[1]
 end
 
@@ -118,7 +125,19 @@ for _, mode in ipairs(MODES) do
 		local root = g:Root(p)
 		local home = g:Station(p, "home")
 		T.check(root and home and (root.Position - home.Position).Magnitude < 12, "Figur an Stations.home")
-		T.check(p.Character:FindFirstChild("GarageTool") ~= nil, "Werkzeug in der Hand (F.Equip)")
+		if mode == "base" then
+			T.check(p.Character:FindFirstChild("GarageTool") ~= nil, "Werkzeug in der Hand (F.Equip)")
+		else
+			-- 3.0: Start mit freier Hand (kein Werkzeug-Modell); Werkzeug erst bei Bedarf (Auswahl oder E)
+			T.eq(st.tool, "hand", "state.tool = freie Hand")
+			T.check(p.Character:FindFirstChild("GarageTool") == nil, "freie Hand: kein Werkzeug in der Hand")
+			g:Send(p, "tool", { id = "scanner" })
+			T.check(p.Character:FindFirstChild("GarageTool") ~= nil, "Werkzeug gewählt: in der Hand (F.Equip)")
+			g:Advance(0.2)
+			g:Send(p, "tool", { id = "hand" })
+			T.eq(g:State(p).tool, "hand", "zurück zur freien Hand")
+			T.check(p.Character:FindFirstChild("GarageTool") == nil, "Hand wieder frei")
+		end
 		-- Zweiter Spieler bekommt einen anderen Slot
 		local p2 = g:Join(1002)
 		g:Advance(0.6)
@@ -214,12 +233,29 @@ for _, mode in ipairs(MODES) do
 			return
 		end
 		T.eq(diag.job, j.id, "diagnose.job")
-		T.eq(#diag.answers, #def.answers, "Antwortmöglichkeiten")
-		T.eq(job(g, p, j.id).scanReady, true, "scanReady")
-		-- falsche Antwort kostet 5 Qualität? Nein – im Smoke-Test richtig antworten, Qualität bleibt 100
-		m = g:Mark()
-		g:Send(p, "diagnose", { id = j.id, choice = def.cause })
-		T.eq(g:Last(p, "diagnosisDone", m), j.id, "diagnosisDone")
+		if mode == "base" then
+			T.eq(#diag.answers, #def.answers, "Antwortmöglichkeiten")
+			T.eq(job(g, p, j.id).scanReady, true, "scanReady")
+			-- falsche Antwort kostet 5 Qualität? Nein – im Smoke-Test richtig antworten, Qualität bleibt 100
+			m = g:Mark()
+			g:Send(p, "diagnose", { id = j.id, choice = def.cause })
+			T.eq(g:Last(p, "diagnosisDone", m), j.id, "diagnosisDone")
+		else
+			-- 3.0: der Fahrzeug-Check liest den Fehlerspeicher (OBD-Tester), keine Multiple-Choice-Antworten
+			T.eq(#diag.answers, 0, "Fahrzeug-Check ohne Antwortmöglichkeiten")
+			T.check(type(diag.codes) == "table" and type(diag.live) == "table", "Fehlercodes und Messwerte")
+			T.check(type(diag.message) == "string" and diag.message:find("gespeichert", 1, true) ~= nil, "Meldung Fehlerspeicher")
+			if job(g, p, j.id).phase == "approval" then
+				-- Fehler gespeichert: Kunde per Handy fragen (Antwort bestimmt der Server)
+				T.check(#diag.codes > 0, "Befund hat Fehlercodes")
+				g:Send(p, "call", { id = j.id })
+				g:Advance(C.Inspection.RingSeconds + 0.3)
+				j = job(g, p, j.id)
+				def = C.JobById[j.kind]
+			else
+				T.eq(#diag.codes, 0, "kein Befund: Fehlerspeicher leer")
+			end
+		end
 		T.eq(job(g, p, j.id).phase, "repair", "Phase repair")
 		-- Reparaturschritte
 		for i = 1, #def.steps do

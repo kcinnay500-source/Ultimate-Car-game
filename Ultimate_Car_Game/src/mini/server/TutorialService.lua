@@ -334,6 +334,13 @@ function TutorialService.Tick(ms: any, d: any, now: number?): boolean
 		changed = grantReward(ms, d) or changed
 	end
 	TutorialService.Flush(ms)
+	-- Beginner-Hinweise zur Werkstatt (freie Hand / Werkzeug automatisch, Handy für die Kunden-Freigabe) – auch ohne
+	-- laufendes Tutorial, je einmal
+	for _, trigger in ipairs(TutorialRules.PendingJobHints(d)) do
+		if TutorialService.Hint(ms, d, trigger) > 0 then
+			changed = true
+		end
+	end
 	if not activeHere(ms, d) then
 		return changed
 	end

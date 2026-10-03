@@ -9,6 +9,8 @@
 --   Init(ctx)                         ctx aus MiniService.Init (now)
 --   OnJoin(ms, d, now)                Veteranen ohne Weg -> werkstatt; Sitzung zurücksetzen
 --   OnMode(ms, d, mode)               Open World betreten und Wahl offen: mini_notice { kind = "start", event = "offer" }
+--                                     (merkt meta.startOffered: die Wahl bleibt offen, bis der Spieler wählt)
+--   OnArrive(ms, d)                   Figur in der Open World erschienen: verschobene Wahl erneut anbieten
 --   SnapshotFields(ms, d, now, full)  { start = { path, pending, choices[] } } (choices nur, solange die Wahl offen ist)
 --   Choices()                         die vier Karten (sendbar) – auch für Tests
 -- Wirkung von start_choose {path}:
@@ -155,6 +157,7 @@ end
 function StartService.OnJoin(ms: any, d: any, _t: number?)
 	if ms then
 		ms.startOffered = nil
+		ms.startArrived = nil
 	end
 	MetaRules.ResolveStartPath(d)
 end
@@ -168,6 +171,7 @@ function StartService.OnMode(ms: any, d: any, mode: any): boolean
 	if not MetaRules.StartPending(d) then
 		return false
 	end
+	MetaRules.MarkStartOffered(d) -- gezeigt: „Später entscheiden“ bleibt offen, auch nach abgerechneten Aufträgen
 	dirty(ms)
 	if ms.startOffered then
 		return false
@@ -177,6 +181,20 @@ function StartService.OnMode(ms: any, d: any, mode: any): boolean
 		api.notice(ms, "start", { event = "offer", choices = StartService.Choices() })
 	end
 	return true
+end
+
+-- Ankunft in der Werkstattmeile (Figur erschienen, Mini.OnCharacter): Wer die Wahl mit „Später entscheiden“
+-- verschoben hat, bekommt sie hier wieder angeboten (auch im kombinierten Place ohne Lobby-Rundreise).
+function StartService.OnArrive(ms: any, d: any): boolean
+	if not ms or not inOpenWorld(ms) then
+		return false
+	end
+	if not ms.startArrived then
+		ms.startArrived = true -- erste Figur der Sitzung: OnJoin/OnMode hat die Wahl gerade schon angeboten
+		return false
+	end
+	ms.startOffered = nil
+	return StartService.OnMode(ms, d, modeOf(ms))
 end
 
 ---------------------------------------------------------------- Snapshot

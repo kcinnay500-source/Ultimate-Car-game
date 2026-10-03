@@ -13,6 +13,10 @@
 --   subscribe(fn)    meldet fn bei jedem Wechsel von 2.4.0-Dialog (InteractionOverlay), Tablet und Fahrzeugknöpfen an:
 --                    dann blendet RefreshOverlays sofort alle Phase-4-Karten/-Abzeichen aus bzw. ein (nicht erst im
 --                    nächsten 0,2-s-Takt), damit nie eine Karte im selben Moment über einem 2.4.0-Dialog liegt.
+--   getState()       der 2.4.0-Zustand (state.data.jobs …) – fürs Handy (Kunden mit Phase "approval", Aufträge)
+--   onEvent(fn)      meldet fn(kind, value) für 2.4.0-Server-Ereignisse an (heute "call": Kundenanruf) – fürs Handy
+-- Das Handy (PhoneUI, ScreenGui "Handy", DisplayOrder 19, Taste P) startet hier; MiniClient.OpenPhone({job}) öffnet es
+-- (der OBD-Tester ruft so den Kunden an).
 -- Alle Phase-4-Oberflächen außerhalb des Panels (Tutorial 17, Freischaltungen 18, Missionen 16, Abzeichen 19) liegen
 -- UNTER dem 2.4.0-UI (20); nur das Panel selbst (30) liegt darüber.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -67,6 +71,7 @@ local Tutorial -- TutorialUI (Ausbaustufe 4: Tutorial-Karte, Beginner-Hinweise; 
 local Tycoon -- TycoonClient (Meilenstein 4: Bargeld-Abzeichen, Pad-Blitz, Produzenten-Animationen; kein Tab)
 local Mission -- MissionClient (Meilenstein 7: Welt-Marker, Missions-/Kapitel-Karten, NPC-Kunden; eigener Heartbeat, kein Tab)
 local Unlocks -- GarageShared.Mini.Unlocks (repliziert): Sperrhinweis je Tab
+local Phone -- PhoneUI (Handy wie bei GTA 5: Kunden anrufen, Nachrichten, Aufträge, Karte, Konto, Einstellungen)
 local StartChoice -- StartUI (Startwahl in der Open World, ScreenGui "StartChoice"; optional, nur wenn das Modul da ist)
 local Modules = {}
 local LockNotes = {} -- [tab] = TextLabel „Ab Level n: …“ über dem Bereich (Bereiche bleiben sichtbar, nur markiert)
@@ -149,6 +154,9 @@ function MiniClient.Toast(text)
 	elseif UI then
 		UI.MirrorToast(text, true)
 	end
+	if Phone then
+		call(Phone.Notify, text) -- auch Hinweise, die nur der Client erzeugt, landen in „Nachrichten“
+	end
 end
 
 -- Oberkante der Toasts (2.4.0-Toast und Spiegel): während der Fahrt unter dem Tacho, sonst 62
@@ -177,6 +185,18 @@ function MiniClient.RefreshOverlays()
 	if StartChoice then
 		call(StartChoice.Render) -- Startwahl weicht 2.4.0-Dialog und Tablet aus (liegt sonst mit 40 darüber)
 	end
+	if Phone then
+		call(Phone.Refresh) -- Handy weicht QTE/OBD-Tester, Tablet, Panel und Fahrt aus
+	end
+end
+
+-- Handy öffnen (opts = { app = "kunden" | … } oder { job = Auftrags-Id } -> sofort den Kunden anrufen).
+-- Rückgabe true, wenn das Handy offen ist; false ohne Handy (dann sendet GarageClient den Anruf selbst).
+function MiniClient.OpenPhone(o)
+	if not Phone then
+		return false
+	end
+	return call(Phone.Open, o) == true
 end
 
 ---------------------------------------------------------------- Anzeige
@@ -266,6 +286,9 @@ local function onSnapshot(s)
 	end
 	if StartChoice then
 		call(StartChoice.OnSnapshot, s) -- Startwahl (snapshot.start.pending)
+	end
+	if Phone then
+		call(Phone.OnSnapshot, s) -- Handy: Konto, Einstellungen, Startwahl offen
 	end
 	if Modules.story and Modules.story.OnSnapshot then
 		call(Modules.story.OnSnapshot, s) -- Preistafel am Kiesplatz und Kunden-Countdown auch bei geschlossenem Panel
@@ -476,6 +499,31 @@ function MiniClient.Start(o)
 		if not okSt then
 			StartChoice = nil
 			warnOnce("start", "Startwahl nicht geladen: " .. tostring(errSt))
+		end
+	end
+
+	-- Handy (PhoneUI, eigene ScreenGui "Handy"): optional wie die Startwahl – fehlt es, läuft alles wie bisher
+	local phoneNode = folder:FindFirstChild("PhoneUI")
+	if phoneNode then
+		local okPh, errPh = pcall(function()
+			Phone = require(phoneNode)
+			Phone.Start({
+				UI = UI,
+				Remote = Remote,
+				Toast = MiniClient.Toast,
+				IsBlocked = MiniClient.IsBlocked,
+				IsTabletOpen = ctx.IsTabletOpen,
+				IsPanelOpen = MiniClient.IsOpen,
+				Open = MiniClient.Open,
+				Snapshot = MiniClient.Snapshot,
+				GetState = opts.getState,
+				OnEvent = opts.onEvent,
+				ReopenStart = StartChoice and StartChoice.Reopen or nil, -- „Startweg wählen“ in der App Einstellungen
+			})
+		end)
+		if not okPh then
+			Phone = nil
+			warnOnce("phone", "Handy nicht geladen: " .. tostring(errPh))
 		end
 	end
 

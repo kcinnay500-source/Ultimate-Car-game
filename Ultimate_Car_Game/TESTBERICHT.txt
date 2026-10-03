@@ -1,4 +1,5 @@
 TESTBERICHT – Ultimate Car Game 3.x mit Ausbaustufe 4 (Lobby, Tutorial, Prestige, Tycoon, Open World, Story, Shop)
+             + Werkstatt-Update (freie Hand, OBD-Tester, Fahrzeug-Check mit Fehlerspeicher und Handy)
 =====================================================================================================================
 
 Datum: 2026-10-03
@@ -8,10 +9,10 @@ Befehle:
   python3 tools/build_place.py --place openworld Ultimate_Car_Game_OpenWorld.rbxlx
   python3 tools/build_place.py --place tycoon    Ultimate_Car_Game_Tycoon.rbxlx
   python3 tools/export_fixture.py
-  python3 tools/validate.py Ultimate_Car_Game.rbxlx        (Laufzeit 8 Min. 29 s)
+  python3 tools/validate.py Ultimate_Car_Game.rbxlx        (Laufzeit 9 Min. 29 s)
   python3 tools/economy_sim.py --check
 
-Ergebnis: 2.058 Validierungsprüfungen + 65.171 Testprüfungen, 0 Fehler, 0 Warnungen
+Ergebnis: 2.145 Validierungsprüfungen + 72.074 Testprüfungen, 0 Fehler, 0 Warnungen
 Balance:  tools/economy_sim.py --check → 0 Verstöße (docs/BALANCE.md)
 
 Place-Dateien (alle vier gebaut, gleicher Code, Attribut PlaceKind)
@@ -23,9 +24,9 @@ Place-Dateien (alle vier gebaut, gleicher Code, Attribut PlaceKind)
 
 Basis
   - Place = Original 2.4.0 + Skripte aus src/ + Welt aus tools/worldgen (Stadt, Lobby, Tycoon-Gelände).
-  - 89 Skripte im Place. Roundtrip: gegenüber 2.4.0 nur Skripte geändert (10 Skripte, jede Änderung mit "-- 3.0:" markiert).
-  - Luau-Compiler: 129 Dateien, 0 Fehler.
-  - 71 Minispiel-Aktionen, 71 Server-Handler, alle vom Client gesendet, 277 requires geprüft. Keine neuen Remotes.
+  - 93 Skripte im Place. Roundtrip: gegenüber 2.4.0 nur Skripte geändert (10 Skripte, jede Änderung mit "-- 3.0:" markiert).
+  - Luau-Compiler: 140 Dateien, 0 Fehler.
+  - 73 Minispiel-Aktionen, 73 Server-Handler, alle vom Client gesendet, 290 requires geprüft. Keine neuen Remotes.
   - Test-Fixtures aktuell. Alle drei Einzel-Places werden bei jeder Validierung mitgebaut und geprüft.
 
 Welt (Budgets)
@@ -33,10 +34,19 @@ Welt (Budgets)
   - Lobby:     774 Parts (Budget 1.500),    9 Lichter (Budget 12).
   - Tycoon:    482 Parts (Budget 2.500),   12 Lichter (Budget 20).
   - Welt-Prüfungen von tools/worldgen/checks.py (Überlappungen, Z-Fighting, schwebende Teile, Stationen) sind Teil der
-    2.058 Validierungsprüfungen: 0 Fehler, 0 Warnungen.
+    2.145 Validierungsprüfungen: 0 Fehler, 0 Warnungen.
 
-Tests (35 Dateien; die Roblox-Nachbildung führt den echten GarageServer und GarageClient aus)
+Tests (41 Dateien; die Roblox-Nachbildung führt den echten GarageServer und GarageClient aus)
   - 2.4.0-Ablauf: Beitritt, Grundstück, Auftrag, Diagnose, Reparatur-QTE, Endkontrolle, Abrechnen, Speichern.
+  - Werkstatt-Update (Spielerbericht „Endkontrolle und Ölfilter hängen“):
+      alle Aufträge nur mit E (Werkzeug, Gerät, Hebebühne, Motorhaube automatisch; Ölwechsel Schritt 2 Ölfilter mit
+      Öl-Werkzeug in der Hand; Endkontrolle mit gehobener Bühne/offener Haube), geschützter 0,5-s-Takt (Fehler in
+      W.Sync/Takt einer Sitzung hält weder sie noch andere an, Abgleich wird nachgeholt), E-Druck an Station während
+      OBD-Scan bricht nichts ab (test_workshop_flow, test_workshop_stuck);
+      OBD-Tester-Seiten und Klicktreffer (test_obd_ui); Fahrzeug-Check: Fehlerspeicher, Phase approval, Kundenanruf
+      per Handy (Ja/Nein, deterministisch, kein Neu-Würfeln durch Abbrechen, Salz nie im Client), phone_call-Prüfungen
+      (test_phone); freie Hand auf Taste 1, Werkzeuge 2–6, Start/Respawn mit freier Hand; Studio-Klicktest
+      (test_studio_play, 6 Bildschirmgrößen) spielt beide Aufträge und den Anruf über echte GUI-Klicks.
   - Profil: Hülle {version=2,data,receipts,lock} inkl. games, Migration, NaN-Schutz, Sperre (Warten bei Ortswechsel).
   - Minispiele, Autos/Fahren/Tuning, Auktionshaus, Spielhalle (wie 3.0, siehe frühere Berichte).
   - Ausbaustufe 4:
