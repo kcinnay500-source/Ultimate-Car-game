@@ -28,7 +28,8 @@ GameConfig.Modes = { "lobby", "openworld", "tycoon" } -- p.mode, d.games.meta.la
 GameConfig.DefaultMode = "lobby" -- allererster Beitritt im all-Place
 GameConfig.SimulationNotice = "Studio-Simulation: Ortswechsel ohne Teleport"
 -- TeleportData (nur Strings/Zahlen/Booleans, geprüft): erlaubte Schlüssel und Längen
-GameConfig.TeleportDataKeys = { mode = "string", single = "boolean", party = "string" }
+-- leader (B-016): UserId des Party-Leiters beim Gruppen-Teleport – wirkt nur innerhalb der Party mit demselben Code
+GameConfig.TeleportDataKeys = { mode = "string", single = "boolean", party = "string", leader = "number" }
 GameConfig.TeleportDataMaxLength = 32
 -- Profil-Sperre beim Laden (Profiles.Load): nach einem Ortswechsel gibt der alte Server die Sperre erst beim
 -- Verlassen frei – so oft (je ProfileLockRetryWait Sekunden) erneut versuchen, bevor die Sitzung nur temporär läuft
@@ -150,6 +151,7 @@ GameConfig.Party = {
 	CodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", -- ohne I, O, 0, 1 (Verwechslung)
 	CodeTries = 20, -- Versuche für einen freien Code
 	InviteSeconds = 120, -- Beitrittsangebot (Code) gültig, danach muss der Leiter neu einladen
+	LeaderWaitSeconds = 120, -- B-016: so lange nach der Ankunft des Ersten kann der ursprüngliche Leiter noch übernehmen
 	TravelOfferSeconds = 30, -- Reiseangebot des Leiters an die Mitglieder (lobby_go)
 	CreateCooldown = 3,
 	JoinCooldown = 2,

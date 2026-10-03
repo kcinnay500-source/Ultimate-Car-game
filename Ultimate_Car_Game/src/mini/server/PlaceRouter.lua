@@ -48,7 +48,7 @@ local CityService = require(script.Parent:WaitForChild("CityService"))
 
 local PlaceRouter = {}
 
-export type GoData = { single: boolean?, party: string?, players: { Player }? }
+export type GoData = { single: boolean?, party: string?, players: { Player }?, leader: number? }
 export type GoResult = { mode: string, teleported: boolean, simulated: boolean, placeId: number?, message: string? }
 
 local TEXT = {
@@ -258,7 +258,7 @@ function PlaceRouter.SanitizeTeleportData(raw: any): { [string]: any }
 end
 
 -- Modus beim Beitritt (Vertrag §1). joinData = Player:GetJoinData() (oder nil). Setzt p.mode, p.single, p.partyCode.
--- Rückgabe: mode, info = { mode, single, party, source = "place" | "saved" | "teleport", placeKind }
+-- Rückgabe: mode, info = { mode, single, party, leader, source = "place" | "saved" | "teleport", placeKind }
 function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string, { [string]: any })
 	local kind = (type(placeKind) == "string" and GameConfig.PlaceKindSet[placeKind]) and placeKind or PlaceRouter.PlaceKind()
 	local d = p and p.profile and p.profile.data or nil
@@ -287,6 +287,12 @@ function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string
 	if type(td.party) == "string" then
 		party = string.upper(td.party)
 	end
+	-- B-016: Leiter-Kennung der Party (UserId). Unvertrauenswürdig wie der Party-Code: nur eine ganze positive Zahl,
+	-- und sie zählt nur zusammen mit einem Party-Code (LobbyService.OnJoin entscheidet, ob sie etwas bewirkt).
+	local leader = nil
+	if party and type(td.leader) == "number" and td.leader > 0 and td.leader % 1 == 0 and td.leader < 2 ^ 53 then
+		leader = td.leader
+	end
 	if p then
 		p.mode = mode
 		p.single = single
@@ -295,7 +301,7 @@ function PlaceRouter.InitialMode(p: any, placeKind: any, joinData: any): (string
 	if d then
 		MetaRules.SetMode(d, mode)
 	end
-	return mode, { mode = mode, single = single, party = party, source = source, placeKind = kind }
+	return mode, { mode = mode, single = single, party = party, leader = leader, source = source, placeKind = kind }
 end
 
 ---------------------------------------------------------------- Zonen (Simulation)
@@ -450,6 +456,7 @@ local function teleport(p: any, kind: string, placeId: number, data: GoData)
 		mode = kind,
 		single = data.single == true,
 		party = type(data.party) == "string" and string.sub(data.party, 1, GameConfig.TeleportDataMaxLength) or "",
+		leader = (type(data.party) == "string" and finite(data.leader)) and data.leader or nil, -- B-016
 	})
 	local players = {}
 	local seen = {}
