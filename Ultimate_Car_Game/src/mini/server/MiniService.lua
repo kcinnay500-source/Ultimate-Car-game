@@ -218,8 +218,10 @@ local function storyEventOf(kind, data)
 		return "track_finish"
 	elseif kind == "auction_won" then
 		return "auction_won"
-	elseif kind == "arcade_result" and not data.replay and not data.expired and not data.aborted and not data.rejected then
-		return "arcade_round" -- nur zu Ende gespielte, gewertete Runden (kein Sofort-Abbruch mit 0 Punkten)
+	elseif kind == "arcade_result" and not data.replay and not data.expired and not data.aborted then
+		-- nur zu Ende gespielte, gewertete Runden (kein Sofort-Abbruch mit 0 Punkten). data.rejected ist KEIN Ablehnungs-
+		-- Kennzeichen, sondern der Zähler gedrosselter Eingaben der Runde (meist 0, in Luau wahr) – er entscheidet hier nichts
+		return "arcade_round"
 	elseif kind == "ow_build" then
 		return "ow_built:" .. tostring(data.typ)
 	end
