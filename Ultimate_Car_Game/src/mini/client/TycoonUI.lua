@@ -31,8 +31,13 @@ local UI, Remote, T, ctx
 local refs = {}
 local latest = nil
 local pendingChoice = nil -- lokal gewählter Typ, bis der Snapshot den Durchlauf zeigt
+local pendingAt = 0 -- os.clock beim Senden der Wahl
 local trade = { to = nil, toName = nil, item = nil, qty = 1, price = 0, priceTouched = false, listOpen = false }
 local marketOffers = {} -- letzte Marktplatz-Angebote (mini_notice tycoon_market), auch als Spielerquelle
+
+-- B-011: Der Server lehnt eine Wahl nur per Toast ab (transacting, Rate-Budget, alle Grundstücke belegt) – ohne
+-- Durchlauf im Snapshot und ohne Hinweis. Die Sperre gilt deshalb höchstens so lange (Schutz vor Doppelklick).
+TycoonUI.PendingSeconds = 4
 
 TycoonUI.MaxQty = TY.TradeMaxQty or 999
 TycoonUI.MinPrice = TY.TradeMinPrice or 1
@@ -202,8 +207,15 @@ local function typeCard(parent, typ: string, order: number)
 			return
 		end
 		pendingChoice = typ
+		pendingAt = os.clock()
 		Remote.Send("tycoon_choose", { building = typ })
 		TycoonUI.Render(latest)
+		local sentAt = pendingAt
+		task.delay(TycoonUI.PendingSeconds + 0.05, function()
+			if pendingChoice ~= nil and pendingAt == sentAt then
+				TycoonUI.Render(latest) -- keine Antwort: Karten wieder freigeben
+			end
+		end)
 	end, { Name = "Choose_" .. typ, LayoutOrder = order, Size = UDim2.new(1, 0, 0, 120), AutomaticSize = Enum.AutomaticSize.Y, Text = "" })
 	local inner = UI.Frame(button, { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0) })
 	UI.Padding(inner, 14, 12)
@@ -761,7 +773,7 @@ function TycoonUI.Render(s)
 	local mode = latest and latest.mode or nil
 	local here = inTycoon()
 	local r = run()
-	if r then
+	if r or (pendingChoice ~= nil and os.clock() - pendingAt >= TycoonUI.PendingSeconds) then
 		pendingChoice = nil
 	end
 	refs.where.Text = r and ("Dein Durchlauf: " .. tostring(r.name or (TY.Buildings[r.building] and TY.Buildings[r.building].name) or r.building) .. ", Stufe " .. tostring(r.stage) .. "/" .. tostring(TY.MaxStage) .. ".")
