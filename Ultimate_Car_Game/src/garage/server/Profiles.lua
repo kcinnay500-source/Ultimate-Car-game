@@ -136,6 +136,7 @@ end
 -- Geld-/Auto-Änderungen so lange an). Rückgabe wie GrantCredits: granted, new.
 --   apply(data: table) -> boolean   false = Kauf jetzt nicht anwendbar (Deckel, Garage voll): nichts geschrieben,
 --                                    Roblox wiederholt den Beleg später (NotProcessedYet)
+--   Dritter Rückgabewert "busy" (nur bei granted=false): ein anderes Speichern lief nach 10 s noch.
 --   receiptPending = { id, snapshot, amount? } bleibt bis zur Auflösung (Save/Autosave warten; Purchases wiederholt).
 function Profiles.GrantReceipt(profile,purchaseId,apply,commit)
     if not profile.writable or not store or type(purchaseId)~="string" or #purchaseId>160 or type(apply)~="function" then return false end
@@ -143,6 +144,9 @@ function Profiles.GrantReceipt(profile,purchaseId,apply,commit)
     if profile.receiptPending and profile.receiptPending.id~=purchaseId then return false end
     local deadline=os.clock()+10
     while profile.saving and os.clock()<deadline do task.wait(0.1) end
+    -- 3.0: Dritter Rückgabewert "busy": ein anderes Speichern läuft noch (langsamer DataStore). Nichts wurde
+    -- 3.0: geschrieben und receiptPending ist nicht gesetzt – Purchases wiederholt die Quittung in der Sitzung.
+    if profile.saving and profile.writable then return false,nil,"busy" end
     if profile.saving or not profile.writable then return false end
     if profile.receipts and profile.receipts[purchaseId] then return true,false end
     if not profile.receiptPending then

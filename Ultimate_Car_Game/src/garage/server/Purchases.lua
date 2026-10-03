@@ -82,13 +82,14 @@ function Purchases.Init(getSession,onGranted,onDeferred)
     local function grant(session,receipt,product)
         local granted,new,result -- 3.0: result = ApplyReceipt-Ergebnis
         local deferred=nil -- 3.0: Grund, wenn ApplyReceipt die Quittung (noch) nicht anwenden konnte
+        local busy -- 3.0: "busy" = ein anderes Speichern lief noch (langsamer DataStore), nichts geschrieben
         if Purchases.Kind(product)=="credits" then
-            granted,new=Profiles.GrantCredits(session.profile,receipt.PurchaseId,product.credits)
+            granted,new,busy=Profiles.GrantCredits(session.profile,receipt.PurchaseId,product.credits)
         else
             -- 3.0: DLC-Auto/Kosmetik/Bündel: ShopRules.ApplyReceipt auf dem Schnappschuss, atomar mit der Quittung
             local rules=shop()
             if not rules then return false end
-            granted,new=Profiles.GrantReceipt(session.profile,receipt.PurchaseId,function(snapshot)
+            granted,new,busy=Profiles.GrantReceipt(session.profile,receipt.PurchaseId,function(snapshot)
                 local ok,res=rules.ApplyReceipt(snapshot,product,os.time()) -- 3.0: Ergebnis/Grund merken
                 if ok==true then result=res;deferred=nil else deferred=type(res)=="string" and res or "nicht anwendbar" end
                 return ok==true
@@ -104,20 +105,22 @@ function Purchases.Init(getSession,onGranted,onDeferred)
             if not ok then warn("[Purchases] onDeferred: "..tostring(err)) end
         end
         if granted then told[receipt.PurchaseId]=nil end -- 3.0
-        return granted,deferred~=nil -- 3.0: aufgeschoben (nicht anwendbar)?
+        return granted,deferred~=nil,busy=="busy" -- 3.0: aufgeschoben (nicht anwendbar)? Speicher beschäftigt?
     end
     Marketplace.ProcessReceipt=function(receipt)
         local product=Purchases.ByProduct(receipt.ProductId)
         local player=Players:GetPlayerByUserId(receipt.PlayerId)
         local session=player and getSession(player)
         if not product or not session or session.closing or type(receipt.PurchaseId)~="string" then return Enum.ProductPurchaseDecision.NotProcessedYet end
-        local granted,deferred=grant(session,receipt,product) -- 3.0
+        local granted,deferred,busy=grant(session,receipt,product) -- 3.0
         if granted then return Enum.ProductPurchaseDecision.PurchaseGranted end
         -- Roblox also retries receipts on rejoin. Resolve ambiguous store writes while
         -- the owner remains present so they do not have to spend Robux a second time.
         -- 3.0: auch aufgeschobene Shop-Quittungen (Garage voll) in der Sitzung wiederholen, damit ein frei
         -- gewordener Platz die Quittung sofort auflöst (nicht erst beim nächsten Beitritt).
-        if not retries[receipt.PurchaseId] and (session.profile.receiptPending or (deferred and session.profile.writable)) then
+        -- 3.0: ebenso, wenn GrantReceipt nur wegen eines noch laufenden (langsamen) Speicherns aufgegeben hat: dann ist
+        -- kein receiptPending gesetzt, und ohne Wiederholung bliebe der bezahlte Kauf bis zur nächsten Zustellung offen.
+        if not retries[receipt.PurchaseId] and (session.profile.receiptPending or ((deferred or busy) and session.profile.writable)) then
             retries[receipt.PurchaseId]=true
             local _,config=shop()
             local every=config and type(config.ReceiptRetrySeconds)=="number" and config.ReceiptRetrySeconds or 8 -- 3.0
