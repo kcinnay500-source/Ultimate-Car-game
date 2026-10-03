@@ -362,6 +362,10 @@ GameConfig.Hints = {
 	{ id = "h_map", when = "station:map", text = "Mit dem Stadtplan reist du schnell durch die Stadt – und jederzeit zurück zu deiner Werkstatt." },
 	{ id = "h_shop", when = "station:shop", text = "Im Credit-Center gibt es Credits und Pässe. Alles im Spiel schaffst du auch ohne Robux." },
 	{ id = "h_tycoon", when = "station:mode_tycoon", text = "Tycoon: eine Tycoon-Runde mit Bargeld. Fertige Runden bringen dauerhafte Boni in der Open World." },
+	-- 3.x: Startauto Flitzer (CarService: Willkommens-Flitzer nach der Startwahl) und Große Werkstatt (Stationen)
+	{ id = "h_flitzer", when = "car:intro", text = "Das ist dein Flitzer – klein und schnell! Steig ein und fahr los. Später rufst du ihn jederzeit mit Taste G oder im Handy (P) unter „Auto rufen“." },
+	{ id = "h_grosswerkstatt", when = "station:grosswerkstatt", text = "Große Werkstatt: Hier reparierst du deine eigenen Autos. Reparierte Autos verkaufst du im Autohaus teurer. Bleib in der Nähe, bis die Reparatur fertig ist." },
+	{ id = "h_teileankauf", when = "station:teileankauf", text = "Teile-Ankauf: Die Große Werkstatt zahlt dir mehr für Altteile als der Schrotthändler – Schrottplatz-Profis bekommen noch etwas extra." },
 } :: { Hint }
 
 ---------------------------------------------------------------- Deckel der Werkstatt-Vergütung (§8)
@@ -1427,10 +1431,14 @@ GameConfig.StarterCar = {
 	CallCooldown = 5, -- Sekunden zwischen zwei car_call eines Spielers
 	SearchRadius = 300, -- Studs: so weit sucht der Server die nächste Fahrbahn (City.Roads, Asphalt / CarRoad)
 	RoadMargin = 5, -- Abstand der Wagenmitte zum Fahrbahnrand
+	CarHalfWidth = 3.25, -- 3.x: halbe Breite eines gerufenen Autos (Verkehrsspur-Abstand)
+	LaneGap = 1, -- 3.x: Luft zwischen gerufenem Auto und Verkehr: nie in einer Verkehrsspur abstellen
 	RoadCandidates = 8, -- so viele nächstgelegene Fahrbahnstücke werden geprüft
 	SlideStep = 9, -- belegt (Laterne, Ampel, Auto): so weit entlang der Fahrbahn ausweichen
 	IntroDelay = 2, -- Sekunden in der Open World nach der Startwahl, bis der Begrüßungs-Flitzer kommt
 	IntroRetry = 5, -- erneuter Versuch, wenn gerade kein Platz frei war
+	NearRoad = 24, -- liegt die nächste Fahrbahn weiter weg, kommt das Auto auf einen freien, ebenen Platz direkt neben dich
+	BesideOffset = 8, -- so weit neben/vor dem Spieler (Studs)
 	ClientSendGap = 1, -- Client: Taste G höchstens 1× pro Sekunde
 	Text = {
 		intro = "Dein Flitzer! Ruf ihn jederzeit mit dem Handy (P) → „Auto rufen“ oder Taste G",

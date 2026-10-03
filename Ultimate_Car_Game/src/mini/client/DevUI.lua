@@ -405,6 +405,29 @@ function DevUI.Start(c: any)
 	end
 	build()
 	UserInputService.InputBegan:Connect(onInput)
+	-- Chat „/dev“ zusätzlich auf dem Client: der vom Server angelegte TextChatCommand (DevService.CommandName) wird
+	-- repliziert; löst er hier aus, fragt der Client per dev_open an (der Server prüft IsDev und öffnet höchstens
+	-- einmal je Moment, falls auch sein eigenes Triggered/Chatted feuert). So öffnet „/dev“ in jedem Chat-Modus.
+	task.spawn(function()
+		pcall(function()
+			local tcs = game:GetService("TextChatService")
+			local folder = tcs:WaitForChild("TextChatCommands", 30)
+			local cmd = folder and folder:WaitForChild("UCGDevCommand", 30)
+			if not cmd then
+				return
+			end
+			cmd.Triggered:Connect(function(source)
+				local me = Players.LocalPlayer
+				local id = nil
+				pcall(function()
+					id = source and source.UserId
+				end)
+				if me and (id == nil or id == me.UserId) and not isOpen then
+					DevUI.Request()
+				end
+			end)
+		end)
+	end)
 	if ctx.Listen ~= false then
 		local ok, err = pcall(function()
 			local event = ReplicatedStorage:WaitForChild("GarageShared"):WaitForChild("Remotes"):WaitForChild("Event")

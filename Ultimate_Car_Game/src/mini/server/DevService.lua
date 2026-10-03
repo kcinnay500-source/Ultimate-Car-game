@@ -329,6 +329,16 @@ local function resetStart(ms: any, d: any): (boolean, string?)
 	local okS, StartService = pcall(function()
 		return require(script.Parent:WaitForChild("StartService", 5))
 	end)
+	-- StartService.ResetStart (Story-Team): Weg leeren, Wahl bleibt Pflicht, Tutorial auf Schritt 1 (ohne zweite
+	-- Belohnung), Kapitel 1 zurück, mini_notice start/reset, in der Open World sofort die Startwahl
+	if okS and type(StartService) == "table" and type(StartService.ResetStart) == "function" then
+		local ok, res = pcall(StartService.ResetStart, ms, d)
+		if not ok then
+			warn("[Dev] StartService.ResetStart: " .. tostring(res))
+			return false, DevService.Text.invalid
+		end
+		return res == true, nil
+	end
 	if okS and type(StartService) == "table" and type(StartService.DevReset) == "function" then
 		local ok, res, msg = pcall(StartService.DevReset, ms, d)
 		if not ok then

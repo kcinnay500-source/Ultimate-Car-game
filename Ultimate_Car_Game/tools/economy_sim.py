@@ -56,8 +56,8 @@ ASSUME = {
     "arcade_score": 700, "arcade_overhead": 9.0, "arcade_duration_share": 0.9,
     # Presse: Klicks pro Sekunde eines Menschen (Serverlimit 20/s), Zeit bis das Guthaben umgetauscht wird
     "press_cps": 6.0,
-    # Teststrecke: Rundenzeiten (Oval ~780 Studs) und Zeit je Versuch inkl. Hinfahrt/Startampel
-    "track_first": 16.0, "track_best": 10.0, "track_runs": 10, "track_run_seconds": 60.0, "track_drive_there": 60.0,
+    # Teststrecke: Rundenzeiten (3.x Grand-Prix-Kurs ~1220 Studs, 20–45 s) und Zeit je Versuch inkl. Hinfahrt/Startampel
+    "track_first": 40.0, "track_best": 25.0, "track_runs": 10, "track_run_seconds": 75.0, "track_drive_there": 60.0,
     # Spielzeit-Verlauf der Werkstatt
     "reserve": 0,             # Mindestguthaben, das beim Ausbau stehen bleibt
     # abgeschlossene Tuning-Projekte je Level (lassen die passive Tuning-Rate wachsen)

@@ -456,7 +456,23 @@ Zebras Z2 / Z3 / Z14–16 get 2 amber globe beacons each (striped pole plus Neon
 
 NPC cars also stop whenever a character stands on any crosswalk band ahead within 20 studs.
 
+**3.x update (CityClient, ground_roads.signal_masts).** The table above is superseded: cycle 32 s, Meile green 0–11.5,
+amber to 14.5; Markt green 16–27.5, amber to 30.5 (3 s amber, 1.5 s all-red each way). Pedestrians crossing the Markt
+road: green 0.5–10.5; crossing the Meile: green 16–26 (each ≥ 4 s before cars get green). Every mast carries an explicit
+`PedPhase`; pedestrian heads face across their crosswalk. The four Querachse masts now also have a vehicle head
+(`Serves = "Markt"`). Off lenses are dark SmoothPlastic (18 % colour), on lenses Neon. All heads switch in the same
+frame. Loops carry `StopLines` (real line positions, derived from the crosswalk list) instead of `Stops`; cars stop
+with the front 3.5 studs before the line.
+
 ### 3.7 NPC traffic loops
+
+**3.x update:** waypoints are a `Waypoints` text attribute (no WP parts). Cars are kinematic (accelerate ≤ 6, comfort
+braking 5, max 12 studs/s²), queue 5.5 studs bumper to bumper, ~1.5 s gap while moving, slow down for curves, stop
+4 studs before people/player cars and before an occupied crosswalk. Each car has an invisible collision box
+`Kollision` (CanCollide on), so players cannot walk through cars; far cars keep their logic at 2 Hz. 3.x: there is no
+traffic loop on the Grand-Prix course any more (time-trial cars would run into the solid traffic boxes from behind);
+`checks.vehicle_checks` asserts that no loop comes near the track surface. The section "Loop T" below is historical.
+
 All client-side lite cars, with CanCollide, CanQuery and CanTouch false, moved by `workspace:BulkMoveTo`. Car Root Y = −0.95. Right-hand traffic, lanes ±6.5 from the centre line.
 - Car following: stop if another car is within 14 ahead on the same loop.
 - Animation runs only within 300 studs of the camera. Farther cars are parked, not moved.
@@ -487,7 +503,7 @@ All client-side lite cars, with CanCollide, CanQuery and CanTouch false, moved b
 (131.5,-348.5) (-131.5,-348.5) (-138.5,-347.6) (-145,-344.9) (-150.6,-340.6) (-154.9,-335) (-157.6,-328.5) (-158.5,-321.5) (-158.5,179.5) (-157.6,186.5) (-154.9,193) (-150.6,198.6) (-145,202.9) (-138.5,205.6) (-131.5,206.5) (131.5,206.5) (138.5,205.6) (145,202.9) (150.6,198.6) (154.9,193) (157.6,186.5) (158.5,179.5) (158.5,-321.5) (157.6,-328.5) (154.9,-335) (150.6,-340.6) (145,-344.9) (138.5,-347.6) -> close
 ```
 
-**Loop T "Teststrecke"**: clockwise, 26 waypoints, length 779. 2 demo cars at 55 st/s on the straights and 35 in the curves. The start lights blink on each lap.
+**Loop T "Teststrecke"** (removed in 3.x, kept for reference): clockwise, 26 waypoints, length 779. 2 demo cars at 55 st/s on the straights and 35 in the curves. The start lights blink on each lap.
 
 ```
 (-85,270) (85,270) (103.1,272.4) (120,279.4) (134.5,290.5) (145.6,305) (152.6,321.9) (155,340) (152.6,358.1) (145.6,375) (134.5,389.5) (120,400.6) (103.1,407.6) (85,410) (-85,410) (-103.1,407.6) (-120,400.6) (-134.5,389.5) (-145.6,375) (-152.6,358.1) (-155,340) (-152.6,321.9) (-145.6,305) (-134.5,290.5) (-120,279.4) (-103.1,272.4) -> close

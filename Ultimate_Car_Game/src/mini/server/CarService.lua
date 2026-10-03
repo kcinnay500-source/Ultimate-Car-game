@@ -81,6 +81,8 @@ local STARTER_DEFAULTS = {
 	SlideStep = 9, -- Ausweichen entlang der Fahrbahn (Studs)
 	IntroDelay = 2, -- Sekunden in der Open World, bevor der Begrüßungs-Flitzer kommt
 	IntroRetry = 5, -- erneuter Versuch, wenn gerade kein Platz war
+	NearRoad = 24, -- liegt die nächste Fahrbahn weiter weg: erst ein freier, ebener Platz direkt neben dem Spieler
+	BesideOffset = 8, -- so weit neben/vor den Spieler (Studs)
 	Text = {
 		intro = "Dein Flitzer! Ruf ihn jederzeit mit dem Handy (P) → „Auto rufen“ oder Taste G",
 		called = "%s ist da – gute Fahrt!",
@@ -933,7 +935,74 @@ local function spotFree(cf)
 	return not ok or not blocked
 end
 
--- Ziel-CFrame (Boden unter den Reifen) auf der nächsten freien Fahrbahnstelle neben dem Spieler, oder nil
+-- 3.x: Fahrspuren des Stadtverkehrs (City.Animated.TrafficLoops.*.Waypoints) einmal lesen. Ein gerufenes Auto darf
+-- nicht in einer Spur stehen, sonst wartet die ganze Schleife dahinter. Je Schleife: Segmente und die halbe Breite des
+-- breitesten Verkehrsfahrzeugs (Attribut Width der Modelle unter City.Animated.Verkehr, Bus 8,3).
+local laneCache = nil
+local function trafficLanes()
+	if laneCache and laneCache.folder ~= nil and laneCache.folder.Parent ~= nil then
+		return laneCache.segs
+	end
+	local segs = {}
+	local c = city()
+	local anim = c and c:FindFirstChild("Animated")
+	local loops = anim and anim:FindFirstChild("TrafficLoops")
+	local widths = {}
+	local verkehr = anim and anim:FindFirstChild("Verkehr")
+	if verkehr then
+		for _, m in ipairs(verkehr:GetChildren()) do
+			local key, w = m:GetAttribute("Loop"), m:GetAttribute("Width")
+			if type(key) == "string" and type(w) == "number" then
+				widths[key] = math.max(widths[key] or 0, w)
+			end
+		end
+	end
+	if loops then
+		for _, f in ipairs(loops:GetChildren()) do
+			local wp = f:GetAttribute("Waypoints")
+			if type(wp) == "string" then
+				local key = string.gsub(f.Name, "^Loop_", "")
+				local half = (widths[key] or 8.3) / 2
+				local pts = {}
+				for x, y, z in string.gmatch(wp, "(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+)") do
+					table.insert(pts, Vector3.new(tonumber(x), tonumber(y), tonumber(z)))
+				end
+				for i = 1, #pts do
+					table.insert(segs, { a = pts[i], b = pts[i % #pts + 1], half = half })
+				end
+			end
+		end
+	end
+	-- ohne TrafficLoops-Ordner (z. B. Tests ohne Stadt) wird beim nächsten Mal neu gelesen
+	laneCache = { folder = loops, segs = segs }
+	return segs
+end
+CarService._resetLanes = function()
+	laneCache = nil
+end
+
+-- Liegt die Wagenmitte so nah an einer Verkehrsspur, dass Verkehr dort anhalten müsste?
+-- Abstand zur Spurmitte < halbe Verkehrsbreite + halbe Autobreite (StarterCar.CarHalfWidth) + LaneGap
+function CarService.InTrafficLane(spot)
+	local extra = (starterCfg("CarHalfWidth") or 3.25) + (starterCfg("LaneGap") or 1)
+	for _, sg in ipairs(trafficLanes()) do
+		local a, b = sg.a, sg.b
+		if math.abs(spot.Y - a.Y) < 12 then
+			local abx, abz = b.X - a.X, b.Z - a.Z
+			local len2 = abx * abx + abz * abz
+			local t = len2 > 1e-6 and math.clamp(((spot.X - a.X) * abx + (spot.Z - a.Z) * abz) / len2, 0, 1) or 0
+			local dx, dz = spot.X - (a.X + abx * t), spot.Z - (a.Z + abz * t)
+			local lim = sg.half + extra
+			if dx * dx + dz * dz < lim * lim then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- Ziel-CFrame (Boden unter den Reifen) auf der nächsten freien Fahrbahnstelle neben dem Spieler, oder nil.
+-- 3.x: nie in einer Verkehrsspur (CarService.InTrafficLane); quer zur Fahrbahn wird auch der Randstreifen probiert.
 function CarService.RoadSpot(cs, pos, look)
 	local margin = starterCfg("RoadMargin")
 	local radius = starterCfg("SearchRadius")
@@ -955,7 +1024,11 @@ function CarService.RoadSpot(cs, pos, look)
 	end)
 	local step = starterCfg("SlideStep")
 	local P = CarCatalog.Physics
-	for i = 1, math.min(#cands, starterCfg("RoadCandidates")) do
+	local tried = 0
+	for i = 1, #cands do
+		if tried >= starterCfg("RoadCandidates") then
+			break
+		end
 		local c = cands[i]
 		local axis = c.axis
 		if look and axis:Dot(look) < 0 then
@@ -963,29 +1036,85 @@ function CarService.RoadSpot(cs, pos, look)
 		end
 		local cf0 = c.part.CFrame
 		local localAxis = cf0:VectorToObjectSpace(c.axis)
-		for _, k in ipairs({ 0, 1, -1, 2, -2, 3, -3 }) do
-			-- entlang der Fahrbahn verschieben, im Stück bleiben
-			local x = math.clamp(c.info.x + localAxis.X * k * step, -c.info.mx, c.info.mx)
-			local z = math.clamp(c.info.z + localAxis.Z * k * step, -c.info.mz, c.info.mz)
-			local at = cf0:PointToWorldSpace(Vector3.new(x, c.info.top, z))
-			if k == 0 or (at - c.world).Magnitude > 1 then
-				local y = groundY(at) or at.Y
-				if math.abs(y - at.Y) > 3 then
-					y = at.Y -- Strahl traf etwas anderes (Dach, Brücke): Fahrbahnhöhe nehmen
+		-- Querlage: nächster Punkt, dann die beiden Randstreifen (Wagenmitte RoadMargin vom Rand)
+		local crossX = math.abs(localAxis.X) < 0.5
+		local base = { { x = c.info.x, z = c.info.z } }
+		if crossX then
+			table.insert(base, { x = (c.info.x >= 0) and c.info.mx or -c.info.mx, z = c.info.z })
+			table.insert(base, { x = (c.info.x >= 0) and -c.info.mx or c.info.mx, z = c.info.z })
+		else
+			table.insert(base, { x = c.info.x, z = (c.info.z >= 0) and c.info.mz or -c.info.mz })
+			table.insert(base, { x = c.info.x, z = (c.info.z >= 0) and -c.info.mz or c.info.mz })
+		end
+		local any = false
+		for _, b0 in ipairs(base) do
+			for _, k in ipairs({ 0, 1, -1, 2, -2, 3, -3 }) do
+				-- entlang der Fahrbahn verschieben, im Stück bleiben
+				local x = math.clamp(b0.x + localAxis.X * k * step, -c.info.mx, c.info.mx)
+				local z = math.clamp(b0.z + localAxis.Z * k * step, -c.info.mz, c.info.mz)
+				local at = cf0:PointToWorldSpace(Vector3.new(x, c.info.top, z))
+				if (k == 0 or math.abs(x - b0.x) + math.abs(z - b0.z) > 1) and not CarService.InTrafficLane(at) then
+					any = true
+					local y = groundY(at) or at.Y
+					if math.abs(y - at.Y) > 3 then
+						y = at.Y -- Strahl traf etwas anderes (Dach, Brücke): Fahrbahnhöhe nehmen
+					end
+					local spot = Vector3.new(at.X, y + P.spawnLift, at.Z)
+					local cf = CFrame.lookAt(spot, spot + axis)
+					if not occupied(spot) and spotFree(cf) then
+						local dx, dz = spot.X - pos.X, spot.Z - pos.Z
+						return cf, math.max(c.dist, math.sqrt(dx * dx + dz * dz))
+					end
 				end
-				local spot = Vector3.new(at.X, y + P.spawnLift, at.Z)
-				local cf = CFrame.lookAt(spot, spot + axis)
-				if not occupied(spot) and spotFree(cf) then
-					return cf, c.dist
-				end
+			end
+		end
+		if any then
+			tried += 1 -- Stücke, die ganz in Verkehrsspuren liegen, zählen nicht als Versuch
+		end
+	end
+	return nil
+end
+
+-- Freier Himmel über dem Platz (kein Dach, keine Halle): sonst stünde das Auto z. B. in der eigenen Werkstatt
+local function skyClear(spot)
+	local ok, hit = pcall(function()
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = ignoreList()
+		params.IgnoreWater = true
+		params.RespectCanCollide = true
+		return workspace:Raycast(spot + Vector3.new(0, 1, 0), Vector3.new(0, 40, 0), params)
+	end)
+	return ok and hit == nil
+end
+
+-- 3.x: freier, ebener Platz direkt neben dem Spieler (rechts, links, vor ihm), wenn die nächste Fahrbahn weit weg ist
+-- (z. B. vor der eigenen Werkstatt). Boden höchstens knapp unter den Füßen, nichts Festes im Weg, kein Dach darüber,
+-- kein Auto dort.
+function CarService.BesideSpot(pos, look)
+	local off = starterCfg("BesideOffset")
+	look = look or Vector3.new(0, 0, -1)
+	local right = Vector3.new(-look.Z, 0, look.X)
+	local P = CarCatalog.Physics
+	for _, dir in ipairs({ right, -right, look }) do
+		local at = pos + dir * off
+		local y = groundY(at)
+		-- Boden unter dem Platz: nicht höher als die Hüfte, nicht tiefer als 6 Studs unter den Füßen
+		if y and y <= pos.Y and y >= pos.Y - 9 then
+			local spot = Vector3.new(at.X, y + P.spawnLift, at.Z)
+			local cf = CFrame.lookAt(spot, spot + look)
+			-- 3.x: nie in eine Verkehrsspur (Spieler steht auf der Straße)
+			if not occupied(spot) and not CarService.InTrafficLane(spot) and spotFree(cf) and skyClear(spot) then
+				return cf
 			end
 		end
 	end
 	return nil
 end
 
--- Wohin kommt das gerufene Auto? Nächste freie Fahrbahn; liegt der eigene Werkstatt-Parkplatz näher, dorthin;
--- sonst der nächste City.CarSpawns-Punkt bzw. die Werkstatt (Rückfallkette von spawnCFrame).
+-- Wohin kommt das gerufene Auto? Nächste freie Fahrbahn (ist sie weiter als NearRoad weg: erst ein Platz direkt neben
+-- dem Spieler); liegt der eigene Werkstatt-Parkplatz näher, dorthin; sonst der nächste City.CarSpawns-Punkt bzw. die
+-- Werkstatt (Rückfallkette von spawnCFrame).
 function CarService.CallSpot(cs)
 	local _, _, root = characterParts(cs.player)
 	if not root then
@@ -996,6 +1125,12 @@ function CarService.CallSpot(cs)
 	look = Vector3.new(look.X, 0, look.Z)
 	look = look.Magnitude > 1e-3 and look.Unit or nil
 	local cf, dist = CarService.RoadSpot(cs, pos, look)
+	if not cf or dist > starterCfg("NearRoad") then
+		local beside = CarService.BesideSpot(pos, look)
+		if beside then
+			return beside
+		end
+	end
 	local plotCf = plotSpawn(cs)
 	if plotCf then
 		local d2 = Vector3.new(plotCf.Position.X - pos.X, 0, plotCf.Position.Z - pos.Z).Magnitude
@@ -1220,6 +1355,7 @@ function CarService.Register(Actions, a)
 		if ok then
 			cs.shine[data.id] = nil
 			toast(cs, CarCatalog.Model(sold.model).name .. " verkauft: +" .. credits(value))
+			return true -- 3.x: gelungener Verkauf -> Story-Ereignis action:mini_car_sell (Verkaufshaus c1_ah4)
 		elseif value then
 			toast(cs, value)
 		end

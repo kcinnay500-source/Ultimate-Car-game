@@ -741,4 +741,11 @@ end
 
 PublicWorkshopService.Stock = cfg().StockStart
 
+-- Verkabelung mit den gemeinsamen Regeln (beim ersten require auf dem Server):
+-- games.pw wird mit dem Profil gespeichert/geladen (MiniRules.ExtraGames), der Händler zahlt den Wertbonus
+-- reparierter Autos (CarRules.Sell/SalePrice) und räumt den Eintrag nach dem Verkauf auf.
+MiniRules.ExtraGames.pw = { Default = PublicWorkshopService.Default, Load = PublicWorkshopService.Load }
+CarRules.SaleBonus = PublicWorkshopService.ValueBonus
+CarRules.OnSold = PublicWorkshopService.OnCarSold
+
 return PublicWorkshopService

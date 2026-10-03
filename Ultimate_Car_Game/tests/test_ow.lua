@@ -550,7 +550,7 @@ return {
 		T.check((pos - anchor.Position).Magnitude < 0.5, "Modell steht am Anker")
 		g:Advance(1.1)
 		local text = countdownText(site)
-		T.check(type(text) == "string" and text:find("Autohaus", 1, true) ~= nil and text:find("Fertig in", 1, true) ~= nil, "Countdown-Text: " .. tostring(text))
+		T.check(type(text) == "string" and text:find("Verkaufshaus", 1, true) ~= nil and text:find("Fertig in", 1, true) ~= nil, "Countdown-Text: " .. tostring(text))
 		-- zweiter Kauf während des Baus
 		d.money = 10 ^ 9
 		mark = g:Mark()

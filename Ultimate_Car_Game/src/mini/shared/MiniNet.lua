@@ -92,6 +92,19 @@ MiniNet.Actions = {
 	start_choose = { path = "string" },
 	-- Handy (PhoneService): Kunden eines Fahrzeug-Checks anrufen (id = 2.4.0-Auftrags-Id "job_<n>", kein Betrag)
 	phone_call = { id = "string" },
+	-- 3.x: Auto rufen (Flitzer/Lieblingsauto an die nächste Fahrbahn, nur Open World) und Lieblingsauto wählen (CarService;
+	-- id = Auto-Id, CarCatalog.StarterCarId = -1 = Flitzer)
+	car_call = {},
+	car_favourite = { id = "number" },
+	-- 3.x: Große Werkstatt (PublicWorkshopService): car = Auto-Id als Text, part = Teile-Art ("altteile"),
+	-- count = Stückzahl 1..50 (Absicht; der Server prüft Lager, Tageslimit und Preis selbst)
+	pw_open = {},
+	pw_repair = { car = "string" },
+	pw_sell_parts = { part = "string", count = "number" },
+	-- 3.x: Entwickler-Menü (DevService): nur für Entwickler, der Server prüft DevService.IsDev bei jedem Aufruf
+	-- (field = level | xp | credits | credits_add | cash | start_reset; value wird gerundet und gedeckelt)
+	dev_open = {},
+	dev_set = { field = "string", value = "number" },
 }
 
 -- Abklingzeit in Sekunden je Aktion und Ziel (Feld aus Targets). Standard 0,12 s wie in 2.4.0,
@@ -143,6 +156,13 @@ MiniNet.Cooldowns = {
 	shop_prompt = 3,
 	start_choose = 1,
 	phone_call = 1, -- PhoneService prüft zusätzlich 3 s je Spieler
+	car_call = 1, -- CarService prüft zusätzlich GameConfig.StarterCar.CallCooldown (5 s) je Spieler
+	car_favourite = 0.3,
+	pw_open = 1,
+	pw_repair = 1,
+	pw_sell_parts = 0.5,
+	dev_open = 0.5,
+	dev_set = 0.2,
 }
 MiniNet.Targets = {
 	mini_press_buy = "id",
@@ -173,6 +193,9 @@ MiniNet.Targets = {
 	shop_equip = "slot",
 	shop_prompt = "product",
 	phone_call = "id",
+	car_favourite = "id",
+	pw_repair = "car",
+	dev_set = "field", -- je Feld: Level und gleich danach Credits setzen geht beides durch
 }
 
 -- Ereignisse Server -> Client
@@ -183,7 +206,7 @@ MiniNet.Events = {
 }
 
 -- Tabs der Minispiel-Oberfläche (auch Werte des Attributs MiniTab an City.Stations.<key>)
-MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade", "lobby", "unlocks", "prestige", "tycoon", "buildings", "story" }
+MiniNet.Tabs = { "overview", "press", "tuning", "scrapyard", "quiz", "parking", "goals", "leaderboard", "shop", "map", "dealer", "track", "carwash", "auction", "arcade", "lobby", "unlocks", "prestige", "tycoon", "buildings", "story", "grosswerkstatt" }
 MiniNet.TabSet = {}
 for _, tab in ipairs(MiniNet.Tabs) do
 	MiniNet.TabSet[tab] = true

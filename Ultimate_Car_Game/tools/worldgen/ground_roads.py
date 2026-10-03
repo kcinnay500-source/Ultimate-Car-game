@@ -9,7 +9,7 @@ Höhen-Stapel (§1.2, nie zwei überlappende Oberseiten auf gleicher Höhe):
 import math
 
 from .lib import (CF, AMBER, APRON, ASPHALT, BLACK, GRASS, HEDGE, PLAZA, RED, SIDEWALK, SLATE, STEEL, TEAL,
-                  WHITE, Vec3, set_attrs, yaw_towards)
+                  WHITE, Vec3, is_basepart, name_of, set_attrs, yaw_towards)
 
 Y_GRASS = -1.10
 Y_GROUND = -1.00
@@ -187,10 +187,11 @@ def traffic_loops():
     A += _ring(-518, 0, L, -(180 - th), -(180 - th) - (360 - 2 * (180 - th)), 30)
     B1 = _rect_loop(-145.5, 145.5, -335.5, 193.5, 14, True)
     B2 = _rect_loop(-158.5, 158.5, -348.5, 206.5, 27, False)
-    T = [(-85, 270), (85, 270)] + _ring(85, 340, 70, -90, 90, 15)[1:] + [(-85, 410)]
-    T += _ring(-85, 340, 70, 90, 270, 15)[1:-1]
+    # 3.0: keine Verkehrsschleife mehr auf der Teststrecke: die Verkehrsautos haben lokal eine feste Kollisionsbox,
+    # und ein schnelleres Zeitfahr-Auto würde von hinten auf sie auffahren (checks.vehicle_checks prüft, dass keine
+    # Schleife die Streckenfläche berührt)
     return [("A", "Meile-Schleife", A, 26), ("B1", "Innenstadtring innen", B1, 24),
-            ("B2", "Innenstadtring aussen", B2, 24), ("T", "Teststrecke", T, 45)]
+            ("B2", "Innenstadtring aussen", B2, 24)]
 
 
 def path_point(pts, d):
@@ -626,20 +627,53 @@ def build_arches(roads, lights, lib):
 
 
 # ---------------------------------------------------------------- Ampeln (§3.6)
-def _signal_mast(parent, lib, name, x, z, group, serves, arm_dir, face_yaw, ped_yaw, vehicle=True, arm=True):
-    """Mast mit Fahrzeugkopf (Red/Amber/Green) und Fußgängerkopf (PedRed/PedGreen)."""
-    m = lib.model(parent, name, attrs={"Anim": "signal", "Group": group, "Serves": serves})
+# 3.0 (Verkehr/Ampeln): Programm (CityClient.SignalState, 32 s): Meile grün 0-11,5 / gelb -14,5 / alles rot -16,
+# Markt grün 16-27,5 / gelb -30,5 / alles rot -32. Fußgänger "NS" (queren die Marktstraße / Querachse) grün 0,5-10,5,
+# "WE" (queren die Meile: Plaza, K-Arme West/Ost) grün 16-26.
+# Jeder Mast trägt PedPhase ausdrücklich; der Fußgängerkopf blickt über "seinen" Zebrastreifen zu den Wartenden auf der
+# anderen Seite (vorher zeigten die Köpfe vom Zebra weg und die Phase hing am Fahrzeugstrom des Masts -> an NW/SO
+# zeigte der Kopf über die Meile "Gehen", während die Meile grün hatte). Die Querachse hat jetzt Fahrzeugköpfe
+# (vorher hielten die Autos dort an einer unsichtbaren Ampel).
+# (Name, x, z, Gruppe, Serves, Ausleger (dx,dz) oder None, Fahrzeugkopf-Yaw oder None, Fußgänger-Yaw, PedPhase)
+# Yaw wie CF.at: lokales +Z (Linsenseite) zeigt nach (sin yaw, cos yaw): 0 Süden (+Z), 180 Norden, 90 Osten, -90 Westen
+def signal_masts():
+    out = []
+    for group, cx in (("K-West", -152), ("K-Ost", 152)):
+        # Fahrzeugköpfe: NW für die Marktstraße südwärts (Blick nach Norden), SO nordwärts, SW für die Meile
+        # ostwärts (Blick nach Westen), NO westwärts. Fußgängerköpfe im Kreis: NW über den Nordarm (Blick Osten),
+        # NO über den Ostarm (Blick Süden), SO über den Südarm (Blick Westen), SW über den Westarm (Blick Norden).
+        out += [(group + " NW", cx - 20, -20, group, "Markt", (1, 0), 180, 90, "NS"),
+                (group + " NO", cx + 20, -20, group, "Meile", (0, 1), 90, 0, "WE"),
+                (group + " SO", cx + 20, 20, group, "Markt", (-1, 0), 0, -90, "NS"),
+                (group + " SW", cx - 20, 20, group, "Meile", (0, -1), -90, 180, "WE")]
+    # Plaza (Z1): Masten ohne Ausleger mit Meile-Fahrzeugköpfen; Fußgängerköpfe über die Meile zur Gegenseite
+    for x, z in ((-9, -19), (9, -19), (-9, 19), (9, 19)):
+        out.append(("Plaza %s%s" % ("N" if z < 0 else "S", "W" if x < 0 else "O"), x, z, "Plaza", "Meile", None,
+                    90 if z < 0 else -90, 0 if z < 0 else 180, "WE"))
+    # Querachse (Z12/Z13): Fahrzeugköpfe am Ausleger über dem Bordstein (W-Mast 4 nördlich verschoben, weil
+    # (-171,-193) im Schrott-Tor liegt); Fußgängerköpfe blicken über die Fahrbahn zur Gegenseite
+    for nm, x, z, arm, face, ped in (("Querachse W1", -133, -209, (-1, 0), 0, -90),
+                                     ("Querachse W2", -171, -189, (1, 0), 180, 90),
+                                     ("Querachse O1", 133, -209, (1, 0), 180, 90),
+                                     ("Querachse O2", 171, -193, (-1, 0), 0, -90)):
+        out.append((nm, x, z, nm[:-1].replace(" ", "-"), "Markt", arm, face, ped, "NS"))
+    return out
+
+
+def _signal_mast(parent, lib, name, x, z, group, serves, arm_dir, face_yaw, ped_yaw, ped_phase):
+    """Mast mit Fahrzeugkopf (Red/Amber/Green, face_yaw None = ohne) und Fußgängerkopf (PedRed/PedGreen)."""
+    m = lib.model(parent, name, attrs={"Anim": "signal", "Group": group, "Serves": serves, "PedPhase": ped_phase})
     y = Y_WALK
     lib.box(m, "Sockel", x - 0.6, x + 0.6, y, y + 0.6, z - 0.6, z + 0.6, BLACK, "Metal")
     lib.cylinder(m, "Mast", (x, y + 0.6 + 3.5, z), 7, 0.4, "Y", STEEL, "Metal")
     top = y + 0.6 + 7
     hx, hz = x, z
-    if arm:
+    if arm_dir:
         hx, hz = x + arm_dir[0] * 6, z + arm_dir[1] * 6
         lib.beam(m, "Ausleger", (x, top - 0.3, z), (hx, top - 0.3, hz), 0.3, STEEL, "Metal", deco=True)
-    if vehicle:
+    if face_yaw is not None:
         # am Ausleger: Kopf-Oberkante bündig mit der Auslegerunterseite (top - 0.45), sonst schwebt er
-        hy = top - 0.45 - 1.6 if arm else top - 1.8
+        hy = top - 0.45 - 1.6 if arm_dir else top - 1.8
         head_cf = CF.at(hx, hy, hz, face_yaw)
         lib.part(m, "Signalkopf", (1.1, 3.2, 0.8), head_cf, BLACK, "SmoothPlastic", deco=True)
         for i, (nm, col, tr) in enumerate((("Red", (255, 50, 40), 0), ("Amber", (255, 170, 30), 0.7),
@@ -657,69 +691,136 @@ def _signal_mast(parent, lib, name, x, z, group, serves, arm_dir, face_yaw, ped_
 
 def build_signals(animated, lib):
     sf = lib.folder(animated, "Ampeln")
-    for group, cx in (("K-West", -152), ("K-Ost", 152)):
-        # NW: Ausleger +X, Kopf nach Norden (Markt südwärts); SE: Ausleger -X, Kopf nach Süden (Markt nordwärts)
-        # SW: Ausleger -Z, Kopf nach Westen (Meile ostwärts); NE: Ausleger +Z, Kopf nach Osten (Meile westwärts)
-        _signal_mast(sf, lib, group + " NW", cx - 20, -20, group, "Markt", (1, 0), 180, 180)
-        _signal_mast(sf, lib, group + " SO", cx + 20, 20, group, "Markt", (-1, 0), 0, 0)
-        _signal_mast(sf, lib, group + " SW", cx - 20, 20, group, "Meile", (0, -1), -90, 0)
-        _signal_mast(sf, lib, group + " NO", cx + 20, -20, group, "Meile", (0, 1), 90, 180)
-    # Plaza (Z1): Fußgängermasten mit Meile-Fahrzeugköpfen (ohne Ausleger)
-    for x, z in ((-9, -19), (9, -19), (-9, 19), (9, 19)):
-        _signal_mast(sf, lib, "Plaza %s%s" % ("N" if z < 0 else "S", "W" if x < 0 else "O"), x, z, "Plaza", "Meile",
-                     (0, 0), 90 if z < 0 else -90, 180 if z < 0 else 0, vehicle=True, arm=False)
-    # Querachse: reine Fußgängermasten (W-Mast 4 nördlich verschoben, weil (-171,-193) im Schrott-Tor liegt)
-    for nm, x, z, py in (("Querachse W1", -133, -209, 90), ("Querachse W2", -171, -189, -90),
-                         ("Querachse O1", 133, -209, -90), ("Querachse O2", 171, -193, 90)):
-        _signal_mast(sf, lib, nm, x, z, nm[:-1].replace(" ", "-"), "Fussgaenger", (0, 0), 0, py, vehicle=False,
-                     arm=False)
+    for name, x, z, group, serves, arm, face, ped, phase in signal_masts():
+        _signal_mast(sf, lib, name, x, z, group, serves, arm, face, ped, phase)
+    problems = signal_coverage()
+    assert not problems, "Ampeln: " + "; ".join(problems)
 
 
 # ---------------------------------------------------------------- Verkehr (§3.7)
-# Haltepunkte der Autos (Fahrzeugmitte, 7 vor der Haltelinie) an Ampel-Zebras, Format für CityClient: x,z,Serves.
-# Meile (Loop A): Z1 (Plaza), Z4/Z5 (K-West), Z8/Z9 (K-Ost); Marktstraße (B1/B2): Z6/Z7, Z10/Z11, Z12/Z13 (Querachse).
-_HALT = 7.0
-LOOP_STOPS = {
-    "A": [(-185.3 - _HALT, 6, "Meile"), (-8.3 - _HALT, 6, "Meile"), (118.7 - _HALT, 6, "Meile"),
-          (185.3 + _HALT, -6, "Meile"), (8.3 + _HALT, -6, "Meile"), (-118.7 + _HALT, -6, "Meile")],
-    "B1": [(146, -33.3 - _HALT, "Markt"), (146, -209.3 - _HALT, "Markt"),
-           (-146, 33.3 + _HALT, "Markt"), (-146, -192.7 + _HALT, "Markt")],
-    "B2": [(158, 33.3 + _HALT, "Markt"), (158, -192.7 + _HALT, "Markt"),
-           (-158, -33.3 - _HALT, "Markt"), (-158, -209.3 - _HALT, "Markt")],
-}
+# 3.0: Haltelinien statt Haltepunkten. Attribut StopLines am Schleifen-Ordner: "x,z,Serves;…" = Punkt der Schleife
+# auf der weißen Haltelinie (Linienmitte, 2,3 vor dem Zebra). CityClient hält die Fahrzeugfront STOP_MARGIN (3,5)
+# davor an (vorher: feste Fahrzeugmitte 7 vor der Linie bei 16 langen Autos -> die Front stand 1 Stud ÜBER der Linie).
+# Abgeleitet aus CROSSWALKS (Art "signal") und den Schleifen: jede Fahrtrichtung, die eine Haltelinie in ihrer Spur
+# kreuzt, bekommt sie; Serves "Meile" für die Meile (Achse x, Z 0), sonst "Markt".
+STOP_OFFSET = 2.3       # Haltelinie vor dem Zebraband (build_crosswalks)
+
+
+def stop_line_specs():
+    """[(Zebra-Id, Achse, Linienkoordinate, Fahrtrichtung +1/-1, Spur (lo, hi) quer, Serves)]"""
+    out = []
+    for cid, ax, c, lo, hi, app, kind in CROSSWALKS:
+        if kind != "signal":
+            continue
+        serves = "Meile" if ax == "x" and c == 0 else "Markt"
+        for sd in {"lo": [-1], "hi": [1], "both": [-1, 1]}[app]:
+            line = (lo - STOP_OFFSET) if sd < 0 else (hi + STOP_OFFSET)
+            # wie build_crosswalks: Achse x - von Westen (+X) südlich der Mitte; Achse z - von Norden (+Z) westlich
+            if ax == "x":
+                lane = (c + 0.3, c + 12.05) if sd < 0 else (c - 12.05, c - 0.3)
+            else:
+                lane = (c - 12.05, c - 0.3) if sd < 0 else (c + 0.3, c + 12.05)
+            out.append((cid, ax, line, -sd, lane, serves))
+    return out
+
+
+def loop_stop_lines(pts):
+    """Haltelinien, die die geschlossene Schleife pts in Fahrtrichtung in ihrer Spur kreuzt: [(x, z, Serves, cid)]"""
+    out = []
+    n = len(pts)
+    for cid, ax, line, direction, lane, serves in stop_line_specs():
+        for i in range(n):
+            a, b = pts[i], pts[(i + 1) % n]
+            k = 0 if ax == "x" else 1                    # Koordinate längs der Fahrt
+            q = 1 - k
+            da = a[k] - line
+            db = b[k] - line
+            if (b[k] - a[k]) * direction <= 0 or da * db > 0 or da == db:
+                continue
+            f = da / (da - db)
+            cross = a[q] + (b[q] - a[q]) * f
+            if lane[0] <= cross <= lane[1]:
+                p = (line, cross) if ax == "x" else (cross, line)
+                out.append((round(p[0], 2), round(p[1], 2), serves, cid))
+    return out
+
+
+def signal_coverage():
+    """Jede Haltelinie einer Ampel wird von mindestens einer Schleife befahren und hat einen Fahrzeugkopf desselben
+    Stroms, der der Fahrtrichtung entgegenblickt (höchstens 45 Studs entfernt, nicht hinter der Linie)."""
+    problems = []
+    used = set()
+    for key, title, pts, speed in traffic_loops():
+        for x, z, serves, cid in loop_stop_lines(pts):
+            used.add((cid, x, z))
+    heads = []
+    for name, x, z, group, serves, arm, face, ped, phase in signal_masts():
+        if face is None:
+            continue
+        hx, hz = (x + arm[0] * 6, z + arm[1] * 6) if arm else (x, z)
+        heads.append((name, hx, hz, serves, math.sin(math.radians(face)), math.cos(math.radians(face))))
+    specs = stop_line_specs()
+    for cid, ax, line, direction, lane, serves in specs:
+        mid = (lane[0] + lane[1]) / 2
+        px, pz = (line, mid) if ax == "x" else (mid, line)
+        tx, tz = (direction, 0) if ax == "x" else (0, direction)
+        if not any(u[0] == cid and abs((u[1] if ax == "x" else u[2]) - line) < 0.01 for u in used):
+            problems.append("Haltelinie %s %s=%g wird von keiner Verkehrsschleife befahren" % (cid, ax, line))
+        ok = False
+        for name, hx, hz, hs, fx, fz in heads:
+            if hs != serves or fx * tx + fz * tz > -0.9:
+                continue
+            if math.hypot(hx - px, hz - pz) <= 45 and (hx - px) * tx + (hz - pz) * tz > -1:
+                ok = True
+                break
+        if not ok:
+            problems.append("Haltelinie %s %s=%g (%s) ohne Fahrzeugkopf" % (cid, ax, line, serves))
+    return problems
 
 
 def build_loops(animated, lib):
+    # 3.0: Wegpunkte als String-Attribut Waypoints ("x,y,z;…", CityClient-Vertrag) statt 0,5er-Parts WP1..n
+    # (spart ~110 Parts für Querachsen-Fahrzeugköpfe und die längere Teststrecke)
     lf = lib.folder(animated, "TrafficLoops")
     out = {}
     for key, title, pts, speed in traffic_loops():
         f = lib.folder(lf, "Loop_" + key)
-        attrs = {"Title": title, "Speed": speed, "Waypoints": len(pts)}
-        if LOOP_STOPS.get(key):
-            attrs["Stops"] = ";".join("%g,%g,%s" % st for st in LOOP_STOPS[key])
+        attrs = {"Title": title, "Speed": speed, "Waypoints": ";".join("%.3f,%.2f,%.3f" % (x, Y_ROAD, z)
+                                                                       for x, z in pts)}
+        stops = loop_stop_lines(pts)
+        if stops:
+            attrs["StopLines"] = ";".join("%.2f,%.2f,%s" % (x, z, serves) for x, z, serves, cid in stops)
         set_attrs(f, attrs)
-        for i, (x, z) in enumerate(pts):
-            lib.part(f, "WP%d" % (i + 1), (0.5, 0.5, 0.5), CF(x, Y_ROAD, z), AMBER, "SmoothPlastic",
-                     transparency=1, deco=True)
         out[key] = (f, pts, speed)
     return out
 
 
 # Verkehr §3.7: "Lite"-Autos (~35 Parts, aus den CarTemplates abgeleitet) 6 / 3 / 3 / 2 je Schleife mit gleichmäßig
-# verteilter Phase, dazu 1 Bus (Schleife A, 6 s Halt an der Haltestelle "Markt"). CityClient bewegt sie lokal.
+# verteilter Phase, dazu 1 Bus (Schleife A, 6 s Halt an der Haltestelle "Markt"). CityClient bewegt sie lokal
+# (kinematisch: Anfahren, Bremsweg, Abstand, Kurven, Ampeln, Spieler) und gibt jedem Auto eine unsichtbare
+# Kollisionsbox (CanCollide), damit niemand durch Autos läuft.
 TRAFFIC = {
     "A": [("hot_hatch", (200, 50, 50)), ("sedan", (235, 238, 240)), ("compact", (38, 78, 140)),
           ("wagon", (170, 176, 180)), ("crossover", (40, 110, 200)), ("electric", (47, 169, 163))],
     "B1": [("compact", (240, 190, 40)), ("sedan", (60, 64, 70)), ("hot_hatch", (235, 238, 240))],
     "B2": [("wagon", (110, 30, 40)), ("crossover", (224, 214, 190)), ("electric", (135, 75, 196))],
-    "T": [("gt_coupe", (247, 176, 63)), ("super", (200, 50, 50))],
 }
-PHASE0 = {"A": 0.03, "B1": 0.11, "B2": 0.21, "T": 0.07}
+PHASE0 = {"A": 0.03, "B1": 0.11, "B2": 0.21}
 BUS_PHASE = 0.03 + 0.5 / 6          # auf Schleife A genau zwischen zwei Autos
 # Haltestelle "Markt" (Buchten Nord X 74..86 / Süd X -86..-74): westwärts auf Z -6.5 bei X 80, ostwärts auf Z 6.5
 # bei X -80 (vor den Wartehäuschen (80,-20) / (-80,20))
 BUS_STOPS = [(80, -6.5), (-80, 6.5)]
 BUS_LEN = 24
+
+
+def car_dims(lib, template):
+    """(Front, Heck, Breite) der Lite-Teile einer Vorlage, gemessen ab dem Pivot (Root, Nase lokal -Z)"""
+    from .lib import aabb
+    src = lib.templates()[template]
+    bb = [aabb(it) for it in src.iter("Item") if is_basepart(it)
+          and (name_of(it) in lib.LITE_KEEP or name_of(it).endswith("Tire"))]
+    return (round(-min(b[4] for b in bb), 2), round(max(b[5] for b in bb), 2),
+            round(max(b[1] for b in bb) - min(b[0] for b in bb), 2))
 
 
 def build_traffic_cars(animated, lib, loops):
@@ -732,15 +833,17 @@ def build_traffic_cars(animated, lib, loops):
             phase = round((PHASE0[key] + k / len(cars)) % 1.0, 4)
             (x, z), (dx, dz), total = path_point(pts, phase * path_point(pts, 0)[2])
             cf = CF.at(x, Y_ROAD, z, yaw_towards(dx, dz))
+            front, rear, width = car_dims(lib, body)
             lib.lite_car(tf, body, cf, color, name="Verkehr_%s_%d" % (key, n),
                          attrs={"Anim": "traffic", "Loop": key, "Path": "Loop_" + key, "Speed": speed,
-                                "Phase": phase, "Length": 16})
+                                "Phase": phase, "Length": round(front + rear, 2), "Front": front, "Rear": rear,
+                                "Width": width})
     f, pts, speed = loops["A"]
     (x, z), (dx, dz), total = path_point(pts, BUS_PHASE * path_point(pts, 0)[2])
     build_bus(tf, lib, CF.at(x, Y_ROAD, z, yaw_towards(dx, dz)),
               {"Anim": "traffic", "Loop": "A", "Path": "Loop_A", "Speed": 20, "Phase": round(BUS_PHASE, 4),
-               "Length": BUS_LEN, "Dwell": 6, "DwellAt": ";".join("%g,%g" % p for p in BUS_STOPS),
-               "StopName": "Markt"})
+               "Length": BUS_LEN + 0.8, "Front": BUS_LEN / 2 + 0.4, "Rear": BUS_LEN / 2 + 0.4, "Width": 8.3,
+               "Dwell": 6, "DwellAt": ";".join("%g,%g" % p for p in BUS_STOPS), "StopName": "Markt"})
 
 
 def build_bus(parent, lib, cf, attrs):

@@ -49,6 +49,14 @@ INTENT_FIELDS = {("mini_auction_bid", "amount"),
                  ("mini_tycoon_trade_offer", "price"), ("mini_tycoon_trade_offer", "qty"),
                  ("mini_story_sell", "price"),
                  ("tycoon_trade_offer", "price"), ("tycoon_trade_offer", "qty"), ("story_sell", "price")}
+# 3.x Entwickler-Menü: dev_set {field, value} trägt einen gewünschten Wert (Level, XP, Credits, Tycoon-Bargeld) – die
+# einzige Aktion, deren Zahl der Server übernimmt. Zulässig, weil DevService.Set bei JEDEM Aufruf DevService.IsDev
+# prüft (Studio, Ersteller/Gruppenbesitzer, GameConfig.Dev.AllowedUserIds) und den Wert rundet und deckelt; alle
+# anderen Spieler bekommen keine Antwort. validate_static prüft, dass diese Berechtigungsprüfung im Handler steht.
+SERVER_AUTHORIZED = {("dev_set", "value"): ("src/mini/server/DevService.lua", "function DevService.Set", "DevService.IsDev(ms.player)")}
+# print() im Spielcode nur als bewusstes Protokoll: DevService schreibt jede Entwickler-Änderung als "[Dev] …" ins
+# Server-Log (nachvollziehbar, wer im veröffentlichten Spiel Level/Credits gesetzt hat).
+PRINT_ALLOWED = {"DevService.lua"}
 PLACES = ("all", "lobby", "openworld", "tycoon")
 ZONE_MODELS = {"lobby": "Lobby", "openworld": "City", "tycoon": "Tycoon"}
 
@@ -336,6 +344,12 @@ def validate_static():
     for name, fields in actions.items():
         for f in fields:
             check(f not in FORBIDDEN_FIELDS or (name, f) in INTENT_FIELDS, f"MiniNet.Actions.{name}: Feld {f} wäre ein Client-Betrag")
+    for (a, field), (path, func, guard) in SERVER_AUTHORIZED.items():
+        check(field in actions.get(a, set()), f"MiniNet.Actions.{a}: Feld {field} fehlt (SERVER_AUTHORIZED)")
+        src = texts.get(ROOT / path, "")
+        body = src[src.find(func):] if func in src else ""
+        body = body[: body.find("\nend\n")] if "\nend\n" in body else body
+        check(guard in body, f"{path}: {func} prüft die Berechtigung nicht ({guard})")
     registered = []
     for p, text in texts.items():
         if side_of(p) == ("mini", "server"):
@@ -376,7 +390,7 @@ def validate_static():
         check("Autopunkt" not in text and "car points" not in text.lower(), f"{rel(p)}: Begriff 'Autopunkte' gefunden")
         check(re.search(r"\bAP\b", text) is None, f"{rel(p)}: Begriff 'AP' gefunden")
         check("rbxassetid://" not in text and "roblox.com/asset" not in text, f"{rel(p)}: externe Asset-ID")
-        if side_of(p)[0] == "mini" and re.search(r"^\s*print\(", text, re.M):
+        if side_of(p)[0] == "mini" and p.name not in PRINT_ALLOWED and re.search(r"^\s*print\(", text, re.M):
             warnings.append(f"{rel(p)}: print() im Spielcode")
 
     # PHASE4_CONTRACT §9 (Meilenstein 8): ProcessReceipt nur in Purchases.lua; Produkt-/Pass-Ids eindeutig (0 = Platzhalter)

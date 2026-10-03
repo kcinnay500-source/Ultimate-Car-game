@@ -383,6 +383,33 @@ function CarRules.SellValue(car)
 	return math.floor((CarRules.Value(car) + CarRules.TuningValue(car)) * CarCatalog.SellShare + 0.5)
 end
 
+-- 3.x: Wertbonus der Großen Werkstatt (reparierte Autos). Der Server setzt den Haken beim Laden von
+-- PublicWorkshopService (CarRules.SaleBonus = PublicWorkshopService.ValueBonus, Faktor 1..MaxBonus); ohne ihn
+-- (Client, reine Regel-Tests) gilt Faktor 1. Verkaufspreis beim Händler = SellValue × Bonus.
+CarRules.SaleBonus = nil
+CarRules.OnSold = nil -- optional: (d, id) nach dem Verkauf (Werkstatt-Eintrag aufräumen)
+
+local function saleFactor(d, id)
+	local hook = CarRules.SaleBonus
+	if type(hook) ~= "function" then
+		return 1
+	end
+	local ok, f = pcall(hook, d, id)
+	if not ok or type(f) ~= "number" or f ~= f or f < 1 or f == math.huge then
+		return 1
+	end
+	return f
+end
+
+-- Tatsächlicher Händler-Erlös eines eigenen Autos (mit Werkstatt-Bonus)
+function CarRules.SalePrice(d, car)
+	local base = CarRules.SellValue(car)
+	if base <= 0 or type(car) ~= "table" then
+		return base
+	end
+	return math.floor(base * saleFactor(d, car.id) + 0.5)
+end
+
 function CarRules.StyleCost(car, key)
 	local def = CarCatalog.Style[key]
 	if not def then
@@ -513,9 +540,12 @@ function CarRules.Sell(d, id)
 	if car.locked then
 		return false, "Dieses Auto ist gerade in einer Auktion."
 	end
-	local value = CarRules.SellValue(car)
+	local value = CarRules.SalePrice(d, car) -- 3.x: inkl. Wertbonus der Großen Werkstatt
 	CarRules.RemoveCar(d, id)
 	mini().AddMoney(d, value)
+	if type(CarRules.OnSold) == "function" then
+		pcall(CarRules.OnSold, d, id)
+	end
 	return true, value, car
 end
 
@@ -670,7 +700,7 @@ function CarRules.View(car, d)
 		paint = car.paint, rims = car.rims, glow = car.glow, spoiler = car.spoiler,
 		engine = car.engine, gearbox = car.gearbox, tires = car.tires, suspension = car.suspension, nitro = car.nitro,
 		locked = car.locked, bought = car.bought,
-		value = CarRules.Value(car), sellValue = CarRules.SellValue(car),
+		value = CarRules.Value(car), sellValue = CarRules.SalePrice(d, car), -- 3.x: Händler-Erlös inkl. Werkstatt-Bonus
 		tune = tune, styleCost = styleView(car),
 		stats = {
 			power = s.power, topSpeed = s.topSpeed, zeroTo100 = s.zeroTo100, grip = math.floor(s.grip * 100 + 0.5) / 100,

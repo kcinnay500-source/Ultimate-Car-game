@@ -188,25 +188,26 @@ return {
 		T.check(type(d.games.story) == "table" and d.games.story.chapter == 1 and d.games.story.active == false, "d.games.story Standard")
 		T.check(type(d.games.ow) == "table" and type(d.games.ow.buildings) == "table" and d.games.ow.passive == false, "d.games.ow Standard")
 		local snap = g:MiniSnapshot(pl)
-		T.check(snap and type(snap.story) == "table" and snap.story.chapter == 1 and type(snap.story.missions) == "table" and #snap.story.missions == 3, "Snapshot story (voll: missions)")
+		T.check(snap and type(snap.story) == "table" and snap.story.chapter == 1 and type(snap.story.missions) == "table" and #snap.story.missions == #g:MiniShared("GameConfig").Story.Chapters[1].Missions, "Snapshot story (voll: missions)")
 		T.check(snap and type(snap.ow) == "table" and type(snap.ow.buildings) == "table" and snap.ow.passive == false, "Snapshot ow")
 		T.check(snap and type(snap.story.side) == "table" and #snap.story.side >= 3, "Snapshot story.side (Tagesauswahl + Legende)")
 
 		---------------------------------------------------------------- Tutorial bis zum Kiesplatz
 		finishTutorial(T, g, pl, d, Flow)
 		T.eq(d.games.stats.jobsDone, 1, "ein Auftrag im Tutorial")
-		T.eq(story(g, pl).active, false, "Story noch nicht gestartet (Tutorial-Auftrag zählt nicht)")
+		-- 3.x: die Story läuft seit der Startwahl – Kapitel 1 des Wegs Werkstatt beginnt mit dem Ölwechsel (c1_ws1);
+		-- der Fahrzeug-Check aus dem Tutorial ist kein Ölwechsel
+		T.check(type(story(g, pl).active) == "table" and story(g, pl).active.id == "c1_ws1", "c1_ws1 läuft seit der Startwahl")
+		T.eq(story(g, pl).active.progress, 0, "Tutorial-Auftrag (Fahrzeug-Check) zählt nicht für den Ölwechsel")
 
-		---------------------------------------------------------------- Kapitel 1: Der Kiesplatz
-		-- c1_m1: drei Verkäufe (alle Preisstufen; Stufe 3 einmal geplatzt, denn der Wurf gehört zum Kunden)
-		act(T, g, pl, "story_start", { id = "c1_m2" }, "ok", "falsche Reihenfolge -> Toast")
-		T.eq(story(g, pl).active, false, "c1_m2 nicht gestartet (erst c1_m1)")
+		---------------------------------------------------------------- Kapitel 1 (Werkstatt) und der Kiesplatz als Extra-Verdienst
+		act(T, g, pl, "story_start", { id = "c1_ws2" }, "ok", "falsche Reihenfolge -> Toast")
+		T.eq(story(g, pl).active.id, "c1_ws1", "c1_ws2 nicht gestartet (erst c1_ws1)")
 		local m = g:Mark()
-		act(T, g, pl, "story_start", { id = "c1_m1" }, "ok", "story_start c1_m1")
-		T.check(type(story(g, pl).active) == "table" and story(g, pl).active.id == "c1_m1", "c1_m1 aktiv")
-		local started = g:Notices(pl, "story", m)
-		T.check(#started >= 1 and started[1].event == "started" and started[1].mission == "c1_m1", "mini_notice story started")
-		-- Verkauf nur am Kiesplatz: weit weg -> Toast, kein Verkauf
+		act(T, g, pl, "story_start", { id = "c1_ws1" }, "ok", "story_start der laufenden Mission ist kein Fehler")
+		T.eq(story(g, pl).active.id, "c1_ws1", "c1_ws1 bleibt aktiv")
+		T.check(not g:HasToast(pl, "schon bei", m), "kein Fehler-Toast")
+		-- Kiesplatz (jeder Weg): Verkauf nur am Kiesplatz, alle Preisstufen; weit weg -> Toast, kein Verkauf
 		local offer = customer(g, pl)
 		T.check(offer ~= nil, "Kunde am Kiesplatz (story.sale im Snapshot)")
 		g:Advance(1.1)
@@ -219,21 +220,19 @@ return {
 		act(T, g, pl, "story_sell", { offer = offer.serial, price = "teuer" }, "invalid", "price muss number sein")
 		-- Stufe 1 (sicher)
 		local money = d.money
-		local mStart = g:Mark()
 		local n1 = sell(T, g, pl, 1)
 		local tier1 = g:MiniShared("GameConfig").Story.Sale.Tiers[1].profit -- Level 1: Faktor 1
 		T.check(n1 ~= nil and n1.sold == true and n1.tier == 1 and n1.credits == tier1, "Stufe 1 verkauft: +" .. tier1 .. " Cr Reingewinn")
 		T.eq(d.money - money, tier1, "Credits nur über den Server (Reingewinn)")
 		T.eq(story(g, pl).sales.n, 1, "sales.n 1")
-		T.eq(story(g, pl).active.progress, 1, "c1_m1 Fortschritt 1")
-		-- Stufe 3 geplatzt (Wurf ≥ 0,5): kein Geld, kein Fortschritt (Stand unmittelbar vor dem Versuch, siehe sell)
+		T.eq(story(g, pl).active.progress, 0, "Kiesplatz-Verkauf zählt nicht für den Ölwechsel")
+		-- Stufe 3 geplatzt (Wurf ≥ 0,5): kein Geld, kein Verkauf (Stand unmittelbar vor dem Versuch, siehe sell)
 		local n3f, _, b3f = sell(T, g, pl, 3, true)
 		T.check(n3f ~= nil and n3f.sold == false and n3f.credits == 0, "Stufe 3 geplatzt")
 		T.eq(d.money, b3f.money, "geplatzt: kein Geld")
 		T.eq(story(g, pl).active.progress, b3f.progress, "geplatzt: kein Fortschritt")
 		T.eq(story(g, pl).sales.n, b3f.sales, "geplatzt: kein Verkauf gezählt")
-		-- Stufe 2 und Stufe 3 erfolgreich (Gewinn je Stufe × Level-Faktor, beim Angebot festgelegt: offer.tiers[tier].profit);
-		-- unpassende Kunden dazwischen wurden günstig verkauft, darum zählt der Fortschritt relativ und mit Deckel 3
+		-- Stufe 2 und Stufe 3 erfolgreich (Gewinn je Stufe × Level-Faktor, beim Angebot festgelegt: offer.tiers[tier].profit)
 		local n2, o2, b2 = sell(T, g, pl, 2, false)
 		T.check(n2 ~= nil and n2.sold == true and n2.credits == o2.tiers[2].profit and n2.credits >= g:MiniShared("GameConfig").Story.Sale.Tiers[2].profit, "Stufe 2 verkauft: +" .. tostring(n2 and n2.credits) .. " Cr (Gewinn der Stufe)")
 		T.check(d.money - b2.money >= (n2 and n2.credits or 1e9), "Stufe 2: Gewinn gutgeschrieben (dazu evtl. Level-Bonus)")
@@ -242,29 +241,91 @@ return {
 		T.check(d.money - b3.money >= (n3 and n3.credits or 1e9), "Stufe 3: Gewinn gutgeschrieben (dazu evtl. Level-Bonus)")
 		T.near(o3.tiers[3].profit, math.floor(g:MiniShared("GameConfig").Story.Sale.Tiers[3].profit * SR.LevelFactor(d.level) + 0.5), 1, "Gewinn = Stufe-3-Gewinn × Level-Faktor")
 		T.check(story(g, pl).sales.best >= 1, "Bestpreis-Verkäufe gezählt")
-		T.eq(story(g, pl).active.progress, 3, "c1_m1 3/3")
-		local done1 = missionNotice(g, pl, "c1_m1", mStart)
-		T.check(done1 ~= nil and done1.done == true and done1.progress == 3, "mini_notice mission c1_m1 erledigt")
-		act(T, g, pl, "story_claim", { id = "c1_m1" }, "ok", "story_claim c1_m1")
-		T.eq(story(g, pl).done.c1_m1, true, "c1_m1 abgeholt")
-		T.eq(story(g, pl).step, 2, "Schritt 2")
-		T.eq(d.games.stats.missionsDone, 1, "missionsDone 1")
-		act(T, g, pl, "story_claim", { id = "c1_m1" }, "ok", "zweites Abholen -> Toast")
-		T.eq(d.games.stats.missionsDone, 1, "nicht zweimal")
-		-- c1_m2: Zurück in die Werkstatt (settle-Ereignis aus Mini.OnSettled)
-		act(T, g, pl, "story_start", { id = "c1_m2" }, "ok")
+		T.check(story(g, pl).sales.n >= 3, "mindestens drei Verkäufe gezählt")
+		T.eq(story(g, pl).active.id, "c1_ws1", "Ölwechsel läuft weiter")
+		-- c1_ws1: echter Ölwechsel (settle:oil aus d.jobs beim Abrechnen)
+		local C = g:Config()
+		local function ensureOffer(kind)
+			if not Flow.FindOffer(g, pl, kind) then
+				table.insert(d.offers, { id = "offer_test_" .. kind, kind = kind, carId = "komet" })
+				g:Send(pl, "select", {})
+				g:Advance(0.2)
+			end
+		end
+		local function claimNext(id, nextId)
+			local mc = g:Mark()
+			act(T, g, pl, "story_claim", { id = id }, "ok", "story_claim " .. id)
+			T.eq(story(g, pl).done[id], true, id .. " abgeholt")
+			if nextId then
+				T.check(type(story(g, pl).active) == "table" and story(g, pl).active.id == nextId, nextId .. " startet nach dem Abholen von selbst")
+			end
+			return mc
+		end
+		ensureOffer("oil")
 		m = g:Mark()
-		local receipt = Flow.CompleteInspection(T, g, pl)
-		T.check(receipt ~= nil, "Auftrag abgerechnet")
-		T.check(missionNotice(g, pl, "c1_m2", m) ~= nil and missionNotice(g, pl, "c1_m2", m).done == true, "c1_m2 erledigt durch echte Abrechnung")
-		act(T, g, pl, "story_claim", { id = "c1_m2" }, "ok")
-		-- c1_m3: 2.500 Credits auf dem Konto (Bedingung aus dem Profil, im Tick 1×/s). Startgeld + Tutorial + Belohnungen
-		-- liegen knapp darunter (die Probeverkäufe oben haben etwas dazugegeben); unter 2.500 ist die Mission offen
+		local oj = Flow.AcceptKind(T, g, pl, "oil")
+		T.check(oj ~= nil, "Ölwechsel angenommen")
+		if oj then
+			Flow.Scan(T, g, pl, oj.id)
+			oj = Flow.Diagnose(T, g, pl, oj.id) or oj
+			for i = 1, #C.JobById.oil.steps do
+				Flow.RepairStep(T, g, pl, oj.id, i)
+			end
+			Flow.Scan(T, g, pl, oj.id)
+			Flow.Settle(T, g, pl, oj.id)
+			g:Advance(0.3)
+		end
+		local mOil = missionNotice(g, pl, "c1_ws1", m)
+		T.check(mOil ~= nil and mOil.done == true, "c1_ws1 erledigt durch echten Ölwechsel")
+		local missionsBefore = d.games.stats.missionsDone
+		claimNext("c1_ws1", "c1_ws2")
+		T.eq(d.games.stats.missionsDone, missionsBefore + 1, "missionsDone +1")
+		act(T, g, pl, "story_claim", { id = "c1_ws1" }, "ok", "zweites Abholen -> Toast")
+		T.eq(d.games.stats.missionsDone, missionsBefore + 1, "nicht zweimal")
+		-- c1_ws2: Fahrzeug-Check mit Befund und Kundenanruf (settle:inspection)
+		m = g:Mark()
+		local receipt = Flow.CompleteInspection(T, g, pl, { finding = "oil", decision = true })
+		T.check(receipt ~= nil, "Fahrzeug-Check abgerechnet")
+		g:Advance(0.3)
+		T.check(missionNotice(g, pl, "c1_ws2", m) ~= nil and missionNotice(g, pl, "c1_ws2", m).done == true, "c1_ws2 erledigt durch echte Abrechnung")
+		claimNext("c1_ws2", "c1_ws3")
+		-- c1_ws3: Ersatzteile am Teilehandel (2.4.0-Aktion order)
+		local sku = nil
+		for _, part in ipairs(C.Parts) do
+			if part.eta == 0 and part.level <= d.level and not sku then
+				sku = part.id
+			end
+		end
+		g:Send(pl, "travel", { key = "parts" })
+		g:Advance(0.3)
+		g:Send(pl, "order", { sku = sku, qty = 1 })
+		g:Advance(1.2)
+		T.eq(story(g, pl).active.progress, 1, "c1_ws3: Teilekauf zählt (parts_bought)")
+		claimNext("c1_ws3", "c1_ws4")
+		-- c1_ws4: drei Aufträge (jobsDone über MiniRules.AddStat -> StatHook)
+		m = g:Mark()
+		for i = 1, 3 do
+			T.check(Flow.CompleteInspection(T, g, pl) ~= nil, "c1_ws4: Auftrag " .. i)
+		end
+		g:Advance(0.3)
+		T.check(missionNotice(g, pl, "c1_ws4", m) ~= nil and missionNotice(g, pl, "c1_ws4", m).done == true, "c1_ws4 erledigt (3 Aufträge)")
+		claimNext("c1_ws4", "c1_ws5")
+		-- c1_ws5: Werkstattgerät an der Ausbau-Werkbank (equipment_bought, ab Level 2)
+		T.check(d.level >= 2, "Level ≥ 2 für das Gerät (" .. tostring(d.level) .. ")")
+		MR.AddMoney(d, 1000)
+		g:Send(pl, "travel", { key = "upgrades" })
+		g:Advance(0.3)
+		local equipBefore = d.equipment.wheel_jack or 0
+		g:Send(pl, "equipment", { id = "wheel_jack" })
+		g:Advance(1.2)
+		T.eq(d.equipment.wheel_jack, equipBefore + 1, "Radheber gekauft")
+		T.eq(story(g, pl).active.progress, 1, "c1_ws5: Gerätekauf zählt (equipment_bought)")
+		-- c1_m3: 2.500 Credits auf dem Konto (Bedingung aus dem Profil, im Tick 1×/s); startet nach dem Abholen von selbst
+		MR.AddMoney(d, 2400 - d.money)
+		m = claimNext("c1_ws5", "c1_m3")
 		if d.money >= 2500 then
 			MR.AddMoney(d, 2400 - d.money)
 		end
-		m = g:Mark()
-		act(T, g, pl, "story_start", { id = "c1_m3" }, "ok")
 		g:Advance(2.1)
 		T.check(missionNotice(g, pl, "c1_m3", m) == nil or missionNotice(g, pl, "c1_m3", m).done ~= true, "c1_m3 unter 2.500 Cr offen")
 		MR.AddMoney(d, 2500 - d.money)
@@ -569,11 +630,21 @@ return {
 		act(T, g, a, "lobby_go", {}, "ok", "Leiter reist, Mitglied kommt mit")
 		T.eq(g:Session(a).mode, "openworld", "Anna in der Open World")
 		T.eq(g:Session(b).mode, "openworld", "Ben in der Open World")
-		-- Tutorial läuft für beide (neue Profile); die Story ist davon unabhängig
+		-- 3.x: beide wählen den Startweg Verkaufshaus (Pflicht vor dem Überspringen des Tutorials); die Story läuft sofort
+		act(T, g, a, "start_choose", { path = "autohaus" }, "ok")
+		act(T, g, b, "start_choose", { path = "autohaus" }, "ok")
+		T.eq(da.games.story.active.id, "c1_ah1", "Anna: Mission 1 des Verkaufshauses läuft")
 		act(T, g, a, "tutorial_skip", {}, "ok")
 		act(T, g, b, "tutorial_skip", {}, "ok")
-		act(T, g, a, "story_start", { id = "c1_m1" }, "ok", "Anna startet c1_m1")
-		act(T, g, b, "story_start", { id = "c1_m1" }, "ok", "Ben startet c1_m1")
+		-- beide haben die ersten Einnahmen schon abgeholt (c1_ah1 erledigt): c1_m1 startet von selbst, in der Party
+		local SR = g:MiniShared("StoryRules")
+		da.games.story = SR.Load({ layout = SR.Layout, done = { c1_ah1 = true } }, da)
+		db.games.story = SR.Load({ layout = SR.Layout, done = { c1_ah1 = true } }, db)
+		g:Advance(1.1)
+		T.check(type(da.games.story.active) == "table" and da.games.story.active.id == "c1_m1", "Anna: c1_m1 läuft von selbst")
+		T.check(type(db.games.story.active) == "table" and db.games.story.active.id == "c1_m1", "Ben: c1_m1 läuft von selbst")
+		act(T, g, a, "story_start", { id = "c1_m1" }, "ok", "Anna: story_start der laufenden Mission ist kein Fehler")
+		act(T, g, b, "story_start", { id = "c1_m1" }, "ok", "Ben: story_start der laufenden Mission ist kein Fehler")
 		T.eq(da.games.story.active.party, 2, "Party-Größe beim Start gemerkt")
 		-- Anna verkauft am Kiesplatz: Ben bekommt den Fortschritt (mini_notice mission coop, Toast)
 		local m = g:Mark()
@@ -609,13 +680,15 @@ return {
 		-- Ben verkauft selbst den dritten: fertig; Anna (andere Mission aktiv/keine) bekommt nichts
 		sell(T, g, b, 1)
 		T.eq(db.games.story.active.progress, 3, "Ben 3/3")
-		T.eq(da.games.story.active, false, "Anna: keine aktive Mission mehr")
+		T.check(type(da.games.story.active) == "table" and da.games.story.active.id == "c1_m2", "Anna: nächste Mission c1_m2 läuft von selbst")
+		T.eq(da.games.story.active.progress, 0, "Anna: Bens Verkauf zählt nicht für c1_m2")
 		act(T, g, b, "story_claim", { id = "c1_m1" }, "ok", "Ben holt ab")
 		T.eq(db.games.story.done.c1_m1, true, "Ben: erledigt")
 		-- Party verlassen: kein Co-op mehr
 		act(T, g, b, "party_leave", {}, "ok", "Ben verlässt die Party")
 		act(T, g, a, "story_start", { id = "c1_m2" }, "ok")
 		act(T, g, b, "story_start", { id = "c1_m2" }, "ok")
+		T.eq(db.games.story.active.id, "c1_m2", "Ben: c1_m2 läuft")
 		local Flow = H.Load("tests/lib/garage_flow.lua")
 		T.check(Flow.CompleteInspection(T, g, a) ~= nil, "Anna rechnet ab")
 		T.eq(da.games.story.active.progress, 1, "Anna 1/1")

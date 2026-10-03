@@ -61,6 +61,8 @@ local StoryService = require(Server:WaitForChild("StoryService")) -- Meilenstein
 local ShopService = require(Server:WaitForChild("ShopService")) -- Meilenstein 8: Shop (Kosmetik, DLC-Autos, Pässe, Quittungen)
 local StartService = require(Server:WaitForChild("StartService")) -- Startwahl in der Open World (vier Startwege)
 local PhoneService = require(Server:WaitForChild("PhoneService")) -- Handy: Kunden eines Fahrzeug-Checks anrufen (phone_call)
+local PublicWorkshopService = require(Server:WaitForChild("PublicWorkshopService")) -- 3.x: Große Werkstatt (pw_*)
+local DevService = require(Server:WaitForChild("DevService")) -- 3.x: Entwickler-Menü (/dev, dev_open, dev_set)
 local StoryRules = require(MiniShared:WaitForChild("StoryRules"))
 local Profiles = require(Server.Parent:WaitForChild("Profiles"))
 
@@ -230,6 +232,13 @@ local function notice(ms, kind, data)
 	data = type(data) == "table" and data or {}
 	data.kind = kind
 	emit(ms, MiniNet.Events.Notice, data)
+	-- 3.x: Willkommens-Flitzer steht neben dem neuen Spieler: Beginner-Hinweis „Taste G / Handy → Auto rufen“
+	if kind == "car_spawned" and data.at == "intro" and ms.p and ms.p.profile then
+		local okH, errH = pcall(TutorialService.Hint, ms, ms.p.profile.data, "car:intro")
+		if not okH then
+			warn("[Minispiele] Flitzer-Hinweis: " .. tostring(errH))
+		end
+	end
 	local event = storyEventOf(kind, data)
 	if event and ms.p and ms.p.profile then
 		local ok, err = pcall(StoryService.OnEvent, ms, ms.p.profile.data, event, data)
@@ -326,6 +335,18 @@ function api.event(ms, event, data)
 	if ms and ms.p and ms.p.profile then
 		StoryService.OnEvent(ms, ms.p.profile.data, event, data)
 	end
+end
+-- 3.x: Story-Ereignis der Großen Werkstatt ("pw_repair" { car, gain }, "pw_parts_sold" { part, count, value }) –
+-- auch aus dem Tick (Reparatur fertig), also außerhalb von Handle: Snapshot als geändert markieren
+function api.storyEvent(ms, name, data)
+	api.event(ms, name, data)
+	if ms then
+		ms.dirty = true
+	end
+end
+-- 3.x: Startweg zurücksetzen (Entwickler-Menü; nur nach DevService.IsDev): Rückgabe true/false
+function api.resetStart(ms, d)
+	return StartService.ResetStart(ms, d) == true
 end
 -- Auktions-Übergabe ins Auktionsbuch schreiben (vor dem Speichern beider Profile; darf warten)
 function api.recordTransfer(transfer)
@@ -762,6 +783,8 @@ function Mini.OnJoin(p)
 		TycoonService.OnJoin(ms, d, t) -- Sitzung merken; im Modus tycoon sofort Grundstück + Modelle
 		OWService.OnJoin(ms, d, t) -- Gebäude am Grundstück, offline fertige Bauten
 		StoryService.OnJoin(ms, d, t) -- Story-Sitzung, Tageswechsel der Nebenmissionen, erster Kunde
+		PublicWorkshopService.OnJoin(ms, d, t) -- 3.x: Große Werkstatt (games.pw normalisieren, Erstattungen)
+		DevService.OnJoin(ms, d, t) -- 3.x: Entwickler-Menü (Sitzung, Player.Chatted „/dev“)
 		ShopService.OnJoin(ms, d, t) -- Shop-Sitzung, Pass-Besitz (kann warten) -> Kosmetik gutschreiben
 		ms.modeSeen = nil
 		checkMode(ms, d) -- Open World: Pflicht-Tutorial beim ersten Beitritt (TutorialRules.ShouldStart)
@@ -858,6 +881,15 @@ function Mini.Tick(p, t)
 		else
 			warn("[Minispiele] Story: " .. tostring(resS))
 		end
+		-- 3.x: Große Werkstatt: laufende Reparatur (Abstand, Abschluss; nie Geld)
+		local okW, resW = pcall(PublicWorkshopService.Tick, ms, d, t)
+		if okW then
+			if resW then
+				ms.dirty = true
+			end
+		else
+			warn("[Minispiele] Große Werkstatt: " .. tostring(resW))
+		end
 		-- Schrottplatz: sobald das Fahrzeug zerlegt werden darf, einmal neuen Snapshot senden
 		local sy = d.games.scrapyard
 		if sy.vehicle and ms.scrapReadySent ~= sy.readyAt and SideGameRules.DismantleIn(d, t) <= 0 then
@@ -929,6 +961,8 @@ function Mini.OnLeave(p, wasWritable)
 	pcall(OWService.OnLeave, ms) -- Gebäude-Modelle abbauen (Bauzeit läuft im Profil weiter)
 	pcall(StoryService.OnLeave, ms) -- Story-Sitzung vergessen (Kunde, Lieferung)
 	pcall(ShopService.OnLeave, ms) -- Shop-Sitzung vergessen
+	pcall(PublicWorkshopService.OnLeave, ms) -- 3.x: laufende Reparatur pausieren (bezahlt bleibt bezahlt)
+	pcall(DevService.OnLeave, ms) -- 3.x: Chat-Verbindung lösen
 	local okAuction, errAuction = pcall(AuctionService.OnLeave, ms) -- vor P.Save: Verkäufer-Lose abbrechen
 	if not okAuction then
 		warn("[Minispiele] Auktion verlassen: " .. tostring(errAuction))
@@ -997,7 +1031,7 @@ function Mini.OnCharacter(p)
 	if not ok then
 		warn("[Minispiele] Figur: " .. tostring(err))
 	end
-	-- „Später entscheiden“: bei der nächsten Ankunft in der Spielermeile kommt die Startwahl wieder
+	-- Startwahl offen: bei der nächsten Ankunft in der Spielermeile kommt die Startwahl wieder
 	local okS, errS = pcall(StartService.OnArrive, ms, p.profile.data)
 	if not okS then
 		warn("[Minispiele] Startwahl: " .. tostring(errS))
@@ -1112,6 +1146,8 @@ StoryService.Register(Actions, api)
 ShopService.Register(Actions, api)
 StartService.Register(Actions, api)
 PhoneService.Register(Actions, api)
+PublicWorkshopService.Register(Actions, api) -- 3.x: pw_open, pw_repair, pw_sell_parts (ab Level 1, jeder Startweg)
+DevService.Register(Actions, api) -- 3.x: dev_open, dev_set (DevService.IsDev bei jedem Aufruf)
 
 for name in pairs(MiniNet.Actions) do
 	assert(Mini.Handlers[name], "Kein Handler für " .. name)
@@ -1159,6 +1195,8 @@ function Mini.Init(c)
 	StoryService.Init(c)
 	ShopService.Init(c) -- PromptGamePassPurchaseFinished; purchasePrompt über c.emit
 	StartService.Init(c)
+	PublicWorkshopService.Init(c)
+	DevService.Init(c) -- TextChatCommand „/dev“, Gruppenbesitzer im Hintergrund
 end
 
 return Mini

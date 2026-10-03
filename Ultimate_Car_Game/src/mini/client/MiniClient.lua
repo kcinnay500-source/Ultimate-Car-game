@@ -61,6 +61,7 @@ local PAGES = {
 	shop = "ShopUI",
 	auction = "AuctionUI",
 	arcade = "ArcadeUI",
+	grosswerkstatt = "PublicWorkshopUI", -- 3.x: Große Werkstatt (Autos reparieren, Teile verkaufen)
 }
 
 local opts = {}
@@ -372,6 +373,9 @@ local function onNotice(data)
 		end
 	elseif kind == "ow_ready" or kind == "ow_build" or kind == "ow_collect" or kind == "ow_passive" then
 		call(Modules.buildings and Modules.buildings.OnNotice, data) -- Gebäude: Karten neu, Countdown, Passiv-Schalter
+	elseif kind == "pw" then
+		-- 3.x: Große Werkstatt (Ansicht, Reparatur gestartet/fertig/pausiert, Teile verkauft)
+		call(Modules.grosswerkstatt and Modules.grosswerkstatt.OnNotice, data)
 	elseif kind == "start" then
 		if StartChoice then
 			call(StartChoice.OnNotice, data) -- Startwahl bestätigt/abgelehnt
@@ -518,12 +522,23 @@ function MiniClient.Start(o)
 				Snapshot = MiniClient.Snapshot,
 				GetState = opts.getState,
 				OnEvent = opts.onEvent,
-				ReopenStart = StartChoice and StartChoice.Reopen or nil, -- „Startweg wählen“ in der App Einstellungen
 			})
 		end)
 		if not okPh then
 			Phone = nil
 			warnOnce("phone", "Handy nicht geladen: " .. tostring(errPh))
+		end
+	end
+
+	-- 3.x: Entwickler-Menü (DevUI, eigene ScreenGui "DevMenu"; Strg+Umschalt+D oder Chat „/dev“). Der Server
+	-- antwortet nur Entwicklern (DevService.IsDev); DevUI hört selbst auf mini_notice { kind = "dev" }.
+	local devNode = folder:FindFirstChild("DevUI")
+	if devNode then
+		local okDev, errDev = pcall(function()
+			require(devNode).Start({ Remote = Remote, Toast = MiniClient.Toast })
+		end)
+		if not okDev then
+			warnOnce("dev", "Entwickler-Menü nicht geladen: " .. tostring(errDev))
 		end
 	end
 

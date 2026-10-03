@@ -48,6 +48,7 @@ UI.Tabs = {
 	{ key = "press", label = "Schrottpresse" },
 	{ key = "tuning", label = "Tuning" },
 	{ key = "dealer", label = "Autohaus" },
+	{ key = "grosswerkstatt", label = "Große Werkstatt" }, -- 3.x: Autos reparieren, Teile verkaufen (PublicWorkshopUI)
 	{ key = "track", label = "Teststrecke" },
 	{ key = "carwash", label = "Waschstraße" },
 	{ key = "auction", label = "Auktion" },
@@ -72,6 +73,7 @@ UI.TabTitles = {
 	press = "Schrottpresse",
 	tuning = "Tuning-Zentrum",
 	dealer = "Autohaus",
+	grosswerkstatt = "Große Werkstatt", -- 3.x
 	track = "Teststrecke",
 	carwash = "Waschstraße",
 	scrapyard = "Schrottplatz",

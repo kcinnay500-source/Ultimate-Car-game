@@ -43,6 +43,8 @@ local NAMES = {
 	dyno = "Leistungsprüfstand",
 	testdrive = "Probefahrt",
 	meile_map = "Spielermeile",
+	grosswerkstatt = "Große Werkstatt", -- 3.x: Westende der Spielermeile (Autos reparieren)
+	teileankauf = "Teile-Ankauf (Große Werkstatt)", -- 3.x
 }
 MapUI.Names = NAMES
 MapUI.FallbackName = "Weiteres Reiseziel"

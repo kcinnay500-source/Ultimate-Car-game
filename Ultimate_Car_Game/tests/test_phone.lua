@@ -114,10 +114,6 @@ local function setup(H, T, opts)
 			OnEvent = function(fn)
 				table.insert(S.hooks, fn)
 			end,
-			ReopenStart = function()
-				flags.reopened = (flags.reopened or 0) + 1
-				return true
-			end,
 		})
 	end)
 	g:Advance(0.5)
@@ -473,16 +469,14 @@ return {
 		click(T, S, find(visibleNamed(S, "Setting_beginner"), "Toggle"), "Beginner-Schalter")
 		ls = S.rec.Last("lobby_settings")
 		T.check(ls.beginner == false and ls.passive == true, "Beginner aus, Passiv bleibt an")
-		-- Startwahl verschoben („Später entscheiden“): Knopf „Startweg wählen“ öffnet sie wieder und schließt das Handy
+		-- Startwahl ist Pflicht (StartUI zeigt sich selbst, kein „Später entscheiden“): das Handy bietet keinen Knopf
+		-- „Startweg wählen“ mehr – weder ohne noch mit offener Startwahl
 		T.check(visibleNamed(S, "ChooseStart") == nil, "ohne offene Startwahl kein Knopf")
 		S.snap.start = { pending = true, path = "" }
 		g:Advance(0.6)
-		local chooseStart = visibleNamed(S, "ChooseStart")
-		T.check(chooseStart ~= nil, "Knopf „Startweg wählen“ bei offener Startwahl")
-		click(T, S, chooseStart, "Startweg wählen")
-		T.eq(S.flags.reopened, 1, "Startwahl wieder geöffnet (StartUI.Reopen)")
-		g:Advance(0.4)
-		T.eq(S.Phone.IsOpen(), false, "Handy schließt für die Startwahl")
+		T.check(visibleNamed(S, "ChooseStart") == nil, "auch bei offener Startwahl kein Knopf (Startwahl ist Pflicht)")
+		T.eq(S.flags.reopened, nil, "Handy öffnet die Startwahl nicht")
+		T.check(visibleNamed(S, "Setting_passive") ~= nil, "Einstellungen bleiben bedienbar")
 		S.snap.start = { pending = false, path = "werkstatt" }
 		T.eq(g:ErrorText(), "", "keine Fehler")
 		g:Close()

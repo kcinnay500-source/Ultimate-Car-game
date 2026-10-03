@@ -8,7 +8,7 @@
 * Werkstatt.CarSpawn    derselbe Part in der Plot-Vorlage auf dem Kundenparkplatz (plotlokal, Nase zur Meile).
 * City.Track            Checkpoints.CP1..CPn (unsichtbar, CanCollide false, CanTouch true, CanQuery false, quer
   über die ganze Streckenbreite) und Ziel (Start/Ziel-Linie unter der Brücke). Reihenfolge im Uhrzeigersinn wie
-  Schleife T; Start = CarSpawns.track kurz vor der Ziellinie, das erste Überfahren der Ziellinie zählt nicht.
+  die Mittellinie; Start = CarSpawns.track kurz vor der Ziellinie, das erste Überfahren der Ziellinie zählt nicht.
 
 Jede Ausfahrt (ROUTES) und jede Plot-Einfahrt wird in checks.py mit drive.py abgefahren.
 """
@@ -50,7 +50,7 @@ PLOT_SPAWN = (7.5, -1.0, 64, 180, (1, -1, 2))
 PLOT_ROUTE_LOCAL = [(7.5, 64), (7.5, 102.5)]      # bis auf die Meile-Fahrspur (Welt Z ∓6.5)
 
 # Teststrecke "Grand-Prix-Kurs" (3.0): eine Mittellinie für Belag (districts/dealer_track.build_track), Checkpoints,
-# Verkehrsschleife T (ground_roads.traffic_loops -> track_loop()) und Prüfungen (checks.py, test_vehicles.py).
+# 3.0: keine Verkehrsschleife mehr (Verkehr gehört nicht auf die Rennlinie) und Prüfungen (checks.py, test_vehicles.py).
 # Start an der Westecke der Start/Ziel-Geraden (-90, 270), Blick nach Osten, im Uhrzeigersinn (Karte: Norden oben):
 #   Start/Ziel-Gerade -> Kurve 1 (rechts) -> S-Kurve (links/rechts) -> schnelle Kurve (rechts, r 85)
 #   -> lange Gegengerade (320) -> Haarnadel (180° rechts) -> Linksknick -> Westgerade -> weite Zielkurve (rechts)
@@ -133,7 +133,7 @@ def track_point(idx, frac):
 
 
 def track_loop(step=15.0):
-    """Geschlossene Mittellinie (ohne doppelten Endpunkt) für Schleife T und die Prüfungen: Geraden-Endpunkte und
+    """Geschlossene Mittellinie (ohne doppelten Endpunkt) für Belag, Checkpoints und die Prüfungen: Geraden-Endpunkte und
     Bogenpunkte alle `step` Grad."""
     pts = []
     for g in track_geometry():

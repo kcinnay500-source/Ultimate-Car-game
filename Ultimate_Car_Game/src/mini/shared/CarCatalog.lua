@@ -204,11 +204,11 @@ CarCatalog.SpawnKeys = { "workshop", "dealer", "testdrive", "track", "carwash", 
 CarCatalog.Track = {
 	countdown = 3, -- Sekunden bis zum Start (Startampel)
 	maxRunSeconds = 240, -- danach verfällt der Lauf
-	-- Balance: eine Runde auf dem Oval (~780 Studs) dauert je nach Auto etwa 8–16 s. Der ganze Topf je Spieler
-	-- (erste Runde + alle Verbesserungen unter der Basiszeit) liegt bei ~400 Cr × Level-Bonus.
+	-- Balance (3.x): eine Runde auf dem Grand-Prix-Kurs (~1220 Studs) dauert je nach Auto etwa 20–45 s. Der ganze
+	-- Topf je Spieler (erste Runde + alle Verbesserungen unter der Basiszeit) liegt bei ~400 Cr × Level-Bonus.
 	firstReward = 100, -- erste gültige Runde
 	perSecond = 15, -- Cr je Sekunde Verbesserung der belohnten Bestzeit
-	baselineSeconds = 30, -- Verbesserungen zählen erst unterhalb dieser Zeit (langsame erste Runde bringt nichts)
+	baselineSeconds = 45, -- 3.x: längere Strecke (vorher 30 s auf dem Oval). Verbesserungen zählen erst unterhalb dieser Zeit (langsame erste Runde bringt nichts)
 	maxReward = 250, -- Deckel je Lauf (vor Level-Bonus)
 	levelBonus = 0.1, -- +10 % je Spielerlevel über 1 (Level 40: ×4,9)
 	minImprovement = 0.05, -- Sekunden

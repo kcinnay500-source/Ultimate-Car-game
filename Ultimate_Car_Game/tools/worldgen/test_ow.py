@@ -72,7 +72,11 @@ def test_templates():
 
 
 def test_kiesplatz():
-    check("kiesplatz" in ORDER and ORDER[-1] == "kiesplatz", "kiesplatz muss als letzter District gebaut werden")
+    # 3.x: nach dem Kiesplatz folgt nur noch die Große Werkstatt (räumt ihr Gelände nach allen anderen frei)
+    tail = [k for k in ORDER if k != "grosswerkstatt"]
+    check("kiesplatz" in ORDER and tail[-1] == "kiesplatz",
+          "kiesplatz muss als letzter District (vor der Großen Werkstatt) gebaut werden")
+    check(ORDER[-1] == "grosswerkstatt", "grosswerkstatt muss ganz zuletzt gebaut werden (räumt ihr Gelände frei)")
     st = contract.STATIONS.get("kiesplatz")
     check(st is not None and st[0] == "story" and st[1].startswith("Kiesplatz"), "Station kiesplatz (story)")
     ar = contract.ARRIVALS.get("kiesplatz")

@@ -14,8 +14,8 @@
 --                  dem Snapshot (cars), „Favorit“ -> car_favourite {id} (CarCatalog.StarterCarId = Flitzer)
 --   Karte          öffnet den Stadtplan (Minispiel-Tab "map")
 --   Konto          Credits, Level, Prestige-Rang, Tycoon-Bargeld (aus dem Minispiel-Snapshot)
---   Einstellungen  Beginner-/Passiv-Modus (bestehende Aktion lobby_settings); solange die Startwahl offen ist
---                  („Später entscheiden“), der Knopf „Startweg wählen“ (ctx.ReopenStart -> StartUI.Reopen)
+--   Einstellungen  Beginner-/Passiv-Modus (bestehende Aktion lobby_settings). Die Startwahl ist Pflicht und zeigt
+--                  sich selbst (StartUI), das Handy bietet dafür keinen Knopf mehr
 --
 -- Der Client sendet nur Absichten: phone_call {id} (Auftrags-ID, String), lobby_settings, car_call {} und
 -- car_favourite {id} (Auto-Id als Zahl, keine Beträge) über MiniRemote. Ob und
@@ -33,7 +33,6 @@
 --   OnEvent(fn)   meldet fn(kind, value) für das 2.4.0-Server-Ereignis "call" an, optional; ohne Hook hört das Handy
 --                 selbst am Remote "Event" auf "call"
 --   Snapshot()    letzter Minispiel-Snapshot (MiniClient.Snapshot), optional (sonst PhoneUI.OnSnapshot)
---   ReopenStart() Startwahl wieder zeigen (StartUI.Reopen), optional
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -120,8 +119,6 @@ local TEXT = {
 	isFavourite = "★ Favorit",
 	starterInfo = "Startauto · immer dabei · unverkäuflich",
 	inAuction = "In Auktion",
-	startTitle = "Startweg wählen",
-	startInfo = "Du hast deinen Start noch nicht gewählt. Tipp hier, um die vier Startwege zu sehen.",
 }
 
 local ctx: any = {}
@@ -1046,39 +1043,6 @@ function render.einstellungen()
 	toggle(1, "beginner", TEXT.beginner, TEXT.beginnerInfo)
 	toggle(2, "passive", TEXT.passive, TEXT.passiveInfo)
 	note(sf, "Hint", TEXT.settingsHint, 3, 30)
-	-- Startwahl verschoben („Später entscheiden“): hier kommt sie jederzeit zurück
-	if PhoneUI.StartPending() and type(ctx.ReopenStart) == "function" then
-		local sh = touchH(44)
-		local c = card(sf, "Setting_start", 4, 52 + sh)
-		label(c, "Info", TEXT.startInfo, {
-			Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 32), TextSize = 11, TextColor3 = C.muted,
-			TextYAlignment = Enum.TextYAlignment.Top,
-		})
-		local b = make("TextButton", c, {
-			Name = "ChooseStart", Text = TEXT.startTitle, AutoButtonColor = true, BackgroundColor3 = C.blue, BorderSizePixel = 0,
-			Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = C.text,
-			Position = UDim2.new(0, 10, 1, -(sh + 6)), Size = UDim2.new(1, -20, 0, sh),
-		})
-		corner(b, 10)
-		b.Activated:Connect(function()
-			PhoneUI.ReopenStart()
-		end)
-	end
-end
-
--- Ist die Startwahl noch offen (Minispiel-Snapshot start.pending)?
-function PhoneUI.StartPending(): boolean
-	local s = snapshot()
-	return type(s) == "table" and type(s.start) == "table" and s.start.pending == true
-end
-
--- „Startweg wählen“: Handy zu, Startwahl (StartUI) wieder auf
-function PhoneUI.ReopenStart(): boolean
-	if not PhoneUI.StartPending() or type(ctx.ReopenStart) ~= "function" then
-		return false
-	end
-	PhoneUI.Close()
-	return call(ctx.ReopenStart) == true
 end
 
 -- Anruf-Bildschirm: Avatar, Name, Status (klingelt / verbunden / beendet), Antwort als Sprechblase, Auflegen
@@ -1214,7 +1178,7 @@ local function signature(): string
 		return "konto|" .. tostring(s.credits) .. "|" .. tostring(s.level) .. "|" .. tostring(pr.rank) .. "|" .. tostring(run.cash)
 	elseif app == "einstellungen" then
 		local v = currentSettings()
-		return "einstellungen|" .. (v and (tostring(v.passive) .. tostring(v.beginner)) or "nil") .. "|" .. tostring(PhoneUI.StartPending())
+		return "einstellungen|" .. (v and (tostring(v.passive) .. tostring(v.beginner)) or "nil")
 	elseif app == "auto" then
 		local parts = {}
 		for _, car in ipairs(PhoneUI.GarageCars()) do

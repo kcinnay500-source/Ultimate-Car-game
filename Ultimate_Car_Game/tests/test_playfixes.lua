@@ -164,10 +164,20 @@ return {
 		local g = H.Garage({})
 		local pl, d, p = join(g, 9131, "Paul")
 		T.eq(p.mode, "openworld", "Open World")
+		-- 3.x: Startwahl ist Pflicht (Überspringen erst danach); auf dem Weg Verkaufshaus folgt c1_m1 auf c1_ah1
+		act(T, g, pl, "start_choose", { path = "autohaus" }, "ok")
+		T.check(type(d.games.story.active) == "table" and d.games.story.active.id == "c1_ah1", "Story läuft sofort: c1_ah1 aktiv")
 		act(T, g, pl, "tutorial_skip", {}, "ok")
-		local st = cityStation(g, "kiesplatz")
-		local arrival = st and st:FindFirstChild("Arrival")
-		g:Teleport(pl, arrival and arrival.WorldPosition or st.Position, arrival and nil or Vector3.new(0, 3, 4))
+		-- erste Einnahmen schon abgeholt (c1_ah1 erledigt, nichts aktiv)
+		local SR = g:MiniShared("StoryRules")
+		d.games.story = SR.Load({ layout = SR.Layout, done = { c1_ah1 = true } }, d)
+		local st = d.games.story
+		T.eq(st.active, false, "nach c1_ah1 nichts aktiv")
+		g:Advance(1.1)
+		T.check(type(st.active) == "table" and st.active.id == "c1_m1", "c1_m1 startet ohne „Starten“ im Takt")
+		local station = cityStation(g, "kiesplatz")
+		local arrival = station and station:FindFirstChild("Arrival")
+		g:Teleport(pl, arrival and arrival.WorldPosition or station.Position, arrival and nil or Vector3.new(0, 3, 4))
 		local SS = g:MiniServer("StoryService")
 		local offer = nil
 		for _ = 1, 200 do
@@ -178,6 +188,9 @@ return {
 			g:Advance(0.5)
 		end
 		T.check(offer ~= nil, "Kunde am Kiesplatz")
+		-- Verkauf, bevor der Takt die Mission (wieder) gestartet hat: der Verkauf selbst startet c1_m1 und zählt
+		st = d.games.story
+		st.active = false
 		T.eq(d.games.story.active, false, "nichts gestartet")
 		local m = g:Mark()
 		act(T, g, pl, "story_sell", { offer = offer.serial, price = 1 }, "ok")
@@ -201,6 +214,8 @@ return {
 		local TR = g:MiniShared("TutorialRules")
 		local ms = g:MiniState(pl)
 		-- Belohnung zurückgehalten (Robux-Quittung lief), Spieler verlässt das Spiel vor dem nächsten Tick
+		-- 3.x: Überspringen erst nach der (Pflicht-)Startwahl
+		T.eq((g:MiniShared("MetaRules").SetStartPath(d, "werkstatt")), true, "Startweg werkstatt")
 		TR.Skip(d)
 		ms.tutorialRewardPending = true
 		local money, xp = d.money, d.xp

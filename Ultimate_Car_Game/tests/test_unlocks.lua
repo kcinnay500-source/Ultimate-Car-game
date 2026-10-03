@@ -553,6 +553,8 @@ return {
 				T.check(statSet[arg], "Statistik bekannt " .. h.when)
 			elseif kind == "job" then
 				T.check(arg == "accepted" or arg == "approval", "Auftrags-Auslöser bekannt " .. h.when)
+			elseif kind == "car" then
+				T.eq(arg, "intro", "Auto-Auslöser bekannt (Willkommens-Flitzer) " .. h.when)
 			else
 				T.eq(kind, "station", "Auslöser " .. h.when)
 			end

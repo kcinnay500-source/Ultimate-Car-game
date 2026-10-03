@@ -523,7 +523,7 @@ def build_backyard(dm, anim, lib):
 
 
 # ================================================================ Teststrecke (D13) - Grand-Prix-Kurs (3.0)
-# Die Mittellinie (Geraden + Bögen), Breite, Checkpoints und Schleife T kommen aus vehicles.py (eine Quelle).
+# Die Mittellinie (Geraden + Bögen), Breite und Checkpoints kommen aus vehicles.py (eine Quelle).
 # Höhen: Belag -0.95 (Geraden: Quader, Bögen: Trapez-Sektoren ohne Überlappung) | Kies-Auslauf -1.00 (unter dem
 # Belagrand beginnend) | Ziellinie -0.90 | Kerbs abwechselnd -0.85 / -0.83 | Reifenstapel auf dem Auslauf.
 SAND = (196, 178, 140)

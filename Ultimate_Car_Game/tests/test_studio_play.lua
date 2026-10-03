@@ -784,6 +784,175 @@ local function play(T0, H, vp, path)
 	T.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
 end
 
+-- 3.x: ein Server (all-Place, Studio), vier neue Profile nacheinander bei 1280x650: Lobby -> Open World per Klick, jeder
+-- Startweg über die hit-getestete StartUI; Mission 1 des Wegs läuft sofort (Snapshot + Karte „Deine Mission“), der
+-- Willkommens-Flitzer steht neben dem Spieler; danach öffnet „/dev“ (Studio = Entwickler) das Entwickler-Menü und
+-- setzt per Klick Level 90 und Credits (Server-Profil und 2.4.0-Zustand).
+local function playStartsAndDev(T0, H)
+	local vp = VIEWPORTS[1]
+	local Hit = H.Load("tests/lib/gui_hit.lua")
+	local g = H.Garage({ placeKind = "all", viewport = H.Mock.Vector2.new(vp[1], vp[2]), studio = true })
+	local GC = g:MiniShared("GameConfig")
+	local MR = g:MiniShared("MetaRules")
+	local SR = g:MiniShared("StoryRules")
+	local firstPlayer, firstT
+	for i, path in ipairs({ "werkstatt", "autohaus", "produktion", "schrottplatz" }) do
+		local T = prefixed(T0, string.format("[%dx%d Start %s] ", vp[1], vp[2], path))
+		local uid = 5300 + i
+		local p = g:Join(uid, { name = "Start" .. i })
+		g:Advance(0.5)
+		g:StartClient(p)
+		g:Advance(2)
+		local pg = p.PlayerGui
+		local MiniUI = g:ClientModule(p, "Mini.MiniUI")
+		local function visible(guiName, name)
+			local root = pg:FindFirstChild(guiName)
+			for _, x in ipairs(root and root:GetDescendants() or {}) do
+				if x.Name == name and x:IsA("GuiObject") and Hit.Visible(x) then
+					return x
+				end
+			end
+			return nil
+		end
+		local function click(button, what)
+			local ok = Hit.Click(T, g, p, button, { label = what })
+			g:Advance(0.35)
+			return ok
+		end
+		-- Lobby -> Open World
+		T.check(MiniUI.IsOpen and MiniUI.CurrentTab == "lobby", "Lobby-Tab offen")
+		click(visible("Minispiele", "ModeCard_openworld"), "Lobby: Karte „Open World“")
+		g:Advance(3.2)
+		click(visible("Minispiele", "GoButton"), "Lobby: „Los geht's“")
+		g:Advance(3.5)
+		local d = g:D(p)
+		if not T.eq(g:Session(p).mode, "openworld", "in der Open World") then
+			return
+		end
+		T.check(MR.StartPending(d), "Startwahl offen (Pflicht)")
+		local Start = g:ClientModule(p, "Mini.StartUI")
+		if MiniUI.IsOpen then
+			click(visible("Minispiele", "Close"), "Panel schließen")
+			g:Advance(0.4)
+		end
+		T.check(Start.IsOpen(), "Startwahl sichtbar")
+		T.check(visible("StartChoice", "Later") == nil and visible("StartChoice", "LaterButton") == nil, "kein „Später entscheiden“")
+		for _, other in ipairs(GC.Start.Order) do
+			T.check(visible("StartChoice", "Choice_" .. other) ~= nil, "Karte " .. other .. " sichtbar")
+		end
+		local m = g:Mark()
+		click(visible("StartChoice", "Choice_" .. path), "Startwahl „" .. path .. "“")
+		g:Advance(1.5)
+		T.eq(MR.StartPath(d), path, "Startweg gespeichert")
+		T.check(not Start.IsOpen(), "Startwahl geschlossen")
+		-- Mission 1 des Wegs läuft sofort
+		local list = GC.Story.Chapters[1].Paths and GC.Story.Chapters[1].Paths[path] or GC.Story.Chapters[1].Missions
+		local first = list[1]
+		local active = d.games.story.active
+		T.check(type(active) == "table" and active.id == first.id, "Mission 1 läuft sofort (" .. first.id .. ", erhalten " .. tostring(type(active) == "table" and active.id) .. ")")
+		local started = nil
+		for _, n in ipairs(g:Notices(p, "story", m)) do
+			if n.event == "started" and n.mission == first.id then
+				started = n
+			end
+		end
+		T.check(started ~= nil, "Hinweis „Mission gestartet“")
+		g:Advance(1.2)
+		local sn = g:MiniSnapshot(p)
+		T.check(sn and sn.story and type(sn.story.active) == "table" and sn.story.active.id == first.id, "Snapshot story.active = Mission 1")
+		-- Kapitel-Karte „Deine Story beginnt“ wegklicken, dann zeigt die Karte „Deine Mission“ Mission 1
+		local ok = visible("Missionen", "ChapterOk")
+		if ok then
+			click(ok, "Kapitel-Karte „Los geht's!“")
+			g:Advance(0.5)
+		end
+		local tracker = visible("Missionen", "MissionTracker")
+		T.check(tracker ~= nil, "Karte „Deine Mission“ sichtbar")
+		local title = tracker and tracker:FindFirstChild("Title", true)
+		T.eq(title and title.Text, first.title, "Karte zeigt Mission 1")
+		-- Willkommens-Flitzer neben dem Spieler (Startauto, Open World)
+		local car = nil
+		for _ = 1, 20 do
+			car = g:Find("Workspace.PlayerCars.Car_" .. uid)
+			if car then
+				break
+			end
+			g:Advance(0.5)
+		end
+		T.check(car ~= nil, "Flitzer erscheint (Workspace.PlayerCars.Car_" .. uid .. ")")
+		local intro = nil
+		for _, n in ipairs(g:Notices(p, "car_spawned", m)) do
+			if n.at == "intro" then
+				intro = n
+			end
+		end
+		T.check(intro ~= nil and intro.model == "flitzer", "car_spawned intro: Flitzer")
+		-- Platz: direkt neben dem Spieler (Raycast in Roblox) bzw. die nächste freie Fahrbahn (der Mock kennt keine
+		-- Raycasts): in jedem Fall in Sichtweite und auf dem Boden
+		local root = g:Root(p)
+		if car and root then
+			local dist = (car:GetPivot().Position - root.Position).Magnitude
+			T.check(dist < 80, "Flitzer in Sichtweite (" .. math.floor(dist) .. " Studs)")
+			T.check(math.abs(car:GetPivot().Position.Y - (root.Position.Y - 3)) < 6, "Flitzer steht auf dem Boden")
+		end
+		if i == 1 then
+			firstPlayer, firstT = p, T
+		end
+	end
+	T0.eq(#g:Errors(), 0, "keine Laufzeitfehler (Startwege): " .. g:ErrorText())
+
+	---------------------------------------------------------------- Entwickler-Menü über „/dev“ (Studio)
+	local p, T = firstPlayer, firstT
+	if not p then
+		return
+	end
+	local d = g:D(p)
+	local gui = p.PlayerGui:FindFirstChild("DevMenu")
+	T.check(gui ~= nil and gui.DisplayOrder == 45, "ScreenGui DevMenu (45)")
+	T.check(gui ~= nil and not gui.Enabled, "Menü anfangs zu")
+	local m = g:Mark()
+	g:Activate()
+	p.Chatted:Fire("/dev")
+	g:Advance(0.8)
+	local opened = g:Notices(p, "dev", m)
+	T.check(#opened >= 1 and opened[#opened].event == "open", "„/dev“ im Studio: mini_notice dev/open")
+	if not T.check(gui ~= nil and gui.Enabled, "Entwickler-Menü offen") then
+		return
+	end
+	local function find(name)
+		for _, x in ipairs(gui:GetDescendants()) do
+			if x.Name == name then
+				return x
+			end
+		end
+		return nil
+	end
+	local function typeInto(name, text)
+		local box = find(name)
+		g:InClient(p, function()
+			box.Text = text
+		end)
+	end
+	typeInto("LevelBox", "90")
+	Hit.Click(T, g, p, find("SetLevel"), { label = "„Level setzen“" })
+	g:Advance(1.2)
+	T.eq(d.level, 90, "Level 90 im Profil")
+	typeInto("CreditsBox", "250.000")
+	Hit.Click(T, g, p, find("SetCredits"), { label = "„Credits setzen“" })
+	g:Advance(1.2)
+	T.eq(d.money, 250000, "250.000 Credits im Profil")
+	local st = g:State(p)
+	T.check(st and st.data and st.data.level == 90 and st.data.money == 250000, "2.4.0-Zustand zeigt Level 90 und 250.000 Credits")
+	local info = find("Info_Level")
+	T.check(info ~= nil and string.find(info.Text, "90", 1, true) ~= nil, "Menü zeigt Level 90")
+	local infoC = find("Info_Credits")
+	T.check(infoC ~= nil and string.find(infoC.Text, "250.000", 1, true) ~= nil, "Menü zeigt 250.000 Credits")
+	Hit.Click(T, g, p, find("Close"), { label = "„Schließen“" })
+	g:Advance(0.3)
+	T.check(not gui.Enabled, "Menü geschlossen")
+	T0.eq(#g:Errors(), 0, "keine Laufzeitfehler: " .. g:ErrorText())
+end
+
 local cases = {
 	{ "gui_hit: DisplayOrder, ZIndex, Active/Knöpfe, ClipsDescendants, Topbar-Abstand, UIScale, Enabled/Visible", function(T, H)
 		local Hit = H.Load("tests/lib/gui_hit.lua")
@@ -857,5 +1026,8 @@ table.insert(cases, { "Studio-Spiel 1280x650: Startwahl Produktion – Bauteil-P
 end })
 table.insert(cases, { "Studio-Spiel 390x844: Startwahl Schrottplatz – Schrott abholen, Tutorial-Weg per Klick", function(T, H)
 	play(T, H, VIEWPORTS[6], "schrottplatz")
+end })
+table.insert(cases, { "Studio-Spiel 1280x650 (all-Place): jeder Startweg per StartUI-Klick -> Mission 1 sofort, Flitzer erscheint; „/dev“ öffnet das Entwickler-Menü, Level 90 und Credits per Klick", function(T, H)
+	playStartsAndDev(T, H)
 end })
 return cases

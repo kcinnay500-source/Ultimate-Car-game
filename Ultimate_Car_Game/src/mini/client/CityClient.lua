@@ -44,8 +44,9 @@
 --              (Nabe des Zifferblatts; Hub am Model = Turmmitte, bestimmt die Außenseite) wird der Winkel absolut gesetzt,
 --              gleich in welcher Ruhestellung der Zeiger steht; sonst Drehung um die lokale Z-Achse des eigenen Pivots
 --              mit Grundstellung 12 Uhr.
---   signal     Ampel nach dem 32-s-Programm der Serverzeit (CITY_SPEC §3.6). Linsen: Kinder Red/Amber/Green, PedRed/PedGreen.
---              Attribute: Serves ("Meile"|"Markt"|…), Group, PedPhase ("NS" 1–13 s | "WE" 18–26 s; sonst abgeleitet)
+--   signal     Ampel nach dem 32-s-Programm der Serverzeit (CITY_SPEC §3.6; 3.0: Gelb 3 s, Alles-Rot 1,5 s, siehe
+--              SIGNAL_PROGRAM). Linsen: Kinder Red/Amber/Green, PedRed/PedGreen (an = Neon, aus = dunkel, Transparenz 0,7).
+--              Attribute: Serves ("Meile"|"Markt"|…), Group, PedPhase ("NS" 0,5–10,5 s | "WE" 16–26 s; sonst abgeleitet)
 --   startlight Startampel: Neon-Lampen (nach Namen sortiert) gehen nacheinander an, dann alle aus. Attribute: Period (5)
 --   wash       Waschbürsten ("Buerste"/"Bürste"/"Brush" im Namen) drehen um ihre Achse. Attribute: Speed (Grad/s, 240), Axis ("X")
 --   parkgrid   bekannt, keine Animation (lokale Rätselautos)
@@ -59,16 +60,24 @@
 --              Ordners/Models in City mit WP1..WPn. Attribute: Speed (Studs/s, 14), Loop (false = hin und zurück, sonst
 --              Rundkurs), FacingOffset (Grad, 0), HeightOffset (Studs; Standard: Pivot-Höhe minus Höhe von WP1),
 --              Phase (0..1) bzw. StartOffset (Studs; Standard: Startposition des Autos).
---              Haltelinien: String-Attribut Stops ("x,z,Serves;…") am Pfad-Ordner oder am Auto; das Auto hält dort,
---              solange die Ampel für Serves nicht grün ist. Autos auf demselben Pfad halten 14 Studs Abstand.
---              Die Teile eines Verkehrsautos werden lokal CanCollide/CanQuery/CanTouch=false gesetzt (rein optisch).
---              Length (Studs, 16): Fahrzeuglänge für den Abstand. Bus: DwellAt ("x,z;x,z") + Dwell (s) = Haltestellen,
---              an denen das Fahrzeug einmal pro Runde hält.
+--              Haltelinien (3.0): String-Attribut StopLines ("x,z,Serves;…" = Punkt auf der weißen Linie) am Pfad-Ordner
+--              oder am Auto; die Fahrzeugfront hält 3,5 Studs davor, solange die Ampel für Serves nicht grün ist (bei
+--              Gelb nur, wenn das Anhalten mit <= 6,5 st/s² geht). Alt: Stops ("x,z,Serves;…") = Haltepunkt der Mitte,
+--              dort hält das Auto immer, solange nicht grün (wie bisher; notfalls abrupt an der Grenze).
+--              3.0 kinematisch: Anfahren 6 st/s², Bremsprofil 5 st/s² (Notbremsung bis 12), Abstand im Stand 5,5 Studs
+--              Stoßstange zu Stoßstange, in Fahrt Zeitlücke 1,5 s, Kurven nach Radius langsamer (Kreisel), Halt vor
+--              Spielfiguren/Spielerautos in der Spur (4 Studs Abstand) und vor Zebras, auf denen jemand steht.
+--              Ein Auto-Model bekommt eine unsichtbare Kollisionsbox "Kollision" (CanCollide=true, kein Query/Touch);
+--              seine übrigen Teile und einzelne Part-Autos sind CanCollide/CanQuery/CanTouch=false.
+--              Length (Studs, 16), Front/Rear (Pivot bis Nase/Heck, sonst Length/2 bzw. aus der Box), Width (6).
+--              Bus: DwellAt ("x,z;x,z") + Dwell (s) = Haltestellen, an denen das Fahrzeug einmal pro Runde hält.
 --   flag       Fahne weht (Drehung um die Mastkante bzw. den Pivot). Attribute: Swing (Grad, 12), Period (3)
 -- Unbekannte Anim-Werte werden einmal je Wert gemeldet (warn) und nicht animiert.
 -- Kosten (CITY_SPEC §3.7/§8): nur Objekte bis 300 Studs von der Kamera laufen; bis 120 Studs jedes Frame, dahinter im
--- 0,25-s-Takt, zeitlich versetzt (jedes Objekt mit eigenem Takt-Versatz). Höchstens 8 Autos (die nächsten) werden
--- jedes Frame bewegt, die übrigen im 0,25-s-Takt (Parts per Tween). Ein Fehler in einem Objekt stoppt nur dieses.
+-- 0,25-s-Takt, zeitlich versetzt (jedes Objekt mit eigenem Takt-Versatz); Ampeln jedes Frame (synchron). Verkehr
+-- (3.0): Logik mit höchstens 30 Hz für alle sichtbaren Autos (jenseits der Sichtweite 2 Hz, nicht gezeichnet);
+-- gezeichnet werden die 8 nächsten (bis 120 Studs) und alle nahe einer Spielfigur mit 30 Hz, die übrigen mit 10 Hz.
+-- Ein Fehler in einem Objekt stoppt nur dieses.
 -- Neon, Fahnen, Fontänen, Pylonen und Warnleuchten laufen als endlose Tweens ohne Lua-Arbeit pro Frame.
 -- Periodische Bewegungen richten sich nach der Serverzeit, damit alle Spieler dasselbe sehen.
 -- Fehlt Workspace.City (oder Animated), wartet das Modul still, bis es erscheint.
@@ -94,7 +103,6 @@ local CULL = 300 -- Studs: weiter entfernte Animationen pausieren (CITY_SPEC: 30
 local NEAR = 120 -- Studs: bis hier jedes Frame, dahinter im langsamen Takt
 local SHAKE_NEAR = 80 -- Studs: Rüttel-Effekt des Prüfstands nur aus der Nähe
 local SLOW_INTERVAL = 0.25
-local FOLLOW_GAP = 14
 local SIGNAL_CYCLE = 32
 
 CityClient.FastTraffic = FAST_TRAFFIC
@@ -305,25 +313,42 @@ local function pulse(inst, period, colorB)
 	return tweens
 end
 
----------------------------------------------------------------- Ampelprogramm (CITY_SPEC §3.6)
+---------------------------------------------------------------- Ampelprogramm (CITY_SPEC §3.6, 3.0 überarbeitet)
+-- 3.0 (Verkehr/Ampeln): 32-s-Umlauf nach der Serverzeit, Gelb 3 s, Alles-Rot-Räumzeit 1,5 s, nie zwei Ströme
+-- gleichzeitig grün:
+--   Meile grün 0–11,5 | gelb 11,5–14,5 | rot 14,5–32
+--   Markt rot 0–16    | grün 16–27,5   | gelb 27,5–30,5 | rot 30,5–32
+--   Fußgänger "NS" (queren die Marktstraße/Querachse) grün 0,5–10,5 – nur während Markt rot hat (Räumzeit bis 16)
+--   Fußgänger "WE" (queren die Meile: Plaza, K-Arme West/Ost) grün 16–26 – nur während die Meile rot hat
+local SIGNAL_PROGRAM = {
+	Meile = { green = { 0, 11.5 }, amber = { 11.5, 14.5 } },
+	Markt = { green = { 16, 27.5 }, amber = { 27.5, 30.5 } },
+}
+local PED_PROGRAM = { NS = { 0.5, 10.5 }, WE = { 16, 26 } }
+CityClient.SignalCycle = SIGNAL_CYCLE
+CityClient.SignalProgram = SIGNAL_PROGRAM
+CityClient.PedProgram = PED_PROGRAM
+
 -- Zustand der Fahrzeugampel für einen Strom ("Meile" | "Markt"): "green" | "amber" | "red"
 function CityClient.SignalState(serves, t)
 	local tt = (t or now()) % SIGNAL_CYCLE
-	if serves == "Meile" then
-		return tt < 14 and "green" or tt < 16 and "amber" or "red"
-	elseif serves == "Markt" then
-		return tt < 17 and "red" or tt < 27 and "green" or tt < 29 and "amber" or "red"
+	local p = SIGNAL_PROGRAM[serves]
+	if not p then
+		return "red"
+	end
+	if tt >= p.green[1] and tt < p.green[2] then
+		return "green"
+	elseif tt >= p.amber[1] and tt < p.amber[2] then
+		return "amber"
 	end
 	return "red"
 end
 
--- Fußgängerampel: "NS" (Querachse, Kreuzungsarme N/S) grün bei 1–13 s, "WE" (Plaza, Arme W/O) bei 18–26 s
+-- Fußgängerampel: "NS" (Querachse und K-Arme Nord/Süd) bzw. "WE" (Plaza und K-Arme West/Ost)
 function CityClient.PedGreen(phase, t)
 	local tt = (t or now()) % SIGNAL_CYCLE
-	if phase == "WE" then
-		return tt >= 18 and tt < 26
-	end
-	return tt >= 1 and tt < 13
+	local p = PED_PROGRAM[phase] or PED_PROGRAM.NS
+	return tt >= p[1] and tt < p[2]
 end
 
 ---------------------------------------------------------------- Arten
@@ -1170,8 +1195,14 @@ function Kinds.clock(inst)
 	return rec
 end
 
--- Ampel: Linsen nach dem Programm (Transparenz 0 = an, 0,7 = aus), nur bei Zustandswechsel geschrieben
+-- Ampel: Linsen nach dem Programm, nur bei Zustandswechsel geschrieben.
+-- 3.0: an = Neon in der gebauten Farbe, Transparenz 0; aus = SmoothPlastic, abgedunkelte Farbe, Transparenz 0,7 (das
+-- schwarze Gehäuse scheint durch -> dunkel). Vorher blieben ausgeschaltete Linsen Neon mit Transparenz 0,7 und
+-- leuchteten bei Tag sichtbar mit: Rot, Gelb und Grün wirkten gleichzeitig an. Alle Masten werden jedes Frame
+-- geprüft (sync), damit alle Köpfe einer Kreuzung im selben Frame umschalten (vorher bis 0,25 s versetzt).
 local LENS_OFF = 0.7
+local LENS_DIM = 0.18
+CityClient.LensOff = LENS_OFF
 function Kinds.signal(inst)
 	local lenses = {}
 	for _, d in ipairs(inst:GetDescendants()) do
@@ -1179,7 +1210,8 @@ function Kinds.signal(inst)
 			local n = d.Name
 			if n == "Red" or n == "Amber" or n == "Green" or n == "PedRed" or n == "PedGreen" then
 				lenses[n] = lenses[n] or {}
-				table.insert(lenses[n], d)
+				local c = d.Color
+				table.insert(lenses[n], { part = d, color = c, dim = Color3.new(c.R * LENS_DIM, c.G * LENS_DIM, c.B * LENS_DIM) })
 			end
 		end
 	end
@@ -1196,14 +1228,19 @@ function Kinds.signal(inst)
 			ped = serves == "Meile" and "WE" or "NS"
 		end
 	end
-	local rec = { inst = inst, base = inst:GetPivot(), slow = true, serves = serves, ped = ped, lenses = lenses, shown = nil }
+	local rec = { inst = inst, base = inst:GetPivot(), slow = true, sync = true, serves = serves, ped = ped, lenses = lenses, shown = nil }
 	local function set(name, on)
-		for _, part in ipairs(rec.lenses[name] or {}) do
-			part.Transparency = on and 0 or LENS_OFF
+		for _, e in ipairs(rec.lenses[name] or {}) do
+			local part = e.part
+			if part.Parent then
+				part.Material = on and Enum.Material.Neon or Enum.Material.SmoothPlastic
+				part.Color = on and e.color or e.dim
+				part.Transparency = on and 0 or LENS_OFF
+			end
 		end
 	end
 	rec.update = function(r, t)
-		local state = (r.serves == "Meile" or r.serves == "Markt") and CityClient.SignalState(r.serves, t) or "red"
+		local state = CityClient.SignalState(r.serves, t)
 		local walk = CityClient.PedGreen(r.ped, t)
 		local key = state .. (walk and "+" or "-")
 		if key == r.shown then
@@ -1317,6 +1354,40 @@ function Kinds.flag(inst)
 end
 
 ---------------------------------------------------------------- Verkehr
+-- 3.0 (Verkehr/Ampeln): kinematisches Fahren je Auto statt fester Geschwindigkeit mit Sofort-Stopp.
+-- Jedes Auto hat Strecke u (Mitte = Pivot) und Geschwindigkeit v. Je Logik-Takt (höchstens 30 Hz, Unterschritte
+-- <= 0,1 s) wird eine Zielgeschwindigkeit aus allen Einschränkungen gebildet und v mit höchstens ACCEL erhöht bzw.
+-- mit höchstens DECEL_MAX gesenkt. Stehende Hindernisse (rote Haltelinie, stehender Vordermann, Spielfigur,
+-- Zebra mit Fußgänger, Bushaltestelle) ergeben das Bremsprofil sqrt(2 * DECEL * s): das Auto gleitet mit ~5 st/s²
+-- genau bis zum Haltepunkt und kommt dort ohne Ruck zum Stehen; zusätzlich darf es in einem Schritt nie über den
+-- Haltepunkt hinaus (harte Grenze, kein Durchfahren). Fahrende Vorderleute: sqrt(vL² + 2 * DECEL * s) und s / HEADWAY
+-- (Zeitlücke 1,5 s), mindestens MIN_GAP Stoßstange zu Stoßstange. Kurven: Bogenpunkte mit Knick 2°..50° begrenzen
+-- auf sqrt(LAT_ACCEL * Radius) und werden vorausschauend angebremst (Kreisel r 25 -> ~17 st/s).
+local TRAFFIC_HZ = 30
+local ACCEL = 6 -- st/s² Anfahren
+local DECEL = 5 -- st/s² komfortables Bremsen (Bremsprofil)
+local DECEL_MAX = 12 -- st/s² Notbremsung (größte Verzögerung je Schritt)
+local AMBER_DECEL = 6.5 -- bei Gelb anhalten, wenn das mit höchstens dieser Verzögerung geht, sonst durchfahren
+local MIN_GAP = 5.5 -- Studs Stoßstange zu Stoßstange im Stand
+local HEADWAY = 1.5 -- s Zeitlücke in Fahrt
+local STOP_MARGIN = 3.5 -- Studs zwischen Fahrzeugfront und Haltelinie
+local LAT_ACCEL = 12 -- st/s² Querbeschleunigung in Kurven
+local PLAYER_GAP = 4 -- Studs zwischen Fahrzeugfront und Spielfigur/Spielerauto
+local ZEBRA_GAP = 2 -- Studs zwischen Fahrzeugfront und Zebraband
+local SCAN_STEP = 2 -- Studs: Abtastung der eigenen Spur nach Spielern
+-- 3.x: ein leeres, stehendes Spielerauto in der Spur hält ein Verkehrsauto höchstens so lange auf; danach fährt es
+-- weiter (sonst stünde die ganze Schleife bis zum Abräumen des Autos still)
+local PARK_WAIT = 4
+local MOVE_HOLD = 4 -- Sekunden: so lange gilt ein leeres Spielerauto nach der letzten Bewegung noch als fahrend
+local FAR_LOGIC = 0.5 -- s: Logiktakt jenseits der Sichtweite (nicht gezeichnet)
+local MEDIUM_RENDER = 0.1 -- s: Zeichentakt der übrigen sichtbaren Autos (10 Hz)
+local NEAR_PLAYER = 45 -- Studs: Autos so nah an einer Spielfigur werden in jedem Logiktakt gezeichnet
+
+CityClient.Traffic = {
+	Hz = TRAFFIC_HZ, Accel = ACCEL, Decel = DECEL, DecelMax = DECEL_MAX, MinGap = MIN_GAP, Headway = HEADWAY,
+	StopMargin = STOP_MARGIN, LatAccel = LAT_ACCEL, PlayerGap = PLAYER_GAP,
+}
+
 local function parseWaypoints(s)
 	local list = {}
 	for x, y, z in string.gmatch(s, "(%-?[%d%.]+)%s*,%s*(%-?[%d%.]+)%s*,%s*(%-?[%d%.]+)") do
@@ -1365,6 +1436,31 @@ local function findPath(name)
 	return (paths and paths:FindFirstChild(name)) or city:FindFirstChild(name, true)
 end
 
+-- Kurvenpunkte: Knick zwischen zwei Segmenten von 2°..50° (gesampelte Bögen) -> Radius ≈ kürzere Sehne / (2 tan(Knick/2)).
+-- Stärkere Knicke sind Wendepunkte bzw. abstrakte Ecken alter Pfade und bremsen nicht.
+local function curveLimits(segs, loop)
+	local list = {}
+	local n = #segs
+	if not loop or n < 3 then
+		return list
+	end
+	for i = 1, n do
+		local s1, s2 = segs[i], segs[i % n + 1]
+		local d1 = Vector3.new(s1.b.X - s1.a.X, 0, s1.b.Z - s1.a.Z)
+		local d2 = Vector3.new(s2.b.X - s2.a.X, 0, s2.b.Z - s2.a.Z)
+		if d1.Magnitude > 1e-3 and d2.Magnitude > 1e-3 then
+			local c = math.clamp(dot(d1.Unit, d2.Unit), -1, 1)
+			local ang = math.acos(c)
+			if ang > math.rad(2) and ang <= math.rad(50) then
+				local radius = math.min(s1.len, s2.len) / (2 * math.tan(ang / 2))
+				-- gilt auf der halben kürzeren Sehne vor und nach dem Knick (im Bogen lückenlos)
+				table.insert(list, { d = s2.start, v = math.sqrt(LAT_ACCEL * radius), r = radius, half = math.min(s1.len, s2.len) / 2 })
+			end
+		end
+	end
+	return list
+end
+
 local function buildPath(points, loop)
 	local segs, total = {}, 0
 	local n = #points
@@ -1377,8 +1473,9 @@ local function buildPath(points, loop)
 			total += len
 		end
 	end
-	return { segs = segs, total = total, loop = loop, cars = {}, stops = {} }
+	return { segs = segs, total = total, loop = loop, cars = {}, stops = {}, lines = {}, limits = curveLimits(segs, loop), crossings = nil }
 end
+CityClient._buildPath = buildPath
 
 -- Punkt bei Strecke d (0..total)
 local function sample(path, d)
@@ -1394,7 +1491,7 @@ local function sample(path, d)
 	end
 	local s = segs[lo]
 	local f = math.clamp((d - s.start) / s.len, 0, 1)
-	return s.a + (s.b - s.a) * f
+	return s.a + (s.b - s.a) * f, s
 end
 
 -- Strecke des Punkts auf dem Pfad, der p am nächsten liegt (Startposition des Autos)
@@ -1412,8 +1509,9 @@ local function project(path, p)
 	return best
 end
 
--- Haltelinien "x,z,Serves;x,z,Serves" (Serves Standard "Meile") → Strecken auf dem Pfad
-local function addStops(path, s)
+-- "x,z,Serves;x,z,Serves" (Serves Standard "Meile") -> Strecken auf dem Pfad. list = path.stops (Stops: Haltepunkt der
+-- Fahrzeugmitte, alter Vertrag) oder path.lines (StopLines: Haltelinie; die Front hält STOP_MARGIN davor)
+local function addStops(path, s, list)
 	if type(s) ~= "string" or not path.loop or #path.segs == 0 then
 		return
 	end
@@ -1421,9 +1519,166 @@ local function addStops(path, s)
 	for entry in string.gmatch(s, "[^;]+") do
 		local x, z, serves = string.match(entry, "^%s*(%-?[%d%.]+)%s*,%s*(%-?[%d%.]+)%s*,?%s*([%w%-]*)%s*$")
 		if x then
-			table.insert(path.stops, { d = project(path, Vector3.new(tonumber(x), y, tonumber(z))), serves = serves ~= "" and serves or "Meile" })
+			table.insert(list, { d = project(path, Vector3.new(tonumber(x), y, tonumber(z))), serves = serves ~= "" and serves or "Meile" })
 		end
 	end
+end
+
+-- Zebrastreifen aus City.Roads.Zebrastreifen (Attribute Axis/Center/BandLo/BandHi): wo der Pfad das Band betritt.
+-- Steht dort eine Spielfigur auf dem Band (ganze Fahrbahnbreite), hält das Auto davor (CITY_SPEC §3.6).
+local function crossingsFor(path)
+	if path.crossings then
+		return path.crossings
+	end
+	local list = {}
+	path.crossings = list
+	local city = workspace:FindFirstChild("City")
+	local roads = city and city:FindFirstChild("Roads")
+	local zf = roads and roads:FindFirstChild("Zebrastreifen")
+	if not zf or not path.loop or path.total <= 0 then
+		return list
+	end
+	local rects = {}
+	for _, m in ipairs(zf:GetChildren()) do
+		local ax, c, lo, hi = m:GetAttribute("Axis"), m:GetAttribute("Center"), m:GetAttribute("BandLo"), m:GetAttribute("BandHi")
+		if (ax == "x" or ax == "z") and type(c) == "number" and type(lo) == "number" and type(hi) == "number" then
+			if ax == "x" then
+				table.insert(rects, { x0 = lo, x1 = hi, z0 = c - 12.5, z1 = c + 12.5 })
+			else
+				table.insert(rects, { x0 = c - 12.5, x1 = c + 12.5, z0 = lo, z1 = hi })
+			end
+		end
+	end
+	if #rects == 0 then
+		return list
+	end
+	local function inside(rc, p)
+		return p.X >= rc.x0 and p.X <= rc.x1 and p.Z >= rc.z0 and p.Z <= rc.z1
+	end
+	-- je Segment und Band: Eintrittsparameter (Liang-Barsky) statt Abtastung - einmal je Pfad, O(Segmente x Bänder)
+	for _, rc in ipairs(rects) do
+		for _, sg in ipairs(path.segs) do
+			local dx, dz = sg.b.X - sg.a.X, sg.b.Z - sg.a.Z
+			local t0, t1 = 0, 1
+			local ok = true
+			for _, e in ipairs({ { -dx, sg.a.X - rc.x0 }, { dx, rc.x1 - sg.a.X }, { -dz, sg.a.Z - rc.z0 }, { dz, rc.z1 - sg.a.Z } }) do
+				local pp, q = e[1], e[2]
+				if math.abs(pp) < 1e-9 then
+					if q < 0 then
+						ok = false
+					end
+				else
+					local tt = q / pp
+					if pp < 0 then
+						t0 = math.max(t0, tt)
+					else
+						t1 = math.min(t1, tt)
+					end
+				end
+			end
+			if ok and t0 < t1 then
+				local d = sg.start + t0 * sg.len
+				-- Eintritt nur, wenn der Pfad kurz davor außerhalb liegt (sonst Fortsetzung aus dem Vorsegment)
+				if not inside(rc, sample(path, (d - 0.25) % path.total)) then
+					table.insert(list, { d = d, rect = rc })
+				end
+			end
+		end
+	end
+	return list
+end
+
+-- Spielfiguren und Spielerautos ("Akteure"), höchstens alle 0,1 s neu gelesen: { pos, r } (Kreise in XZ).
+-- Ein Spielerauto (workspace.PlayerCars.*) wird als 3 Kreise längs seiner Blickrichtung abgebildet.
+local actorCache, actorAt = {}, -math.huge
+local actorOverride = nil
+local carMotion = {} -- 3.x: Spielerauto -> { pos, at } (letzte Bewegung, os.clock)
+local function actors()
+	if actorOverride then
+		return actorOverride()
+	end
+	local c = os.clock()
+	if c - actorAt < 0.1 then
+		return actorCache
+	end
+	actorAt = c
+	local list = {}
+	pcall(function()
+		for _, pl in ipairs(Players:GetPlayers()) do
+			local ch = pl.Character
+			local root = ch and ch:FindFirstChild("HumanoidRootPart")
+			if root and root:IsA("BasePart") then
+				table.insert(list, { pos = root.Position, r = 1.5, char = true })
+			end
+		end
+		local cars = workspace:FindFirstChild("PlayerCars")
+		local seen = {}
+		if cars then
+			for _, m in ipairs(cars:GetChildren()) do
+				if m:IsA("Model") then
+					local cf = m:GetPivot()
+					local look = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+					look = look.Magnitude > 1e-3 and look.Unit or Vector3.new(0, 0, -1)
+					-- 3.x: besetzt oder gerade bewegt = fahrendes Auto (Verkehr wartet); sonst "parked" (Verkehr wartet
+					-- höchstens PARK_WAIT Sekunden, siehe carStep)
+					local seat = m:FindFirstChildWhichIsA("VehicleSeat", true)
+					local occupied = seat ~= nil and seat.Occupant ~= nil
+					local mv = carMotion[m]
+					if not mv or (mv.pos - cf.Position).Magnitude > 1 then
+						carMotion[m] = { pos = cf.Position, at = (mv and c) or -math.huge }
+						mv = carMotion[m]
+					end
+					seen[m] = true
+					local parked = not occupied and c - mv.at > MOVE_HOLD
+					for _, k in ipairs({ -5, 0, 5 }) do
+						table.insert(list, { pos = cf.Position + look * k, r = 3.5, parked = parked or nil })
+					end
+				end
+			end
+		end
+		for m in pairs(carMotion) do
+			if not seen[m] then
+				carMotion[m] = nil
+			end
+		end
+	end)
+	actorCache = list
+	return actorCache
+end
+
+-- Unsichtbare Kollisionsbox über alle Teile (im Pivot-Raum des Autos): CanCollide an, kein Query/Touch. Die Teile
+-- selbst kollidieren nicht (Räder/Spiegel hängen sonst an Figuren fest). Bewegt wird sie mit dem Auto (PivotTo).
+local function addHitbox(inst, pivot)
+	local lo, hi = Vector3.new(math.huge, math.huge, math.huge), Vector3.new(-math.huge, -math.huge, -math.huge)
+	local inv = pivot:Inverse()
+	for _, part in ipairs(baseParts(inst)) do
+		if part.Transparency < 0.95 then
+			local rel = inv * part.CFrame
+			local s = part.Size / 2
+			local ex = math.abs(rel.XVector.X) * s.X + math.abs(rel.YVector.X) * s.Y + math.abs(rel.ZVector.X) * s.Z
+			local ey = math.abs(rel.XVector.Y) * s.X + math.abs(rel.YVector.Y) * s.Y + math.abs(rel.ZVector.Y) * s.Z
+			local ez = math.abs(rel.XVector.Z) * s.X + math.abs(rel.YVector.Z) * s.Y + math.abs(rel.ZVector.Z) * s.Z
+			local p = rel.Position
+			lo = Vector3.new(math.min(lo.X, p.X - ex), math.min(lo.Y, p.Y - ey), math.min(lo.Z, p.Z - ez))
+			hi = Vector3.new(math.max(hi.X, p.X + ex), math.max(hi.Y, p.Y + ey), math.max(hi.Z, p.Z + ez))
+		end
+	end
+	if lo.X > hi.X then
+		return nil
+	end
+	local box = Instance.new("Part")
+	box.Name = "Kollision"
+	box.Anchored = true
+	box.CanCollide = true
+	box.CanQuery = false
+	box.CanTouch = false
+	box.CastShadow = false
+	box.Transparency = 1
+	box.Size = Vector3.new(math.max(0.2, hi.X - lo.X), math.max(0.2, hi.Y - lo.Y), math.max(0.2, hi.Z - lo.Z))
+	box.CFrame = pivot * CFrame.new((lo + hi) / 2)
+	box:SetAttribute("TrafficHitbox", true)
+	box.Parent = inst
+	return box, lo, hi
 end
 
 function Kinds.traffic(inst)
@@ -1446,22 +1701,36 @@ function Kinds.traffic(inst)
 	local path = container ~= inst and pathCache[container]
 	if not path or path.loop ~= loop then
 		path = buildPath(points, loop)
-		addStops(path, container and container:GetAttribute("Stops"))
+		addStops(path, container and container:GetAttribute("Stops"), path.stops)
+		addStops(path, container and container:GetAttribute("StopLines"), path.lines)
 		if container ~= inst then
 			pathCache[container] = path
 		end
 	end
-	addStops(path, container ~= inst and inst:GetAttribute("Stops") or nil)
+	if container ~= inst then
+		addStops(path, inst:GetAttribute("Stops"), path.stops)
+		addStops(path, inst:GetAttribute("StopLines"), path.lines)
+	end
 	if path.total <= 0 then
 		return nil
 	end
-	-- rein optisch: lokal bewegte Autos sollen niemanden schieben, einklemmen oder Treffer auslösen
+	local pivot = inst:GetPivot()
+	-- 3.0: Autos (Models) bekommen eine Kollisionsbox, alle übrigen Teile kollidieren nicht. Ein einzelnes Part
+	-- (alte Test-/Platzhalter-Autos) bleibt ohne Kollision.
 	for _, part in ipairs(baseParts(inst)) do
 		part.CanCollide = false
 		part.CanQuery = false
 		part.CanTouch = false
 	end
-	local pivot = inst:GetPivot()
+	local len = num(inst, "Length", 16)
+	local front, rear, width = num(inst, "Front", len / 2), num(inst, "Rear", len / 2), num(inst, "Width", 6)
+	if inst:IsA("Model") then
+		local box, lo, hi = addHitbox(inst, pivot)
+		if box and not inst:GetAttribute("Front") then
+			-- ohne Worldgen-Maße: aus der Box (Nase lokal -Z)
+			front, rear, width = math.max(0.5, -lo.Z), math.max(0.5, hi.Z), math.max(1, hi.X - lo.X)
+		end
+	end
 	local offset
 	if type(inst:GetAttribute("StartOffset")) == "number" then
 		offset = inst:GetAttribute("StartOffset")
@@ -1485,64 +1754,17 @@ function Kinds.traffic(inst)
 		end
 	end
 	local rec = {
-		inst = inst, path = path, speed = speed, len = num(inst, "Length", 16),
+		inst = inst, path = path, speed = speed, len = front + rear, front = front, rear = rear, width = width,
 		dwell = num(inst, "Dwell", 0), dwellPts = dwellPts, dwellUntil = nil, dwellDone = nil,
 		u = (offset + speed * now()) % span, -- Strecke (Rundkurs 0..L, hin und zurück 0..2L)
+		v = 0, fresh = true, go = {}, farAcc = math.random() * FAR_LOGIC, renderAcc = math.random() * MEDIUM_RENDER,
 		height = num(inst, "HeightOffset", pivot.Position.Y - points[1].Y),
 		facing = CFrame.Angles(0, math.rad(num(inst, "FacingOffset", 0)), 0),
 		isPart = inst:IsA("BasePart"), base = pivot, lastDir = pivot.LookVector, fast = false, moved = true,
 	}
+	rec.pos = sample(path, loop and rec.u % path.total or math.min(rec.u, path.total)) + Vector3.new(0, rec.height, 0)
 	table.insert(path.cars, rec)
-	-- Fortschritt um dt: hält an roten Haltelinien und hinter dem vorausfahrenden Auto (nur Rundkurse)
-	rec.advance = function(r, t, dt)
-		local want = r.speed * dt
-		local L = r.path.total
-		if r.dwellUntil then
-			if t < r.dwellUntil then
-				return
-			end
-			r.dwellUntil = nil
-		end
-		if r.path.loop then
-			local limit = want
-			for _, st in ipairs(r.path.stops) do
-				local gap = (st.d - r.u) % L
-				if gap <= want + 0.5 and CityClient.SignalState(st.serves, t) ~= "green" then
-					limit = math.min(limit, gap < 0.5 and 0 or gap)
-				end
-			end
-			for _, o in ipairs(r.path.cars) do
-				if o ~= r and o.inst.Parent then
-					local gap = (o.u - r.u) % L
-					-- Abstand Mitte zu Mitte: mindestens FOLLOW_GAP, bei langen Fahrzeugen (Bus) halbe Längen + 3
-					local need = math.max(FOLLOW_GAP, ((r.len or 16) + (o.len or 16)) / 2 + 3)
-					if gap > 0 and gap < need + want then
-						limit = math.min(limit, math.max(0, gap - need))
-					end
-				end
-			end
-			if r.dwell > 0 then
-				for i, dp in ipairs(r.dwellPts) do
-					local gap = (dp - r.u) % L
-					if r.dwellDone == i and gap > 1 then
-						r.dwellDone = nil -- Haltestelle verlassen: nächste Runde wieder halten
-					end
-					if r.dwellDone ~= i and gap <= limit then
-						limit = gap
-						r.dwellUntil = t + r.dwell
-						r.dwellDone = i
-					end
-				end
-			end
-			if limit > 0 then
-				r.u = (r.u + limit) % L
-				r.moved = true
-			end
-		else
-			r.u = (r.u + want) % (2 * L)
-			r.moved = true
-		end
-	end
+
 	-- Lage auf dem Pfad: Position = Mitte zweier Punkte je ROUND Studs vor und hinter d (Ecken werden weich
 	-- abgerundet, auf Geraden exakt), Richtung = Sehne über ±look (Auto dreht schon vor der Ecke ein)
 	local ROUND = 3
@@ -1575,10 +1797,227 @@ function Kinds.traffic(inst)
 			r.lastDir = dir
 		end
 		local pos = p + Vector3.new(0, r.height, 0)
+		r.pos = pos
 		return CFrame.lookAt(pos, pos + r.lastDir) * r.facing
 	end
 	table.insert(trafficRecs, rec)
 	return nil -- eigener Takt, nicht in frameRecs
+end
+
+-- Ein Logikschritt (dt <= 0,1 s) eines Autos auf einem Rundkurs. Liefert die Zielgeschwindigkeit (Tests).
+local function carStep(r, t, dt, acts)
+	local path = r.path
+	local L = path.total
+	if not path.loop then
+		-- hin und zurück (alte Pfade): gleichmäßig mit Anfahren
+		r.v = math.min(r.speed, r.v + ACCEL * dt)
+		r.u = (r.u + r.v * dt) % (2 * L)
+		r.moved = true
+		r.pos = sample(path, r.u <= L and r.u or 2 * L - r.u) + Vector3.new(0, r.height, 0)
+		return r.v
+	end
+	if r.dwellUntil then
+		if t < r.dwellUntil then
+			r.v = 0
+			return 0
+		end
+		r.dwellUntil = nil
+	end
+	local v = r.v
+	local look = v * v / (2 * DECEL) + r.front + 30
+	local vt = r.speed
+	local hard = math.huge -- weiteste erlaubte Strecke in diesem Schritt
+	local reason = nil
+	local bd = DECEL * dt
+	-- Geschwindigkeit, mit der nach diesem Schritt (Strecke v * dt) noch mit DECEL bis s angehalten bzw. auf vo
+	-- verzögert werden kann: v² + 2·D·dt·v <= vo² + 2·D·s (gleichmäßige Verzögerung bis genau zum Haltepunkt)
+	local function safe(s, vo)
+		return -bd + math.sqrt(bd * bd + vo * vo + 2 * DECEL * math.max(0, s))
+	end
+	-- stehendes Hindernis: Fahrzeugmitte darf noch s Studs fahren
+	local function stopIn(s, why)
+		s = math.max(0, s)
+		local allow = safe(s, 0)
+		if allow < vt then
+			vt, reason = allow, why
+		end
+		if s < hard then
+			hard = s
+		end
+	end
+	-- Kurven: im Bogen höchstens c.v, davor vorausschauend anbremsen
+	for _, c in ipairs(path.limits) do
+		local g = (c.d - c.half - r.u) % L
+		if (r.u - (c.d - c.half)) % L < 2 * c.half then
+			g = 0
+		end
+		if g < look then
+			local allow = g <= 0 and c.v or safe(g, c.v)
+			if allow < vt then
+				vt, reason = allow, "curve"
+			end
+		end
+	end
+	-- Ampeln: Haltelinien (Front STOP_MARGIN davor) und alte Haltepunkte (Fahrzeugmitte). strict (alter Vertrag
+	-- "Stops"): hält immer, solange nicht grün (kein Durchfahren bei Gelb; notfalls hart an der Grenze)
+	local function signalStop(list, frontOffset, strict)
+		for _, st in ipairs(list) do
+			local g = (st.d - r.u) % L
+			if g > L / 2 then
+				r.go[st] = nil -- liegt hinter dem Auto
+			else
+				local s = g - frontOffset
+				if s >= -0.5 and s < look then
+					local state = CityClient.SignalState(st.serves, t)
+					if state == "green" then
+						r.go[st] = nil
+					elseif not r.go[st] then
+						if not strict and state == "amber" and v * v > 2 * AMBER_DECEL * math.max(s, 0.01) then
+							r.go[st] = true -- bei Gelb zu nah zum Anhalten: durchfahren (bleibt bis hinter der Linie)
+						else
+							stopIn(s, "signal")
+						end
+					end
+				end
+			end
+		end
+	end
+	signalStop(path.lines, r.front + STOP_MARGIN, false)
+	signalStop(path.stops, 0, true)
+	-- Vorderleute auf demselben Pfad
+	for _, o in ipairs(path.cars) do
+		if o ~= r and o.inst.Parent then
+			local g = (o.u - r.u) % L
+			if g > 0 and g < look + o.rear + r.front + MIN_GAP then
+				local s = g - r.front - o.rear - MIN_GAP
+				if o.v < 0.5 then
+					stopIn(s, "queue")
+				else
+					local allow = math.min(safe(s, o.v), math.max(0, s) / HEADWAY)
+					if allow < vt then
+						vt, reason = allow, "follow"
+					end
+					local lim = math.max(0, s + MIN_GAP - 1) -- nie näher als 1 Stud
+					if lim < hard then
+						hard = lim
+					end
+				end
+			end
+		end
+	end
+	-- Bus: Haltestellen
+	if r.dwell > 0 then
+		for i, dp in ipairs(r.dwellPts) do
+			local g = (dp - r.u) % L
+			if r.dwellDone == i and g > 1 then
+				r.dwellDone = nil -- Haltestelle verlassen: nächste Runde wieder halten
+			end
+			if r.dwellDone ~= i and g < look then
+				stopIn(g, "dwell")
+				if g < 0.05 and v < 0.5 then
+					r.dwellUntil = t + r.dwell
+					r.dwellDone = i
+					r.v = 0
+					return 0
+				end
+			end
+		end
+	end
+	-- Spielfiguren und Spielerautos in der eigenen Spur (vor der Fahrzeugmitte): anhalten und warten
+	if acts and #acts > 0 then
+		local pos = r.pos
+		local parkedAhead = false
+		local ignoreParked = (r.parkWaited or 0) >= PARK_WAIT
+		for _, a in ipairs(acts) do
+			local dp = a.pos - pos
+			if a.parked and ignoreParked then
+				-- 3.x: schon PARK_WAIT gewartet: am leeren Auto vorbei (nur merken, dass es noch da ist)
+				if math.abs(dp.Y) < 8 and Vector3.new(dp.X, 0, dp.Z).Magnitude < look + a.r + 4 then
+					parkedAhead = true
+				end
+			elseif math.abs(dp.Y) < 8 and Vector3.new(dp.X, 0, dp.Z).Magnitude < look + a.r + 4 then
+				-- Spur abtasten: an jedem Punkt längs (al) und quer (lat) zur Fahrtrichtung zerlegen
+				local lane = r.width / 2 + a.r + 0.6
+				local k = 0
+				while k <= look do
+					local p, seg = sample(path, (r.u + k) % L)
+					local dir = (seg.b - seg.a) / seg.len
+					local rx, rz = a.pos.X - p.X, a.pos.Z - p.Z
+					local al = rx * dir.X + rz * dir.Z
+					if math.abs(al) <= SCAN_STEP / 2 + 0.01 then
+						local lx, lz = rx - dir.X * al, rz - dir.Z * al
+						if lx * lx + lz * lz < lane * lane then
+							stopIn(k + al - r.front - a.r - PLAYER_GAP, a.parked and "parked" or "player")
+							if a.parked then
+								parkedAhead = true
+							end
+							break
+						end
+					end
+					k += SCAN_STEP
+				end
+			end
+		end
+		-- Wartezeit vor einem leeren Spielerauto zählen (nur im Stand); kein leeres Auto mehr voraus: zurücksetzen
+		if parkedAhead then
+			if ignoreParked or r.v < 0.5 then
+				r.parkWaited = (r.parkWaited or 0) + dt
+			end
+		else
+			r.parkWaited = 0
+		end
+		-- Zebrastreifen: jemand auf dem Band vor uns -> davor halten
+		for _, c in ipairs(crossingsFor(path)) do
+			local g = (c.d - r.u) % L
+			local s = g - r.front - ZEBRA_GAP
+			if s >= -0.5 and g < look then
+				local rc = c.rect
+				for _, a in ipairs(acts) do
+					if a.char and a.pos.X >= rc.x0 - 1 and a.pos.X <= rc.x1 + 1 and a.pos.Z >= rc.z0 - 1 and a.pos.Z <= rc.z1 + 1 then
+						stopIn(s, "zebra")
+						break
+					end
+				end
+			end
+		end
+	end
+	-- Integration: Beschleunigen <= ACCEL, Bremsen <= DECEL_MAX, nie über ein stehendes Hindernis hinaus
+	if r.fresh then
+		r.fresh = false
+		v = math.min(vt, r.speed) -- Einstieg ohne Sprung
+	elseif vt > v then
+		v = math.min(vt, v + ACCEL * dt)
+	else
+		v = math.max(vt, v - DECEL_MAX * dt)
+	end
+	if v < 0.01 and vt < 0.01 then
+		v = 0 -- ausgerollt
+	end
+	local stepLen = v * dt
+	if stepLen > hard then
+		stepLen = hard
+		if hard <= 1e-3 then
+			v = 0
+		end
+	end
+	if stepLen > 0 then
+		r.u = (r.u + stepLen) % L
+		r.moved = true
+		r.pos = sample(path, r.u) + Vector3.new(0, r.height, 0)
+	end
+	r.v = v
+	r.reason = reason
+	return vt
+end
+
+-- Logik eines Autos über dt (in Schritten <= 0,1 s); Fehler stoppen nur dieses Auto
+local function carAdvance(r, t, dt, acts)
+	local remaining = dt
+	while remaining > 1e-6 do
+		local h = math.min(0.1, remaining)
+		carStep(r, t - (remaining - h), h, acts)
+		remaining -= h
+	end
 end
 
 ---------------------------------------------------------------- Nachtschaltung (CITY_SPEC §9.3)
@@ -1785,7 +2224,7 @@ local function whenChild(parent, name, fn)
 end
 
 ---------------------------------------------------------------- Takt
-local cullTimer, slowTimer = 0, 0
+local cullTimer = 0
 
 refreshActivity = function()
 	local cam = camPos()
@@ -1803,15 +2242,31 @@ refreshActivity = function()
 			r.fast = r.active and not r.slow and dist < NEAR
 		end
 	end
-	-- die nächsten 8 Autos jedes Frame, die übrigen im langsamen Takt; jenseits von CULL geparkt
+	-- 3.0: die nächsten 8 Autos (bis NEAR) und alle Autos nahe einer Spielfigur in jedem Logiktakt (30 Hz) zeichnen,
+	-- die übrigen sichtbaren mit 10 Hz; jenseits von CULL nicht zeichnen (die Logik läuft dort mit 2 Hz weiter,
+	-- damit niemand hinter einem "eingefrorenen" Auto im Stau steht)
 	local sorted = {}
+	local acts = actors()
 	for i = #trafficRecs, 1, -1 do
 		local r = trafficRecs[i]
 		if not r.inst.Parent then
 			table.remove(trafficRecs, i)
+			local cars = r.path.cars
+			for k = #cars, 1, -1 do
+				if cars[k] == r then
+					table.remove(cars, k)
+				end
+			end
 		else
-			local pos = r.inst:GetPivot().Position
+			local pos = r.pos or r.inst:GetPivot().Position
 			r.dist = (pos - cam).Magnitude
+			r.nearPlayer = false
+			for _, a in ipairs(acts) do
+				if (a.pos - pos).Magnitude < NEAR_PLAYER then
+					r.nearPlayer = true
+					break
+				end
+			end
 			table.insert(sorted, r)
 		end
 	end
@@ -1819,13 +2274,61 @@ refreshActivity = function()
 		return a.dist < b.dist
 	end)
 	for i, r in ipairs(sorted) do
-		local fast = i <= FAST_TRAFFIC and r.dist < NEAR
-		if fast and not r.fast and r.tween then
-			r.tween:Cancel()
-			r.tween = nil
-		end
-		r.fast = fast
 		r.active = r.dist < CULL
+		r.fast = r.active and ((i <= FAST_TRAFFIC and r.dist < NEAR) or r.nearPlayer)
+	end
+end
+
+-- Verkehrslogik (höchstens TRAFFIC_HZ) und Zeichnen
+local trafficAcc = 0
+local function trafficStep(t, dt)
+	trafficAcc += dt
+	if trafficAcc < 1 / TRAFFIC_HZ - 1e-4 then
+		return
+	end
+	local tdt = math.min(trafficAcc, 0.5)
+	trafficAcc = 0
+	local acts = actors()
+	for _, r in ipairs(trafficRecs) do
+		if r.inst.Parent and not r.dead then
+			local runDt
+			if r.active then
+				runDt = tdt
+			else
+				r.farAcc += tdt
+				if r.farAcc >= FAR_LOGIC then
+					runDt = r.farAcc
+					r.farAcc = 0
+				end
+			end
+			if runDt then
+				local ok, err = pcall(carAdvance, r, t, runDt, r.active and acts or nil)
+				if not ok then
+					r.dead = true
+					warnOnce("traffic_" .. tostring(r.inst), "Verkehr gestoppt: " .. tostring(err))
+				end
+			end
+		end
+	end
+	for _, r in ipairs(trafficRecs) do
+		if r.inst.Parent and r.active and not r.dead then
+			local draw = false
+			if r.fast then
+				draw = r.moved
+			else
+				r.renderAcc += tdt
+				if r.renderAcc >= MEDIUM_RENDER then
+					r.renderAcc = 0
+					draw = r.moved
+				end
+			end
+			if draw then
+				r.moved = false
+				r.inst:PivotTo(r.cframe(r))
+			elseif not r.pos then
+				r.cframe(r)
+			end
+		end
 	end
 end
 
@@ -1836,15 +2339,10 @@ local function step(dt)
 		cullTimer = 0
 		refreshActivity()
 	end
-	slowTimer += dt
-	local slowTick = slowTimer >= SLOW_INTERVAL
-	if slowTick then
-		slowTimer = 0
-	end
 	for _, r in ipairs(frameRecs) do
 		if r.active and not r.dead and r.inst.Parent then
 			local runDt
-			if r.fast then
+			if r.fast or r.sync then
 				runDt = dt
 			else
 				r.pendingDt += dt
@@ -1867,26 +2365,7 @@ local function step(dt)
 	if not okNight then
 		warnOnce("night", "Nachtschaltung: " .. tostring(errNight))
 	end
-	for _, r in ipairs(trafficRecs) do
-		if r.inst.Parent and r.active then
-			r.advance(r, t, dt) -- nur Arithmetik; bewegt wird unten
-			if r.fast then
-				if r.moved then
-					r.moved = false
-					r.inst:PivotTo(r.cframe(r))
-				end
-			elseif slowTick and r.moved then
-				r.moved = false
-				if r.isPart then
-					-- einzelnes Part: Tween zur Position beim nächsten Takt (flüssig, ohne Lua pro Frame)
-					r.tween = TweenService:Create(r.inst, TweenInfo.new(SLOW_INTERVAL, Enum.EasingStyle.Linear), { CFrame = r.cframe(r, r.speed * SLOW_INTERVAL) })
-					r.tween:Play()
-				else
-					r.inst:PivotTo(r.cframe(r))
-				end
-			end
-		end
-	end
+	trafficStep(t, dt)
 end
 
 ---------------------------------------------------------------- Schnittstelle
@@ -1990,5 +2469,44 @@ function CityClient.Record(inst)
 	local r = records[inst]
 	return type(r) == "table" and r or nil
 end
+
+-- 3.0: Testzugang zur Verkehrslogik (tests/test_traffic.lua): Logik ohne Heartbeat, Akteure (Spieler) vorgeben
+CityClient._test = {
+	CarStep = carStep,
+	CarAdvance = carAdvance,
+	Sample = sample,
+	-- fn() -> { { pos = Vector3, r = Radius, char = true|nil } } statt der echten Spieler/Spielerautos; nil = echt
+	-- 3.x: echte Akteure sofort neu lesen (ohne 0,1-s-Puffer)
+	Actors = function()
+		actorAt = -math.huge
+		return actors()
+	end,
+	SetActors = function(fn)
+		actorOverride = fn
+	end,
+	-- Animierte Objekte unter root registrieren (wie Start, aber ohne Heartbeat)
+	Attach = function(root)
+		attach(root)
+		refreshActivity()
+	end,
+	Refresh = function()
+		refreshActivity()
+	end,
+	-- Ein Frame: Animationen, Ampeln und Verkehr (Zeit = Serverzeit des Mocks)
+	Step = function(dt)
+		step(dt)
+	end,
+	TrafficRecords = function()
+		return trafficRecs
+	end,
+	TrafficRecord = function(inst)
+		for _, r in ipairs(trafficRecs) do
+			if r.inst == inst then
+				return r
+			end
+		end
+		return nil
+	end,
+}
 
 return CityClient

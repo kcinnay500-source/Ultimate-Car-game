@@ -59,8 +59,8 @@ d.games.meta     = { tutorialDone=bool, tutorialStep=int, tutorialSkipped=bool, 
                      -- tutorialRewarded: Belohnung verbucht (Neustart am Kiosk ohne zweite)
                      -- startPath: Startwahl (§6a); "" = noch offen; Veteranen (d.completed > 0, Tutorial beendet/übersprungen,
                      -- tutorialStep ≥ 2 oder ein OW-Gebäude mit Stufe > 0) bekommen beim Laden "werkstatt"
-                     -- startOffered: die Wahl wurde schon gezeigt („Später entscheiden“) – dann zählen d.completed und
-                     -- tutorialStep nicht als Veteran, die Wahl bleibt offen, bis der Spieler wählt
+                     -- startOffered: die Wahl wurde schon gezeigt – dann zählen d.completed, tutorialStep und Gebäude
+                     -- nicht als Veteran, die Wahl bleibt Pflicht, bis der Spieler wählt (3.x: kein „Später entscheiden“)
 d.games.prestige = { claimed={ [rank:int]=true }, titleRank=int }          -- Rang = PrestigeRules.RankFor(d.level)
 d.games.tycoon   = { runsDone={ werkstatt=int, autohaus=int, produktion=int, schrottplatz=int },
                      rebirths=int, xpStage=0..5,       -- xpStage: Stufen-XP dieses Durchlaufs schon vergeben (kein XP-Farmen)
@@ -189,12 +189,19 @@ d.games.stats    -- bestehende Zähler + neue Schlüssel (MiniRules.STAT_KEYS): 
   abgelehnt). Danach startet das Tutorial des Wegs: Intro (laufen, Menü) → Mittelteil des Wegs
   (`GameConfig.Tutorial.Paths[typ]`, Gebäude-Tab öffnen (`openTab`), Ertrag abholen, Station in der Stadt) → Ende
   (Stadtplan, Kiesplatz). `GameConfig.Tutorial.ByPath[typ]` ist die fertige Liste; `Steps = ByPath.werkstatt`.
-- Story Kapitel 1, Mission an `PathSlot`: je Weg eine eigene erste Mission (`PathMissions`).
+- **3.x: Die Wahl ist Pflicht** (kein „Später entscheiden“, kein Handy-Knopf): solange sie offen ist, lehnt der Server
+  `tutorial_skip` mit Toast ab; `meta.startOffered` hält sie offen, auch wenn inzwischen Aufträge abgerechnet wurden.
+  Namen: Werkstatt, Verkaufshaus (`autohaus`), Herstellung (`produktion`), Schrottplatz – die Ids bleiben.
+- **Story ab der Wahl:** `StoryService.OnStartChosen` startet sofort Mission 1 von Kapitel 1 des Wegs
+  (`GameConfig.Story.Chapters[1].Paths[typ]`, Verkaufshaus = `Missions`; je Weg 6 Missionen, je 80 XP) und zeigt die
+  Karte „Deine Story beginnt“; jede weitere Mission startet von selbst (`StoryRules.AutoStart`: nach dem Abholen, im
+  1-s-Takt, beim Level-Aufstieg). `story_start` der laufenden Mission ist kein Fehler. Karte „Deine Mission“
+  (`MissionClient`, oben links) mit Ort und „Hinreisen“.
 - Client: ScreenGui `StartChoice` (DisplayOrder 40, voller Hintergrund), sichtbar solange `snapshot.start.pending`
   und Modus `openworld`; sie blendet sich aus, solange ein 2.4.0-Dialog (QTE/Diagnose), das Tablet oder das
-  Minispiel-Panel offen ist. „Später entscheiden“ blendet sie bis zur nächsten Ankunft in der Spielermeile aus
-  (`StartService.OnArrive`, auch nach Respawn) oder bis zum Knopf **„Startweg wählen“** in der Handy-App Einstellungen
-  (`StartUI.Reopen`); `meta.startOffered` hält die Wahl offen, auch wenn inzwischen Aufträge abgerechnet wurden.
+  Minispiel-Panel offen ist, und kommt danach wieder.
+- Entwickler-Menü: `StartService.ResetStart(ms, d)` (über `dev_set {field="start_reset"}`) leert den Weg, die Wahl ist
+  wieder Pflicht, Tutorial ab Schritt 1 ohne zweite Belohnung, Kapitel 1 von vorn; geschenkte Gebäude bleiben.
 
 ## 6b. Ebenen der Oberflächen (Studio-Klicktest `tests/test_studio_play.lua`)
 
@@ -387,6 +394,9 @@ party_create  party_join {code}  party_leave  party_kick {userId}
 tutorial_next {step}  tutorial_skip  tutorial_restart
 start_choose {path}                                                 -- Startwahl (§6a), einmalig
 phone_call {id}                                                     -- Handy: Kunden eines Fahrzeug-Checks anrufen (§6c)
+car_call  car_favourite {id}                                        -- 3.x: Auto rufen (Flitzer/Lieblingsauto, nur Open World)
+pw_open  pw_repair {car}  pw_sell_parts {part, count}               -- 3.x: Große Werkstatt (count = Absicht 1..50)
+dev_open  dev_set {field, value}                                    -- 3.x: Entwickler-Menü, Server prüft DevService.IsDev
 prestige_claim {rank}
 ow_build {typ}  ow_collect {typ}  ow_passive {on}
 story_start {id}  story_claim {id}  story_sell {offer, price}      -- price = Stufe 1..3 (Absicht)
@@ -399,7 +409,7 @@ unlocks_seen
 ```
 
 Events: `mini_notice` mit `kind` ∈ { `mode`, `party`, `tutorial`, `unlock`, `prestige`, `story`, `mission`,
-`ow_ready`, `tycoon_market`, `tycoon_stage`, `trade`, `shop`, `start` }. `start`: `{event="offer", choices}` |
+`ow_ready`, `tycoon_market`, `tycoon_stage`, `trade`, `shop`, `start`, `pw`, `dev`, `car_spawned` }. `start`: `{event="offer", choices}` |
 `{event="chosen", path, name, gift}`. Snapshot-Felder (§11).
 
 **Stand nach Umsetzung (Meilenstein 9):** Die Aktionsnamen und Felder oben sind genau so in `MiniNet.Actions`
@@ -419,8 +429,24 @@ Neue Tabs: `lobby`, `unlocks`, `story` (Missionen + Nebenmissionen), `tycoon`, `
 `start {path, pending, choices[]}` (choices nur, solange die Wahl offen ist), `party {code, leader, leaderMode, away, members[]}`,
 `prestige {rank, next, claimable[], claimed[]}`, `unlocks {next, list[] (nur bei full)}`,
 `tutorial {step, count, text, target, done, path, waiting, openTab}`, `story {chapter, active, missions[], side[]}`, `ow {buildings{}, passive}`,
-`tycoon {run, slot, offers[], bonus{}}`, `shop {owned[], equipped{}, dlcCars[], passes{}, catalog{} (full)}`.
+`tycoon {run, slot, offers[], bonus{}}`, `shop {owned[], equipped{}, dlcCars[], passes{}, catalog{} (full)}`,
+3.x: `favCar`, `starterCar`, `spawnedStarter` (Flitzer draußen: `spawnedCar=false`, `spawnedId=-1`).
 Sticky (nur bei full): `unlocks.list`, `shop.catalog`, `story.missions`.
+
+### 3.x-Ergänzungen (Integration)
+
+- **Startauto Flitzer** (`CarCatalog.Starter`, Id `flitzer`, Auto-Id −1): jedes Profil besitzt ihn (`d.games.flitzer`),
+  unverkäuflich, ohne Tuning, belegt keinen Garagenplatz. `car_call {}` (Taste G, Handy „Auto rufen“) stellt das
+  Lieblingsauto an die nächste freie Fahrbahn bzw. – ist die weiter als `GameConfig.StarterCar.NearRoad` weg – auf einen
+  freien, ebenen Platz unter freiem Himmel direkt neben den Spieler. Nach der Startwahl kommt einmal der
+  Willkommens-Flitzer (Beginner-Hinweis `h_flitzer`).
+- **Große Werkstatt** (`PublicWorkshopService`, `PublicWorkshopUI`, Tab `grosswerkstatt`, Stationen `grosswerkstatt`
+  und `teileankauf` am Westende der Spielermeile): eigene Autos reparieren (Bonus bis ×1,35 auf den Händler-Erlös über
+  `CarRules.SalePrice` / `CarRules.Sell`), Altteile verkaufen. Daten `d.games.pw` über `MiniRules.ExtraGames`.
+  Story-Ereignisse `pw_repair` / `pw_parts_sold` über `api.storyEvent`.
+- **Entwickler-Menü** (`DevService`, `DevUI`, ScreenGui `DevMenu`, DisplayOrder 45): Chat „/dev“ oder Strg+Umschalt+D;
+  nur in Studio, für den Ersteller/Gruppenbesitzer oder `GameConfig.Dev.AllowedUserIds`. `dev_set` setzt Level, XP,
+  Credits, Tycoon-Bargeld (nur im Tycoon) oder setzt den Startweg zurück; jede Änderung steht als `[Dev] …` im Server-Log.
 
 ## 12. Sicherheit und Regeln
 

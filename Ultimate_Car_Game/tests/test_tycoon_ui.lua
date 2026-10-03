@@ -243,7 +243,7 @@ return {
 		s.tycoon.bonus.werkstatt = { runs = 3, pct = 6, text = "Werkstatt-Vergütung" }
 		render(g, p, mod, s)
 		T.check(byName(page, "BonusText").Text:find("Werkstatt: 3 Runden → +6 % Werkstatt-Vergütung", 1, true) ~= nil, "Bonus-Zeile: " .. byName(page, "BonusText").Text)
-		T.check(byName(page, "BonusText").Text:find("Autohaus: 0 Runden → 0 % Händlerrabatt", 1, true) ~= nil, "ohne Runden kein Vorzeichen")
+		T.check(byName(page, "BonusText").Text:find("Verkaufshaus: 0 Runden → 0 % Händlerrabatt", 1, true) ~= nil, "ohne Runden kein Vorzeichen")
 		T.eq(#toasts, 0, "keine Toasts")
 		T.eq(g:ErrorText(), "", "keine Fehler")
 	end },
@@ -370,7 +370,7 @@ return {
 			run.upgrades[GC.Tycoon.Buildings.autohaus.Stages[5].Upgrades[4].id] = nil
 		end)
 		render(g, p, mod, s)
-		T.eq(byName(page, "RunTitle").Text, "Autohaus · Stufe 5/5", "Stufe 5")
+		T.eq(byName(page, "RunTitle").Text, "Verkaufshaus · Stufe 5/5", "Stufe 5")
 		T.eq(byName(page, "StageTitle").Text, "Höchste Stufe erreicht", "keine Stufe 6")
 		T.check(not enabled(byName(page, "StageButton")), "Stufen-Knopf aus")
 		local rb = byName(page, "RebirthButton")

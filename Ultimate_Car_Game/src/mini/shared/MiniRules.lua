@@ -102,6 +102,33 @@ end
 -- Tiefe höchstens 5 unter games (Vertrag §2): games.press.upgrades.pu1, games.cars[1].paint, games.arcade.best.arcade_1,
 -- games.meta.hintsSeen.h_map, games.prestige.claimed[n], games.tycoon.run.upgrades[id] (Tiefe 4), games.shop.owned[id] (Tiefe 3);
 -- R.Snapshot erlaubt 12.
+-- 3.x: zusätzliche games-Bereiche aus Server-Modulen (Shared darf keine Server-Module laden). Eintrag:
+-- MiniRules.ExtraGames[key] = { Default = fn() -> table, Load = fn(raw, d, now) -> table (Whitelist, idempotent) }.
+-- PublicWorkshopService trägt games.pw ein (Große Werkstatt: Reparatur-Boni, Erstattungen, Tageslimit).
+MiniRules.ExtraGames = {}
+
+local function applyExtraDefaults(g)
+	for key, def in pairs(MiniRules.ExtraGames) do
+		if type(key) == "string" and type(def) == "table" and g[key] == nil then
+			local ok, v = pcall(def.Default or def.Load)
+			if ok and type(v) == "table" then
+				g[key] = v
+			end
+		end
+	end
+end
+
+local function applyExtraLoad(g, raw, d, now)
+	for key, def in pairs(MiniRules.ExtraGames) do
+		if type(key) == "string" and type(def) == "table" and type(def.Load) == "function" then
+			local ok, v = pcall(def.Load, type(raw) == "table" and raw[key] or nil, d, now)
+			if ok and type(v) == "table" then
+				g[key] = v
+			end
+		end
+	end
+end
+
 function MiniRules.DefaultGames()
 	local stats = {}
 	for _, key in ipairs(MiniRules.STAT_KEYS) do
@@ -140,6 +167,7 @@ function MiniRules.DefaultGames()
 	OWRules.ApplyDefault(g) -- ow (Meilenstein 6)
 	StoryRules.ApplyDefault(g) -- story (Meilenstein 7)
 	ShopRules.ApplyDefault(g) -- shop (Meilenstein 8)
+	applyExtraDefaults(g) -- 3.x: games.pw (Große Werkstatt), sobald der Server PublicWorkshopService geladen hat
 	return g
 end
 
@@ -178,8 +206,10 @@ function MiniRules.LoadGames(raw, d, now)
 		local completed = type(d) == "table" and d.completed or 0
 		g.stats.jobsDone = loadInt(completed, 0, 0, MAX_SAFE)
 		g.meta = MetaRules.Load(nil, d, now) -- 2.4.0-Veteranen: Tutorial gilt als erledigt
+		applyExtraLoad(g, nil, d, now)
 		return g
 	end
+	applyExtraLoad(g, raw, d, now) -- 3.x: games.pw
 	g.auction = AuctionRules.Load(raw.auction, d, now)
 	g.track = TrackRules.Load(raw.track)
 	g.arcade = ArcadeRules.Load(raw.arcade, d, now)

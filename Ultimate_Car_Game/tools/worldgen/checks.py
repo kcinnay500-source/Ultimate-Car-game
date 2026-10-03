@@ -71,6 +71,7 @@ DISTRICT_BUDGET = {
     "Meile": (120, 0),               # Haltestellen, Gassen-Portale, Bänke, Eimer
     "Stadtrand": (640, 0),           # Wäldchen in den leeren Ecken
     "Kiesplatz": (900, 8),           # D14 Kiesplatz (Story Kapitel 1)
+    "Grosswerkstatt": (900, 4),      # D15 Große Werkstatt (3.x: 4 Hallen, Teile-Ankauf, Vorplatz, Zufahrt)
 }
 # 3.0: Ground mit Naturrand (Hügel/Felsen/Bäume, horizon.build_edge) 800, Horizon (Fernboden + Skyline) 700,
 # Track 13 Checkpoints + Ziel
@@ -1717,7 +1718,9 @@ def kiesplatz_checks(city, errors, warns, info):
     if {"Line1", "Line2", "Line3"} - labels:
         errors.append("Kiesplatz: SurfaceGui PriceBoard mit TextLabels Line1..3 fehlt")
     elif board is not None:
-        texts = {name_of(x): get_prop(x, "Text") for x in board.iter("Item") if x.get("class") == "TextLabel"}
+        # get_prop liefert das XML-Element: den Text daraus lesen (sonst wäre jede Legende ein „Platzhalter“)
+        texts = {name_of(x): getattr(get_prop(x, "Text"), "text", None) for x in board.iter("Item")
+                 if x.get("class") == "TextLabel"}
         for n, word in ((1, "günstig"), (2, "fair"), (3, "teuer")):
             if word not in str(texts.get("Line%d" % n) or ""):
                 errors.append("Kiesplatz: PriceBoard.Line%d sollte die Legende „%s“ zeigen (kein Platzhalter)" % (n, word))
@@ -1764,17 +1767,15 @@ def vehicle_checks(tree, city, parts, errors, warns, info, verbose=False):
     world = drive.World(parts)
     # a) Verkehrsschleifen: alle Spuren ohne Stufe > 0.6 / Hindernis
     track_line = vehicles.track_loop()
+    # 3.0: keine Verkehrsschleife (Autos mit fester Kollisionsbox) darf die Teststrecke berühren, sonst fährt ein
+    # Zeitfahr-Auto von hinten auf ein Verkehrsauto auf
+    track_pts = drive.polyline_samples(track_line, True, 2.0)
     for key, nm, pts, speed in traffic_loops():
-        if key == "T":
-            # 3.0: Schleife T muss der Mittellinie des Grand-Prix-Kurses folgen (ground_roads.traffic_loops:
-            # T = vehicles.track_loop()); befahren wird unten die Mittellinie selbst
-            line = drive.polyline_samples(track_line, True, 1.0)
-            off = max(min(math.hypot(x - sx, z - sz) for sx, sz, dx, dz in line)
-                      for x, z, a, b in drive.polyline_samples(list(pts), True, 2.0))
-            if off > 3.0:
-                errors.append("Schleife T (Verkehr) liegt bis %.0f Studs neben der Teststrecke: ground_roads."
-                              "traffic_loops() muss für T vehicles.track_loop() verwenden" % off)
-            continue
+        near = min(min(math.hypot(x - sx, z - sz) for sx, sz, dx, dz in track_pts)
+                   for x, z, a, b in drive.polyline_samples(list(pts), True, 4.0))
+        if near < vehicles.TRACK_WIDTH / 2 + 8:
+            errors.append("Schleife %s (Verkehr) kommt der Teststrecke bis %.0f Studs nahe (Mittellinie): Verkehr "
+                          "mit Kollisionsbox gehört nicht auf die Rennlinie" % (key, near))
         _report_drive(errors, "Schleife %s (%s)" % (key, nm), drive.drive(world, pts, -0.95, True, (-5.0, 0.0, 5.0)),
                       verbose)
     _report_drive(errors, "Teststrecke (Mittellinie, Spuren ±9)",
