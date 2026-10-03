@@ -200,12 +200,18 @@ end
 -- Ankunft in der Spielermeile (Figur erschienen, Mini.OnCharacter): ist die Wahl noch offen (z. B. nach ResetStart oder
 -- wenn der Client den ersten Hinweis verpasst hat), kommt das Angebot hier erneut (auch im kombinierten Place).
 function StartService.OnArrive(ms: any, d: any): boolean
-	if not ms or not inOpenWorld(ms) then
+	if not ms then
 		return false
 	end
-	if not ms.startArrived then
-		ms.startArrived = true -- erste Figur der Sitzung: OnJoin/OnMode hat die Wahl gerade schon angeboten
+	-- B-022: Die erste Figur der Sitzung zählt in JEDEM Modus. Sonst hielte der erste Respawn in der Open World nach
+	-- einem Beitritt in der Lobby als „erste Figur“ her und die Wahl käme erst beim übernächsten wieder.
+	local first = not ms.startArrived
+	ms.startArrived = true
+	if not inOpenWorld(ms) then
 		return false
+	end
+	if first then
+		return false -- erste Figur der Sitzung: OnJoin/OnMode hat die Wahl gerade schon angeboten
 	end
 	ms.startOffered = nil
 	return StartService.OnMode(ms, d, modeOf(ms))
