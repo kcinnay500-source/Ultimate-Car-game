@@ -58,7 +58,10 @@ MissionClient.Kinds = { npc_idle = true }
 MissionClient.TrackerWidth = 300 -- Karte „Deine Mission“ (3.x)
 MissionClient.TrackerMinWidth = 220 -- schmaler wird sie oben links nicht (sonst rückt sie unter die Karten oben)
 MissionClient.TrackerNear = 40 -- Studs: so nah am Ziel gibt es keinen „Hinreisen“-Knopf
-MissionClient.TrackerTextLines = 3
+MissionClient.TrackerMaxBottom = 0.45 -- Unterkante höchstens bei 45 % der Bildschirmhöhe (Bildmitte bleibt frei)
+MissionClient.ChapterFullHeight = 700 -- darunter (oder schmaler als ChapterFullWidth) ist die Kapitel-Karte kompakt
+MissionClient.ChapterFullWidth = 600
+MissionClient.ChapterLines = 3 -- Intro-Zeilen der großen Kapitel-Karte
 
 -- Ziel je Missionsart (zone, Stationsschlüssel, Beschriftung, Schnellreise): eine Tabelle für Server und Client
 -- (StoryRules.Targets / StoryRules.TargetOf; 3.x: zone "anchor" = Open-World-Gebäude am eigenen Grundstück)
@@ -79,6 +82,7 @@ local chapterPending = nil -- { title, text } wartet, bis Overlays erlaubt sind
 local delivery = nil -- { route, until_ }
 local tracker = {} -- frame, kicker, title, text, bar, fill, count, button, mode ("claim" | "travel" | nil), id, travel
 local cardOn, chapterOn = false, false -- Karte bzw. Kapitel-Intro gerade „an“ (sichtbar, sobald Overlays erlaubt sind)
+local buildTracker -- Karte „Deine Mission“ (Aufbau bei den Tracker-Funktionen unten)
 local stepTimer, cullTimer, npcSlow = 0, 0, 0
 local npcs = setmetatable({}, { __mode = "k" }) -- [inst] = Datensatz
 local npcList = {}
@@ -246,13 +250,14 @@ local function placeCard()
 	end
 end
 
+-- 3.x: oben unter der Toast-Zone (wie die Missions-Karte, die so lange wartet) – nie in der Bildmitte, wo Spieler in die
+-- Welt klicken (Auto, Arbeitspunkte); der Intro-Text ist dafür auf wenige Zeilen gekürzt (ganz im Tab „Story“)
 local function placeChapter()
 	if not chapter.frame or not gui then
 		return
 	end
-	local h = gui.AbsoluteSize.Y
 	local ch = chapter.frame.AbsoluteSize.Y > 0 and chapter.frame.AbsoluteSize.Y or 200
-	local pos = freePosition(chapter.frame, h * 0.42 - ch / 2, ch)
+	local pos = freePosition(chapter.frame, cardTop(), ch)
 	-- Ankerpunkt der Kapitel-Karte ist die Mitte (0.5, 0.5)
 	chapter.frame.Position = UDim2.new(pos.X.Scale, pos.X.Offset, 0, pos.Y.Offset + ch / 2)
 end
@@ -284,6 +289,9 @@ local function hideChapter()
 	if chapter.frame then
 		chapter.frame.Visible = false
 	end
+	if MissionClient.Refresh then
+		task.defer(MissionClient.Refresh) -- wartende Missions-Karte zeigen
+	end
 end
 
 local function buildChapterCard()
@@ -293,13 +301,15 @@ local function buildChapterCard()
 		Size = UDim2.new(0, MissionClient.CardWidth, 0, 0), Visible = false, Active = false,
 	})
 	UI.Corner(frame, 14)
-	UI.Padding(frame, 20, 16)
-	UI.List(frame, 8)
+	chapter.padding = UI.Padding(frame, 20, 16)
+	chapter.list = UI.List(frame, 8)
 	chapter.frame = frame
 	chapter.kicker = UI.Label(frame, "Neues Kapitel", { Name = "Kicker", Font = UI.FontBold, TextSize = 13, TextColor3 = T.yellow, LayoutOrder = 1 })
 	chapter.title = UI.Label(frame, "", { Name = "Title", Font = UI.FontBig, TextSize = 22, LayoutOrder = 2 })
 	chapter.text = UI.Label(frame, "", { Name = "Text", TextSize = 15, TextColor3 = T.muted, LayoutOrder = 3 })
 	chapter.button = UI.Button(frame, "Los geht's!", T.green, hideChapter, { Name = "ChapterOk", LayoutOrder = 4 })
+	-- 3.x: niedrige Bildschirme (Handy quer): kompakt wie die anderen Karten, damit sie über die HUD-Leiste passt
+	chapter.style = { padding = chapter.padding, list = chapter.list, title = chapter.title, text = chapter.text, titleSize = 22, textSize = 15, padX = 20, padY = 16, gap = 8 }
 	chapter.scale = Instance.new("UIScale")
 	chapter.scale.Scale = 1
 	chapter.scale.Parent = frame
@@ -320,7 +330,24 @@ local function layout()
 	end
 	placeCard()
 	chapter.frame.Size = UDim2.new(0, cw, 0, 0)
+	if chapter.style then
+		local h = gui.AbsoluteSize.Y
+		local compact = h < MissionClient.ChapterFullHeight or w < MissionClient.ChapterFullWidth
+		if PrestigeUI then
+			pcall(PrestigeUI.StyleCard, chapter.style, compact)
+		end
+		chapter.kicker.Visible = not compact
+		if not compact then
+			-- auch groß höchstens ChapterLines Zeilen Intro
+			chapter.text.AutomaticSize = Enum.AutomaticSize.None
+			chapter.text.Size = UDim2.new(1, 0, 0, math.ceil(MissionClient.ChapterLines * chapter.style.textSize * 1.25))
+			chapter.text.TextTruncate = Enum.TextTruncate.AtEnd
+		end
+	end
 	placeChapter()
+	if MissionClient.RenderTracker then
+		pcall(MissionClient.RenderTracker, overlaysAllowed()) -- Karte „Deine Mission“ neu legen
+	end
 end
 
 local function build()
@@ -343,6 +370,7 @@ local function build()
 	buildMarker("DeliveryEnd", T.green)
 	buildCard()
 	buildChapterCard()
+	buildTracker()
 	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
 	layout()
 end
@@ -523,6 +551,191 @@ local function updateMarkers()
 	end
 end
 
+---------------------------------------------------------------- Karte „Deine Mission“ (3.x)
+local function trackerPress()
+	local remote = ctx and ctx.Remote
+	if not remote or type(remote.Send) ~= "function" then
+		return
+	end
+	if tracker.mode == "claim" and type(tracker.id) == "string" then
+		remote.Send("story_claim", { id = tracker.id })
+	elseif tracker.mode == "travel" and type(tracker.travel) == "string" and tracker.travel ~= "" then
+		remote.Send("mini_travel", { key = tracker.travel })
+	end
+end
+
+function buildTracker()
+	local frame = UI.Frame(gui, {
+		Name = "MissionTracker", BackgroundColor3 = T.panel, AutomaticSize = Enum.AutomaticSize.Y,
+		AnchorPoint = Vector2.new(0, 0), Position = UDim2.fromOffset(12, 8),
+		Size = UDim2.new(0, MissionClient.TrackerWidth, 0, 0), Visible = false,
+	})
+	UI.Corner(frame, 12)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = T.yellow
+	stroke.Thickness = 2
+	stroke.Transparency = 0.35
+	stroke.Parent = frame
+	tracker.padding = UI.Padding(frame, 12, 10)
+	tracker.list = UI.List(frame, 4)
+	tracker.frame = frame
+	tracker.kicker = UI.Label(frame, "DEINE MISSION", { Name = "Kicker", Font = UI.FontBold, TextSize = 12, TextColor3 = T.yellow, LayoutOrder = 1 })
+	tracker.title = UI.Label(frame, "", { Name = "Title", Font = UI.FontBold, TextSize = 16, LayoutOrder = 2 })
+	tracker.text = UI.Label(frame, "", { Name = "Text", TextSize = 13, TextColor3 = T.muted, LayoutOrder = 3 })
+	local bar = UI.Frame(frame, {
+		Name = "Bar", BackgroundColor3 = T.bg, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(1, 0, 0, 8), LayoutOrder = 4,
+	})
+	UI.Corner(bar, 4)
+	tracker.bar = bar
+	tracker.fill = UI.Frame(bar, {
+		Name = "Fill", BackgroundColor3 = T.green, AutomaticSize = Enum.AutomaticSize.None, Size = UDim2.new(0, 0, 1, 0),
+	})
+	UI.Corner(tracker.fill, 4)
+	tracker.count = UI.Label(frame, "", { Name = "Count", TextSize = 12, TextColor3 = T.muted, LayoutOrder = 5 })
+	tracker.button = UI.Button(frame, "", T.blue, trackerPress, {
+		Name = "TrackerButton", LayoutOrder = 6, Size = UDim2.new(1, 0, 0, UI.MinTouch), Visible = false,
+	})
+end
+
+-- Passt die Karte oben links neben die 2.4.0-Leiste (CompactProgress)?
+function MissionClient.TrackerTopLeft(): boolean
+	local w = gui and gui.AbsoluteSize.X or 0
+	local compactW = PrestigeUI and PrestigeUI.CompactProgressWidth or 310
+	return w > 0 and math.floor((w - compactW) / 2 - 20) >= MissionClient.TrackerMinWidth
+end
+
+-- Lage: oben links neben der 2.4.0-Leiste, wenn dort Platz ist; sonst unter Toast-Zone und Karten oben rechts
+local function placeTracker()
+	local frame = tracker.frame
+	if not frame or not gui then
+		return
+	end
+	local w, h = gui.AbsoluteSize.X, gui.AbsoluteSize.Y
+	if w <= 0 or h <= 0 then
+		return
+	end
+	local compactW = PrestigeUI and PrestigeUI.CompactProgressWidth or 310
+	local side = math.floor((w - compactW) / 2 - 20)
+	local cw, x, y
+	if side >= MissionClient.TrackerMinWidth then
+		cw, x, y = math.min(MissionClient.TrackerWidth, side), 12, 8
+	else
+		cw, x = math.min(MissionClient.TrackerWidth, w - 24), 12
+		y = cardTop()
+		if cardShowing and card.frame and card.frame.Visible then
+			y = math.max(y, card.frame.AbsolutePosition.Y - gui.AbsolutePosition.Y + card.frame.AbsoluteSize.Y + 8)
+		end
+	end
+	if frame.Size.X.Offset ~= cw then
+		frame.Size = UDim2.new(0, cw, 0, 0)
+	end
+	local ch = frame.AbsoluteSize.Y > 0 and frame.AbsoluteSize.Y or 160
+	if PrestigeUI then
+		local ok, fx, fy = pcall(PrestigeUI.FreeRect, w, h, x, y, cw, ch)
+		if ok and type(fx) == "number" and type(fy) == "number" then
+			x, y = fx, fy
+		end
+	end
+	frame.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
+end
+
+-- Überdeckt die Karte die gerade sichtbare Missions-/Kapitel-Karte? (dann taucht sie kurz ab)
+local function trackerCovers(other: GuiObject?): boolean
+	local f = tracker.frame
+	if not f or not other or not other.Visible then
+		return false
+	end
+	local a0, a1 = f.AbsolutePosition, f.AbsolutePosition + f.AbsoluteSize
+	local b0, b1 = other.AbsolutePosition, other.AbsolutePosition + other.AbsoluteSize
+	return a0.X < b1.X and b0.X < a1.X and a0.Y < b1.Y and b0.Y < a1.Y
+end
+
+local function nearPart(part: BasePart?): boolean
+	local pos = rootPos()
+	return part ~= nil and pos ~= nil and (part.Position - pos).Magnitude < MissionClient.TrackerNear
+end
+
+-- Inhalt und Sichtbarkeit (Refresh, alle 0,2 s). allowed = Karten dürfen gerade zu sehen sein
+function MissionClient.RenderTracker(allowed: boolean?)
+	local frame = tracker.frame
+	if not frame then
+		return
+	end
+	local s = latest
+	local st = story(s)
+	local a = type(st.active) == "table" and type(st.active.id) == "string" and st.active or nil
+	local inWorld = type(s) == "table" and (s.mode == nil or s.mode == "openworld")
+	local pending = type(s) == "table" and type(s.start) == "table" and s.start.pending == true
+	local locked = a == nil and st.locked == true
+	local show = allowed == true and inWorld and not pending and st.passive ~= true and st.finished ~= true and (a ~= nil or locked)
+	if not show then
+		if frame.Visible then
+			frame.Visible = false
+		end
+		return
+	end
+	-- kompakt (ohne Text): niedrige Bildschirme und schmale (Handy hochkant: die Karte steht dann unter den Karten oben und
+	-- darf nicht in die Bildmitte reichen, wo Spieler in die Welt klicken)
+	local compact = PrestigeUI ~= nil and gui ~= nil and (PrestigeUI.IsCompact(gui.AbsoluteSize.Y) or not MissionClient.TrackerTopLeft())
+	local chapterNo = math.floor(num(st.chapter, 1))
+	local chapterTitle = type(st.chapterTitle) == "string" and st.chapterTitle or ""
+	tracker.kicker.Text = "DEINE MISSION · Kapitel " .. tostring(chapterNo) .. (chapterTitle ~= "" and (": " .. chapterTitle) or "")
+	tracker.kicker.Visible = not compact
+	tracker.mode, tracker.id, tracker.travel = nil, nil, nil
+	if a then
+		local okD, def = pcall(StoryRules.Mission, a.id)
+		def = okD and def or nil
+		local target = math.max(1, num(a.target, 1))
+		local progress = math.clamp(num(a.progress, 0), 0, target)
+		tracker.title.Text = tostring(a.title or (def and def.title) or a.id)
+		tracker.text.Text = tostring(a.text or (def and def.text) or "")
+		tracker.text.Visible = not compact and tracker.text.Text ~= ""
+		tracker.bar.Visible = true
+		tracker.fill.Size = UDim2.new(progress / target, 0, 1, 0)
+		tracker.count.Visible = true
+		tracker.count.Text = MiniLocale.Number(math.floor(progress)) .. " / " .. MiniLocale.Number(math.floor(target))
+		tracker.id = a.id
+		if a.claimable == true then
+			tracker.mode = "claim"
+			tracker.button.Text = "Belohnung abholen"
+			UI.SetEnabled(tracker.button, true, T.green)
+		else
+			local travel = type(a.travel) == "string" and a.travel or ""
+			local where = type(a.where) == "string" and a.where or ""
+			if travel == "" and def then
+				local t = MissionClient.TargetOf(def)
+				travel, where = t and t.travel or "", t and (t.name or t.title) or ""
+			end
+			local t = def and MissionClient.TargetOf(def) or nil
+			local part = t and stationPart(t.zone, t.key) or nil
+			if travel ~= "" and not nearPart(part) then
+				tracker.mode, tracker.travel = "travel", travel
+				tracker.button.Text = travel == "workshop" and "Hinreisen: deine Werkstatt" or ("Hinreisen" .. (where ~= "" and (": " .. where) or ""))
+				UI.SetEnabled(tracker.button, true, T.blue)
+			end
+		end
+	else
+		tracker.title.Text = "Kapitel " .. tostring(chapterNo) .. (chapterTitle ~= "" and (": " .. chapterTitle) or "")
+		tracker.text.Text = "Gibt es ab Level " .. tostring(math.floor(num(st.levelNeeded, 1))) .. ". Aufträge, Verkäufe und Nebenmissionen bringen dir XP!"
+		tracker.text.Visible = true
+		tracker.bar.Visible = false
+		tracker.count.Visible = false
+	end
+	tracker.button.Visible = tracker.mode ~= nil
+	if PrestigeUI and tracker.style == nil then
+		tracker.style = { padding = tracker.padding, list = tracker.list, title = tracker.title, text = tracker.text, titleSize = 16, textSize = 13, padX = 12, padY = 10, gap = 4 }
+	end
+	placeTracker()
+	local covered = (cardShowing and trackerCovers(card.frame)) or (chapterOn and trackerCovers(chapter.frame))
+	-- nie bis in die Bildmitte (dort klickt man in die Welt: Auto, Arbeitspunkte); passt es nicht, wartet die Karte
+	local tooLow = false
+	if gui and gui.AbsoluteSize.Y > 0 then
+		local bottom = frame.AbsolutePosition.Y - gui.AbsolutePosition.Y + frame.AbsoluteSize.Y
+		tooLow = bottom > gui.AbsoluteSize.Y * MissionClient.TrackerMaxBottom
+	end
+	frame.Visible = not covered and not tooLow
+end
+
 ---------------------------------------------------------------- Karten
 -- Niedriger Bildschirm (Handy quer): zwischen Toast-Zone und HUD-Leiste passt nur eine Karte – solange oben rechts
 -- „Tipp“/„Neu freigeschaltet“ zu sehen ist, wartet die Missions-Karte
@@ -535,7 +748,8 @@ local function shortAndBusy(): boolean
 end
 
 local function showNextCard()
-	if cardShowing or #cardQueue == 0 or not card.frame or not overlaysAllowed() or shortAndBusy() then
+	-- 3.x: solange das Kapitel-Intro oben steht, wartet die Missions-Karte (gleiche Stelle)
+	if cardShowing or chapterOn or #cardQueue == 0 or not card.frame or not overlaysAllowed() or shortAndBusy() then
 		return
 	end
 	local entry = table.remove(cardQueue, 1)
@@ -587,6 +801,7 @@ local function showChapterNow(entry: any)
 		if serial == chapterSerial and chapter.frame then
 			chapterOn = false
 			chapter.frame.Visible = false
+			MissionClient.Refresh()
 		end
 	end)
 end
@@ -812,6 +1027,10 @@ function MissionClient.OnNotice(data: any)
 			updateMarkers()
 		elseif ev == "started" then
 			updateMarkers()
+		elseif ev == "chapter" then
+			-- 3.x: Story beginnt (nach der Startwahl): Kapitel-Intro des Startwegs
+			MissionClient.ShowChapter("Kapitel " .. tostring(math.floor(num(data.chapter, 1))) .. ": " .. tostring(data.title or ""),
+				type(data.intro) == "string" and data.intro or nil, type(data.kicker) == "string" and data.kicker or "Deine Story beginnt")
 		end
 	end
 end
@@ -911,6 +1130,15 @@ end
 
 function MissionClient.DeliveryState(): any
 	return delivery
+end
+
+-- Karte „Deine Mission“ (3.x): Frame und ob sie gerade zu sehen ist
+function MissionClient.Tracker(): Frame?
+	return tracker.frame
+end
+
+function MissionClient.TrackerVisible(): boolean
+	return gui ~= nil and gui.Enabled and tracker.frame ~= nil and tracker.frame.Visible == true
 end
 
 return MissionClient

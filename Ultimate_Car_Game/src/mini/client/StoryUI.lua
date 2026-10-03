@@ -2,7 +2,10 @@
 -- Kapitel-Kopf mit Intro-Text (Erzählstimme), Missionskarten (Fortschrittsbalken, Starten/Abholen, Sperrgrund),
 -- Nebenmissionen (täglich 3 + Werkstatt-Legende, Tageszähler, Lieferungs-Uhr), Kiesplatz-Verkaufskarte (Kunde mit
 -- Name, Wunsch, Spruch, drei Preisknöpfe mit erwartetem Preis/Gewinn und Risiko „sicher / wahrscheinlich / riskant“,
--- Ergebnis-Animation) und der Story-Wegweiser („Gehe zum Kiesplatz“ mit Schnellreise → mini_travel {key = "kiesplatz"}).
+-- Ergebnis-Animation) und der Story-Wegweiser („Gehe zum Kiesplatz“ mit Schnellreise → mini_travel {key = "kiesplatz"};
+-- 3.x: für jede Mission mit Ort – Ziel aus StoryRules.TargetOf bzw. den Snapshot-Feldern where/travel).
+-- 3.x: Missionen starten von selbst (StoryService/StoryRules.AutoStart); „Starten“ erscheint nur noch, falls eine
+-- Mission ausnahmsweise wartet. Kapitel 1 hängt vom Startweg ab (Snapshot story.path, StoryRules.PathMissions).
 -- Der Client zeigt nur an und sendet Absichten: story_start {id}, story_claim {id}, story_sell {offer, price}
 -- (price = Preisstufe 1..3, nie ein Betrag), side_claim {id}, mini_travel {key}. Alle Ergebnisse kommen vom Server.
 --
@@ -366,8 +369,10 @@ local function nearKiesplatz(): boolean
 	return (st.Position - root.Position).Magnitude < StoryUI.NearStation
 end
 
+local travelKey = StoryUI.TravelKey -- Ziel des Wegweisers (Kiesplatz oder Ort der laufenden Mission)
+
 local function travel()
-	Remote.Send("mini_travel", { key = StoryUI.TravelKey })
+	Remote.Send("mini_travel", { key = travelKey })
 	if ctx and ctx.Close then
 		ctx.Close()
 	end
@@ -386,10 +391,43 @@ local function currentMission(st: any, missions: { any }): any
 	return nil
 end
 
+-- Ort einer Missionsansicht: Snapshot-Felder where/travel, sonst aus der Konfiguration (StoryRules.TargetOf)
+local function goalOf(m: any): (string, string)
+	if type(m) ~= "table" then
+		return "", ""
+	end
+	local where, key = type(m.where) == "string" and m.where or "", type(m.travel) == "string" and m.travel or ""
+	if key == "" and type(m.id) == "string" then
+		local ok, def = pcall(StoryRules.Mission, m.id)
+		local okT, t = pcall(StoryRules.TargetOf, ok and def or nil)
+		if okT and type(t) == "table" then
+			where, key = t.name or t.title or "", t.travel or ""
+		end
+	end
+	return where, key
+end
+
 local function renderMapHint(s: any, missions: { any })
 	local st = story(s)
 	local cur = currentMission(st, missions)
 	local wantsKiesplatz = (cur ~= nil and cur.kind == "sell") or type(st.sale) == "table"
+	-- 3.x: andere Missionen mit Ort (Große Werkstatt, Schrottpresse, eigene Werkstatt …) bekommen auch einen Wegweiser
+	local where, key = goalOf(cur)
+	if not wantsKiesplatz and key ~= "" and cur ~= nil and cur.claimable ~= true and st.finished ~= true and st.passive ~= true then
+		refs.mapCard.Visible = true
+		travelKey = key
+		if not inOpenWorld(s) then
+			refs.mapText.Text = "Deine Mission spielt in der Open World. Reise über die Lobby dorthin."
+			refs.travelButton.Text = "Nur in der Open World"
+			UI.SetEnabled(refs.travelButton, false)
+		else
+			refs.mapText.Text = "Ziel deiner Mission: " .. (where ~= "" and where or "siehe Missionstext") .. "."
+			refs.travelButton.Text = key == "workshop" and "Schnellreise in deine Werkstatt" or ("Schnellreise: " .. (where ~= "" and where or "zum Ziel"))
+			UI.SetEnabled(refs.travelButton, true, T.blue)
+		end
+		return
+	end
+	travelKey = StoryUI.TravelKey
 	local show = wantsKiesplatz and st.finished ~= true and st.passive ~= true
 	refs.mapCard.Visible = show
 	if not show then
@@ -433,10 +471,11 @@ local function missionsFor(s: any): { any }
 	end
 	-- Rückfall: Konfiguration (replizierte GameConfig.Story)
 	local out = {}
-	local ok, ch = pcall(StoryRules.Chapter, chapter)
-	if ok and type(ch) == "table" then
+	local path = type(st.path) == "string" and st.path or (type(s) == "table" and type(s.meta) == "table" and s.meta.startPath) or ""
+	local ok, list = pcall(StoryRules.PathMissions, chapter, path) -- 3.x: Kapitel 1 je Startweg
+	if ok and type(list) == "table" then
 		local step = math.floor(num(st.step, 1))
-		for i, m in ipairs(ch.Missions) do
+		for i, m in ipairs(list) do
 			local active = type(st.active) == "table" and st.active.id == m.id
 			local r = m.reward or {}
 			table.insert(out, {

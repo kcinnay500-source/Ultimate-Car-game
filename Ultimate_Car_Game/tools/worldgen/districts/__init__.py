@@ -7,4 +7,5 @@ Regeln für alle Module (siehe tools/worldgen/lib.py und docs/CITY_SPEC.md):
 * Höhen-Stapel §1.2 einhalten (keine überlappenden Oberseiten auf gleicher Höhe), alles verankert.
 * Budget: Teile unter `with lib.section("D<n> Name"):` bauen, damit die Zählung pro District stimmt.
 """
-ORDER = ["plaza_arrival", "plaza_buildings", "scrapyard", "tuning", "dealer_track", "parking_misc", "kiesplatz"]
+ORDER = ["plaza_arrival", "plaza_buildings", "scrapyard", "tuning", "dealer_track", "parking_misc", "kiesplatz",
+         "grosswerkstatt"]   # grosswerkstatt zuletzt: räumt sein Gelände (Grenze, Skyline) erst nach den anderen frei

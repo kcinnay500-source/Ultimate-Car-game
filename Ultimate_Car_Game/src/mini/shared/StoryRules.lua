@@ -1302,42 +1302,43 @@ function StoryRules.CoopApply(dA: any, dB: any, id: any, delta: any, now: number
 end
 
 ---------------------------------------------------------------- Ziele (Marker, Wegweiser, Karte „Deine Mission“)
--- Ziel je Missionsart: { zone, key, title, travel } – zone "city": City.Stations.<key>, "plot": eigenes Grundstück
+-- Ziel je Missionsart: { zone, key, title, travel, name } – zone "city": City.Stations.<key>, "plot": eigenes Grundstück
 -- PlayerWorkshops.Plot_<UserId>.Stations.<key>, "anchor": Plot_<UserId>.OWAnchors.<key> (Open-World-Gebäude);
--- travel = Schnellreise-Ziel (mini_travel {key}; "workshop" = eigene Werkstatt). Lieferungen haben eigene Marker.
+-- travel = Schnellreise-Ziel (mini_travel {key}; "workshop" = eigene Werkstatt), title = Marker-Beschriftung (groß),
+-- name = Ort im Satz („Große Werkstatt“). Lieferungen haben eigene Marker.
 local CITY, PLOT, ANCHOR = "city", "plot", "anchor"
 local TARGETS = {
-	sell = { CITY, "kiesplatz", "KIESPLATZ", "kiesplatz" },
-	settle = { PLOT, "workshop", "EMPFANG", "workshop" },
-	["settle:oil"] = { PLOT, "workshop", "EMPFANG", "workshop" },
-	["settle:inspection"] = { PLOT, "workshop", "EMPFANG", "workshop" },
-	jobsDone = { PLOT, "workshop", "EMPFANG", "workshop" },
-	parts_bought = { PLOT, "parts", "TEILEHANDEL", "workshop" },
-	equipment_bought = { PLOT, "upgrades", "AUSBAU", "workshop" },
-	bays = { PLOT, "upgrades", "HALLENANBAU", "workshop" },
-	equipmentAll = { PLOT, "upgrades", "AUSBAU", "workshop" },
-	build = { PLOT, "workshop", "GRUNDSTÜCK", "workshop" },
-	["owTyp:autohaus"] = { ANCHOR, "autohaus", "VERKAUFSHAUS", "workshop" },
-	["owTyp:produktion"] = { ANCHOR, "produktion", "HERSTELLUNG", "workshop" },
-	["owTyp:schrottplatz"] = { ANCHOR, "schrottplatz", "SCHROTTPLATZ", "workshop" },
-	pw_repair = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt" },
-	pw_parts_sold = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt" },
-	car_bought = { CITY, "dealer", "AUTOHAUS", "dealer" },
-	cars = { CITY, "dealer", "AUTOHAUS", "dealer" },
-	auction_won = { CITY, "auction", "AUKTIONSHAUS", "auction" },
-	auction_consigned = { CITY, "auction_consign", "AUKTIONSHAUS", "auction" },
-	["action:mini_auction_bid"] = { CITY, "auction", "AUKTIONSHAUS", "auction" },
-	track_finish = { CITY, "track", "TESTSTRECKE", "track" },
-	arcade_round = { CITY, "arcade", "SPIELHALLE", "arcade" },
-	["action:mini_carwash"] = { CITY, "carwash", "WASCHSTRASSE", "carwash" },
-	["action:mini_press_exchange"] = { CITY, "scrap_trader", "SCHROTTHÄNDLER", "scrap_trader" },
-	["action:mini_car_tune"] = { PLOT, "workshop", "GARAGE", "workshop" },
-	["action:mini_car_sell"] = { PLOT, "workshop", "GARAGE", "workshop" },
-	clicks = { CITY, "press", "SCHROTTPRESSE", "press" },
-	pressed = { CITY, "press", "SCHROTTPRESSE", "press" },
-	dismantled = { CITY, "scrapyard", "ZERLEGEPLATZ", "scrapyard" },
-	quizCorrect = { CITY, "quiz", "QUIZ", "quiz" },
-	parkingSolved = { CITY, "parking", "PARKPLATZ", "parking" },
+	sell = { CITY, "kiesplatz", "KIESPLATZ", "kiesplatz", "Kiesplatz" },
+	settle = { PLOT, "workshop", "EMPFANG", "workshop", "Empfang deiner Werkstatt" },
+	["settle:oil"] = { PLOT, "workshop", "EMPFANG", "workshop", "Empfang deiner Werkstatt" },
+	["settle:inspection"] = { PLOT, "workshop", "EMPFANG", "workshop", "Empfang deiner Werkstatt" },
+	jobsDone = { PLOT, "workshop", "EMPFANG", "workshop", "Empfang deiner Werkstatt" },
+	parts_bought = { PLOT, "parts", "TEILEHANDEL", "workshop", "Teilehandel" },
+	equipment_bought = { PLOT, "upgrades", "AUSBAU", "workshop", "Ausbau deiner Werkstatt" },
+	bays = { PLOT, "upgrades", "HALLENANBAU", "workshop", "Hallenanbau" },
+	equipmentAll = { PLOT, "upgrades", "AUSBAU", "workshop", "Ausbau deiner Werkstatt" },
+	build = { PLOT, "workshop", "GRUNDSTÜCK", "workshop", "dein Grundstück" },
+	["owTyp:autohaus"] = { ANCHOR, "autohaus", "VERKAUFSHAUS", "workshop", "dein Verkaufshaus" },
+	["owTyp:produktion"] = { ANCHOR, "produktion", "HERSTELLUNG", "workshop", "deine Herstellung" },
+	["owTyp:schrottplatz"] = { ANCHOR, "schrottplatz", "SCHROTTPLATZ", "workshop", "dein Schrottplatz" },
+	pw_repair = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
+	pw_parts_sold = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
+	car_bought = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },
+	cars = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },
+	auction_won = { CITY, "auction", "AUKTIONSHAUS", "auction", "Auktionshaus" },
+	auction_consigned = { CITY, "auction_consign", "AUKTIONSHAUS", "auction", "Auktionshaus" },
+	["action:mini_auction_bid"] = { CITY, "auction", "AUKTIONSHAUS", "auction", "Auktionshaus" },
+	track_finish = { CITY, "track", "TESTSTRECKE", "track", "Teststrecke" },
+	arcade_round = { CITY, "arcade", "SPIELHALLE", "arcade", "Spielhalle" },
+	["action:mini_carwash"] = { CITY, "carwash", "WASCHSTRASSE", "carwash", "Waschstraße" },
+	["action:mini_press_exchange"] = { CITY, "scrap_trader", "SCHROTTHÄNDLER", "scrap_trader", "Schrotthändler" },
+	["action:mini_car_tune"] = { PLOT, "workshop", "GARAGE", "workshop", "deine Garage" },
+	["action:mini_car_sell"] = { PLOT, "workshop", "GARAGE", "workshop", "deine Garage" },
+	clicks = { CITY, "press", "SCHROTTPRESSE", "press", "Schrottpresse" },
+	pressed = { CITY, "press", "SCHROTTPRESSE", "press", "Schrottpresse" },
+	dismantled = { CITY, "scrapyard", "ZERLEGEPLATZ", "scrapyard", "Zerlegeplatz" },
+	quizCorrect = { CITY, "quiz", "QUIZ", "quiz", "Mechaniker-Quiz" },
+	parkingSolved = { CITY, "parking", "PARKPLATZ", "parking", "Parkplatz" },
 }
 StoryRules.Targets = TARGETS
 
@@ -1375,7 +1376,7 @@ function StoryRules.TargetOf(def: any): any
 	for _, k in ipairs(keys) do
 		local t = TARGETS[k]
 		if t then
-			return { zone = t[1], key = t[2], title = t[3], travel = t[4] }
+			return { zone = t[1], key = t[2], title = t[3], travel = t[4], name = t[5] or t[3] }
 		end
 	end
 	return nil
@@ -1397,7 +1398,7 @@ function StoryRules.MissionView(d: any, def: Mission, level: any): any
 		current = cur.mission ~= nil and cur.mission.id == def.id,
 		startable = cur.mission ~= nil and cur.mission.id == def.id and type(cur.active) ~= "table" and StoryRules.ChapterOpen(d, def.chapter or 1, level),
 		credits = finite(r.credits) and r.credits or 0, xp = missionXp(def), cosmetic = r.cosmetic, titleReward = r.title,
-		where = goal and goal.title or "", travel = goal and goal.travel or "",
+		where = goal and goal.name or "", travel = goal and goal.travel or "",
 	}
 end
 

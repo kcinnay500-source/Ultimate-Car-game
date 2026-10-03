@@ -646,7 +646,10 @@ function Kinds.turntable(inst)
 	rec.update = function(r, t)
 		local turn = 360 / math.max(0.01, math.abs(r.speed))
 		local a = math.rad(phaseOf(t, turn) * 360) * (r.speed < 0 and -1 or 1)
-		r.inst:PivotTo(r.base * CFrame.Angles(0, a, 0))
+		-- Um die senkrechte Weltachse drehen: der Pivot (PrimaryPart = liegend erzeugter Zylinder) hat eine
+		-- gekippte lokale Y-Achse, sonst kippt das Auto in den Boden.
+		local p = r.base.Position
+		r.inst:PivotTo(CFrame.new(p) * CFrame.Angles(0, a, 0) * (r.base - p))
 	end
 	return rec
 end

@@ -526,7 +526,12 @@ function StoryService.OnStartChosen(ms: any, d: any, t: number?): any
 	end
 	StoryService.Sessions[ms.player] = ms
 	session(ms).seen = {}
-	return autoStart(ms, d, finite(t) and t or now())
+	local started = autoStart(ms, d, finite(t) and t or now())
+	-- Kapitel-Intro des Startwegs (MissionClient: Karte „Deine Story beginnt“)
+	local cur = StoryRules.Current(d)
+	local title, intro = StoryRules.ChapterInfo(d, cur.chapter)
+	notice(ms, "story", { event = "chapter", chapter = cur.chapter, title = title, intro = intro, kicker = "Deine Story beginnt" })
+	return started
 end
 
 -- 3.x: Kapitel 1 von vorn (StartService.ResetStart): erledigte Kapitel-1-Missionen und die laufende sind weg; die

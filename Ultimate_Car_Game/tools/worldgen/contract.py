@@ -42,6 +42,12 @@ STATIONS = {
     "track": ("track", "Teststrecke", (0, 3, 224), "N", -0.5, {}),
     # Kiesplatz (PHASE4_CONTRACT §7, Story Kapitel 1): Verkaufsfenster der Hütte, Spieler steht östlich davor
     "kiesplatz": ("story", "Kiesplatz · Gebrauchtwagen", (301.5, 2, 306), "E", -1.0, {}),
+    # Große Werkstatt (districts/grosswerkstatt.py, PublicWorkshopService): Annahme-Terminal am Mittelpfeiler der
+    # Hallen (Spieler östlich davor auf dem Vorplatz) und Theke des Teile-Ankaufs; beide öffnen den Bereich grosswerkstatt
+    "grosswerkstatt": ("grosswerkstatt", "Große Werkstatt · Reparatur", (-594.5, 3, 0), "E", -1.0,
+                       {"PwStation": "repair"}),
+    "teileankauf": ("grosswerkstatt", "Große Werkstatt · Teile-Ankauf", (-603.5, 3, -58), "E", -1.0,
+                    {"PwStation": "parts"}),
 }
 ARCADE_GAMES = [
     ("arcade_1", "BLITZ-REAKTION", (-121, 3, -60), "E"),
@@ -75,6 +81,8 @@ ARRIVALS = {
     "scrapyard_gate": (-168, -0.95, -201, "W"),   # liegt in der Schrott-Tor-Absenkung (-0.95)
     "park": (-186, -1, 165, "W"),
     "kiesplatz": (327, -1, 296, "S"),            # Kiesplatz-Einfahrt (Kies -1.0), Blick nach Süden auf den Platz
+    "grosswerkstatt": (-578, -1, 0, "W"),        # Vorplatz der Großen Werkstatt (Beton -1.0), Blick auf die Hallen
+    "teileankauf": (-594, -1, -58, "W"),         # vor der Theke des Teile-Ankaufs
 }
 CITY_SPAWN = (0, 0.1, -201)
 

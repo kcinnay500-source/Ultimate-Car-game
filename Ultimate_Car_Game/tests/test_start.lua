@@ -3,8 +3,15 @@
 -- (eigene Aktionen-Tabelle wie test_tutorial, unabhängig von der MiniService-Verkabelung) und StartUI im Mock-Client.
 -- Geprüft: Wahl nur einmal, Veteranen bekommen werkstatt automatisch, Stufe 1 geschenkt (sofort fertig, kostenlos,
 -- nie zweimal), Tutorial-Schritte je Weg, Kapitel-1-Mission je Weg, Speichern/Laden, ungültiger Weg abgelehnt.
+-- 3.x: Die Wahl ist Pflicht (kein „Später entscheiden“, auch Tutorial-Überspringen und abgerechnete Aufträge umgehen sie
+-- nicht), die Story startet sofort nach der Wahl (Mission 1 des Wegs aktiv, ohne Kiesplatz-Besuch), Kapitel 1 hat je
+-- Weg sechs Missionen und lässt sich mit simulierten Ereignissen ganz durchspielen, Veteranen behalten Weg und Stand,
+-- StartService.ResetStart (Entwickler-Menü) setzt Wahl, Tutorial und Kapitel 1 zurück.
 local NOW = 1760000000
 local PATHS = { "werkstatt", "autohaus", "produktion", "schrottplatz" }
+-- erste Mission von Kapitel 1 je Weg (3.x) und die Namen der Startkarten
+local FIRST = { werkstatt = "c1_ws1", autohaus = "c1_ah1", produktion = "c1_m1_produktion", schrottplatz = "c1_m1_schrottplatz" }
+local NAMES = { werkstatt = "Werkstatt", autohaus = "Verkaufshaus", produktion = "Herstellung", schrottplatz = "Schrottplatz" }
 
 ---------------------------------------------------------------- Hilfen
 local function mods(g)
@@ -119,6 +126,21 @@ return {
 			T.check(type(p.yieldHours) == "number" and p.yieldHours >= 0 and p.yieldHours <= GC.OW.PassiveCapHours, "Startertrag im Deckel: " .. typ)
 		end
 		T.eq(GC.Start.Default, "werkstatt", "Veteranen: werkstatt")
+		-- 3.x: Namen wie gewünscht und gleich im Tycoon und bei den Open-World-Gebäuden; Symbol und Kapiteltitel je Karte
+		for _, typ in ipairs(PATHS) do
+			local p = GC.Start.Paths[typ]
+			T.eq(p.name, NAMES[typ], "Name der Startkarte " .. typ)
+			T.eq(GC.Tycoon.Buildings[typ].name, NAMES[typ], "gleicher Name im Tycoon: " .. typ)
+			T.eq(GC.OW.Buildings[typ].name, NAMES[typ], "gleicher Name als Open-World-Gebäude: " .. typ)
+			T.check(type(p.icon) == "string" and p.icon ~= "", "Symbol " .. typ)
+			local info = GC.Story.Chapters[1].PathInfo[typ]
+			T.eq(p.chapter, "Kapitel 1: " .. info.title, "Kapiteltitel auf der Karte " .. typ)
+			local _, lines = string.gsub(p.desc, "\n", "")
+			T.eq(lines, 1, "zweizeilige Beschreibung " .. typ)
+		end
+		T.eq(GC.Start.Texts.later, nil, "kein „Später entscheiden“ mehr")
+		T.eq(GC.Start.Texts.laterHint, nil, "kein Später-Hinweis mehr")
+		T.check(type(GC.Start.Texts.mustChoose) == "string" and type(GC.Start.Texts.reset) == "string", "Texte Pflichtwahl/Zurücksetzen")
 		-- werkstatt = klassischer Weg, unverändert (11 Schritte)
 		T.check(GC.Tutorial.ByPath.werkstatt == GC.Tutorial.Steps, "Steps = ByPath.werkstatt")
 		T.eq(ids(GC.Tutorial.Steps), "move,menu,reception,accept,obd,repair,settle,map,dealer,goals,kiesplatz", "klassischer Weg unverändert")
@@ -223,6 +245,35 @@ return {
 		MR.SetStartPath(saved, "autohaus")
 		local loaded = M.MiniRules.LoadGames(H.Copy(saved.games), saved, NOW)
 		T.eq(loaded.meta.startPath, "autohaus", "LoadGames hält den Weg")
+		-- 3.x: Wahl gezeigt (Pflicht): Aufträge, Tutorial-Schritt UND Gebäude machen das Profil nicht mehr zum Veteranen
+		local shown = profile(g)
+		T.eq(MR.MarkStartOffered(shown), true, "Wahl gezeigt")
+		shown.completed = 4
+		shown.games.meta.tutorialStep = 3
+		shown.games.ow.buildings.autohaus.stage = 1
+		T.eq(MR.StartPending(shown), true, "gezeigt + Aufträge + Gebäude: Wahl bleibt Pflicht")
+		T.eq(MR.ResolveStartPath(shown), "", "kein automatischer Weg")
+		local gs = {}
+		MR.ApplyLoad(gs, H.Copy(shown.games), shown, NOW)
+		T.eq(gs.meta.startPath, "", "Laden: Wahl bleibt offen (Gebäude im Datensatz)")
+		T.eq(gs.meta.startOffered, true, "Laden: startOffered bleibt")
+		-- ResetStart (Entwickler-Menü): Weg offen, Wahl gilt als gezeigt, Tutorial wartet wieder, Belohnung bleibt verbucht
+		local rs = profile(g)
+		MR.SetStartPath(rs, "schrottplatz")
+		rs.completed = 9
+		rs.games.meta.tutorialDone = true
+		rs.games.meta.tutorialRewarded = true
+		rs.games.meta.tutorialStep = 7
+		T.eq(MR.ResetStart(rs), true, "ResetStart")
+		T.eq(MR.StartPath(rs), "", "Weg wieder offen")
+		T.eq(MR.StartPending(rs), true, "Wahl wieder Pflicht (trotz Aufträgen)")
+		T.eq(rs.games.meta.tutorialDone, false, "Tutorial läuft wieder")
+		T.eq(rs.games.meta.tutorialStep, 1, "Tutorial ab Schritt 1")
+		T.eq(rs.games.meta.tutorialRewarded, true, "Belohnung bleibt verbucht (keine zweite)")
+		local rl = MR.Load(H.Copy(rs.games.meta), rs, NOW)
+		T.eq(rl.startPath, "", "nach Laden weiter offen")
+		T.eq(MR.SetStartPath(rs, "produktion"), true, "neue Wahl möglich")
+		T.eq(MR.ResetStart({ games = {} }), false, "ohne meta nichts")
 	end },
 
 	{ "OWRules.GrantStart: Stufe 1 je Weg geschenkt, sofort fertig, kostenlos, ohne Level-Sperre, nie zweimal", function(T, H)
@@ -327,6 +378,12 @@ return {
 		T.eq(TR.Waiting(d, nil), false, "ohne Modus wartet nichts")
 		T.eq(TR.Count(d), 11, "ohne Wahl: klassischer Weg")
 		T.eq(TR.Count(), 11, "ohne Profil: klassischer Weg")
+		-- 3.x: vor der Wahl lässt sich das Tutorial nicht überspringen (sonst wäre die Pflichtwahl umgangen)
+		local okSkip, whySkip = TR.Skip(d)
+		T.eq(okSkip, false, "Überspringen vor der Wahl abgelehnt")
+		T.eq(whySkip, "waiting", "Grund: wartet auf die Wahl")
+		T.eq(d.games.meta.tutorialDone, false, "Tutorial nicht beendet")
+		T.eq(MR.StartPending(d), true, "Wahl bleibt Pflicht")
 		local function walk(path, events)
 			local dd = profile(g)
 			MR.SetStartPath(dd, path)
@@ -378,106 +435,248 @@ return {
 		T.eq(TR.View(dp, "openworld").openTab, "buildings", "Gebäude-Schritt nennt den Tab")
 	end },
 
-	{ "StoryRules: erste Mission von Kapitel 1 je Weg, übrige Kapitel unverändert, Veteranen behalten ihren Stand, Balance", function(T, H)
+	{ "StoryRules: Kapitel 1 je Weg (sechs Missionen mit Ort), XP-Kette ohne Sackgasse, Kapitel 2–5 unverändert, Balance", function(T, H)
 		local g = H.Garage({ noServer = true })
 		local M = mods(g)
-		local SR, MR, OWR, GC = M.SR, M.MR, M.OWR, M.GC
-		local expect = { werkstatt = "c1_m1", autohaus = "c1_m1", produktion = "c1_m1_produktion", schrottplatz = "c1_m1_schrottplatz" }
-		T.eq(SR.Current(profile(g)).mission.id, "c1_m1", "ohne Wahl: Kiesplatz-Verkauf wie bisher")
+		local SR, MR, GC = M.SR, M.MR, M.GC
+		local ch1 = GC.Story.Chapters[1]
+		T.eq(SR.Current(profile(g)).mission.id, "c1_ah1", "ohne Wahl: Liste Missions (Weg Verkaufshaus)")
+		local seen = {}
 		for _, typ in ipairs(PATHS) do
 			local d = profile(g)
 			MR.SetStartPath(d, typ)
 			local cur = SR.Current(d)
 			T.eq(cur.chapter, 1, typ .. ": Kapitel 1")
-			T.eq(cur.mission.id, expect[typ], typ .. ": erste Mission")
+			T.eq(cur.mission.id, FIRST[typ], typ .. ": erste Mission")
 			local list = SR.Missions(d, 1)
-			T.eq(#list, 3, typ .. ": drei Missionen")
-			T.eq(list[2].id, "c1_m2", typ .. ": Mission 2 gleich")
-			T.eq(list[3].id, "c1_m3", typ .. ": Mission 3 gleich")
-			T.eq(SR.RequiredLevel(cur.mission), 1, typ .. ": ab Level 1 machbar")
-			local cfg = cur.mission.reward
-			T.check(cfg and cfg.credits > 0 and cfg.credits / cur.mission.minutes <= GC.Story.Balance.Share * SR.WorkshopPerMinute(1) + 1e-9, typ .. ": 40-%-Regel")
-			-- falsche Varianten lassen sich nicht starten
-			for other, id in pairs(expect) do
-				if other ~= typ and id ~= expect[typ] then
+			T.eq(#list, 6, typ .. ": sechs Missionen")
+			T.eq(#ch1.Paths[typ], #ch1.Missions, typ .. ": gleich viele Stellen wie Missions")
+			T.eq(list[6].id, "c1_m3", typ .. ": gemeinsame letzte Mission (2.500 Credits)")
+			local title = SR.ChapterInfo(d, 1)
+			T.eq("Kapitel 1: " .. title, GC.Start.Paths[typ].chapter, typ .. ": Kapiteltitel wie auf der Startkarte")
+			for i, m in ipairs(list) do
+				T.eq(SR.MissionAt(d, 1, i), m, typ .. ": MissionAt " .. i)
+				T.eq(m.index, i, typ .. ": Stelle " .. m.id)
+				T.check(type(m.text) == "string" and #m.text >= 60, typ .. ": klarer Text " .. m.id)
+				-- jede Mission sagt, wohin (Ziel-Marker/Schnellreise) – außer Kontostand und Lieferung (eigene Marker)
+				local t = SR.TargetOf(m)
+				local free = m.money ~= nil or m.event == "delivery"
+				T.check(free or (t ~= nil and type(t.travel) == "string" and t.travel ~= ""), typ .. ": Ziel für " .. m.id)
+				T.check(m.reward and m.reward.credits > 0 and m.reward.xp == 80, typ .. ": Belohnung " .. m.id)
+				if m.id ~= "c1_m3" then
+					T.check(not seen[m.id] or seen[m.id] == m, "Id eindeutig: " .. m.id)
+				end
+				seen[m.id] = m
+			end
+			-- falsche Varianten lassen sich nicht starten, die eigene schon
+			for other, id in pairs(FIRST) do
+				if other ~= typ and id ~= FIRST[typ] then
 					T.eq(select(1, SR.Start(d, id, NOW)), false, typ .. ": " .. id .. " nicht startbar")
 				end
 			end
 			T.eq(select(1, SR.Start(d, cur.mission.id, NOW)), true, typ .. ": eigene Mission startbar")
 		end
-		-- Fortschritt je Weg bis zur Abholung
-		local dw = profile(g)
-		MR.SetStartPath(dw, "werkstatt")
-		-- werkstatt = klassischer Start: Kiesplatz-Verkäufe wie bisher (das Werkstatt-Tutorial endet am Kiesplatz)
-		T.eq(select(1, SR.Start(dw, "c1_m1", NOW)), true, "werkstatt: c1_m1 startbar")
-		SR.OnStat(dw, "jobsDone", 3, NOW)
-		T.eq(select(1, SR.Claim(dw, "c1_m1", NOW)), false, "Aufträge zählen nicht für den Kiesplatz")
-		for _ = 1, 3 do
-			SR.OnSale(dw, 1, false, NOW)
+		-- Inhalt je Weg (Wunsch des Auftraggebers)
+		local function ids(typ)
+			local out = {}
+			for _, m in ipairs(SR.PathMissions(1, typ)) do
+				table.insert(out, m.id)
+			end
+			return table.concat(out, ",")
 		end
-		local okW = SR.Claim(dw, "c1_m1", NOW)
-		T.eq(okW, true, "werkstatt: drei Verkäufe abgeholt")
-		T.eq(SR.Current(dw).mission.id, "c1_m2", "weiter mit Mission 2")
-		local da = profile(g)
-		MR.SetStartPath(da, "autohaus")
-		SR.Start(da, "c1_m1", NOW)
-		for _ = 1, 3 do
-			SR.OnSale(da, 1, false, NOW)
+		T.eq(ids("autohaus"), "c1_ah1,c1_m1,c1_ah3,c1_ah4,c1_m2,c1_m3", "Verkaufshaus: Kiesplatz-Kapitel + Große Werkstatt + teurer verkaufen")
+		T.eq(ids("werkstatt"), "c1_ws1,c1_ws2,c1_ws3,c1_ws4,c1_ws5,c1_m3", "Werkstatt: Ölwechsel, Check mit Anruf, Teile …")
+		T.eq(ids("produktion"), "c1_m1_produktion,c1_pr2,c1_pr3,c1_pr4,c1_pr5,c1_m3", "Herstellung: Pakete, Lieferungen, Teile")
+		T.eq(ids("schrottplatz"), "c1_m1_schrottplatz,c1_sc2,c1_sc3,c1_sc4,c1_sc5,c1_m3", "Schrottplatz: Minispiele + Teile an die Große Werkstatt")
+		T.eq(SR.Mission("c1_ah3").event, "pw_repair", "Reparatur in der Großen Werkstatt (pw_repair)")
+		T.eq(SR.Mission("c1_ah4").repaired, true, "reparierten Wagen teurer verkaufen")
+		T.eq(SR.Mission("c1_sc2").event, "pw_parts_sold", "Teile an die Große Werkstatt (pw_parts_sold)")
+		T.eq(SR.Mission("c1_pr3").event, "pw_parts_sold", "Herstellung: Teile an die Große Werkstatt")
+		T.eq(SR.Mission("c1_ws1").event, "settle:oil", "Ölwechsel")
+		T.eq(SR.Mission("c1_ws2").event, "settle:inspection", "Fahrzeug-Check mit Anruf")
+		T.eq(SR.Mission("c1_ws3").event, "parts_bought", "Teile kaufen")
+		T.eq(SR.Mission("c1_pr2").event, "delivery", "Lieferfahrt")
+		T.eq(SR.TargetOf(SR.Mission("c1_ah3")).key, "grosswerkstatt", "Ziel Große Werkstatt (City.Stations.grosswerkstatt)")
+		T.eq(SR.TargetOf(SR.Mission("c1_ah3")).travel, "grosswerkstatt", "Schnellreise zur Großen Werkstatt")
+		T.eq(SR.TargetOf(SR.Mission("c1_ah1")).zone, "anchor", "Gebäude-Mission zeigt aufs eigene Gebäude")
+		T.eq(#SR.AllMissions(1), 6 + 3 * 5, "Kapitel 1: 6 Stellen, je Weg 5 eigene Varianten (c1_m3 gemeinsam)")
+		-- XP-Kette: was eine Mission braucht, bringt der Spieler durch die vorigen Missionen sicher mit (Presse Lv 2, Zerlegeplatz Lv 3)
+		T.eq(#SR.UnlockCheck(), 0, "alle Wege ohne Sackgasse: " .. table.concat(SR.UnlockCheck(), "; "))
+		T.eq(SR.RequiredLevel(SR.Mission("c1_sc4")), 3, "Zerlegeplatz braucht Level 3")
+		T.eq(SR.RequiredLevel(SR.Mission("c1_sc3")), 2, "Schrottpresse braucht Level 2")
+		T.eq(SR.RequiredLevel(SR.Mission("c1_ws5")), 2, "Gerätekauf ab Level 2 (minLevel)")
+		T.eq(SR.RequiredLevel(SR.Mission("c1_pr2")), 1, "Lieferfahrt mit dem Flitzer ab Level 1")
+		T.check(SR.LevelAfterXp(1, 240) >= 3, "drei Missionen (240 XP) bringen Level 3")
+		T.eq(SR.LevelAfterXp(1, 100), 1, "100 XP: noch Level 1")
+		T.eq(#SR.BalanceCheck(), 0, "40-%-Regel: " .. table.concat(SR.BalanceCheck(), "; "))
+		-- Kapitel 2–5 unverändert
+		for ci = 2, 5 do
+			for k, m in ipairs(GC.Story.Chapters[ci].Missions) do
+				T.eq(m.id, "c" .. ci .. "_m" .. k, "Kapitel " .. ci .. " unverändert")
+			end
+			T.eq(GC.Story.Chapters[ci].Paths, nil, "Kapitel " .. ci .. " ohne Startweg-Listen")
 		end
-		T.eq(select(1, SR.Claim(da, "c1_m1", NOW)), true, "autohaus: drei Verkäufe")
-		for _, typ in ipairs({ "produktion", "schrottplatz" }) do
-			local d = profile(g)
+		T.check(M.MiniRules.IsClean(GC.Story.Chapters[1]), "Kapitel 1 sauber (sendbar)")
+	end },
+
+	{ "StoryRules: jedes Kapitel 1 lässt sich mit simulierten Ereignissen ganz durchspielen (Level 1 → Kapitel 2)", function(T, H)
+		local g = H.Garage({ noServer = true })
+		local M = mods(g)
+		local SR, MR, OWR = M.SR, M.MR, M.OWR
+		for _, typ in ipairs(PATHS) do
+			local d = profile(g, 1)
+			d.money = 800
 			MR.SetStartPath(d, typ)
 			OWR.GrantStart(d, typ, NOW)
 			OWR.Settle(d, NOW)
-			local id = expect[typ]
-			SR.Start(d, id, NOW)
-			local def = SR.Mission(id)
-			T.eq(SR.ProgressOf(d, def), 0, typ .. ": noch nichts abgeholt")
-			T.eq(select(1, SR.Claim(d, id, NOW)), false, typ .. ": nicht vor dem Abholen")
-			OWR.Collect(d, typ, NOW)
-			T.eq(SR.ProgressOf(d, def), 2, typ .. ": Startertrag erfüllt die Mission")
-			local money = d.money
-			T.eq(select(1, SR.Claim(d, id, NOW)), true, typ .. ": abgeholt")
-			T.eq(d.money - money, def.reward.credits, typ .. ": Belohnung")
-			T.eq(SR.Current(d).mission.id, "c1_m2", typ .. ": weiter mit Mission 2")
+			local claimed = 0
+			for step = 1, 6 do
+				local def = SR.AutoStart(d, NOW + step, 0)
+				if not T.check(def ~= nil, typ .. ": Mission " .. step .. " startet von selbst") then
+					break
+				end
+				T.eq(def.index, step, typ .. ": Stelle " .. step)
+				T.eq(SR.AutoStart(d, NOW + step, 0), nil, typ .. ": nur eine Mission gleichzeitig")
+				T.check(SR.RequiredLevel(def) <= d.level, typ .. ": " .. def.id .. " ist auf Level " .. d.level .. " machbar")
+				T.eq(select(1, SR.Claim(d, def.id, NOW)), false, typ .. ": " .. def.id .. " nicht vor dem Ziel")
+				-- Ereignisse wie im Spiel (Server meldet sie)
+				local target = SR.Target(def)
+				if def.kind == "own" and def.owTyp then
+					local e = OWR.Entry(d, def.owTyp)
+					e[def.owStat] = math.max(e[def.owStat] or 0, target)
+				elseif def.kind == "own" and def.money then
+					d.money = math.max(d.money, def.money)
+				elseif def.kind == "sell" then
+					for _ = 1, target do
+						if def.repaired then
+							-- die Reparatur aus der Mission davor (pw_repair) wartet schon auf ihren Verkauf
+							local waiting = d.games.story.sales.repaired
+							T.check(waiting >= 1, typ .. ": reparierter Wagen wartet (" .. waiting .. ")")
+							local before = d.money
+							local offer = SR.NextSale(d, "seed:" .. step, d.level)
+							local res = SR.Sell(d, offer, 1, NOW)
+							T.check(res and res.sold and res.repaired == true, typ .. ": Verkauf frisch repariert")
+							T.check(d.money - before >= math.floor(offer.tiers[1].profit * 1.5), typ .. ": +50 % Gewinn")
+							T.eq(d.games.story.sales.repaired, waiting - 1, typ .. ": Reparatur verbraucht")
+						else
+							SR.OnSale(d, 1, false, NOW)
+						end
+					end
+				elseif def.kind == "event" then
+					for _ = 1, target do
+						SR.OnEvent(d, def.event, { count = 1 }, NOW)
+					end
+				elseif def.kind == "stat" then
+					SR.OnStat(d, def.stat, target, NOW)
+				end
+				local money = d.money
+				local ok, res = SR.Claim(d, def.id, NOW)
+				T.eq(ok, true, typ .. ": " .. def.id .. " abgeholt")
+				if ok then
+					claimed += 1
+					T.eq(d.money - money, def.reward.credits, typ .. ": Belohnung " .. def.id)
+					if step == 6 then
+						T.eq(res.chapterDone, true, typ .. ": Kapitel 1 geschafft")
+					end
+				end
+			end
+			T.eq(claimed, 6, typ .. ": alle sechs Missionen")
+			T.eq(SR.Current(d).chapter, 2, typ .. ": weiter mit Kapitel 2")
+			T.check(d.level >= 3, typ .. ": Level " .. d.level .. " nach Kapitel 1")
+			local nxt = SR.AutoStart(d, NOW, 0, d.level)
+			T.eq(nxt ~= nil, d.level >= SR.ChapterLevel(2), typ .. ": Kapitel 2 startet von selbst, sobald Level " .. SR.ChapterLevel(2) .. " erreicht ist (Level " .. d.level .. ")")
+			T.eq(d.games.stats.missionsDone, 6, typ .. ": sechs Missionen gezählt")
 		end
-		-- Veteran (werkstatt) mit erledigtem c1_m1 behält Kapitel 1 Stelle 1 als erledigt; ganze Kapitel bleiben erledigt
-		local vet = profile(g)
+		-- Sell-Mission „repariert“: ein normaler Verkauf zählt nicht
+		local d = profile(g)
+		MR.SetStartPath(d, "autohaus")
+		d.games.story = SR.Load({ layout = SR.Layout, done = { c1_ah1 = true, c1_m1 = true, c1_ah3 = true } }, d, NOW)
+		T.eq(SR.AutoStart(d, NOW, 0).id, "c1_ah4", "Mission „teurer verkaufen“")
+		T.eq(#SR.OnSale(d, 3, false, NOW, false), 0, "ohne Reparatur zählt der Verkauf nicht")
+		T.eq(#SR.OnEvent(d, "action:mini_car_sell", {}, NOW), 1, "Verkauf eines eigenen (reparierten) Autos zählt auch")
+		-- Ereignis „settle“ allein erfüllt den Ölwechsel nicht, „settle:oil“ schon
+		local dw = profile(g)
+		MR.SetStartPath(dw, "werkstatt")
+		SR.AutoStart(dw, NOW, 0)
+		T.eq(#SR.OnEvent(dw, "settle", {}, NOW), 0, "irgendein Auftrag ist kein Ölwechsel")
+		T.eq(#SR.OnEvent(dw, "settle:inspection", {}, NOW), 0, "Fahrzeug-Check ist kein Ölwechsel")
+		T.eq(#SR.OnEvent(dw, "settle:oil", {}, NOW), 1, "Ölwechsel")
+	end },
+
+	{ "StoryRules: Veteranen behalten ihren Stand (alte Kapitel-1-Liste), ResetChapter1, Laden/Whitelist", function(T, H)
+		local g = H.Garage({ noServer = true })
+		local M = mods(g)
+		local SR, MR, GC = M.SR, M.MR, M.GC
+		-- altes Kapitel 1 ganz geschafft (ohne layout): Kapitel 1 bleibt erledigt, keine zweite Belohnung
+		local vet = profile(g, 7)
 		vet.completed = 30
 		MR.ResolveStartPath(vet)
-		vet.games.story = SR.Load({ done = { c1_m1 = true } }, vet, NOW)
-		T.eq(SR.Current(vet).mission.id, "c1_m2", "Veteran: Stelle 1 erledigt")
+		T.eq(MR.StartPath(vet), "werkstatt", "Veteran: werkstatt")
+		vet.games.story = SR.Load({ done = { c1_m1 = true, c1_m2 = true, c1_m3 = true } }, vet, NOW)
+		T.eq(SR.Current(vet).chapter, 2, "altes Kapitel 1 geschafft -> Kapitel 2")
+		for _, m in ipairs(SR.Missions(vet, 1)) do
+			T.eq(SR.SlotDone(vet.games.story, 1, m.index), true, "Stelle erledigt: " .. m.id)
+		end
+		local vp = SR.Load({ done = { c1_m1_produktion = true, c1_m2 = true, c1_m3 = true } }, vet, NOW)
+		T.eq(vp.chapter, 2, "alte Herstellungs-Variante geschafft -> Kapitel 2")
+		-- spätere Kapitel geschafft (ohne layout): Kapitel 1 gilt als erledigt
 		local done = {}
-		for ci = 1, 4 do
+		for ci = 2, 4 do
 			for _, m in ipairs(GC.Story.Chapters[ci].Missions) do
 				done[m.id] = true
 			end
 		end
 		vet.games.story = SR.Load({ done = done }, vet, NOW)
 		T.eq(SR.Current(vet).chapter, 5, "Kapitel 5 bleibt")
-		-- laufende Variante eines anderen Wegs läuft zu Ende (z. B. Verkaufsmission von vor der Wahl)
-		local mixed = profile(g)
-		SR.Start(mixed, "c1_m1", NOW)
-		MR.SetStartPath(mixed, "werkstatt")
-		T.eq(SR.Current(mixed).mission.id, "c1_m1", "aktive Variante bleibt die Mission ihrer Stelle")
-		-- Speichern/Laden: erledigte Variante zählt
-		local saved = SR.Load({ done = { c1_m1_produktion = true } }, profile(g), NOW)
-		T.eq(saved.done.c1_m1_produktion, true, "Variante bleibt in done")
-		T.eq(saved.step, 2, "Stelle 1 erledigt")
+		-- angefangener alter Stand: erledigte Missionen bleiben erledigt (Stelle zählt), nichts doppelt
+		local part = SR.Load({ done = { c1_m1 = true } }, profile(g), NOW)
+		T.eq(part.done.c1_m1, true, "c1_m1 bleibt erledigt")
+		T.eq(part.chapter, 1, "noch Kapitel 1")
+		local dp = profile(g)
+		MR.SetStartPath(dp, "autohaus")
+		dp.games.story = part
+		T.eq(SR.Current(dp).mission.id, "c1_ah1", "Verkaufshaus: erst die Einnahmen")
+		T.eq(SR.SlotDone(part, 1, 2), true, "Stelle 2 (Kiesplatz-Verkäufe) erledigt")
+		-- neuer Stand (layout) mit c1_m3: kein Altbestand, Kapitel 1 nicht automatisch fertig
+		local fresh = SR.Load({ layout = SR.Layout, done = { c1_m3 = true } }, profile(g), NOW)
+		T.eq(fresh.chapter, 1, "neuer Stand: Kapitel 1 bleibt offen")
+		-- Laden: Whitelist, Idempotenz, aktive Mission nur an der aktuellen Stelle
 		local dl = profile(g)
 		MR.SetStartPath(dl, "schrottplatz")
-		dl.games.story = SR.Load({ active = { id = "c1_m1_schrottplatz", progress = 0 } }, dl, NOW)
-		T.eq(type(dl.games.story.active), "table", "aktive Variante überlebt das Laden")
-		-- Kapitel 2–5 unverändert, Prüfungen über alle Varianten
-		T.eq(#SR.AllMissions(1), 5, "Kapitel 1: 3 Missionen + 2 Varianten (produktion, schrottplatz; werkstatt/autohaus = c1_m1)")
-		T.eq(#SR.UnlockCheck(), 0, "alle Varianten ohne Sackgasse: " .. table.concat(SR.UnlockCheck(), "; "))
-		T.eq(#SR.BalanceCheck(), 0, "40-%-Regel: " .. table.concat(SR.BalanceCheck(), "; "))
-		for ci = 2, 5 do
-			for k, m in ipairs(GC.Story.Chapters[ci].Missions) do
-				T.eq(m.id, "c" .. ci .. "_m" .. k, "Kapitel " .. ci .. " unverändert")
-			end
+		dl.games.story = SR.Load({ layout = SR.Layout, active = { id = "c1_m1_schrottplatz", progress = 0 } }, dl, NOW)
+		T.eq(type(dl.games.story.active), "table", "aktive Mission der aktuellen Stelle überlebt das Laden")
+		local skip = SR.Load({ layout = SR.Layout, active = { id = "c1_sc3", progress = 5 } }, dl, NOW)
+		T.eq(skip.active, false, "Mission einer späteren Stelle ist nach dem Laden nicht aktiv")
+		local raw = { layout = SR.Layout, done = { c1_ws1 = true, quatsch = true }, sales = { n = 2, repaired = 99 }, active = { id = "c1_ws2", progress = 0 } }
+		local once = SR.Load(raw, profile(g), NOW)
+		T.eq(once.done.quatsch, nil, "unbekannte Mission fällt weg")
+		T.eq(once.sales.repaired, GC.Story.Sale.RepairedMax, "reparierte Wagen gedeckelt")
+		T.eq(once.layout, SR.Layout, "layout gespeichert")
+		local twice = SR.Load(H.Copy(once), profile(g), NOW)
+		local same, where = H.DeepEqual(once, twice)
+		T.check(same, "Load idempotent: " .. tostring(where))
+		T.check(M.MiniRules.IsClean(once), "sauber")
+		T.eq(SR.Default().layout, SR.Layout, "neues Profil: aktueller Stand")
+		-- ResetChapter1: alle Kapitel-1-Missionen (jeder Weg) wieder offen, spätere Kapitel bleiben
+		local dr = profile(g)
+		MR.SetStartPath(dr, "werkstatt")
+		local all = { c2_m1 = true }
+		for _, m in ipairs(SR.AllMissions(1)) do
+			all[m.id] = true
 		end
+		dr.games.story = SR.Load({ layout = SR.Layout, done = all }, dr, NOW)
+		T.eq(SR.Current(dr).chapter, 2, "vorher Kapitel 2")
+		T.eq(SR.ResetChapter1(dr), true, "ResetChapter1")
+		T.eq(SR.Current(dr).chapter, 1, "wieder Kapitel 1")
+		T.eq(SR.Current(dr).mission.id, "c1_ws1", "ab Mission 1")
+		T.eq(dr.games.story.done.c2_m1, true, "Kapitel 2 bleibt erledigt")
+		for _, m in ipairs(SR.AllMissions(1)) do
+			T.eq(dr.games.story.done[m.id], nil, "offen: " .. m.id)
+		end
+		SR.AutoStart(dr, NOW, 0)
+		T.eq(dr.games.story.active.id, "c1_ws1", "läuft wieder")
+		SR.ResetChapter1(dr)
+		T.eq(dr.games.story.active, false, "laufende Kapitel-1-Mission endet beim Zurücksetzen")
 	end },
 
 	{ "StartService im Server: Wahl einmal, Gebäude sofort am Grundstück, Tutorial des Wegs, ungültig abgelehnt, Speichern/Laden", function(T, H)
@@ -524,6 +723,16 @@ return {
 		T.eq(tut.path, "autohaus", "Tutorial des Wegs")
 		T.eq(tut.count, #M.GC.Tutorial.ByPath.autohaus, "Schrittzahl des Wegs")
 		T.eq(ms.tutorialStarted, true, "Tutorial gestartet")
+		-- 3.x: Story läuft sofort – Kapitel 1 des Wegs, Mission 1 aktiv
+		local stA = d.games.story
+		T.check(type(stA.active) == "table" and stA.active.id == FIRST.autohaus, "Mission 1 des Verkaufshauses läuft sofort: " .. tostring(type(stA.active) == "table" and stA.active.id))
+		local chapterNote = nil
+		for _, n in ipairs(g:Notices(pl, "story")) do
+			if n.event == "chapter" then
+				chapterNote = n
+			end
+		end
+		T.check(chapterNote ~= nil and chapterNote.chapter == 1 and chapterNote.title == "Der Kiesplatz", "Kapitel-Intro des Wegs (mini_notice story/chapter)")
 		local chosen = nil
 		for _, n in ipairs(S.log.notices) do
 			if n.kind == "start" and n.data.event == "chosen" then
@@ -546,6 +755,7 @@ return {
 		-- werkstatt: kein Gebäude, klassisches Tutorial
 		local pl2, ms2, d2 = S.join(7302, "Ole")
 		T.eq(S.choose(pl2, "werkstatt"), true, "werkstatt gewählt")
+		T.check(type(d2.games.story.active) == "table" and d2.games.story.active.id == FIRST.werkstatt, "Werkstatt: Ölwechsel läuft sofort")
 		T.eq(OWR.StageOf(d2, "autohaus") + OWR.StageOf(d2, "produktion") + OWR.StageOf(d2, "schrottplatz"), 0, "werkstatt: kein Geschenk")
 		T.eq(TR.Count(d2), 11, "klassisches Tutorial")
 		-- Speichern/Laden
@@ -576,41 +786,34 @@ return {
 		T.eq(SS.OnMode(ms4, d4, "openworld"), false, "Veteran: kein Angebot")
 		T.eq(S.choose(pl4, "autohaus"), nil, "Veteran kann nicht wählen")
 		T.eq(OWR.StageOf(d4, "autohaus"), 0, "Veteran: kein Geschenk")
+		T.eq(MR.StartPath(d4), "werkstatt", "Veteran behält seinen Weg")
 		T.eq(g:ErrorText(), "", "keine Skriptfehler")
 	end },
 
-	{ "Später entscheiden: Wahl bleibt nach abgerechneten Aufträgen offen, kommt bei der nächsten Ankunft wieder", function(T, H)
+	{ "Pflicht-Startwahl: kein „Später“, Tutorial-Überspringen und abgerechnete Aufträge umgehen sie nicht, Respawn bietet sie wieder an", function(T, H)
 		local S = setup(H)
 		local g, SS = S.g, S.SS
 		local M = mods(g)
 		local MR = M.MR
 		local Flow = H.Load("tests/lib/garage_flow.lua")
-		-- Regeln: einmal gezeigt -> Aufträge/Tutorial-Schritt machen das Profil nicht zum Veteranen
-		local d0 = profile(g)
-		T.eq(MR.MarkStartOffered(d0), true, "Wahl gezeigt gemerkt")
-		T.eq(MR.MarkStartOffered(d0), false, "idempotent")
-		d0.completed = 3
-		d0.games.meta.tutorialStep = 2
-		T.eq(MR.StartPending(d0), true, "gezeigt + Aufträge: Wahl bleibt offen")
-		T.eq(MR.ResolveStartPath(d0), "", "kein automatischer Weg")
-		local loaded = MR.Load(H.Copy(d0.games.meta), d0, NOW)
-		T.eq(loaded.startPath, "", "Laden: Wahl bleibt offen")
-		T.eq(loaded.startOffered, true, "Laden: startOffered bleibt")
-		T.eq(MR.Load({ tutorialStep = 2 }, d0, NOW).startPath, "werkstatt", "ohne startOffered: Veteran wie bisher")
-		T.eq(MR.Load({ startOffered = true, tutorialDone = true }, d0, NOW).startPath, "werkstatt", "Tutorial beendet: Veteran")
-		T.eq(MR.SetStartPath(d0, "produktion"), true, "später gewählt")
-		T.eq(d0.games.meta.startOffered, false, "nach der Wahl nichts mehr offen")
-		T.check(M.MiniRules.IsClean(loaded), "sauber")
-		-- Server: Wahl angeboten, „Später entscheiden“ (nur Client), Auftrag abgerechnet -> Wahl weiter offen
 		local pl, ms, d = S.join(7311, "Lena")
 		ms.greeted = true -- wie nach dem „hello“ des Clients (sonst wartet der Hinweis)
 		T.eq(SS.OnMode(ms, d, "openworld"), true, "Angebot beim Betreten")
 		T.eq(d.games.meta.startOffered, true, "Angebot gemerkt")
+		-- Tutorial überspringen (echte Aktion) geht vor der Wahl nicht – sonst wäre die Wahl umgangen
+		local m = g:Mark()
+		g:Act(pl, "tutorial_skip", { rid = 11 })
+		T.eq(d.games.meta.tutorialDone, false, "Tutorial nicht übersprungen")
+		T.eq(MR.StartPending(d), true, "Wahl weiter Pflicht")
+		T.check(g:HasToast(pl, "Wähle zuerst", m), "Hinweis: erst wählen")
+		-- über das Tablet einen Auftrag abrechnen: die Wahl bleibt offen, die Story wartet
 		local receipt = Flow.CompleteInspection(T, g, pl)
 		T.check(receipt ~= nil, "Werkstatt-Auftrag abgerechnet")
 		T.check(d.completed >= 1, "d.completed gezählt")
+		g:Advance(1.2)
 		T.eq(MR.StartPending(d), true, "Startwahl nach dem Auftrag weiter offen")
 		T.eq(SS.SnapshotFields(ms, d, g:Now(), true).start.pending, true, "Snapshot: weiter offen")
+		T.eq(d.games.story.active, false, "Story wartet auf die Wahl")
 		-- nächste Ankunft in der Spielermeile (neue Figur): erneutes Angebot
 		local function offers()
 			local n = 0
@@ -629,11 +832,209 @@ return {
 		ms.p.mode = "lobby"
 		T.eq(SS.OnArrive(ms, d), false, "in der Lobby kein Angebot")
 		ms.p.mode = "openworld"
-		T.eq(S.choose(pl, "schrottplatz"), true, "Wahl nach Aufträgen noch möglich")
-		T.eq(MR.StartPath(d), "schrottplatz", "Weg gespeichert")
-		g:Respawn(pl)
+		-- Rejoin: die Wahl ist weiter Pflicht (gespeichert: startOffered)
+		g:Leave(pl)
+		g:Advance(1)
+		local pl2, ms2, d2 = S.join(7311, "Lena")
+		T.eq(MR.StartPending(d2), true, "nach Rejoin weiter offen (trotz abgerechnetem Auftrag)")
+		T.eq(SS.SnapshotFields(ms2, d2, g:Now(), true).start.pending, true, "Snapshot nach Rejoin: offen")
+		T.eq(S.choose(pl2, "schrottplatz"), true, "Wahl nach Aufträgen noch möglich")
+		T.eq(MR.StartPath(d2), "schrottplatz", "Weg gespeichert")
+		T.check(type(d2.games.story.active) == "table" and d2.games.story.active.id == FIRST.schrottplatz, "Story läuft sofort")
+		local n0 = offers()
+		g:Respawn(pl2)
 		g:Advance(0.5)
-		T.eq(offers(), before + 1, "gewählt: kein weiteres Angebot")
+		T.eq(offers(), n0, "gewählt: kein weiteres Angebot")
+		T.eq(g:ErrorText(), "", "keine Skriptfehler")
+	end },
+
+	{ "Nach der Wahl (echte Aktion start_choose) läuft Mission 1 jedes Wegs sofort – Snapshot, Hinweise, Tutorial", function(T, H)
+		local g = H.Garage()
+		local GC = g:MiniShared("GameConfig")
+		for i, typ in ipairs(PATHS) do
+			local pl = g:Join(7400 + i, { name = "Neu" .. i })
+			g:Advance(1.2)
+			local d = g:D(pl)
+			local ms = g:MiniState(pl)
+			T.eq(ms.p.mode, "openworld", typ .. ": Open World")
+			local snap0 = g:MiniSnapshot(pl)
+			T.eq(snap0 and snap0.start and snap0.start.pending, true, typ .. ": neuer Spieler bekommt die Wahl")
+			T.eq(snap0 and snap0.start and #snap0.start.choices, 4, typ .. ": vier Karten")
+			T.eq(d.games.story.active, false, typ .. ": vor der Wahl läuft keine Mission")
+			local m = g:Mark()
+			T.eq(g:Act(pl, "start_choose", { path = typ, rid = 50 + i }), "ok", typ .. ": start_choose")
+			local st = d.games.story
+			T.check(type(st.active) == "table" and st.active.id == FIRST[typ], typ .. ": Mission 1 aktiv: " .. tostring(type(st.active) == "table" and st.active.id))
+			local started = nil
+			for _, n in ipairs(g:Notices(pl, "story", m)) do
+				if n.event == "started" and n.mission == FIRST[typ] then
+					started = n
+				end
+			end
+			T.check(started ~= nil and started.auto == true, typ .. ": Hinweis „Mission gestartet“ (automatisch)")
+			T.check(g:HasToast(pl, "Neue Mission", m), typ .. ": Toast „Neue Mission“")
+			g:Advance(1.1)
+			local snap = g:MiniSnapshot(pl, m)
+			local active = snap and snap.story and snap.story.active
+			T.check(type(active) == "table" and active.id == FIRST[typ], typ .. ": Snapshot story.active")
+			T.check(type(active) == "table" and type(active.text) == "string" and #active.text > 40, typ .. ": Missionstext im Snapshot")
+			T.eq(snap and snap.story and snap.story.path, typ, typ .. ": Snapshot story.path")
+			T.eq(snap and snap.story and snap.story.chapterTitle, GC.Story.Chapters[1].PathInfo[typ].title, typ .. ": Kapiteltitel des Wegs")
+			T.eq(snap and snap.start and snap.start.pending, false, typ .. ": Wahl erledigt")
+			T.eq(snap and snap.tutorial and snap.tutorial.active, true, typ .. ": Tutorial läuft")
+			-- story_start der laufenden Mission ist kein Fehler (alter Client)
+			m = g:Mark()
+			T.eq(g:Act(pl, "story_start", { id = FIRST[typ], rid = 70 + i }), "ok", typ .. ": story_start der laufenden Mission")
+			T.check(not g:HasToast(pl, "schon bei", m), typ .. ": kein Fehler-Toast")
+		end
+		T.eq(g:ErrorText(), "", "keine Skriptfehler")
+	end },
+
+	{ "Werkstatt im Server: Ölwechsel, Fahrzeug-Check mit Anruf und Teilekauf zählen über echte 2.4.0-Abläufe; nächste Mission startet nach dem Abholen", function(T, H)
+		local g = H.Garage()
+		local Flow = H.Load("tests/lib/garage_flow.lua")
+		local C = g:Config()
+		local pl = g:Join(7451, { name = "Mech" })
+		g:Advance(1.2)
+		T.eq(g:Act(pl, "start_choose", { path = "werkstatt", rid = 1 }), "ok", "start_choose werkstatt")
+		local d = g:D(pl)
+		T.eq(d.games.story.active.id, "c1_ws1", "Ölwechsel läuft")
+		-- ein Fahrzeug-Check ist kein Ölwechsel
+		local rec = Flow.CompleteInspection(T, g, pl)
+		T.check(rec ~= nil, "Fahrzeug-Check abgerechnet")
+		g:Advance(1.1)
+		T.eq(d.games.story.active.progress, 0, "Check zählt nicht als Ölwechsel")
+		-- Ölwechsel: Angebot sicherstellen, annehmen, reparieren, abrechnen
+		local function ensureOffer(kind)
+			if not Flow.FindOffer(g, pl, kind) then
+				table.insert(d.offers, { id = "offer_test_" .. kind, kind = kind, carId = "komet" })
+				g:Send(pl, "select", {})
+				g:Advance(0.2)
+			end
+		end
+		ensureOffer("oil")
+		local j = Flow.AcceptKind(T, g, pl, "oil")
+		T.check(j ~= nil, "Ölwechsel angenommen")
+		if j then
+			Flow.Scan(T, g, pl, j.id)
+			j = Flow.Diagnose(T, g, pl, j.id) or j
+			local def = C.JobById.oil
+			for i = 1, #def.steps do
+				Flow.RepairStep(T, g, pl, j.id, i)
+			end
+			Flow.Scan(T, g, pl, j.id)
+			T.eq(Flow.Job(g, pl, j.id) and Flow.Job(g, pl, j.id).phase, "invoice", "Ölwechsel fertig")
+			local m = g:Mark()
+			Flow.Settle(T, g, pl, j.id)
+			g:Advance(0.2)
+			local done = nil
+			for _, n in ipairs(g:Notices(pl, "mission", m)) do
+				if n.id == "c1_ws1" and n.done then
+					done = n
+				end
+			end
+			T.check(done ~= nil, "Ölwechsel erfüllt die Mission (settle:oil)")
+		end
+		g:Advance(0.6)
+		T.eq(g:Act(pl, "story_claim", { id = "c1_ws1", rid = 2 }), "ok", "Belohnung abholen")
+		T.eq(d.games.story.done.c1_ws1, true, "Mission 1 erledigt")
+		T.check(type(d.games.story.active) == "table" and d.games.story.active.id == "c1_ws2", "Mission 2 startet direkt nach dem Abholen")
+		-- Fahrzeug-Check mit Befund und Kundenanruf (Handy/Anruf) -> settle:inspection
+		local m2 = g:Mark()
+		local rec2 = Flow.CompleteInspection(T, g, pl, { finding = "oil", decision = true })
+		T.check(rec2 ~= nil, "Check mit Befund und Anruf abgerechnet")
+		g:Advance(0.2)
+		local done2 = nil
+		for _, n in ipairs(g:Notices(pl, "mission", m2)) do
+			if n.id == "c1_ws2" and n.done then
+				done2 = n
+			end
+		end
+		T.check(done2 ~= nil, "Fahrzeug-Check mit Anruf erfüllt Mission 2")
+		g:Advance(0.6)
+		T.eq(g:Act(pl, "story_claim", { id = "c1_ws2", rid = 3 }), "ok", "Mission 2 abholen")
+		T.eq(d.games.story.active.id, "c1_ws3", "Mission 3: Teile kaufen")
+		-- Teile kaufen am Teilehandel (2.4.0-Aktion order)
+		local sku = nil
+		for _, part in ipairs(C.Parts) do
+			if part.eta == 0 and part.level <= d.level and not sku then
+				sku = part.id
+			end
+		end
+		g:Send(pl, "travel", { key = "parts" })
+		g:Advance(0.3)
+		g:Send(pl, "order", { sku = sku, qty = 1 })
+		g:Advance(1.2)
+		T.eq(d.games.story.active.progress, 1, "Teilekauf zählt (parts_bought)")
+		T.eq(g:ErrorText(), "", "keine Skriptfehler")
+	end },
+
+	{ "StartService.ResetStart (Entwickler-Menü): Wahl wieder offen, Kapitel 1 und Tutorial von vorn, neue Wahl startet die Story neu", function(T, H)
+		local S = setup(H)
+		local g, SS = S.g, S.SS
+		local M = mods(g)
+		local MR, SR, TR = M.MR, M.SR, M.TR
+		local pl, ms, d = S.join(7501, "Dev")
+		ms.greeted = true
+		T.eq(S.choose(pl, "autohaus"), true, "Verkaufshaus gewählt")
+		T.eq(d.games.story.active.id, "c1_ah1", "Mission 1 läuft")
+		-- etwas Fortschritt: Mission 1 erfüllt und abgeholt, Mission 2 läuft
+		g:D(pl).games.ow.buildings.autohaus.collects = 1
+		T.eq(select(1, SR.Claim(d, "c1_ah1", g:Now())), true, "Mission 1 abgeholt")
+		SR.AutoStart(d, g:Now(), 0)
+		d.games.meta.tutorialRewarded = true
+		local before = #S.log.notices
+		T.eq(SS.ResetStart(ms, d), true, "ResetStart")
+		T.eq(MR.StartPath(d), "", "Weg offen")
+		T.eq(MR.StartPending(d), true, "Wahl wieder Pflicht")
+		T.eq(d.games.story.done.c1_ah1, nil, "Kapitel 1 von vorn")
+		T.eq(d.games.story.active, false, "keine Mission aktiv")
+		T.eq(TR.Waiting(d, "openworld"), true, "Tutorial wartet wieder")
+		local offer, reset = false, false
+		for i = before + 1, #S.log.notices do
+			local n = S.log.notices[i]
+			if n.kind == "start" and n.data.event == "offer" then
+				offer = true
+			elseif n.kind == "start" and n.data.event == "reset" then
+				reset = true
+			end
+		end
+		T.check(offer and reset, "Hinweise reset und offer (die Karte kommt sofort)")
+		T.check(S.hasToast(pl, "zurückgesetzt"), "Toast zurückgesetzt")
+		T.eq(SS.SnapshotFields(ms, d, g:Now(), true).start.pending, true, "Snapshot: Wahl offen")
+		g:Advance(1.2)
+		T.eq(d.games.story.active, false, "Story wartet wieder auf die Wahl")
+		-- neue Wahl: anderer Weg, Story und Tutorial starten neu, keine zweite Tutorial-Belohnung
+		T.eq(S.choose(pl, "schrottplatz"), true, "neue Wahl")
+		T.eq(MR.StartPath(d), "schrottplatz", "neuer Weg")
+		T.eq(d.games.story.active.id, FIRST.schrottplatz, "Mission 1 des neuen Wegs läuft")
+		T.eq(TR.Current(d, "openworld").id, "move", "Tutorial ab Schritt 1")
+		T.eq(TR.Rewarded(d), true, "Tutorial-Belohnung bleibt verbucht")
+		T.eq(ms.tutorialStarted, true, "Tutorial des neuen Wegs gestartet")
+		-- ohne Profil-meta: nichts
+		T.eq(SS.ResetStart(ms, { games = {} }), false, "ohne meta nichts")
+		T.eq(g:ErrorText(), "", "keine Skriptfehler")
+	end },
+
+	{ "Veteranen: alter 2.4.0-/3.0-Datensatz behält Weg und Story-Stand, sieht keine Wahl, Story läuft weiter", function(T, H)
+		local g = H.Garage()
+		local MR = g:MiniShared("MetaRules")
+		g:SeedLevel(7601, 12, function(data)
+			data.completed = 40
+			data.games = data.games or {}
+			data.games.meta = { tutorialDone = true, startPath = "produktion" }
+			data.games.story = { done = { c1_m1_produktion = true, c1_m2 = true, c1_m3 = true, c2_m1 = true } }
+		end)
+		local pl = g:Join(7601, { name = "Alt" })
+		g:Advance(1.2)
+		local d = g:D(pl)
+		T.eq(MR.StartPath(d), "produktion", "Weg bleibt")
+		T.eq(MR.StartPending(d), false, "keine Wahl")
+		local snap = g:MiniSnapshot(pl)
+		T.eq(snap and snap.start and snap.start.pending, false, "Snapshot: keine Wahl")
+		T.eq(d.games.story.chapter, 2, "Kapitel 2 (altes Kapitel 1 geschafft)")
+		T.eq(d.games.story.done.c2_m1, true, "c2_m1 bleibt erledigt")
+		T.check(type(d.games.story.active) == "table" and d.games.story.active.id == "c2_m2", "Story läuft weiter mit c2_m2")
 		T.eq(g:ErrorText(), "", "keine Skriptfehler")
 	end },
 
