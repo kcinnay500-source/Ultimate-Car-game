@@ -213,6 +213,7 @@ end
 
 -- Liste des Startwegs für Kapitel n (Paths[startPath]), sonst Missions
 local function pathList(d: any, ch: Chapter): { Mission }
+	index() -- Missionsfelder chapter/index aller Wege setzen
 	if type(ch.Paths) == "table" then
 		local path = MetaRules.StartPath(d)
 		local list = path ~= "" and ch.Paths[path] or nil
@@ -225,6 +226,7 @@ end
 
 -- Startweg-Liste eines Kapitels nach Weg-Id (Startkarten, Tests); unbekannter Weg = Missions
 function StoryRules.PathMissions(n: number, path: any): { Mission }
+	index()
 	local ch = StoryRules.Chapter(n)
 	if not ch then
 		return {}
@@ -1317,10 +1319,11 @@ local TARGETS = {
 	equipment_bought = { PLOT, "upgrades", "AUSBAU", "workshop", "Ausbau deiner Werkstatt" },
 	bays = { PLOT, "upgrades", "HALLENANBAU", "workshop", "Hallenanbau" },
 	equipmentAll = { PLOT, "upgrades", "AUSBAU", "workshop", "Ausbau deiner Werkstatt" },
-	build = { PLOT, "workshop", "GRUNDSTÜCK", "workshop", "dein Grundstück" },
-	["owTyp:autohaus"] = { ANCHOR, "autohaus", "VERKAUFSHAUS", "workshop", "dein Verkaufshaus" },
-	["owTyp:produktion"] = { ANCHOR, "produktion", "HERSTELLUNG", "workshop", "deine Herstellung" },
-	["owTyp:schrottplatz"] = { ANCHOR, "schrottplatz", "SCHROTTPLATZ", "workshop", "dein Schrottplatz" },
+	-- Gebäude bauen/abholen geht überall im Menü (Tab „Gebäude“): Marker am Grundstück, aber keine Schnellreise nötig
+	build = { PLOT, "workshop", "GRUNDSTÜCK", "", "dein Grundstück" },
+	["owTyp:autohaus"] = { ANCHOR, "autohaus", "VERKAUFSHAUS", "", "dein Verkaufshaus" },
+	["owTyp:produktion"] = { ANCHOR, "produktion", "HERSTELLUNG", "", "deine Herstellung" },
+	["owTyp:schrottplatz"] = { ANCHOR, "schrottplatz", "SCHROTTPLATZ", "", "dein Schrottplatz" },
 	pw_repair = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
 	pw_parts_sold = { CITY, "grosswerkstatt", "GROSSE WERKSTATT", "grosswerkstatt", "Große Werkstatt" },
 	car_bought = { CITY, "dealer", "AUTOHAUS", "dealer", "Autohaus" },

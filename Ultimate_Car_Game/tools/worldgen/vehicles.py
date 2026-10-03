@@ -49,33 +49,119 @@ CAR_SPAWNS = {
 PLOT_SPAWN = (7.5, -1.0, 64, 180, (1, -1, 2))
 PLOT_ROUTE_LOCAL = [(7.5, 64), (7.5, 102.5)]      # bis auf die Meile-Fahrspur (Welt Z ∓6.5)
 
-# Teststrecke (Mittellinie wie Schleife T): Oval, Geraden Z 270 / 410, Halbkreise um (±85, 340) r 70, Breite 24
-T_CX, T_CZ, T_R = 85.0, 340.0, 70.0
+# Teststrecke "Grand-Prix-Kurs" (3.0): eine Mittellinie für Belag (districts/dealer_track.build_track), Checkpoints,
+# Verkehrsschleife T (ground_roads.traffic_loops -> track_loop()) und Prüfungen (checks.py, test_vehicles.py).
+# Start an der Westecke der Start/Ziel-Geraden (-90, 270), Blick nach Osten, im Uhrzeigersinn (Karte: Norden oben):
+#   Start/Ziel-Gerade -> Kurve 1 (rechts) -> S-Kurve (links/rechts) -> schnelle Kurve (rechts, r 85)
+#   -> lange Gegengerade (320) -> Haarnadel (180° rechts) -> Linksknick -> Westgerade -> weite Zielkurve (rechts)
+# Stücke: ("S", Länge) Gerade | ("R"/"L", Radius, Grad) Bogen rechts/links. Breite 24 (Spuren ±9 frei befahrbar).
+TRACK_START = (-90.0, 270.0)
+TRACK_HEADING = (1.0, 0.0)
+TRACK_PIECES = [
+    ("S", 200.0, "Start/Ziel-Gerade"),
+    ("R", 50.0, 90.0, "Kurve 1"),
+    ("S", 10.0, "Ostgerade"),
+    ("L", 60.0, 60.0, "S-Kurve links"),
+    ("R", 60.0, 60.0, "S-Kurve rechts"),
+    ("S", 6.0769515, "Ostgerade"),
+    ("R", 85.0, 90.0, "Schnelle Kurve"),
+    ("S", 320.0, "Lange Gerade"),
+    ("R", 35.0, 180.0, "Haarnadel"),
+    ("L", 35.0, 90.0, "Linksknick"),
+    ("S", 90.0, "Westgerade"),
+    ("R", 60.0, 90.0, "Zielkurve"),
+]
 TRACK_WIDTH = 24.0
-CP_SIZE = (TRACK_WIDTH + 8, 14, 3)                 # quer, hoch, längs
+TRACK_Y = -0.95                                    # Oberseite des Belags
+CP_SIZE = (TRACK_WIDTH + 8, 14, 6)                 # quer, hoch, längs (6: schnelle Autos tunneln nicht hindurch)
+# Checkpoints (Stück-Index, Anteil 0..1) in Fahrtrichtung ab der Ziellinie; das Ziel liegt bei X 0 der Geraden
+CP_AT = [(0, 0.8), (1, 0.5), (3, 1.0), (4, 0.5), (6, 0.5), (7, 0.3), (7, 0.73), (8, 0.5), (9, 0.5), (10, 0.5),
+         (11, 0.5), (0, 0.2)]
+FINISH_AT = (0, 0.45)
+TRACK_LAYOUT = 2                                   # = TrackRules.Layout.version (alte Bestzeiten vom Oval verfallen)
 
 
-def _arc(sx, deg):
-    a = math.radians(deg)
-    return (sx * T_CX + T_R * math.cos(a), T_CZ + T_R * math.sin(a))
+def _right(d):
+    return (-d[1], d[0])
+
+
+def track_geometry():
+    """[(kind, a, b, data)] je Stück: Gerade ("S", Start, Ende, (dir, name)) oder Bogen ("A", Start, Ende,
+    (center, radius, a0, a1, sign, name)) mit Winkeln in Grad (0 = +X, 90 = +Z), sign +1 = rechts (Uhrzeigersinn)."""
+    out = []
+    p, d = TRACK_START, TRACK_HEADING
+    for piece in TRACK_PIECES:
+        if piece[0] == "S":
+            q = (p[0] + d[0] * piece[1], p[1] + d[1] * piece[1])
+            out.append(("S", p, q, (d, piece[2])))
+            p = q
+            continue
+        kind, r, deg, name = piece
+        sign = 1 if kind == "R" else -1
+        rv = _right(d)
+        c = (p[0] + rv[0] * r * sign, p[1] + rv[1] * r * sign)
+        a0 = math.degrees(math.atan2(p[1] - c[1], p[0] - c[0]))
+        a1 = a0 + sign * deg
+        q = (c[0] + r * math.cos(math.radians(a1)), c[1] + r * math.sin(math.radians(a1)))
+        t = math.radians(a1)
+        # Tangente in Fahrtrichtung: rechts herum (Winkel wächst) = (-sin, cos), links herum umgekehrt
+        d = (-math.sin(t) * sign, math.cos(t) * sign)
+        out.append(("A", p, q, (c, r, a0, a1, sign, name)))
+        p = q
+    return out
+
+
+def piece_length(g):
+    if g[0] == "S":
+        return math.dist(g[1], g[2])
+    return abs(g[3][3] - g[3][2]) * math.pi / 180 * g[3][1]
+
+
+def track_length():
+    return sum(piece_length(g) for g in track_geometry())
+
+
+def track_point(idx, frac):
+    """(x, z), (dx, dz) auf Stück idx beim Anteil frac"""
+    g = track_geometry()[idx]
+    if g[0] == "S":
+        a, b = g[1], g[2]
+        return (a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac), g[3][0]
+    c, r, a0, a1, sign, name = g[3]
+    t = math.radians(a0 + (a1 - a0) * frac)
+    return (c[0] + r * math.cos(t), c[1] + r * math.sin(t)), (-math.sin(t) * sign, math.cos(t) * sign)
+
+
+def track_loop(step=15.0):
+    """Geschlossene Mittellinie (ohne doppelten Endpunkt) für Schleife T und die Prüfungen: Geraden-Endpunkte und
+    Bogenpunkte alle `step` Grad."""
+    pts = []
+    for g in track_geometry():
+        if g[0] == "S":
+            pts.append(g[1])
+            continue
+        c, r, a0, a1, sign, name = g[3]
+        n = max(1, int(round(abs(a1 - a0) / step)))
+        for k in range(n):
+            t = math.radians(a0 + (a1 - a0) * k / n)
+            pts.append((c[0] + r * math.cos(t), c[1] + r * math.sin(t)))
+    clean = []
+    for q in pts:
+        if not clean or math.dist(q, clean[-1]) > 1e-6:
+            clean.append((round(q[0], 4), round(q[1], 4)))
+    if math.dist(clean[0], clean[-1]) < 1e-6:
+        clean.pop()
+    return clean
 
 
 def checkpoints():
-    """[(Name, (x, z), (dx, dz) Fahrtrichtung)] im Uhrzeigersinn, zuletzt das Ziel"""
+    """[(Name, (x, z), (dx, dz) Fahrtrichtung)] im Uhrzeigersinn ab der Ziellinie, zuletzt das Ziel"""
     pts = []
-
-    def add(p, d):
-        pts.append(("CP%d" % (len(pts) + 1), p, d))
-    add((60, 270), (1, 0))
-    for deg in (-45, 0, 45):                      # Ostkurve: Winkel -90 (Nord) .. 90 (Süd)
-        a = math.radians(deg)
-        add(_arc(1, deg), (-math.sin(a), math.cos(a)))
-    add((0, 410), (-1, 0))
-    for deg in (135, 180, 225):                   # Westkurve: 90 (Süd) .. 270 (Nord)
-        a = math.radians(deg)
-        add(_arc(-1, deg), (-math.sin(a), math.cos(a)))
-    add((-60, 270), (1, 0))
-    pts.append(("Ziel", (0, 270), (1, 0)))
+    for i, (idx, frac) in enumerate(CP_AT):
+        p, d = track_point(idx, frac)
+        pts.append(("CP%d" % (i + 1), p, d))
+    p, d = track_point(*FINISH_AT)
+    pts.append(("Ziel", p, d))
     return pts
 
 
@@ -122,12 +208,13 @@ def build(city, lib, tree, workspace=None):
         for key, (title, x, fy, z, yaw, alts, route) in CAR_SPAWNS.items():
             _spawn_part(lib, sp, key, x, fy, z, yaw, title, alts)
         tr = lib.folder(city, "Track")
-        lib.attrs(tr, Laps=1, Direction="Uhrzeigersinn", Start="CarSpawns.track")
+        lib.attrs(tr, Laps=1, Direction="Uhrzeigersinn", Start="CarSpawns.track", Layout=TRACK_LAYOUT,
+                  Length=round(track_length()), Title="Grand-Prix-Kurs")
         cps = lib.folder(tr, "Checkpoints")
         lst = checkpoints()
         for i, (name, (x, z), (dx, dz)) in enumerate(lst):
             parent = tr if name == "Ziel" else cps
-            p = lib.part(parent, name, CP_SIZE, CF.at(x, -0.95 + CP_SIZE[1] / 2, z, _yaw_cf(dx, dz)),
+            p = lib.part(parent, name, CP_SIZE, CF.at(x, TRACK_Y + CP_SIZE[1] / 2, z, _yaw_cf(dx, dz)),
                          AMBER if name == "Ziel" else TEAL, "SmoothPlastic", transparency=1, collide=False,
                          touch=True, query=False, cast_shadow=False)
             set_attrs(p, {"Index": i + 1, "Total": len(lst)})

@@ -55,7 +55,8 @@ from worldgen.lib import child, children, get_attrs, get_prop, name_of  # noqa: 
 from worldgen.plots import KEEP_TOP, RECT, SLOTS, loc2world  # noqa: E402
 from worldgen.contract import STATIONS, ARRIVALS  # noqa: E402
 
-INTENDED_LOW = {"Grasplatte", "Teichbecken", "Teichboden"}
+# 3.0: Hügel des Naturrands (liegende Zylinder / Kugeln, Mitte unter dem Gras) reichen tief in den Boden
+INTENDED_LOW = {"Grasplatte", "Teichbecken", "Teichboden", "Huegel", "Kuppe"}
 # Budget je District-Model (Name unter City.Districts) - Parts ohne Autos, Lichter (CITY_SPEC §10, Stand des Baus)
 DISTRICT_BUDGET = {
     "Stadtplatz": (700, 9),          # D1 + D2 (mit Ausbau der Ankunftshalle) + Wegeleitsystem
@@ -63,7 +64,7 @@ DISTRICT_BUDGET = {
     "Schrottplatz": (540, 5),        # D10
     "Tuning": (280, 7),              # D9 inkl. Vorplatz-Deko
     "Autohaus": (340, 7),            # D8 inkl. Hinterhof
-    "Teststrecke": (160, 4),         # D13
+    "Teststrecke": (560, 4),         # D13 (3.0: Grand-Prix-Kurs mit Bögen, Kerbs, Kiesbett, Reifenstapeln)
     "Parkplatz": (150, 4),           # D7 + Parkhaus
     "Tankstelle": (260, 3),          # D11 + Waschstraße + Kundenparkplatz + Baumreihe
     "Stadtpark": (410, 3),           # D12
@@ -71,9 +72,14 @@ DISTRICT_BUDGET = {
     "Stadtrand": (640, 0),           # Wäldchen in den leeren Ecken
     "Kiesplatz": (900, 8),           # D14 Kiesplatz (Story Kapitel 1)
 }
-FOLDER_BUDGET = {"Ground": (250, 0), "Roads": (610, 0), "Lights": (220, 52), "PlotSlots": (300, 0),
-                 "Animated": (2300, 0), "CarSpawns": (12, 0), "Track": (14, 0), "Missions": (6, 0)}
-TOTAL_BUDGET = 12000   # Gesamtobergrenze aller Stadt-Parts inkl. Autos und Verkehr (Merge-Vorgabe)
+# 3.0: Ground mit Naturrand (Hügel/Felsen/Bäume, horizon.build_edge) 800, Horizon (Fernboden + Skyline) 700,
+# Track 13 Checkpoints + Ziel
+FOLDER_BUDGET = {"Ground": (800, 0), "Roads": (610, 0), "Lights": (220, 52), "PlotSlots": (300, 0),
+                 "Animated": (2300, 0), "CarSpawns": (12, 0), "Track": (16, 0), "Missions": (6, 0),
+                 "Horizon": (700, 0)}
+# Gesamtobergrenze aller Stadt-Parts inkl. Autos und Verkehr (Merge-Vorgabe 12000; 3.0: +1000 für Naturrand,
+# Skyline und Grand-Prix-Kurs, gebaut ~12650 - Reserve für die übrigen 3.0-Teams), Lichter unverändert 120
+TOTAL_BUDGET = 13000
 LIGHT_BUDGET = 120
 
 
@@ -703,7 +709,88 @@ def main(argv):
     ow_checks(tree, parts, errors, warns, info, verbose)
     mission_checks(city, parts, errors, warns, info)
     kiesplatz_checks(city, errors, warns, info)
+    # 12) 3.0: natürlicher Weltrand, Fernboden, Skyline (horizon.py)
+    edge_checks(tree, city, parts, errors, warns, info)
     return _report(errors, warns, info)
+
+
+def edge_checks(tree, city, parts, errors, warns, info, n_dir=32, step=2.0, r_max=2400.0):
+    """Vom Stadtzentrum in n_dir Richtungen: Boden reicht bis hinter die äußerste unsichtbare Grenze (>= 50 Studs),
+    die Grenze sperrt Y 0..100, und davor (<= 150 Studs) steht ein sichtbarer, kollidierender Teil des Naturrands
+    (Hügel/Fels/Stamm). Skyline: nur Deko (CanCollide/CanTouch/CanQuery/CastShadow false), Budget."""
+    from worldgen import drive, horizon
+    hz = child(city, "Horizon")
+    sky = child(hz, "Skyline") if hz is not None else None
+    if sky is None:
+        errors.append("City.Horizon.Skyline fehlt (horizon.build)")
+    else:
+        sp = [p for p in parts if p.path.startswith("City.Horizon.Skyline.")]
+        bad = [p.path for p in sp if p.collide or _bool_prop(p.item, "CanTouch", True) or
+               _bool_prop(p.item, "CanQuery", True) or _bool_prop(p.item, "CastShadow", True)]
+        if bad:
+            errors.append("Skyline: %d Parts nicht reine Deko (CanCollide/CanTouch/CanQuery/CastShadow): %s" %
+                          (len(bad), bad[:4]))
+        if len(sp) > horizon.SKY_BUDGET:
+            errors.append("Skyline: %d Parts > Budget %d" % (len(sp), horizon.SKY_BUDGET))
+        info.append("Skyline: %d Türme, %d Parts (Budget %d)" % (len(children(sky)), len(sp), horizon.SKY_BUDGET))
+    floor = [p for p in parts if p.name in ("Grasplatte", "Fernboden")]
+    for zn in ("Lobby", "Tycoon"):
+        zm, zparts = scan.zone_parts(tree, zn)
+        floor += [p for p in zparts if p.name == "Grasplatte"]
+    walls = [p for p in parts if p.name == "Grenze" and p.collide]
+    natural = [p for p in parts if ".Naturrand." in p.path and p.collide and p.transp < 0.95]
+
+    def hit(lst, x, z, y0, y1):
+        for p in lst:
+            b = p.aabb()
+            if not (b[0] - 1e-6 <= x <= b[1] + 1e-6 and b[4] - 1e-6 <= z <= b[5] + 1e-6):
+                continue
+            iv = drive.vertical_interval(p, x, z)
+            if iv is not None and iv[0] <= y0 + 1e-6 and iv[1] >= y1 - 1e-6:
+                return p
+        return None
+
+    def touch(lst, x, z, y0, y1):
+        for p in lst:
+            b = p.aabb()
+            if not (b[0] <= x <= b[1] and b[4] <= z <= b[5]):
+                continue
+            iv = drive.vertical_interval(p, x, z)
+            if iv is not None and iv[0] < y1 and iv[1] > y0:
+                return p
+        return None
+    ok = 0
+    for k in range(n_dir):
+        a = 2 * math.pi * k / n_dir
+        ux, uz = math.cos(a), math.sin(a)
+        r = 0.0
+        last_wall = None
+        ground_end = None
+        while r < r_max:
+            x, z = ux * r, uz * r
+            if hit(floor, x, z, -1.2, -1.2) is None:
+                ground_end = r
+                break
+            if hit(walls, x, z, 0.0, 100.0) is not None:
+                last_wall = r
+            r += step
+        who = "Rand Richtung %d° " % round(math.degrees(a))
+        if last_wall is None:
+            errors.append(who + "ohne Grenze bis zum Bodenende %s" % ground_end)
+            continue
+        if ground_end is not None and ground_end - last_wall < 50:
+            errors.append(who + "Boden endet %.0f Studs hinter der Grenze (soll >= 50)" % (ground_end - last_wall))
+            continue
+        nat = None
+        r = last_wall
+        while r > last_wall - 150 and nat is None:
+            nat = touch(natural, ux * r, uz * r, 0.5, 6.0)
+            r -= step
+        if nat is None:
+            errors.append(who + "kein natürliches Hindernis vor der Grenze (r %.0f)" % last_wall)
+            continue
+        ok += 1
+    info.append("Weltrand: %d / %d Richtungen mit Naturrand + Grenze, Boden bis dahinter" % (ok, n_dir))
 
 
 def _report(errors, warns, info):
@@ -1676,9 +1763,22 @@ def vehicle_checks(tree, city, parts, errors, warns, info, verbose=False):
     from worldgen.ground_roads import traffic_loops
     world = drive.World(parts)
     # a) Verkehrsschleifen: alle Spuren ohne Stufe > 0.6 / Hindernis
+    track_line = vehicles.track_loop()
     for key, nm, pts, speed in traffic_loops():
-        offs = (-9.0, -4.5, 0.0, 4.5, 9.0) if key == "T" else (-5.0, 0.0, 5.0)
-        _report_drive(errors, "Schleife %s (%s)" % (key, nm), drive.drive(world, pts, -0.95, True, offs), verbose)
+        if key == "T":
+            # 3.0: Schleife T muss der Mittellinie des Grand-Prix-Kurses folgen (ground_roads.traffic_loops:
+            # T = vehicles.track_loop()); befahren wird unten die Mittellinie selbst
+            line = drive.polyline_samples(track_line, True, 1.0)
+            off = max(min(math.hypot(x - sx, z - sz) for sx, sz, dx, dz in line)
+                      for x, z, a, b in drive.polyline_samples(list(pts), True, 2.0))
+            if off > 3.0:
+                errors.append("Schleife T (Verkehr) liegt bis %.0f Studs neben der Teststrecke: ground_roads."
+                              "traffic_loops() muss für T vehicles.track_loop() verwenden" % off)
+            continue
+        _report_drive(errors, "Schleife %s (%s)" % (key, nm), drive.drive(world, pts, -0.95, True, (-5.0, 0.0, 5.0)),
+                      verbose)
+    _report_drive(errors, "Teststrecke (Mittellinie, Spuren ±9)",
+                  drive.drive(world, track_line, -0.95, True, (-9.0, -4.5, 0.0, 4.5, 9.0)), verbose)
     # b) CarSpawns
     folder = child(city, "CarSpawns")
     have = {name_of(c): c for c in children(folder)} if folder is not None else {}
@@ -1767,8 +1867,7 @@ def vehicle_checks(tree, city, parts, errors, warns, info, verbose=False):
         if seq[-1] is None:
             errors.append("City.Track.Ziel fehlt")
             seq = seq[:-1]
-        loop_t = next(pts for key, nm, pts, sp in traffic_loops() if key == "T")
-        samples = drive.polyline_samples(loop_t, True, 1.0)
+        samples = drive.polyline_samples(track_line, True, 1.0)
         for it in seq:
             rec = scan.record(it, "City.Track." + name_of(it))
             if rec.collide or rec.transp < 1 or not rec.anchored or not _bool_prop(it, "CanTouch", True):

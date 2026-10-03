@@ -14,8 +14,8 @@ Höhen-Stapel (§1.2, nie zwei überlappende Oberseiten auf gleicher Höhe):
   Autohaus-Gelände -1.00 (ground_roads; Gebrauchtwagen-Belag bündig -1.00 in einer Aussparung) | Stellflächen,
   Kundenparkplatz, Zufahrt-Asphalt -0.95 | Vorplatz / Tribünenwege -0.50 | Böden Showroom, Rotunden-Sockel,
   Übergabe 0 | Teppiche +0.05
-  Teststrecke: Kurvenscheiben -1.00 | Geraden, Boxen-Anschluss, Innenfeld-Kreise -0.95 | Ziellinie, Innenfeld-Mitte
-  -0.90 | Kerbs abwechselnd -0.85 / -0.83
+  Teststrecke (3.0 Grand-Prix-Kurs, Mittellinie aus vehicles.py): Belag -0.95 (Geraden + Trapez-Sektoren der Bögen)
+  | Kies-Auslauf -1.00 | Ziellinie -0.90 | Kerbs abwechselnd -0.85 / -0.83
 Markierungen (Linien, Raster, Stellflächen-Rahmen, Zielflagge) sind SurfaceGui-Frames auf der Oberseite: 0 Parts.
 """
 import math
@@ -522,52 +522,150 @@ def build_backyard(dm, anim, lib):
     return m
 
 
-# ================================================================ Teststrecke (D13)
-T_CX, T_CZ = 85.0, 340.0
-T_R, T_W = 70.0, 24.0
+# ================================================================ Teststrecke (D13) - Grand-Prix-Kurs (3.0)
+# Die Mittellinie (Geraden + Bögen), Breite, Checkpoints und Schleife T kommen aus vehicles.py (eine Quelle).
+# Höhen: Belag -0.95 (Geraden: Quader, Bögen: Trapez-Sektoren ohne Überlappung) | Kies-Auslauf -1.00 (unter dem
+# Belagrand beginnend) | Ziellinie -0.90 | Kerbs abwechselnd -0.85 / -0.83 | Reifenstapel auf dem Auslauf.
+SAND = (196, 178, 140)
+TYRE = (30, 32, 36)
+TYRE_BAND = (200, 50, 50)
+RAIL = (170, 178, 184)
+# Breite des Kies-Auslaufs außen je Kurve (Zielkurve schmal: dahinter liegt der Stadtpark)
+RUNOFF = {"Kurve 1": 16.0, "Schnelle Kurve": 16.0, "Haarnadel": 16.0, "Zielkurve": 8.0}
+OUTER_KERBS = ("Kurve 1", "Haarnadel", "Zielkurve", "Schnelle Kurve")
+
+
+def _sectors(deg, max_step):
+    """Anzahl Sektoren m (je deg/m Grad), so dass 360 / (deg/m) ganzzahlig ist (lib.ring_slab braucht volle Kreise)"""
+    m = max(1, int(math.ceil(deg / max_step)))
+    while abs(360.0 * m / deg - round(360.0 * m / deg)) > 1e-6:
+        m += 1
+    return m
+
+
+def arc_slab(lib, parent, name, c, r_in, r_out, a0, a1, m, y0, y1, color, material, **kw):
+    """Bogen-Band als m Trapez-Sektoren (lib.ring_slab, Teil eines Vollkreises). r_in/r_out sind die Abstände der
+    Sektor-ECKEN auf den Grenzstrahlen; so schließen Geraden genau an (Apothem = r * cos(halber Sektorwinkel))."""
+    lo, hi = min(a0, a1), max(a0, a1)
+    step = (hi - lo) / m
+    n = int(round(360.0 / step))
+    k = math.cos(math.radians(step / 2))
+    return lib.ring_slab(parent, name, c[0], c[1], r_in * k, r_out * k, n, y0, y1, color, material,
+                         phase=lo + step / 2, skip=tuple(range(m, n)), **kw)
+
+
+def _flat_cf(a, b, y):
+    """CFrame eines liegenden Quaders von a nach b (lokal -Z = Fahrtrichtung, lokal X = quer)"""
+    mid = ((a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2)
+    return CF.look_at(mid, (mid[0] + b[0] - a[0], y, mid[2] + b[1] - a[1]))
+
+
+def track_clear(x, z, margin=0.0):
+    """True, wenn (x, z) mindestens TRACK_WIDTH/2 + margin von der Mittellinie entfernt liegt"""
+    from ..vehicles import track_geometry, TRACK_WIDTH
+    half = TRACK_WIDTH / 2 + margin
+    for g in track_geometry():
+        if g[0] == "S":
+            (ax, az), (bx, bz) = g[1], g[2]
+            dx, dz = bx - ax, bz - az
+            t = max(0.0, min(1.0, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+            if math.hypot(x - ax - dx * t, z - az - dz * t) < half:
+                return False
+        else:
+            c, r, a0, a1, sign, nm = g[3]
+            ang = math.degrees(math.atan2(z - c[1], x - c[0]))
+            lo, hi = min(a0, a1), max(a0, a1)
+            inside = any(lo - 1e-9 <= ang + k * 360 <= hi + 1e-9 for k in (-1, 0, 1))
+            d = abs(math.hypot(x - c[0], z - c[1]) - r) if inside else min(math.dist((x, z), g[1]),
+                                                                           math.dist((x, z), g[2]))
+            if d < half:
+                return False
+    return True
 
 
 def build_track(dm, anim, lib):
+    from ..vehicles import track_geometry, TRACK_WIDTH, TRACK_Y
     m = lib.model(dm, "Teststrecke")
-    ro, ri = T_R + T_W / 2, T_R - T_W / 2
-    # --- Belag: Geraden (-0.95), Kurvenscheiben (-0.97), Innenfeld-Rasen (-0.93 / -0.91)
-    for nm, z0, z1 in (("Gerade Nord", 258, 282), ("Gerade Sued", 398, 422)):
-        g = lib.box(m, nm, -85, 85, -1.25, -0.95, z0, z1, TRACK_ASPHALT, "Asphalt")
-        e0, e1 = 0.7 / 24, 1.2 / 24
-        paint(lib, g, [(0, e0, 1, e1, WHITE), (0, 1 - e1, 1, 1 - e0, WHITE)], px=6, name="Randlinien")
-    # Kurvenscheiben 0.05 unter den Geraden (die über ihnen enden); Innenfeld-Kreise berühren die Geraden nur
-    # (r 58 = 340 - 282) und liegen auf Geradenhöhe, das Mittelfeld 0.05 darüber
-    for sx in (-1, 1):
-        lib.cylinder(m, "Kurve", (sx * T_CX, -1.15, T_CZ), 0.3, 2 * ro, "Y", TRACK_ASPHALT, "Asphalt")
-        lib.cylinder(m, "Innenfeld", (sx * T_CX, -1.1, T_CZ), 0.3, 2 * ri, "Y", GRASS_IN, "Grass")
-    lib.box(m, "Innenfeld", -85, 85, -1.2, -0.9, 282, 398, GRASS_IN, "Grass")
-    lib.box(m, "Boxen-Anschluss", 88, 112, -1.25, -0.95, 258, 266, TRACK_ASPHALT, "Asphalt")
-    # --- Kerbs rot/weiß: 12 je Rand je Kurve, abwechselnd Höhe (keine gemeinsamen Flächen)
+    hw = TRACK_WIDTH / 2
+    geo = track_geometry()
+    belag = lib.model(m, "Belag")
     kerbs = lib.model(m, "Kerbs")
-    step = 15.0
-    for sx in (-1, 1):
-        base = -90.0 if sx > 0 else 90.0
-        for edge, rc in (("aussen", ro - 0.75), ("innen", ri + 0.75)):
-            re = rc / math.cos(math.radians(step / 4))
-            for k in range(12):
-                a0 = math.radians(base + k * step)
-                a1 = math.radians(base + (k + 1) * step)
-                pa = (sx * T_CX + re * math.cos(a0), T_CZ + re * math.sin(a0))
-                pb = (sx * T_CX + re * math.cos(a1), T_CZ + re * math.sin(a1))
-                red = k % 2 == 0
+    run = lib.model(m, "Auslauf")
+    walls = lib.model(m, "Reifenstapel")
+    e0, e1 = 0.7 / TRACK_WIDTH, 1.2 / TRACK_WIDTH
+    kerb_i = 0
+    wall_i = 0
+    for g in geo:
+        if g[0] == "S":
+            a, b = g[1], g[2]
+            ln = math.dist(a, b)
+            nm = g[3][1]
+            st = lib.part(belag, nm, (TRACK_WIDTH, 0.3, ln), _flat_cf(a, b, TRACK_Y - 0.15), TRACK_ASPHALT, "Asphalt")
+            if ln > 20:
+                paint(lib, st, [(e0, 0, e1, 1, WHITE), (1 - e1, 0, 1 - e0, 1, WHITE)], px=6, name="Randlinien")
+            continue
+        c, r, a0, a1, sign, nm = g[3]
+        deg = abs(a1 - a0)
+        m_road = _sectors(deg, 12.0)
+        arc_slab(lib, belag, nm, c, r - hw, r + hw, a0, a1, m_road, TRACK_Y - 0.3, TRACK_Y, TRACK_ASPHALT, "Asphalt")
+        # Kerbs rot/weiß: innen (Scheitel) an jedem Bogen, außen an den schnellen/engen Kurven; je Sektor ein
+        # Stück auf der Sehne, abwechselnd Höhe (keine gemeinsamen Flächen an den Stoßstellen)
+        lo, hi = min(a0, a1), max(a0, a1)
+        step = (hi - lo) / m_road
+        # Kerb-Außenseite 0.15 innerhalb der Belagkante (keine fast koplanaren Seitenflächen)
+        edges = [("innen", r - hw + 0.9)]
+        if nm in OUTER_KERBS:
+            edges.append(("aussen", r + hw - 0.9))
+        for edge, rc in edges:
+            for k in range(m_road):
+                t0, t1 = math.radians(lo + k * step), math.radians(lo + (k + 1) * step)
+                pa = (c[0] + rc * math.cos(t0), c[1] + rc * math.sin(t0))
+                pb = (c[0] + rc * math.cos(t1), c[1] + rc * math.sin(t1))
+                red = kerb_i % 2 == 0
+                kerb_i += 1
                 y0, y1 = (-1.05, -0.85) if red else (-1.07, -0.83)
                 ym = (y0 + y1) / 2
                 lib.beam(kerbs, "Kerb_" + edge, (pa[0], ym, pa[1]), (pb[0], ym, pb[1]), 1.5,
                          TRACK_RED if red else KERB_WHITE, "SmoothPlastic", depth=y1 - y0)
+        # Kies-Auslauf außen (beginnt 1 Stud unter dem Belagrand) und Reifenstapel an seinem Außenrand
+        if nm in RUNOFF:
+            m_run = _sectors(deg, 22.5)
+            arc_slab(lib, run, "Kiesbett", c, r + hw - 1.0, r + hw + RUNOFF[nm], a0, a1, m_run, -1.15, -1.0, SAND,
+                     "Pebble")
+            rw = r + hw + RUNOFF[nm] + 1.4
+            st2 = (hi - lo) / m_run
+            for k in range(m_run):
+                t0, t1 = math.radians(lo + k * st2), math.radians(lo + (k + 1) * st2)
+                pa = (c[0] + rw * math.cos(t0), c[1] + rw * math.sin(t0))
+                pb = (c[0] + rw * math.cos(t1), c[1] + rw * math.sin(t1))
+                h = 3.0 if wall_i % 2 == 0 else 3.4
+                wall_i += 1
+                w = lib.beam(walls, "Reifenstapel", (pa[0], -1.0 + h / 2, pa[1]), (pb[0], -1.0 + h / 2, pb[1]), 2.6,
+                             TYRE, "SmoothPlastic", depth=h)
+                # rot-weiße Warnbänder als SurfaceGui (0 Parts) auf der Streckenseite
+                gui = lib.surface_text(w, None, face="Left", name="Baender", px_per_stud=6)
+                for j in range(6):
+                    _frame(lib, gui, "Band%d" % j, (j / 6.0, 0.3), (1 / 12.0, 0.4), TYRE_BAND if j % 2 else KERB_WHITE)
+    # Leitplanken: Außenseite der langen Gerade (Süd) und der Westgerade (zum Stadtpark)
+    for nm, x0, x1, z0, z1 in (("Leitplanke", -185, 135, 538.5, 539.1), ("Leitplanke", -163.1, -162.5, 330, 420)):
+        lib.box(walls, nm, x0, x1, 0.2, 1.4, z0, z1, RAIL, "Metal")
+        n_post = max(2, int((max(x1 - x0, z1 - z0)) // 20) + 1)
+        for k in range(n_post):
+            f = k / (n_post - 1)
+            if x1 - x0 > z1 - z0:
+                px, pz = x0 + 0.6 + (x1 - x0 - 1.2) * f, (z0 + z1) / 2
+            else:
+                px, pz = (x0 + x1) / 2, z0 + 0.6 + (z1 - z0 - 1.2) * f
+            lib.box(walls, "Pfosten", px - 0.25, px + 0.25, -1.1, 0.2, pz - 0.25, pz + 0.25, STEEL, "Metal")
     # --- Start/Ziel-Brücke: Pfeiler (0,·,256) und (0,·,284), Träger Y 16..18
     g = lib.model(m, "StartZiel")
     lib.box(g, "Pfeiler", -1, 1, -0.5, 16, 255, 257, TRACK_RED, "Metal")
-    lib.box(g, "Pfeiler", -1, 1, -0.9, 16, 283, 285, TRACK_RED, "Metal")
+    lib.box(g, "Pfeiler", -1, 1, -1.1, 16, 283, 285, TRACK_RED, "Metal")
     lib.box(g, "Traeger", -1.5, 1.5, 16, 18, 254.5, 285.5, SLATE, "Metal")
     for yaw, x in ((-90, -1.6), (90, 1.6)):
         lib.sign(g, "START · ZIEL", (22, 2.6), CF.at(x, 17, 270, yaw), AMBER, SLATE, name="StartZielSchild",
                  bolts=yaw < 0)
-    lib.sign(g, "ZEITFAHREN", (4.6, 2.6), CF.at(0, 9.5, 254.9, 180), AMBER, SLATE, name="Rundentafel",
+    lib.sign(g, "GRAND-PRIX-KURS", (4.6, 2.6), CF.at(0, 9.5, 254.9, 180), AMBER, SLATE, name="Rundentafel",
              sub="Start an der Kasse · Uhrzeigersinn", bolts=False)
     cl = lib.box(g, "Ziellinie", -1.2, 1.2, -0.95, -0.9, 258.5, 281.5, WHITE, "SmoothPlastic", deco=True)
     rects = []
@@ -608,22 +706,37 @@ def build_track(dm, anim, lib):
     lib.box(tr, "Kassentresen", -4, 4, -0.5, 2.6, 224.8, 227.2, TRACK_RED, "Metal")
     lib.box(tr, "Kassenplatte", -4.2, 4.2, 2.6, 2.8, 224.6, 227.2, KERB_WHITE, "SmoothPlastic")
     lib.sign(tr, "TESTSTRECKE", (16, 3.4), CF.at(0, 7.6, 227.1, 180), TRACK_RED, KERB_WHITE, name="Kassenschild",
-             sub="Tribüne · Zeitfahren · Bestzeiten", sub_color=SLATE)
-    # --- 4 Flutlichtmasten (±120, 250) und (±120, 430)
-    for x, z in ((-120, 250), (120, 250), (-120, 430), (120, 430)):
+             sub="Grand-Prix-Kurs · Zeitfahren · Bestzeiten", sub_color=SLATE)
+    # --- 4 Flutlichtmasten im Innenfeld (je 1 SpotLight), Kopf zur Strecke
+    for x, z, tx, tz in ((0, 330, 0, 270), (90, 470, 175, 495), (-185, 490, -215, 505), (-95, 425, -150, 375)):
         fm = lib.model(m, "Flutlichtmast")
-        lib.cylinder(fm, "Mast", (x, 11.95, z), 26.1, 0.8, "Y", STEEL, "Metal")
-        head_cf = CF.look_at((x, 26.8, z), (x * 0.3, -6.0, T_CZ + (z - T_CZ) * 0.3))
+        lib.cylinder(fm, "Mast", (x, 12.85, z), 27.9, 0.8, "Y", STEEL, "Metal")
+        head_cf = CF.look_at((x, 26.8, z), (tx, -6.0, tz))
         head = lib.part(fm, "Scheinwerferrahmen", (7, 4, 0.8), head_cf, SLATE, "Metal")
         lib.part(fm, "Scheinwerfer", (6.4, 3.4, 0.1), head_cf * CF(0, 0, -0.45), NEON_WHITE, "Neon", deco=True)
         lib.spot_light(head, 60, 1.3, (244, 248, 255), 80, "Front", False, name="Flutlicht")
-    # --- Innenfeld: 4 Bäume + Plakatwand "ULTIMATE CAR GAME" 16 x 6 bei (0,340), Text nach Norden
-    for i, (x, z) in enumerate(((-48, 312), (48, 312), (-48, 368), (48, 368))):
-        lib.tree_lite(m, x, -0.9, z, scale=1.4, seed=i + 3, name="Innenfeldbaum")
+    # --- Kurvenschilder (Innenseite, Text zur Anfahrt)
+    for text, x, z, face in (("KURVE 1", 70, 300, (-1, 0)), ("S-KURVE", 150, 372, (0, -1)),
+                             ("SCHNELLE KURVE", 160, 452, (0, -1)), ("LANGE GERADE", 95, 500, (1, 0)),
+                             ("HAARNADEL", -130, 500, (1, 0)), ("ZIELKURVE", -115, 345, (0, 1))):
+        sm = lib.model(m, "Kurvenschild")
+        yaw = face_yaw(*face)
+        dx, dz = math.cos(math.radians(yaw)), -math.sin(math.radians(yaw))
+        for s_ in (-1, 1):
+            lib.cylinder(sm, "Pfosten", (x + dx * s_ * 3.2, -1.1 + 2.6, z + dz * s_ * 3.2), 5.2, 0.35, "Y", STEEL,
+                         "Metal")
+        lib.sign(sm, text, (8, 1.8), CF.at(x, 5.0, z, yaw), AMBER, SLATE, name="Schild", bolts=False)
+    # --- Innenfeld: Bäume + Plakatwand "ULTIMATE CAR GAME" 16 x 6 bei (0,400), Text nach Norden
+    trees = [(-60, 330), (60, 335), (-40, 470), (40, 470), (-110, 470), (30, 395), (-80, 380), (95, 460)]
+    k = 0
+    for x, z in trees:
+        if track_clear(x, z, 6):
+            lib.tree_lite(m, x, -1.1, z, scale=1.4, seed=k + 3, name="Innenfeldbaum")
+            k += 1
     for x in (-6, 6):
-        lib.box(m, "Plakatstuetze", x - 0.3, x + 0.3, -0.9, 5, 340.15, 340.75, STEEL, "Metal")
-    bb = lib.sign(m, "ULTIMATE CAR GAME", (16, 6), CF.at(0, 8, 340, 180), AMBER, SLATE, name="Plakatwand",
-                  thickness=0.3, font="GothamBlack", sub="TESTSTRECKE · SPIELERMEILE", sub_color=WHITE)
+        lib.box(m, "Plakatstuetze", x - 0.3, x + 0.3, -1.1, 5, 420.15, 420.75, STEEL, "Metal")
+    bb = lib.sign(m, "ULTIMATE CAR GAME", (16, 6), CF.at(0, 8, 420, 180), AMBER, SLATE, name="Plakatwand",
+                  thickness=0.3, font="GothamBlack", sub="GRAND-PRIX-KURS · SPIELERMEILE", sub_color=WHITE)
     lib.surface_text(bb, "ULTIMATE CAR GAME", face="Front", text_color=AMBER, font="GothamBlack", name="Rueckseite")
     return m
 

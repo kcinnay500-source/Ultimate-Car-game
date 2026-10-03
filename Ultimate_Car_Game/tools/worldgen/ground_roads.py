@@ -320,17 +320,12 @@ def build(city, lib, tree):
 
 
 def build_ground(ground, lib):
-    lib.box(ground, "Grasplatte", -660, 660, Y_GRASS - 4, Y_GRASS, -470, 540, GRASS, "Grass")
-    # Heckenring 3 breit x 5 hoch; Nord/Süd zwischen den Ost/West-Hecken (keine Überlappung)
-    hy0, hy1 = Y_GRASS, Y_GRASS + 5
-    lib.box(ground, "Hecke", -591.5, -588.5, hy0, hy1, -391.5, 471.5, HEDGE, "Grass")
-    lib.box(ground, "Hecke", 588.5, 591.5, hy0, hy1, -391.5, 471.5, HEDGE, "Grass")
-    lib.box(ground, "Hecke", -588.5, 588.5, hy0, hy1, -391.5, -388.5, HEDGE, "Grass")
-    lib.box(ground, "Hecke", -588.5, 588.5, hy0, hy1, 468.5, 471.5, HEDGE, "Grass")
-    for x0, x1, z0, z1 in ((-590.5, -589.5, -390, 470), (589.5, 590.5, -390, 470),
-                           (-590, 590, -390.5, -389.5), (-590, 590, 469.5, 470.5)):
-        lib.box(ground, "Grenze", x0, x1, Y_GRASS, Y_GRASS + 60, z0, z1, HEDGE, "SmoothPlastic", transparency=1,
-                cast_shadow=False, query=False, touch=False)
+    # 3.0: Grasplatte bis unter den natürlichen Rand (Hügelring horizon.CREST, Teststrecke bis Z 560, Große
+    # Werkstatt bis X -647); der alte Heckenring X ±590 / Z -390..470 mit unsichtbarer Grenze entfällt - den Rand
+    # bilden jetzt Hügel, Felsen und Bäume (border_trees -> horizon.build_edge), dahinter Fernboden und Skyline.
+    from .horizon import GROUND
+    gx0, gx1, gz0, gz1 = GROUND
+    lib.box(ground, "Grasplatte", gx0, gx1, Y_GRASS - 4, Y_GRASS, gz0, gz1, GRASS, "Grass")
     # Bodenplatten der Bezirke (0,3 dick, Oberseite -1.00). Flächen mit eigenem Belag (GROUND_INSETS) werden
     # ausgespart; die Bezirke setzen ihren Belag bündig (-1.30..-1.00) in die Lücke statt 0.02-0.03 darüber.
     y0, y1 = Y_GROUND - 0.3, Y_GROUND
@@ -352,12 +347,10 @@ def build_ground(ground, lib):
 
 
 def border_trees(ground, lib):
-    m = lib.folder(ground, "Randbaeume")
-    pts = [(x, -378) for x in (-540, -420, -300, -180, -60, 60, 180, 300, 420, 540)]
-    for z in (-330, -200, 60, 200, 380):
-        pts += [(-575, z), (575, z)]
-    for i, (x, z) in enumerate(pts):
-        lib.tree_lite(m, x, Y_GRASS, z, scale=1.5, seed=i, name="Randbaum")
+    # 3.0: natürlicher Weltrand statt Randbäumen am Heckenring: Hügelkette, Felsgruppen, Baumreihen und dahinter
+    # eine unsichtbare Sicherheitswand "Grenze" (horizon.py)
+    from .horizon import build_edge
+    return build_edge(ground, lib)
 
 
 def build_roads(roads, lib):

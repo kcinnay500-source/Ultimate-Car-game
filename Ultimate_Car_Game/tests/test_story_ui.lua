@@ -150,6 +150,9 @@ local function storySnapshot(g, opts)
 	d.money = opts.money or 500
 	g:MiniShared("MetaRules").ApplyDefault(d.games)
 	SR.ApplyDefault(d.games)
+	if opts.path then
+		g:MiniShared("MetaRules").SetStartPath(d, opts.path) -- 3.x: Kapitel 1 des Startwegs
+	end
 	if opts.mutate then
 		opts.mutate(d, SR)
 	end
@@ -160,10 +163,17 @@ local function storySnapshot(g, opts)
 	local view = SR.View(d, NOW, d.level, { sale = sale, saleIn = opts.saleIn or 0, passive = opts.passive == true }, opts.full ~= false)
 	local s = {
 		credits = d.money, level = d.level, mode = opts.mode or "openworld", placeKind = "openworld",
-		meta = { beginner = false, passive = opts.passive == true, single = false, tutorialDone = true, tutorialStep = 10 },
+		meta = { beginner = false, passive = opts.passive == true, single = false, tutorialDone = true, tutorialStep = 10, startPath = opts.path or "" },
 		story = view,
 	}
 	return s, d, sale
+end
+
+-- 3.x: Kapitel 1 (Verkaufshaus): Einnahmen (c1_ah1) erledigt, die Kiesplatz-Verkäufe (c1_m1) laufen
+local function kies(d, R)
+	d.games.story.done.c1_ah1 = true
+	R.Recompute(d.games.story)
+	R.Start(d, "c1_m1", NOW, 0, 2)
 end
 
 local function finishChapters(d, SR, upTo)
@@ -177,17 +187,18 @@ end
 
 ---------------------------------------------------------------- Fälle
 return {
-	{ "StoryUI: Kapitel 1 – Kopf mit Intro, Missionskarten (Starten → story_start, Fortschritt, Abholen → story_claim, Später), Wegweiser (mini_travel kiesplatz)", function(T, H)
+	{ "StoryUI: Kapitel 1 – Kopf mit Intro, Missionskarten (Starten → story_start, Fortschritt, Abholen → story_claim, Später), Wegweiser zum Ort der Mission (mini_travel)", function(T, H)
 		local g, p = startClient(H)
 		local rec = recorder(T)
 		local mod, page, MiniUI, toasts, state = build(g, p, "StoryUI", rec)
 		local SR = g:MiniShared("StoryRules")
 		local ch1 = SR.Chapter(1)
+		-- ohne laufende Mission (z. B. Passiv-Modus aus, bevor der Server sie startet): Mission 1 des Verkaufshauses startbar
 		local s = storySnapshot(g, { level = 2 })
 		render(g, p, mod, s)
 		T.check(byName(page, "ChapterTitle").Text == "Kapitel 1: " .. ch1.title, "Kapitel-Kopf: " .. byName(page, "ChapterTitle").Text)
 		T.check(byName(page, "Intro").Visible and byName(page, "Intro").Text == ch1.intro, "Intro-Text (Erzählstimme)")
-		T.check(byName(page, "ChapterProgress").Text:find("Mission 1 von 3", 1, true) ~= nil, "Fortschritt: " .. byName(page, "ChapterProgress").Text)
+		T.check(byName(page, "ChapterProgress").Text:find("Mission 1 von 6", 1, true) ~= nil, "Fortschritt: " .. byName(page, "ChapterProgress").Text)
 		T.eq(byName(page, "ChapterNote").Visible, false, "kein Sperrhinweis in Kapitel 1")
 		-- Missionskarten
 		for i, m in ipairs(ch1.Missions) do
@@ -209,9 +220,16 @@ return {
 		T.eq(#rec.sent, 0, "gesperrte Knöpfe senden nichts")
 		press(g, b1)
 		local sent = rec.Last("story_start")
-		T.check(sent ~= nil and sent.id == "c1_m1", "story_start c1_m1")
+		T.check(sent ~= nil and sent.id == "c1_ah1", "story_start c1_ah1")
 		T.eq(rec.Count("story_start"), 1, "genau einmal")
-		-- Wegweiser: Mission 1 spielt am Kiesplatz → Karte sichtbar, Schnellreise sendet mini_travel {key = kiesplatz} und schließt
+		-- Gebäude-Mission (Abholen im Tab „Gebäude“ geht überall): kein Wegweiser
+		T.eq(byName(page, "MapHintCard").Visible, false, "kein Wegweiser für die Gebäude-Mission")
+		-- c1_m1 läuft (1/3): Wegweiser zum Kiesplatz, Schnellreise sendet mini_travel {key = kiesplatz} und schließt
+		s = storySnapshot(g, { level = 2, mutate = function(d, R)
+			kies(d, R)
+			d.games.story.active.progress = 1
+		end })
+		render(g, p, mod, s)
 		local mapCard = byName(page, "MapHintCard")
 		T.check(mapCard.Visible, "Wegweiser sichtbar")
 		T.check(withText(mapCard, "Gehe zum Kiesplatz") ~= nil, "Text „Gehe zum Kiesplatz“")
@@ -222,53 +240,73 @@ return {
 		T.check(sent ~= nil and sent.key == "kiesplatz", "mini_travel {key = kiesplatz}")
 		T.eq(state.closed, 1, "Panel geschlossen (ctx.Close)")
 		-- aktiv mit Fortschritt 1/3: Knopf zeigt den Stand, nichts sendbar
-		s = storySnapshot(g, { level = 2, mutate = function(d, R)
-			R.Start(d, "c1_m1", NOW, 0, 2)
-			d.games.story.active.progress = 1
-		end })
-		render(g, p, mod, s)
-		b1 = byName(page, "MissionButton_1")
-		T.check(not enabled(b1) and b1.Text == "1 / 3", "läuft 1/3: " .. b1.Text)
-		T.check(withText(byName(page, "Mission_1"), "Läuft") ~= nil, "Hinweis läuft")
-		T.check(withText(byName(page, "Mission_2"), "Erst „Drei Gebrauchtwagen verkaufen“ erledigen") ~= nil, "Sperrgrund nennt die laufende Mission")
+		local b2b = byName(page, "MissionButton_2")
+		T.check(not enabled(b2b) and b2b.Text == "1 / 3", "läuft 1/3: " .. b2b.Text)
+		T.check(withText(byName(page, "Mission_2"), "Läuft") ~= nil, "Hinweis läuft")
+		T.eq(byName(page, "MissionButton_1").Text, "Erledigt ✓", "Mission 1 erledigt")
+		T.check(withText(byName(page, "Mission_3"), "Erst „Drei Gebrauchtwagen verkaufen“ erledigen") ~= nil, "Sperrgrund nennt die laufende Mission")
 		T.check(byName(page, "ChapterProgress").Text:find("läuft", 1, true) ~= nil, "Kopf nennt die laufende Mission")
-		press(g, b1)
+		press(g, b2b)
 		T.eq(rec.Count("story_claim"), 0, "unfertig: kein story_claim")
 		-- Fortschritt per mini_notice sofort in den Balken (ohne Snapshot)
-		local fill = byName(page, "Mission_1"):FindFirstChild("Bar", true):GetChildren()[2]
+		local fill = byName(page, "Mission_2"):FindFirstChild("Bar", true):GetChildren()[2]
 		g:InClient(p, function()
 			mod.OnNotice({ kind = "mission", id = "c1_m1", title = "Drei Gebrauchtwagen verkaufen", progress = 2, target = 3, done = false, side = false })
 		end)
 		T.check(fill and math.abs(fill.Size.X.Scale - 2 / 3) < 0.01, "Balken 2/3 nach Hinweis")
 		-- erfüllt: Abholen → story_claim {id}
 		s = storySnapshot(g, { level = 2, mutate = function(d, R)
-			R.Start(d, "c1_m1", NOW, 0, 2)
+			kies(d, R)
 			d.games.story.active.progress = 3
 		end })
 		render(g, p, mod, s)
-		b1 = byName(page, "MissionButton_1")
-		T.check(enabled(b1) and b1.Text == "Abholen", "Abholen: " .. b1.Text)
-		press(g, b1)
+		local bc = byName(page, "MissionButton_2")
+		T.check(enabled(bc) and bc.Text == "Abholen", "Abholen: " .. bc.Text)
+		press(g, bc)
 		sent = rec.Last("story_claim")
 		T.check(sent ~= nil and sent.id == "c1_m1", "story_claim c1_m1")
 		-- kleiner Snapshot ohne missions: Liste bleibt (sticky), Zustand aus active nachgezogen
 		local small = storySnapshot(g, { level = 2, full = false, mutate = function(d, R)
-			R.Start(d, "c1_m1", NOW, 0, 2)
+			kies(d, R)
 			d.games.story.active.progress = 2
 		end })
 		T.eq(small.story.missions, nil, "kleiner Snapshot ohne Liste")
 		render(g, p, mod, small)
-		T.check(byName(page, "Mission_1").Visible and byName(page, "Mission_3").Visible, "Zeilen bleiben (sticky)")
-		T.check(byName(page, "MissionButton_1").Text == "2 / 3", "Stand aus dem kleinen Snapshot: " .. byName(page, "MissionButton_1").Text)
-		-- Mission 1 erledigt: Erledigt ✓, Mission 2 startbar (kind event, Werkstatt) → Wegweiser weg
-		s = storySnapshot(g, { level = 2, mutate = function(d)
+		T.check(byName(page, "Mission_1").Visible and byName(page, "Mission_6").Visible, "Zeilen bleiben (sticky)")
+		T.check(byName(page, "MissionButton_2").Text == "2 / 3", "Stand aus dem kleinen Snapshot: " .. byName(page, "MissionButton_2").Text)
+		-- Kiesplatz erledigt: nächste Mission (zurück in die Werkstatt) startbar → Wegweiser zum Empfang
+		s = storySnapshot(g, { level = 2, mutate = function(d, R)
+			d.games.story.done.c1_ah1 = true
 			d.games.story.done.c1_m1 = true
-			d.games.story.step = 2
+			R.Recompute(d.games.story)
 		end })
 		render(g, p, mod, s)
-		T.check(byName(page, "MissionButton_1").Text == "Erledigt ✓" and not enabled(byName(page, "MissionButton_1")), "Mission 1 erledigt")
-		T.check(enabled(byName(page, "MissionButton_2")) and byName(page, "MissionButton_2").Text == "Starten", "Mission 2 startbar")
-		T.eq(byName(page, "MapHintCard").Visible, false, "Wegweiser nur für Kiesplatz-Missionen")
+		T.check(byName(page, "MissionButton_2").Text == "Erledigt ✓" and not enabled(byName(page, "MissionButton_2")), "Mission 2 erledigt")
+		T.check(enabled(byName(page, "MissionButton_3")) and byName(page, "MissionButton_3").Text == "Starten", "Mission 3 startbar")
+		mapCard = byName(page, "MapHintCard")
+		T.check(mapCard.Visible and withText(mapCard, "Empfang deiner Werkstatt") ~= nil, "Wegweiser nennt den Empfang")
+		press(g, byName(page, "TravelButton"))
+		T.eq(rec.Last("mini_travel").key, "workshop", "Schnellreise in die eigene Werkstatt")
+		-- Gebrauchtwagen gekauft: Große Werkstatt
+		s = storySnapshot(g, { level = 3, mutate = function(d, R)
+			for _, id in ipairs({ "c1_ah1", "c1_m1", "c1_m2", "c1_ah5" }) do
+				d.games.story.done[id] = true
+			end
+			R.Recompute(d.games.story)
+		end })
+		render(g, p, mod, s)
+		T.check(enabled(byName(page, "MissionButton_5")) and byName(page, "MissionButton_5").Text == "Starten", "Mission 5 (Große Werkstatt) startbar")
+		mapCard = byName(page, "MapHintCard")
+		T.check(mapCard.Visible and withText(mapCard, "Große Werkstatt") ~= nil, "Wegweiser nennt die Große Werkstatt")
+		press(g, byName(page, "TravelButton"))
+		sent = rec.Last("mini_travel")
+		T.check(sent ~= nil and sent.key == "grosswerkstatt", "mini_travel {key = grosswerkstatt}")
+		-- Werkstatt-Weg: Liste des Startwegs (story.path), Wegweiser in die eigene Werkstatt
+		s = storySnapshot(g, { level = 2, path = "werkstatt" })
+		render(g, p, mod, s)
+		T.check(withText(byName(page, "Mission_1"), "Der erste Ölwechsel") ~= nil, "Werkstatt-Weg: Ölwechsel zuerst")
+		T.check(byName(page, "ChapterTitle").Text == "Kapitel 1: Die ersten Kunden", "Kapiteltitel des Wegs: " .. byName(page, "ChapterTitle").Text)
+		T.check(withText(byName(page, "MapHintCard"), "Empfang deiner Werkstatt") ~= nil, "Wegweiser: Empfang")
 		T.eq(byName(page, "ChaptersCard").Visible, true, "Kapitelübersicht (voller Snapshot)")
 		T.check(withText(byName(page, "ChaptersCard"), "Kapitel 2: " .. SR.Chapter(2).title) ~= nil, "Übersicht nennt Kapitel 2")
 		T.eq(#toasts, 0, "keine eigenen Toasts")
@@ -582,7 +620,7 @@ return {
 		T.eq(mod.MarkerTarget(), nil, "ohne Snapshot kein Marker")
 		-- aktive Kiesplatz-Mission: Marker an City.Stations.kiesplatz, mit Kundenname
 		local s, _, offer = storySnapshot(g, { level = 2, sale = true, mutate = function(d, R)
-			R.Start(d, "c1_m1", NOW, 0, 2)
+			kies(d, R)
 		end })
 		s.story.side = { { id = "s_delivery", title = "Lieferung", text = "", progress = 0, target = 1, done = false, claimable = false, legend = false, credits = 150, xp = 50 } }
 		g:InClient(p, function()
@@ -639,7 +677,7 @@ return {
 		T.eq(mod.CardVisible(), false, "Warteschlange leer")
 		-- erfüllte Mission: kein Ziel-Marker mehr (Belohnung im Tab)
 		s = storySnapshot(g, { level = 2, mutate = function(d, R)
-			R.Start(d, "c1_m1", NOW, 0, 2)
+			kies(d, R)
 			d.games.story.active.progress = 3
 		end })
 		g:InClient(p, function()
@@ -678,7 +716,7 @@ return {
 		local reception = g:Station(p, "workshop")
 		T.check(reception ~= nil, "Empfang im eigenen Grundstück")
 		T.eq(mod.MarkerTarget(), reception, "Marker am Werkstatt-Empfang")
-		T.check(gui.MissionMarker.Text.Text:find("WERKSTATT", 1, true) ~= nil, "Beschriftung Werkstatt")
+		T.check(gui.MissionMarker.Text.Text:find("EMPFANG", 1, true) ~= nil, "Beschriftung Empfang (wie das Schild)")
 		-- NPC: wippt und dreht sich dezent um den eigenen Pivot (X/Z bleiben, Y ≥ Ruhelage, klein)
 		T.eq(mod.NpcCount(), 1, "ein NPC erkannt")
 		local base = Vector3.new(300, 3, -240)
@@ -774,7 +812,7 @@ return {
 		end
 		T.check(moved, "Kunde wippt")
 		local s = storySnapshot(g, { level = 2, sale = true, mutate = function(d, R)
-			R.Start(d, "c1_m1", NOW, 0, 2)
+			kies(d, R)
 		end })
 		s.story.side = { { id = "s_delivery", title = "Lieferung", text = "", progress = 0, target = 1, done = false, claimable = false, legend = false, credits = 150, xp = 50 } }
 		g:InClient(p, function()
@@ -806,7 +844,7 @@ return {
 				page.Size = UDim2.new(0, MiniUI.Content.AbsoluteSize.X - 8, 0, 0)
 			end)
 			local s = storySnapshot(g, { level = 2, sale = true, mutate = function(d, R)
-				R.Start(d, "c1_m1", NOW, 0, 2)
+				kies(d, R)
 			end })
 			render(g, p, mod, s)
 			local width = page.AbsoluteSize.X
@@ -863,7 +901,7 @@ return {
 		T.check(board ~= nil, "SurfaceGui PriceBoard")
 		T.check(board.Line1.Text:find("günstig", 1, true) ~= nil and board.Line3.Text:find("teuer", 1, true) ~= nil, "Legende aus dem Generator: " .. board.Line1.Text)
 		local s, _, sale = storySnapshot(g, { level = 2, sale = true, mutate = function(d, R)
-			R.Start(d, "c1_m1", NOW, 0, 2)
+			kies(d, R)
 		end })
 		g:InClient(p, function()
 			mod.OnSnapshot(s) -- wie MiniClient bei jedem Snapshot (auch bei geschlossenem Panel)
@@ -929,5 +967,166 @@ return {
 			T.eq(g:ErrorText(), "", tag .. ": keine Fehler")
 			g:Close()
 		end
+	end },
+
+	{ "MissionClient: Karte „Deine Mission“ – Titel, Ort, Fortschritt, Hinreisen/Abholen, gesperrtes Kapitel; weg bei Panel/Tablet/QTE/Fahren (Marker bleiben beim Fahren); Handy kompakt über der Bildmitte", function(T, H)
+		local g, p = startClient(H, { viewport = Vector2.new(1280, 720) })
+		local rec = recorder(T)
+		local _, _, MiniUI, _, state, ctx = build(g, p, "PrestigeUI", rec)
+		local mod = g:ClientModule(p, "Mini.MissionClient")
+		g:InClient(p, function()
+			mod.Start(ctx)
+		end)
+		g:Advance(0.1)
+		local city = g:BuildCity({
+			stations = { { key = "kiesplatz", tab = "story", pos = Vector3.new(300, 3, -250), title = "Kiesplatz · Gebrauchtwagen" } },
+			arrivals = { { key = "kiesplatz", pos = Vector3.new(290, 0, -250) } },
+		})
+		T.check(city ~= nil, "Stadt")
+		T.eq(mod.TrackerVisible(), false, "ohne Snapshot keine Karte")
+		local function show(s)
+			g:InClient(p, function()
+				mod.OnSnapshot(s)
+				mod.Step(0.3)
+			end)
+		end
+		-- laufende Mission 1/3 am Kiesplatz
+		show((storySnapshot(g, { level = 2, mutate = function(d, R)
+			kies(d, R)
+			d.games.story.active.progress = 1
+		end })))
+		T.eq(mod.TrackerVisible(), true, "Karte sichtbar")
+		local tr = mod.Tracker()
+		T.check(tr.Kicker.Text:find("DEINE MISSION", 1, true) ~= nil and tr.Kicker.Text:find("Kapitel 1", 1, true) ~= nil, "Kopf: " .. tr.Kicker.Text)
+		T.eq(tr.Title.Text, "Drei Gebrauchtwagen verkaufen", "Missionstitel")
+		T.check(tr.Text.Visible and tr.Text.Text:find("Kiesplatz", 1, true) ~= nil, "Text sagt, wohin")
+		T.eq(tr.Count.Text, "1 / 3", "Fortschritt")
+		T.check(math.abs(tr.Bar.Fill.Size.X.Scale - 1 / 3) < 0.01, "Balken 1/3")
+		T.check(tr.AbsolutePosition.X <= 20 and tr.AbsolutePosition.Y <= 20, "oben links neben der 2.4.0-Leiste")
+		T.check(tr.AbsolutePosition.Y + tr.AbsoluteSize.Y <= 720 * 0.45 + 1, "über der Bildmitte")
+		local button = tr.TrackerButton
+		T.check(button.Visible and button.Text == "Hinreisen: Kiesplatz" and button.AbsoluteSize.Y >= 44, "Hinreisen: " .. button.Text)
+		press(g, button)
+		local sent = rec.Last("mini_travel")
+		T.check(sent ~= nil and sent.key == "kiesplatz", "mini_travel {key = kiesplatz}")
+		-- am Ziel: kein Hinreisen-Knopf
+		g:Teleport(p, g:Find("Workspace.City.Stations.kiesplatz"), Vector3.new(0, 3, 4))
+		g:InClient(p, function()
+			mod.Step(0.3)
+		end)
+		T.eq(tr.TrackerButton.Visible, false, "am Kiesplatz: kein Hinreisen")
+		-- erfüllt: „Belohnung abholen“ sendet story_claim {id}
+		show((storySnapshot(g, { level = 2, mutate = function(d, R)
+			kies(d, R)
+			d.games.story.active.progress = 3
+		end })))
+		T.check(tr.TrackerButton.Visible and tr.TrackerButton.Text == "Belohnung abholen", "Abholen: " .. tr.TrackerButton.Text)
+		press(g, tr.TrackerButton)
+		sent = rec.Last("story_claim")
+		T.check(sent ~= nil and sent.id == "c1_m1", "story_claim c1_m1")
+		-- Panel / Tablet / QTE: Karte und Marker weg; Fahren: Karte weg, Marker bleiben (Lieferfahrt)
+		show((storySnapshot(g, { level = 2, mutate = function(d, R)
+			kies(d, R)
+		end })))
+		T.eq(mod.TrackerVisible(), true, "wieder da")
+		g:InClient(p, function()
+			MiniUI.Open("overview")
+			mod.Step(0.3)
+		end)
+		T.eq(mod.TrackerVisible(), false, "Panel offen: weg")
+		g:InClient(p, function()
+			MiniUI.Close()
+			mod.Step(0.3)
+		end)
+		state.tablet = true
+		g:InClient(p, function()
+			mod.Step(0.3)
+		end)
+		T.eq(mod.TrackerVisible(), false, "Tablet: weg")
+		state.tablet = false
+		state.blocked = true
+		g:InClient(p, function()
+			mod.Step(0.3)
+		end)
+		T.eq(mod.TrackerVisible(), false, "QTE/Diagnose: weg")
+		state.blocked = false
+		local drive
+		g:InClient(p, function()
+			drive = Instance.new("ScreenGui")
+			drive.Name = "Fahren"
+			drive.Enabled = true
+			drive.Parent = p.PlayerGui
+			mod.Step(0.3)
+		end)
+		T.eq(mod.Tracker().Visible, false, "Fahren: Karte weg")
+		T.eq(mod.Gui().Enabled, true, "Fahren: Marker bleiben an")
+		T.check(mod.MarkerTarget() ~= nil, "Fahren: Marker am Ziel bleibt")
+		g:InClient(p, function()
+			drive:Destroy()
+			mod.Step(0.3)
+		end)
+		T.eq(mod.TrackerVisible(), true, "nach dem Fahren wieder da")
+		-- Lobby, Passiv, Startwahl offen: keine Karte
+		local s = storySnapshot(g, { level = 2, mode = "lobby", mutate = function(d, R)
+			kies(d, R)
+		end })
+		show(s)
+		T.eq(mod.TrackerVisible(), false, "Lobby: keine Karte")
+		s = storySnapshot(g, { level = 2, passive = true, mutate = function(d, R)
+			kies(d, R)
+		end })
+		show(s)
+		T.eq(mod.TrackerVisible(), false, "Passiv: keine Karte")
+		s = storySnapshot(g, { level = 2, mutate = function(d, R)
+			kies(d, R)
+		end })
+		s.start = { pending = true, path = "", choices = {} }
+		show(s)
+		T.eq(mod.TrackerVisible(), false, "Startwahl offen: keine Karte")
+		-- Kapitel geschafft, nächstes gesperrt: Karte nennt das Level
+		show((storySnapshot(g, { level = 2, mutate = function(d, R)
+			finishChapters(d, R, 1)
+		end })))
+		T.eq(mod.TrackerVisible(), true, "gesperrtes Kapitel: Karte")
+		T.check(tr.Title.Text:find("Kapitel 2", 1, true) ~= nil and tr.Text.Text:find("Level 5", 1, true) ~= nil, "nennt Kapitel und Level: " .. tr.Title.Text .. " / " .. tr.Text.Text)
+		T.eq(tr.TrackerButton.Visible, false, "kein Knopf")
+		-- Story-Beginn (mini_notice story/chapter): Kapitel-Intro oben unter der Toast-Zone, Knopf nie in der Bildmitte
+		g:InClient(p, function()
+			mod.OnNotice({ kind = "story", event = "chapter", chapter = 1, title = "Der Kiesplatz", intro = string.rep("Ein langer Erzähltext. ", 20), kicker = "Deine Story beginnt" })
+			mod.Step(0.3)
+		end)
+		T.eq(mod.ChapterVisible(), true, "Kapitel-Intro sichtbar")
+		local chapterCard = mod.Gui():FindFirstChild("ChapterCard")
+		T.eq(chapterCard.Title.Text, "Kapitel 1: Der Kiesplatz", "Titel")
+		T.check(chapterCard.AbsolutePosition.Y >= 62 + 60, "unter der Toast-Zone")
+		local ok = chapterCard.ChapterOk
+		T.check(ok.AbsolutePosition.Y + ok.AbsoluteSize.Y < 360, "Los-geht's-Knopf über der Bildmitte (" .. tostring(ok.AbsolutePosition.Y + ok.AbsoluteSize.Y) .. ")")
+		press(g, ok)
+		T.eq(mod.ChapterVisible(), false, "geschlossen")
+		T.eq(g:ErrorText(), "", "keine Fehler")
+		-- Handy hochkant: kompakt (ohne Text), unter den Karten oben, nie bis in die Bildmitte
+		local g2, p2 = startClient(H, { viewport = Vector2.new(390, 844) })
+		local rec2 = recorder(T)
+		local _, _, _, _, _, ctx2 = build(g2, p2, "PrestigeUI", rec2)
+		local mod2 = g2:ClientModule(p2, "Mini.MissionClient")
+		g2:InClient(p2, function()
+			mod2.Start(ctx2)
+		end)
+		local s2 = storySnapshot(g2, { level = 2, mutate = function(d, R)
+			kies(d, R)
+			d.games.story.active.progress = 3
+		end })
+		g2:InClient(p2, function()
+			mod2.OnSnapshot(s2)
+			mod2.Step(0.3)
+		end)
+		T.eq(mod2.TrackerVisible(), true, "Handy: Karte sichtbar")
+		local tr2 = mod2.Tracker()
+		T.eq(tr2.Text.Visible, false, "Handy: kompakt ohne Text")
+		T.check(tr2.AbsolutePosition.Y >= 62 + 60, "Handy: unter der Toast-Zone")
+		T.check(tr2.AbsolutePosition.Y + tr2.AbsoluteSize.Y <= 844 * 0.45 + 1, "Handy: Karte endet über der Bildmitte")
+		T.check(tr2.AbsolutePosition.X >= 0 and tr2.AbsolutePosition.X + tr2.AbsoluteSize.X <= 390 + 1, "Handy: kein Überstand")
+		T.check(tr2.TrackerButton.Visible and tr2.TrackerButton.AbsoluteSize.Y >= 44, "Handy: Knopf ≥ 44 px")
+		T.eq(g2:ErrorText(), "", "keine Fehler (Handy)")
 	end },
 }

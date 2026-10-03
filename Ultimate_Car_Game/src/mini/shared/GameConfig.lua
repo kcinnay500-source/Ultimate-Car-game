@@ -707,6 +707,8 @@ Story.Title = "Vom Kiesplatzhändler zum Mega-Verkäufer"
 
 ---------------------------------------------------------------- Kapitel (§7: 5 Kapitel à 3 Missionen; Level wie GameConfig.Unlocks "story:<n>")
 Story.Chapters = {
+	-- Balance wie tools/economy_sim.py: (Credits + XP × XP-Wert) / Minuten + Kapitel-Bonus ≤ 40 % der Werkstatt auf Level 1
+	-- (tests/test_start.lua prüft das für jeden Weg)
 	-- 3.x: Kapitel 1 je Startweg (GameConfig.Start): Paths[typ] = die Missionen des Wegs, alle Wege gleich viele Stellen
 	-- (Stelle i aller Wege = Variante derselben Stelle; erledigt ist sie, sobald irgendeine Variante erledigt ist).
 	-- Missions = Weg autohaus (Verkaufshaus; auch ohne Startwahl). PathInfo[typ] = { title, intro } (Kapitelkopf,
@@ -723,25 +725,26 @@ Story.Chapters = {
 			.. "Die Kunden kommen schon, jetzt brauchst du nur noch den richtigen Preis. "
 			.. "Und in der Großen Werkstatt machst du alte Autos wieder schick – die verkaufen sich teurer!",
 		Missions = {
-			{ id = "c1_ah1", title = "Erste Einnahmen vom Verkaufshaus", kind = "own", owTyp = "autohaus", owStat = "collects", target = 1, minutes = 2,
+			{ id = "c1_ah1", title = "Erste Einnahmen vom Verkaufshaus", kind = "own", owTyp = "autohaus", owStat = "collects", target = 1, minutes = 3,
 				text = "Dein Verkaufshaus auf deinem Grundstück hat schon Credits verdient. Drück M, öffne den Tab „Gebäude“ und tipp beim Verkaufshaus auf „Abholen“.",
-				reward = { credits = 100, xp = 80 } },
+				reward = { credits = 60, xp = 80 } },
 			{ id = "c1_m1", title = "Drei Gebrauchtwagen verkaufen", kind = "sell", target = 3, minutes = 4,
 				text = "Reise mit dem Stadtplan zum „Kiesplatz (Gebrauchtwagen)“ am Stadtrand. Sprich dort mit den Kunden und nenne deinen Preis: günstig klappt immer, teuer braucht Verhandlungsglück.",
 				reward = { credits = 150, xp = 80 } },
-			{ id = "c1_ah3", title = "Ab in die Große Werkstatt", kind = "event", event = "pw_repair", target = 1, minutes = 5,
-				text = "Bring einen Gebrauchtwagen in die „Große Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und lass ihn dort reparieren. Repariert bringt er beim Verkauf mehr.",
-				reward = { credits = 200, xp = 80 } },
-			{ id = "c1_ah4", title = "Den reparierten Wagen teurer verkaufen", kind = "sell", target = 1, repaired = true, events = { "action:mini_car_sell" }, minutes = 4,
-				text = "Verkauf den reparierten Wagen: am „Kiesplatz (Gebrauchtwagen)“ zahlen die Kunden für frisch reparierte Autos 50 % mehr Gewinn – oder verkauf ein repariertes eigenes Auto in deiner Garage.",
-				reward = { credits = 150, xp = 80 } },
-			{ id = "c1_m2", title = "Zurück in die Werkstatt", kind = "event", event = "settle", target = 1, minutes = 3,
+			{ id = "c1_m2", title = "Zurück in die Werkstatt", kind = "event", event = "settle", target = 1, minutes = 4,
 				text = "Deine Kunden wollen auch reparieren lassen. Geh in deiner Werkstatt zum Empfang, nimm einen Auftrag an, repariere das Auto mit E und rechne am Empfang ab.",
 				reward = { credits = 100, xp = 80 } },
-			-- Startgeld 800 + Tutorial 500 + Missionen ≈ 2.000 Cr: 2.500 verlangt noch etwas eigenes Spiel
-			{ id = "c1_m3", title = "Die ersten 2.500 Credits", kind = "own", money = 2500, target = 2500, minutes = 4,
-				text = "Bring deinen Kontostand auf 2.500 Credits – mit Verkäufen, Aufträgen in deiner Werkstatt und dem Abholen in deinen Gebäuden (Tab „Gebäude“).",
-				reward = { credits = 160, xp = 80 } },
+			-- ein eigener Gebrauchtwagen für die Große Werkstatt (der Flitzer ist das Startauto und wird dort nicht repariert);
+			-- Händler ab Level 3 – nach drei Missionen (240 XP) sicher erreicht
+			{ id = "c1_ah5", title = "Dein erster Gebrauchtwagen", kind = "event", event = "car_bought", target = 1, minutes = 6,
+				text = "Spar deine Credits und kauf beim Händler im „Autohaus“ der Stadt (Stadtplan) deinen ersten Gebrauchtwagen, zum Beispiel den Komet C1. Dein Verkaufshaus gibt dir dort Rabatt.",
+				reward = { credits = 250, xp = 80 } },
+			{ id = "c1_ah3", title = "Ab in die Große Werkstatt", kind = "event", event = "pw_repair", target = 1, minutes = 5,
+				text = "Fahr deinen Gebrauchtwagen in die „Große Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und lass ihn dort reparieren. Repariert bringt er beim Verkauf mehr.",
+				reward = { credits = 200, xp = 80 } },
+			{ id = "c1_ah4", title = "Den reparierten Wagen teurer verkaufen", kind = "sell", target = 1, repaired = true, events = { "action:mini_car_sell" }, minutes = 4,
+				text = "Verkauf jetzt teurer: Am „Kiesplatz (Gebrauchtwagen)“ bringt dein nächster Verkauf nach der Reparatur 50 % mehr Gewinn – oder verkauf deinen reparierten Wagen beim Händler (Garage im Menü M) zum höheren Preis.",
+				reward = { credits = 150, xp = 80 } },
 		},
 		PathInfo = {
 			autohaus = { title = "Der Kiesplatz" }, -- Intro wie oben
@@ -763,16 +766,20 @@ Story.Chapters = {
 				{ id = "c1_ws2", title = "Fahrzeug-Check mit Kundenanruf", kind = "event", event = "settle:inspection", target = 1, minutes = 5,
 					text = "Nimm am Empfang einen „Fahrzeug-Check“ an und lies am Auto mit dem OBD-Tester den Fehlerspeicher. Findet er Fehler, ruf den Kunden mit dem Handy an (Taste P). Rechne den Check am Empfang ab.",
 					reward = { credits = 180, xp = 80 } },
-				{ id = "c1_ws3", title = "Ersatzteile kaufen", kind = "event", event = "parts_bought", target = 1, minutes = 2,
+				{ id = "c1_ws3", title = "Ersatzteile kaufen", kind = "event", event = "parts_bought", target = 1, minutes = 3,
 					text = "Kauf Ersatzteile für die nächsten Aufträge: am Büro-PC in deiner Werkstatt oder im Tablet (Taste Tab) unter „Teilehandel“, zum Beispiel Ölfilter.",
 					reward = { credits = 80, xp = 80 } },
 				{ id = "c1_ws4", title = "Drei Aufträge abrechnen", kind = "stat", stat = "jobsDone", target = 3, minutes = 9,
 					text = "Rechne in deiner Werkstatt drei weitere Aufträge am Empfang ab. Jeder Auftrag bringt Credits, XP und Ruf.",
 					reward = { credits = 300, xp = 80 } },
-				{ id = "c1_ws5", title = "Ein neues Werkstattgerät", kind = "event", event = "equipment_bought", minLevel = 2, target = 1, minutes = 3,
+				{ id = "c1_ws5", title = "Ein neues Werkstattgerät", kind = "event", event = "equipment_bought", minLevel = 2, target = 1, minutes = 4,
 					text = "Kauf im Tablet (Taste Tab) unter „Ausbau“ ein Werkstattgerät, zum Beispiel den Radheber – damit kannst du Reifen wechseln.",
 					reward = { credits = 120, xp = 80 } },
-				"c1_m3",
+				-- Startgeld 800 + Tutorial 500 + Missionen ≈ 2.000 Cr: 2.500 verlangt noch etwas eigenes Spiel
+				-- (gemeinsame letzte Mission der Wege Werkstatt, Herstellung und Schrottplatz)
+				{ id = "c1_m3", title = "Die ersten 2.500 Credits", kind = "own", money = 2500, target = 2500, minutes = 4,
+					text = "Bring deinen Kontostand auf 2.500 Credits – mit Aufträgen in deiner Werkstatt, Verkäufen und dem Abholen in deinen Gebäuden (Tab „Gebäude“).",
+					reward = { credits = 160, xp = 80 } },
 			},
 			produktion = {
 				{ id = "c1_m1_produktion", title = "Zwei Bauteil-Pakete abholen", kind = "own", owTyp = "produktion", owStat = "packs", target = 2, minutes = 4,
@@ -787,7 +794,7 @@ Story.Chapters = {
 				{ id = "c1_pr4", title = "Zwei Lieferfahrten", kind = "event", event = "delivery", target = 2, minutes = 8,
 					text = "Deine Kunden warten! Fahr mit dem Flitzer noch zwei Lieferungen – vom blauen Start-Marker zum grünen Ziel-Marker.",
 					reward = { credits = 250, xp = 80 } },
-				{ id = "c1_pr5", title = "Ein Auftrag in der Werkstatt", kind = "event", event = "settle", target = 1, minutes = 3,
+				{ id = "c1_pr5", title = "Ein Auftrag in der Werkstatt", kind = "event", event = "settle", target = 1, minutes = 4,
 					text = "Deine Bauteile helfen auch beim Reparieren: Geh in deiner Werkstatt zum Empfang, nimm einen Auftrag an, repariere das Auto mit E und rechne ab.",
 					reward = { credits = 100, xp = 80 } },
 				"c1_m3",
@@ -799,13 +806,13 @@ Story.Chapters = {
 				{ id = "c1_sc2", title = "Teile an die Große Werkstatt", kind = "event", event = "pw_parts_sold", target = 1, minutes = 4,
 					text = "Fahr zur „Großen Werkstatt“ am Westende der Spielermeile (Stadtplan: „Große Werkstatt“) und verkauf dort deine Altteile.",
 					reward = { credits = 150, xp = 80 } },
-				{ id = "c1_sc3", title = "Ran an die Schrottpresse", kind = "stat", stat = "clicks", target = 20, minutes = 2,
+				{ id = "c1_sc3", title = "Ran an die Schrottpresse", kind = "stat", stat = "clicks", target = 20, minutes = 3,
 					text = "Reise mit dem Stadtplan zur „Schrottpresse“, drück dort E und klick 20-mal auf die Presse.",
 					reward = { credits = 80, xp = 80 } },
-				{ id = "c1_sc4", title = "Das erste Unfallauto zerlegen", kind = "stat", stat = "dismantled", target = 1, minutes = 3,
+				{ id = "c1_sc4", title = "Das erste Unfallauto zerlegen", kind = "stat", stat = "dismantled", target = 1, minutes = 4,
 					text = "Reise mit dem Stadtplan zum „Schrottplatz“. Kauf am Zerlegeplatz ein Unfallauto und zerleg es in Altteile.",
 					reward = { credits = 120, xp = 80 } },
-				{ id = "c1_sc5", title = "Schrott gegen Credits", kind = "event", event = "action:mini_press_exchange", target = 1, minutes = 2,
+				{ id = "c1_sc5", title = "Schrott gegen Credits", kind = "event", event = "action:mini_press_exchange", target = 1, minutes = 3,
 					text = "Geh zum „Schrotthändler“ an der Schrottpresse (Stadtplan) und tausch deinen Schrott gegen Credits.",
 					reward = { credits = 80, xp = 80 } },
 				"c1_m3",
@@ -883,12 +890,20 @@ Story.Chapters = {
 	},
 }
 
--- Weg autohaus = Missions; "c1_m3" in den anderen Wegen = dieselbe Mission (gemeinsame letzte Stelle)
+-- Weg autohaus = Missions; "c1_m3" in den Wegen Herstellung/Schrottplatz = dieselbe Mission wie im Weg Werkstatt
+-- (gemeinsame letzte Stelle)
 do
 	local ch1 = Story.Chapters[1]
 	local byId = {}
 	for _, m in ipairs(ch1.Missions) do
 		byId[m.id] = m
+	end
+	for _, list in pairs(ch1.Paths) do
+		for _, m in ipairs(list) do
+			if type(m) == "table" then
+				byId[m.id] = m
+			end
+		end
 	end
 	for _, list in pairs(ch1.Paths) do
 		for i, m in ipairs(list) do

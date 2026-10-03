@@ -12,12 +12,14 @@ apply() liefert eine Zusammenfassung (Parts und Lichter je Ordner/Zone) als Stri
 """
 import importlib
 
-from . import contract, ground_roads, lobby, ow_buildings, plots, tycoon, vehicles
+from . import contract, ground_roads, horizon, lobby, ow_buildings, plots, tycoon, vehicles
 from .lib import Lib, child, children, is_basepart, name_of
 from .districts import ORDER as DISTRICTS
 
 TOP = ["Ground", "Roads", "Lights", "Districts", "Stations", "Arrivals", "Animated", "PlotSlots", "Missions"]
-PART_BUDGET = 12000
+# 3.0: +1000 für den natürlichen Weltrand (Hügel, Felsen, Bäume ~650 statt 228 Hecke/Randbäume), die Skyline
+# (<= 700, City.Horizon) und den Grand-Prix-Kurs (~550 statt 160); Lichter unverändert (checks.py TOTAL_BUDGET)
+PART_BUDGET = 13000
 LIGHT_BUDGET = 120
 PLACES = ("all", "lobby", "openworld", "tycoon")
 ZONE_MODELS = {"lobby": "Lobby", "openworld": "City", "tycoon": "Tycoon"}
@@ -74,7 +76,17 @@ def apply(tree, new_referent, place="all"):
         zones.append(lobby.build(ws, lib, tree))
     if "tycoon" in wanted:
         zones.append(tycoon.build(ws, lib, tree))
+    if city is not None:
+        # 3.0: Fernboden + Skyline zuletzt, damit der Fernboden die Flächen der Zonen im Place genau ausspart
+        horizon.build(city, lib, [_zone_rect(z) for z in zones])
     return summary(city, zones, lib, plot_log, place)
+
+
+def _zone_rect(zone):
+    """XZ-Hülle (x0, x1, z0, z1) aller BaseParts eines Zonen-Modells"""
+    from .lib import aabb
+    bb = [aabb(it) for it in zone.iter("Item") if is_basepart(it)]
+    return (min(b[0] for b in bb), max(b[1] for b in bb), min(b[4] for b in bb), max(b[5] for b in bb))
 
 
 def count(item):

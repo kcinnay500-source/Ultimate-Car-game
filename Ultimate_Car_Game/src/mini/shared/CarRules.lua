@@ -14,6 +14,18 @@ local CarRules = {}
 
 local MAX_SAFE = 2 ^ 53
 
+-- 3.x: Startauto „Flitzer“ (CarCatalog.Starter): gehört jedem Profil, steht nicht in d.games.cars.
+-- d.games.flitzer = { owned = true, fav = 0|<Auto-Id>, due = bool, intro = bool }
+--   fav   Lieblingsauto für car_call (0 = Flitzer, sonst Id eines eigenen Autos; fehlt es, gilt wieder der Flitzer)
+--   due   Begrüßung fällig (Startwahl in dieser Sitzung getroffen; CarService stellt den Flitzer einmal hin)
+--   intro Begrüßung erledigt
+CarRules.Text = {
+	starterSell = "Den Flitzer kannst du nicht verkaufen – er bleibt immer bei dir.",
+	starterTune = "Der Flitzer bleibt, wie er ist – Tuning gibt es für Autos aus dem Autohaus.",
+	starterStyle = "Den Flitzer kannst du nicht umlackieren – Lack und Felgen gibt es für Autos aus dem Autohaus.",
+	starterAuction = "Den Flitzer kannst du nicht versteigern – er bleibt immer bei dir.",
+}
+
 local MiniRules
 local function mini()
 	if not MiniRules then
@@ -46,8 +58,28 @@ local function level(d)
 end
 
 ---------------------------------------------------------------- Daten
+function CarRules.StarterDefault()
+	return { owned = true, fav = 0, due = false, intro = false }
+end
+
 function CarRules.Default()
-	return { cars = {}, carSerial = 0, activeCar = 0 }
+	return { cars = {}, carSerial = 0, activeCar = 0, flitzer = CarRules.StarterDefault() }
+end
+
+-- Flitzer-Daten aus einem gespeicherten games.flitzer (Whitelist, idempotent). owned ist immer true:
+-- neue und alte Profile besitzen den Flitzer (Gutschrift beim Laden, nie doppelt, nie verloren).
+function CarRules.LoadStarter(raw)
+	local out = CarRules.StarterDefault()
+	if type(raw) ~= "table" then
+		return out
+	end
+	out.fav = int(raw.fav, 0, 0, MAX_SAFE)
+	out.due = raw.due == true
+	out.intro = raw.intro == true
+	if out.intro then
+		out.due = false
+	end
+	return out
 end
 
 -- Neues Auto eines Modells im Auslieferungszustand (ohne Id)
@@ -69,8 +101,8 @@ function CarRules.NormalizeCar(raw)
 		return nil
 	end
 	local m = CarCatalog.Model(raw.model)
-	if not m then
-		return nil
+	if not m or m.starter == true then
+		return nil -- 3.x: der Flitzer ist nie ein Garagen-Datensatz (nicht handelbar, nicht doppelt)
 	end
 	local T = CarCatalog.Tune
 	local car = {
@@ -100,6 +132,7 @@ function CarRules.Load(rawGames, d, now)
 	if type(rawGames) ~= "table" then
 		return out
 	end
+	out.flitzer = CarRules.LoadStarter(rawGames.flitzer) -- 3.x: Startauto (immer im Besitz)
 	local serial = int(rawGames.carSerial, 0, 0, MAX_SAFE)
 	local list = type(rawGames.cars) == "table" and rawGames.cars or {}
 	local seen = {}
@@ -137,6 +170,18 @@ function CarRules.Load(rawGames, d, now)
 		active = out.cars[1].id
 	end
 	out.activeCar = active
+	-- Lieblingsauto muss noch in der Garage stehen, sonst wieder der Flitzer
+	if out.flitzer.fav > 0 and not seen[out.flitzer.fav] then
+		local found = false
+		for _, car in ipairs(out.cars) do
+			if car.id == out.flitzer.fav then
+				found = true
+			end
+		end
+		if not found then
+			out.flitzer.fav = 0
+		end
+	end
 	return out
 end
 
@@ -159,7 +204,87 @@ local function games(d)
 	if type(g.cars) ~= "table" then
 		CarRules.ApplyDefault(g)
 	end
+	if type(g.flitzer) ~= "table" then
+		g.flitzer = CarRules.StarterDefault()
+	end
 	return g
+end
+
+---------------------------------------------------------------- Startauto „Flitzer“ (3.x)
+-- Flitzer-Daten des Profils (legt sie bei Bedarf an; owned bleibt immer true)
+function CarRules.StarterData(d)
+	local f = games(d).flitzer
+	f.owned = true
+	return f
+end
+
+-- Besitzt das Profil den Flitzer? Immer (auch 2.4.0-/3.0-Veteranen: Gutschrift beim Laden bzw. hier).
+function CarRules.OwnsStarter(d)
+	return type(d) == "table" and type(d.games) == "table" and CarRules.StarterData(d).owned == true
+end
+
+function CarRules.IsStarterId(id)
+	return id == CarCatalog.StarterCarId
+end
+
+-- Virtueller Auto-Datensatz des Flitzers (für Bau, Werte, Ansicht). Nie in d.games.cars.
+function CarRules.StarterCar(now)
+	local car = CarRules.NewCar(CarCatalog.StarterId, now or 0)
+	car.id = CarCatalog.StarterCarId
+	return car
+end
+
+-- Eigenes Auto oder der Flitzer (nur für Fahren/Rufen/Waschen – Handel/Tuning nutzen weiter Find)
+function CarRules.Owned(d, id)
+	if CarRules.IsStarterId(id) then
+		return CarRules.StarterCar(0)
+	end
+	return CarRules.Find(d, id)
+end
+
+-- Lieblingsauto für car_call: gespeichertes fav (eigenes, nicht versteigertes Auto) oder der Flitzer.
+-- Rückgabe: car, istFlitzer
+function CarRules.Favourite(d)
+	local f = CarRules.StarterData(d)
+	if f.fav > 0 then
+		local car = CarRules.Find(d, f.fav)
+		if car and not car.locked then
+			return car, false
+		end
+	end
+	return CarRules.StarterCar(0), true
+end
+
+-- Lieblingsauto setzen: id = CarCatalog.StarterCarId oder 0 -> Flitzer, sonst eigenes Auto.
+-- Rückgabe: true, car | false, Meldung
+function CarRules.SetFavourite(d, id)
+	if type(id) ~= "number" or id ~= id or id % 1 ~= 0 then
+		return false, "Auto nicht gefunden."
+	end
+	local f = CarRules.StarterData(d)
+	if id == 0 or CarRules.IsStarterId(id) then
+		f.fav = 0
+		return true, CarRules.StarterCar(0)
+	end
+	local car = CarRules.Find(d, id)
+	if not car then
+		return false, "Auto nicht gefunden."
+	end
+	if car.locked then
+		return false, "Dieses Auto ist gerade in einer Auktion."
+	end
+	f.fav = id
+	return true, car
+end
+
+-- Ansicht des Flitzers fürs Handy (Snapshot-Feld starterCar)
+function CarRules.StarterView()
+	local m = CarCatalog.Starter
+	local s = CarRules.Stats(CarRules.StarterCar(0))
+	return {
+		id = CarCatalog.StarterCarId, model = m.id, name = m.name, brand = m.brand, body = m.body, starter = true,
+		value = 0, sellValue = 0, topSpeed = s.topSpeed, zeroTo100 = s.zeroTo100, rating = s.rating,
+	}
 end
 
 function CarRules.Find(d, id)
@@ -252,6 +377,9 @@ function CarRules.TuningValue(car)
 end
 
 function CarRules.SellValue(car)
+	if type(car) == "table" and CarCatalog.IsStarter(car.model) then
+		return 0 -- 3.x: Flitzer ist unverkäuflich
+	end
 	return math.floor((CarRules.Value(car) + CarRules.TuningValue(car)) * CarCatalog.SellShare + 0.5)
 end
 
@@ -375,6 +503,9 @@ end
 
 -- Rückkauf durch den Händler (50 % von Wert + Tuning). Rückgabe: true, Erlös, car | false, Meldung
 function CarRules.Sell(d, id)
+	if CarRules.IsStarterId(id) then
+		return false, CarRules.Text.starterSell -- 3.x: Flitzer nie verkaufen
+	end
 	local car = CarRules.Find(d, id)
 	if not car then
 		return false, nil -- schon verkauft (Doppelklick) oder fremde Id
@@ -391,6 +522,9 @@ end
 -- Tuning: level = die Stufe, die der Client gesehen hat (aktuelle Stufe). Veraltet -> still verworfen.
 -- Rückgabe: true, neueStufe, Kosten | false, Meldung
 function CarRules.Tune(d, id, part, seenLevel)
+	if CarRules.IsStarterId(id) then
+		return false, CarRules.Text.starterTune -- 3.x: Flitzer ohne Tuning (kein Pay-to-win, Zeitfahren außer Konkurrenz)
+	end
 	local car = CarRules.Find(d, id)
 	if not car then
 		return false, "Auto nicht gefunden."
@@ -427,6 +561,9 @@ end
 -- Optik: nur geänderte Werte kosten. Gleiche Werte (Doppelklick) -> true, 0 ohne Änderung.
 -- Rückgabe: true, Kosten, geänderte Schlüssel | false, Meldung
 function CarRules.Style(d, id, paint, rims, glow, spoiler)
+	if CarRules.IsStarterId(id) then
+		return false, CarRules.Text.starterStyle
+	end
 	local car = CarRules.Find(d, id)
 	if not car then
 		return false, "Auto nicht gefunden."
@@ -565,11 +702,14 @@ function CarRules.SnapshotFields(d)
 	for _, car in ipairs(g.cars) do
 		table.insert(cars, CarRules.View(car, d))
 	end
+	local fav = CarRules.Favourite(d)
 	return {
 		cars = cars,
 		activeCar = g.activeCar or 0,
 		catalog = CarRules.CatalogView(d),
 		garageMax = CarCatalog.MaxCars,
+		favCar = fav.id, -- 3.x: Lieblingsauto für car_call (CarCatalog.StarterCarId = Flitzer)
+		starterCar = CarRules.StarterView(), -- 3.x: der Flitzer (nicht in cars, nicht in garageMax)
 	}
 end
 

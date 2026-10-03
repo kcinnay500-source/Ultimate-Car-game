@@ -60,6 +60,38 @@ CarCatalog.Specials = {
 -- Karosserien mit eigenem Spoiler in der Vorlage (Standard: Spoiler an)
 CarCatalog.BodySpoiler = { hot_hatch = true, sport = true, super = true }
 
+---------------------------------------------------------------- Startauto „Flitzer“ (3.x)
+-- Winziges Startauto (Karosserie "flitzer", VehicleFactory baut es aus Parts – keine Vorlage, keine Assets).
+-- Jedes Profil besitzt es immer (CarRules.OwnsStarter): es steht NICHT in d.games.cars, zählt nicht zur Garage,
+-- ist kostenlos, nicht verkäuflich, nicht versteigerbar, nicht tunebar und kann nicht verloren gehen.
+-- Bewusst NICHT in Models/ModelById/DealerModels (Händler, Auktionen, Shop und Teststrecke kennen es nicht);
+-- CarCatalog.Model("flitzer") liefert es trotzdem (Fahrwerte, Name, Optik für CarRules.Stats/View).
+-- Fahrwerte: schnelle Beschleunigung (≈ 14,8 Studs/s², wie die Mittelklasse), wendig (Lenkung 36°), Spitze 88 km/h
+-- (knapp unter der Mittelklasse 90–100) – kein Nitro, kein Tuning, beim Zeitfahren außer Konkurrenz: kein Vorteil
+-- gegenüber gekauften Autos (Leistungsindex ≈ 380, zwischen Komet C1 ≈ 330 und Komet S2 ≈ 410).
+CarCatalog.StarterId = "flitzer"
+CarCatalog.StarterCarId = -1 -- feste Auto-Id des Flitzers (gekaufte Autos haben Ids ≥ 1, 0 = kein Auto)
+CarCatalog.Starter = {
+	id = "flitzer", name = "Flitzer", brand = "Mini", body = "flitzer", level = 1,
+	price = 0, value = 0, -- kostenlos, Verkaufswert 0
+	power = 75, top = 88, weight = 520, grip = 0.95, steer = 36, drive = "RWD",
+	paint = 2, rims = 4, glow = 0, spoiler = false,
+	dealer = false, special = false, dlc = false,
+	starter = true, sellable = false, tunable = false, track = false,
+}
+-- Eigene Physik-Maße der kleinen Karosserie (überschreiben CarCatalog.Physics für body = "flitzer"; unten definiert)
+CarCatalog.BodyPhysics = {
+	flitzer = {
+		hullBottom = 1.0, -- Kollisionsrumpf tiefer (kleine Räder, Radius 0,95)
+		hullTop = 2.4,
+		hullHalfWidth = 1.9,
+		seatTop = 2.1, -- Sitzfläche (die Figur schaut oben heraus: Go-Kart-Gefühl)
+		springLength = 1.6,
+		travel = 0.45,
+		rideDeflection = 0.3,
+	},
+}
+
 ---------------------------------------------------------------- DLC-Autos (Shop, PHASE4_CONTRACT §9, Meilenstein 8)
 -- Eigene Modell-Ids "dlc_<name>": Karosserie aus einer bestehenden Vorlage, Fahrwerte EXAKT vom Basismodell
 -- (base = Händlermodell derselben Klasse – kein Pay-to-win, Test in tests/test_shop_rules.lua), dazu feste Optik
@@ -266,7 +298,32 @@ for _, x in ipairs(CarCatalog.Dlc) do
 end
 
 function CarCatalog.Model(id)
-	return type(id) == "string" and CarCatalog.ModelById[id] or nil
+	if type(id) ~= "string" then
+		return nil
+	end
+	-- 3.x: das Startauto liegt nicht in ModelById (Händler/Auktion/Shop kennen es nicht), ist aber ein gültiges Modell
+	return CarCatalog.ModelById[id] or (id == CarCatalog.StarterId and CarCatalog.Starter or nil)
+end
+
+-- Ist das Modell das Startauto „Flitzer“?
+function CarCatalog.IsStarter(id)
+	return id == CarCatalog.StarterId
+end
+
+-- Physik-Maße einer Karosserie: CarCatalog.Physics, überschrieben von CarCatalog.BodyPhysics[body]
+function CarCatalog.PhysicsFor(body)
+	local over = type(body) == "string" and CarCatalog.BodyPhysics[body] or nil
+	if not over then
+		return CarCatalog.Physics
+	end
+	local out = {}
+	for k, v in pairs(CarCatalog.Physics) do
+		out[k] = v
+	end
+	for k, v in pairs(over) do
+		out[k] = v
+	end
+	return out
 end
 
 local function rgb(t)

@@ -451,17 +451,23 @@ return {
 			local list = SR.Missions(d, 1)
 			T.eq(#list, 6, typ .. ": sechs Missionen")
 			T.eq(#ch1.Paths[typ], #ch1.Missions, typ .. ": gleich viele Stellen wie Missions")
-			T.eq(list[6].id, "c1_m3", typ .. ": gemeinsame letzte Mission (2.500 Credits)")
+			if typ ~= "autohaus" then
+				T.eq(list[6].id, "c1_m3", typ .. ": gemeinsame letzte Mission (2.500 Credits)")
+			end
 			local title = SR.ChapterInfo(d, 1)
 			T.eq("Kapitel 1: " .. title, GC.Start.Paths[typ].chapter, typ .. ": Kapiteltitel wie auf der Startkarte")
 			for i, m in ipairs(list) do
 				T.eq(SR.MissionAt(d, 1, i), m, typ .. ": MissionAt " .. i)
 				T.eq(m.index, i, typ .. ": Stelle " .. m.id)
 				T.check(type(m.text) == "string" and #m.text >= 60, typ .. ": klarer Text " .. m.id)
-				-- jede Mission sagt, wohin (Ziel-Marker/Schnellreise) – außer Kontostand und Lieferung (eigene Marker)
+				-- jede Mission hat einen Ort (Marker, Schnellreise; Gebäude-Missionen gehen im Menü überall) – außer Kontostand
+				-- und Lieferung (eigene Start-/Ziel-Marker)
 				local t = SR.TargetOf(m)
 				local free = m.money ~= nil or m.event == "delivery"
-				T.check(free or (t ~= nil and type(t.travel) == "string" and t.travel ~= ""), typ .. ": Ziel für " .. m.id)
+				T.check(free or (t ~= nil and type(t.name) == "string" and t.name ~= ""), typ .. ": Ziel für " .. m.id)
+				if t and m.kind ~= "own" and m.kind ~= "build" then
+					T.check(t.travel ~= "", typ .. ": Schnellreise für " .. m.id)
+				end
 				T.check(m.reward and m.reward.credits > 0 and m.reward.xp == 80, typ .. ": Belohnung " .. m.id)
 				if m.id ~= "c1_m3" then
 					T.check(not seen[m.id] or seen[m.id] == m, "Id eindeutig: " .. m.id)
@@ -484,7 +490,9 @@ return {
 			end
 			return table.concat(out, ",")
 		end
-		T.eq(ids("autohaus"), "c1_ah1,c1_m1,c1_ah3,c1_ah4,c1_m2,c1_m3", "Verkaufshaus: Kiesplatz-Kapitel + Große Werkstatt + teurer verkaufen")
+		T.eq(ids("autohaus"), "c1_ah1,c1_m1,c1_m2,c1_ah5,c1_ah3,c1_ah4", "Verkaufshaus: Kiesplatz-Kapitel + Gebrauchtwagen + Große Werkstatt + teurer verkaufen")
+		T.eq(SR.Mission("c1_ah5").event, "car_bought", "eigener Gebrauchtwagen (der Flitzer wird in der Großen Werkstatt nicht repariert)")
+		T.eq(SR.RequiredLevel(SR.Mission("c1_ah5")), 3, "Händler ab Level 3 – nach drei Missionen sicher erreicht")
 		T.eq(ids("werkstatt"), "c1_ws1,c1_ws2,c1_ws3,c1_ws4,c1_ws5,c1_m3", "Werkstatt: Ölwechsel, Check mit Anruf, Teile …")
 		T.eq(ids("produktion"), "c1_m1_produktion,c1_pr2,c1_pr3,c1_pr4,c1_pr5,c1_m3", "Herstellung: Pakete, Lieferungen, Teile")
 		T.eq(ids("schrottplatz"), "c1_m1_schrottplatz,c1_sc2,c1_sc3,c1_sc4,c1_sc5,c1_m3", "Schrottplatz: Minispiele + Teile an die Große Werkstatt")
@@ -499,7 +507,7 @@ return {
 		T.eq(SR.TargetOf(SR.Mission("c1_ah3")).key, "grosswerkstatt", "Ziel Große Werkstatt (City.Stations.grosswerkstatt)")
 		T.eq(SR.TargetOf(SR.Mission("c1_ah3")).travel, "grosswerkstatt", "Schnellreise zur Großen Werkstatt")
 		T.eq(SR.TargetOf(SR.Mission("c1_ah1")).zone, "anchor", "Gebäude-Mission zeigt aufs eigene Gebäude")
-		T.eq(#SR.AllMissions(1), 6 + 3 * 5, "Kapitel 1: 6 Stellen, je Weg 5 eigene Varianten (c1_m3 gemeinsam)")
+		T.eq(#SR.AllMissions(1), 6 + 6 + 5 + 5, "Kapitel 1: Verkaufshaus 6, Werkstatt 6, Herstellung/Schrottplatz je 5 eigene (c1_m3 gemeinsam)")
 		-- XP-Kette: was eine Mission braucht, bringt der Spieler durch die vorigen Missionen sicher mit (Presse Lv 2, Zerlegeplatz Lv 3)
 		T.eq(#SR.UnlockCheck(), 0, "alle Wege ohne Sackgasse: " .. table.concat(SR.UnlockCheck(), "; "))
 		T.eq(SR.RequiredLevel(SR.Mission("c1_sc4")), 3, "Zerlegeplatz braucht Level 3")
@@ -509,6 +517,23 @@ return {
 		T.check(SR.LevelAfterXp(1, 240) >= 3, "drei Missionen (240 XP) bringen Level 3")
 		T.eq(SR.LevelAfterXp(1, 100), 1, "100 XP: noch Level 1")
 		T.eq(#SR.BalanceCheck(), 0, "40-%-Regel: " .. table.concat(SR.BalanceCheck(), "; "))
+		-- Balance wie tools/economy_sim.py --check (das nur die Liste Missions prüft) für JEDEN Weg: (Credits + XP × XP-Wert) /
+		-- Minuten + Kapitel-Bonus ≤ 40 % der Werkstatt auf Level 1; XP-Wert = 2.4.0-Levelbonus (120 + 18 × 2) / XP bis Level 2
+		local R = g:Rules()
+		local xv = (120 + 18 * 2) / R.XPNeeded({ level = 1 })
+		local cap = GC.Story.Balance.Share * SR.WorkshopPerMinute(1)
+		for _, typ in ipairs(PATHS) do
+			local list = SR.PathMissions(1, typ)
+			local total = 0
+			for _, m in ipairs(list) do
+				total += m.minutes
+			end
+			local bonus = GC.XP.StoryChapter[1] * xv / total
+			for _, m in ipairs(list) do
+				local per = (m.reward.credits + m.reward.xp * xv) / m.minutes + bonus
+				T.check(per <= cap + 1e-9, string.format("%s %s: %.1f Credits-Wert/Min ≤ %.1f", typ, m.id, per, cap))
+			end
+		end
 		-- Kapitel 2–5 unverändert
 		for ci = 2, 5 do
 			for k, m in ipairs(GC.Story.Chapters[ci].Missions) do
@@ -574,7 +599,8 @@ return {
 				T.eq(ok, true, typ .. ": " .. def.id .. " abgeholt")
 				if ok then
 					claimed += 1
-					T.eq(d.money - money, def.reward.credits, typ .. ": Belohnung " .. def.id)
+					T.eq(res.credits, def.reward.credits, typ .. ": Belohnung " .. def.id)
+					T.check(d.money - money >= def.reward.credits, typ .. ": Credits gutgeschrieben " .. def.id)
 					if step == 6 then
 						T.eq(res.chapterDone, true, typ .. ": Kapitel 1 geschafft")
 					end
@@ -590,7 +616,7 @@ return {
 		-- Sell-Mission „repariert“: ein normaler Verkauf zählt nicht
 		local d = profile(g)
 		MR.SetStartPath(d, "autohaus")
-		d.games.story = SR.Load({ layout = SR.Layout, done = { c1_ah1 = true, c1_m1 = true, c1_ah3 = true } }, d, NOW)
+		d.games.story = SR.Load({ layout = SR.Layout, done = { c1_ah1 = true, c1_m1 = true, c1_m2 = true, c1_ah5 = true, c1_ah3 = true } }, d, NOW)
 		T.eq(SR.AutoStart(d, NOW, 0).id, "c1_ah4", "Mission „teurer verkaufen“")
 		T.eq(#SR.OnSale(d, 3, false, NOW, false), 0, "ohne Reparatur zählt der Verkauf nicht")
 		T.eq(#SR.OnEvent(d, "action:mini_car_sell", {}, NOW), 1, "Verkauf eines eigenen (reparierten) Autos zählt auch")
@@ -1102,25 +1128,59 @@ return {
 				mod.OnSnapshot({ mode = "openworld", start = { pending = false, path = "produktion", choices = {} } })
 			end)
 			T.eq(mod.IsOpen(), false, "bleibt verborgen")
-			-- „Später entscheiden“: weg bis zum nächsten Betreten der Open World
+			-- 3.x: Pflichtwahl – kein „Später entscheiden“, die Tafel steht, bis gewählt ist (z. B. nach ResetStart wieder)
 			g:InClient(p, function()
+				mod.OnNotice({ kind = "start", event = "reset" })
 				mod.OnSnapshot({ mode = "openworld", start = { pending = true, path = "", choices = choices } })
 			end)
-			T.eq(mod.IsOpen(), true, "wieder offen (Test)")
-			g:Click(gui:FindFirstChild("Later", true))
-			T.eq(mod.IsOpen(), false, "später entscheiden")
-			-- Handy → Einstellungen → „Startweg wählen“ (StartUI.Reopen) holt sie jederzeit zurück
+			T.eq(mod.IsOpen(), true, "wieder offen (ResetStart)")
+			T.eq(gui:FindFirstChild("Later", true), nil, "kein Knopf „Später entscheiden“")
+			local later = nil
+			for _, x in ipairs(gui:GetDescendants()) do
+				if (x:IsA("TextLabel") or x:IsA("TextButton")) and x.Text:find("Später", 1, true) then
+					later = x
+				end
+			end
+			T.eq(later, nil, "kein Später-Text auf der Tafel")
+			-- große Karten: gezeichnetes Symbol, zwei Zeilen „was du machst“, Kapiteltitel der Story, Name wie gewünscht
+			local GC = g:MiniShared("GameConfig")
+			for _, typ in ipairs(PATHS) do
+				local card = mod.Card(typ)
+				local icon = card and card:FindFirstChild("Icon", true)
+				T.check(icon ~= nil and #icon:GetChildren() >= 4, typ .. ": gezeichnetes Symbol (Frames)")
+				T.check(icon and icon.AbsoluteSize.X >= 60, typ .. ": Symbol groß genug")
+				local chapter = card and card:FindFirstChild("Chapter", true)
+				T.check(chapter ~= nil and chapter.Visible and chapter.Text == GC.Start.Paths[typ].chapter, typ .. ": Kapiteltitel " .. tostring(chapter and chapter.Text))
+				local title = card and card:FindFirstChild("Title", true)
+				T.eq(title and title.Text, NAMES[typ], typ .. ": Name")
+				local desc = card and card:FindFirstChild("Desc", true)
+				T.check(desc ~= nil and desc.Text:find("\n", 1, true) ~= nil, typ .. ": zwei Zeilen Beschreibung")
+			end
+			-- Tablet/QTE/Panel offen (IsGarageBusy): Tafel weicht kurz, danach ist sie wieder da
+			local busy = true
+			g:InClient(p, function()
+				mod.Build(nil, { UI = MiniUI, Remote = rec, Toast = function() end, IsGarageBusy = function()
+					return busy
+				end })
+				mod.Render()
+			end)
+			T.eq(mod.IsOpen(), false, "2.4.0-Dialog offen: Tafel weicht")
+			busy = false
+			g:InClient(p, function()
+				mod.Render()
+			end)
+			T.eq(mod.IsOpen(), true, "danach wieder da")
+			-- Handy (alter Weg „Startweg wählen“): Reopen zeigt sie, solange sie offen ist
 			local reopened = false
 			g:InClient(p, function()
 				reopened = mod.Reopen()
 			end)
 			T.eq(reopened, true, "Reopen zeigt die Startwahl")
-			T.eq(mod.IsOpen(), true, "wieder offen über Reopen")
-			g:Advance(0.6)
-			g:Click(gui:FindFirstChild("Later", true))
-			T.eq(mod.IsOpen(), false, "wieder später entscheiden")
 			g:InClient(p, function()
 				mod.OnSnapshot({ mode = "lobby", start = { pending = true, path = "", choices = choices } })
+			end)
+			T.eq(mod.IsOpen(), false, "Lobby: verborgen")
+			g:InClient(p, function()
 				mod.OnSnapshot({ mode = "openworld", start = { pending = true, path = "", choices = choices } })
 			end)
 			T.eq(mod.IsOpen(), true, "beim nächsten Betreten wieder da")

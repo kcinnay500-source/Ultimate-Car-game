@@ -3,6 +3,9 @@
 -- (Kiesplatz-Verkäufe aller Preisstufen inkl. geseedeter Pleite, Werkstatt-Abrechnung über garage_flow, Kontostand),
 -- Level-Sperren, einmaliges Abholen, Nebenmissionen mit Tageswechsel und Lieferung, Co-op in der Party, Passiv-Modus,
 -- Verlassen/Wiederkommen, Load idempotent.
+-- 3.x: Neue Profile wählen zuerst ihren Startweg (S.join setzt ihn: Standard autohaus = Verkaufshaus, Kapitel 1 mit
+-- Kiesplatz); danach starten die Missionen von selbst (StoryService.Tick / nach dem Abholen), story_start der laufenden
+-- Mission ist kein Fehler. S.at(pl, done) setzt einen Story-Stand (layout aktuell), z. B. um bei c1_m1 zu beginnen.
 local DAY = 86400
 local NOW = 1760000000 - (1760000000 % DAY) + 3600 -- 01:00 UTC
 
@@ -67,7 +70,7 @@ local function setup(H, opts)
 	}, fakeApi)
 	SS.Init(ctx)
 	local S = { g = g, SR = SR, SS = SS, MR = MR, handlers = handlers, sessions = {} }
-	function S.join(userId, name)
+	function S.join(userId, name, path)
 		-- Rohdatensatz vor dem Beitritt: bis MiniRules.LoadGames StoryRules.ApplyLoad aufruft, lädt der Test
 		-- d.games.story selbst aus dem gespeicherten Datensatz (wie der Integrator es verkabelt)
 		local raw = g:Record(userId)
@@ -82,10 +85,29 @@ local function setup(H, opts)
 		if type(raw) == "table" and type(d.games.story) ~= "table" then
 			SR.ApplyLoad(d.games, raw, d, g:Now())
 		end
+		-- 3.x: Startwahl (Pflicht für neue Profile) – hier direkt gesetzt; danach startet die Story von selbst
+		local Meta = g:MiniShared("MetaRules")
+		if Meta.StartPending(d) then
+			Meta.SetStartPath(d, path or "autohaus")
+		end
 		SS.OnJoin(ms, d, g:Now())
 		g:Flush()
 		table.insert(S.sessions, pl)
 		return pl, ms, d
+	end
+	-- Story-Stand setzen (erledigte Missionen, nichts aktiv); die nächste Mission startet beim nächsten Tick oder story_start
+	function S.at(pl, done)
+		local set = {}
+		for _, id in ipairs(done) do
+			set[id] = true
+		end
+		local d = g:D(pl)
+		local keep = d.games.story.sales
+		d.games.story = SR.Load({ layout = SR.Layout, done = set, sales = keep }, d, g:Now())
+		local ms = g:MiniState(pl)
+		if ms and ms.story then
+			ms.story.seen = {}
+		end
 	end
 	function S.act(pl, action, data)
 		g:Activate()
@@ -201,10 +223,22 @@ return {
 		local Cfg = SR.Config()
 		T.eq(#Cfg.Chapters, 5, "5 Kapitel")
 		for i, ch in ipairs(Cfg.Chapters) do
-			T.check(#ch.Missions >= 3 and #ch.Missions <= 5, "Kapitel " .. i .. ": 3–5 Missionen")
-			for k, m in ipairs(ch.Missions) do
-				T.eq(m.id, "c" .. i .. "_m" .. k, "Missions-Id " .. m.id)
-				T.check(type(m.title) == "string" and #m.text > 20, "Texte " .. m.id)
+			if i == 1 then
+				-- 3.x: Kapitel 1 je Startweg, sechs Stellen (Missions = Weg Verkaufshaus)
+				T.eq(#ch.Missions, 6, "Kapitel 1: sechs Missionen je Weg")
+				for typ, list in pairs(ch.Paths) do
+					T.eq(#list, 6, "Kapitel 1, Weg " .. typ .. ": sechs Missionen")
+					for _, m in ipairs(list) do
+						T.check(type(m.title) == "string" and #m.text > 20, "Texte " .. m.id)
+						T.check(string.match(m.id, "^c1_") ~= nil, "Kapitel-1-Id " .. m.id)
+					end
+				end
+			else
+				T.check(#ch.Missions >= 3 and #ch.Missions <= 5, "Kapitel " .. i .. ": 3–5 Missionen")
+				for k, m in ipairs(ch.Missions) do
+					T.eq(m.id, "c" .. i .. "_m" .. k, "Missions-Id " .. m.id)
+					T.check(type(m.title) == "string" and #m.text > 20, "Texte " .. m.id)
+				end
 			end
 		end
 		T.eq(SR.ChapterLevel(1), 1, "Kapitel 1 ab Level 1")
@@ -286,40 +320,64 @@ return {
 		-- Co-op: nur geteilte Arten, nur dieselbe aktive Mission
 		T.eq(SR.CoopShared(SR.Mission("c1_m1")), true, "sell geteilt")
 		T.eq(SR.CoopShared(SR.Mission("c1_m3")), false, "own nicht geteilt")
+		T.eq(SR.CoopShared(SR.Mission("c1_ah3")), true, "event (Große Werkstatt) geteilt")
+		-- 3.x: Ziele je Mission (Marker, Schnellreise)
+		T.eq(SR.TargetOf(SR.Mission("c1_m1")).key, "kiesplatz", "Kiesplatz-Ziel")
+		T.eq(SR.TargetOf(SR.Mission("c2_m1")).key, "workshop", "Aufträge: Empfang der eigenen Werkstatt")
+		T.eq(SR.TargetOf(SR.Mission("c3_m3")).travel, "track", "Teststrecke")
+		T.eq(SR.TargetOf(SR.Mission("c1_m3")), nil, "Kontostand: kein Ort")
 		T.eq(SR.CoopShared(SR.SideDef("l_jobs100")), false, "Legende nicht geteilt")
 	end },
 
-	{ "Kapitel 1 bis zum Ende: Kiesplatz (alle Stufen, geseedete Pleite), Werkstatt-Abrechnung, Kontostand; nur einmal abholen; Kapitel 2 ab Level 5", function(T, H)
+	{ "Kapitel 1 (Verkaufshaus) bis zum Ende: Einnahmen, Kiesplatz (alle Stufen, geseedete Pleite), Große Werkstatt, teurer Verkauf, Werkstatt-Abrechnung, Kontostand; nur einmal abholen; Kapitel 2 ab Level 5", function(T, H)
 		local S = setup(H)
 		local g, SR, SS = S.g, S.SR, S.SS
 		local Flow = H.Load("tests/lib/garage_flow.lua")
-		local pl, ms, d = S.join(7001, "Kim")
+		local pl, ms, d = S.join(7001, "Kim", "autohaus")
 		T.eq(ms.p.mode, "openworld", "Open World")
+		S.tick(1.5)
 		local snap = S.snapshot(pl)
 		T.eq(snap.chapter, 1, "Snapshot Kapitel 1")
 		T.eq(snap.step, 1, "Stufe 1")
-		T.eq(snap.active, false, "nichts aktiv")
-		T.eq(snap.next, "c1_m1", "nächste Mission")
-		T.check(type(snap.missions) == "table" and #snap.missions == 3 and snap.missions[1].startable == true, "Missionsliste im vollen Snapshot")
+		T.check(type(snap.active) == "table" and snap.active.id == "c1_ah1", "Mission 1 läuft von selbst (keine Kiesplatz-Reise nötig)")
+		T.eq(snap.next, "c1_ah1", "aktuelle Mission")
+		T.eq(snap.path, "autohaus", "Weg im Snapshot")
+		T.check(type(snap.missions) == "table" and #snap.missions == 6 and snap.missions[1].active == true, "Missionsliste (6) im vollen Snapshot")
 		T.eq(S.snapshot(pl, false).missions, nil, "Missionsliste nur bei full")
 		T.check(#snap.side == 1 + 3, "Level 1: nur die immer machbare Nebenmission (s_jobs) + 3 Legende")
 		T.eq(snap.side[1].id, "s_jobs", "Level 1: s_jobs")
 		T.check(#snap.intro > 50 and snap.chapterTitle == "Der Kiesplatz", "Intro/Titel")
-		-- falsche Reihenfolge / unbekannt
+		T.eq(snap.active.where, "dein Verkaufshaus", "Ort der Mission im Snapshot")
+		-- falsche Reihenfolge / unbekannt / zu früh abholen
 		local m = g:Mark()
 		S.act(pl, "story_start", { id = "c1_m2" })
-		T.check(g:HasToast(pl, "der Reihe nach", m), "nur die aktuelle Stufe startbar")
+		T.check(g:HasToast(pl, "schon bei", m), "eine Mission nach der anderen")
 		S.act(pl, "story_start", { id = "gibtsnicht" })
 		T.check(g:HasToast(pl, "gibt es nicht", m), "unbekannte Mission")
-		-- Verkaufen ohne aktive Mission geht (Einnahme), zählt aber nicht
+		S.act(pl, "story_claim", { id = "c1_ah1" })
+		T.check(g:HasToast(pl, "Noch nicht geschafft", m), "Abholen vor dem Ziel")
 		S.act(pl, "story_claim", { id = "c1_m1" })
-		T.check(g:HasToast(pl, "Starte die Mission", m), "Abholen ohne Start")
+		T.check(g:HasToast(pl, "Starte die Mission", m), "Abholen einer nicht laufenden Mission")
+		-- c1_ah1: Einnahmen des Verkaufshauses abgeholt (Lebenszeit-Zähler collects)
+		d.games.ow.buildings.autohaus.collects = 1
+		m = g:Mark()
+		S.tick(1.5)
+		T.check(S.snapshot(pl).active.claimable == true, "Einnahmen abgeholt: erfüllt")
+		S.act(pl, "story_claim", { id = "c1_ah1" })
+		T.eq(S.story(pl).done.c1_ah1, true, "c1_ah1 erledigt")
+		-- die nächste Mission läuft sofort an (Hinweis + Toast „Neue Mission“)
+		T.eq(S.story(pl).active.id, "c1_m1", "c1_m1 startet direkt nach dem Abholen")
+		local started = nil
+		for _, n in ipairs(g:Notices(pl, "story", m)) do
+			if n.event == "started" and n.mission == "c1_m1" then
+				started = n
+			end
+		end
+		T.check(started ~= nil and started.auto == true, "story-Hinweis started (automatisch)")
+		T.check(g:HasToast(pl, "Neue Mission", m), "Toast „Neue Mission“")
 		m = g:Mark()
 		S.act(pl, "story_start", { id = "c1_m1" })
-		T.check(g:HasToast(pl, "Mission gestartet", m), "Start-Toast")
-		local started = g:Notices(pl, "story", m)
-		T.check(#started == 1 and started[1].event == "started" and started[1].mission == "c1_m1", "story-Hinweis started")
-		T.eq(S.story(pl).active.id, "c1_m1", "aktiv")
+		T.check(not g:HasToast(pl, "schon bei", m), "story_start der laufenden Mission ist kein Fehler")
 		-- Kunde kommt nach FirstOfferDelay; Snapshot zeigt das Angebot ohne den Wurf
 		local offer = S.customer(pl)
 		T.check(offer ~= nil, "Kunde da")
@@ -386,55 +444,80 @@ return {
 		T.check(snap.active and snap.active.claimable == true and snap.active.done == false, "claimable")
 		-- Abholen: Credits + XP, nur einmal
 		money = d.money
-		local xp = d.xp
+		local xp, level = d.xp, d.level
 		m = g:Mark()
 		S.act(pl, "story_claim", { id = "c1_m1" })
-		local claimed = g:Notices(pl, "story", m)[1]
-		T.check(claimed and claimed.event == "claimed" and claimed.mission == "c1_m1" and claimed.credits == 150, "claimed-Hinweis")
+		local claimed = nil
+		for _, n in ipairs(g:Notices(pl, "story", m)) do
+			if n.event == "claimed" then
+				claimed = n
+			end
+		end
+		T.check(claimed and claimed.mission == "c1_m1" and claimed.credits == 150 and claimed.xp == 80, "claimed-Hinweis (150 Cr, 80 XP)")
 		T.check(d.money >= money + 150, "150 Credits")
-		T.check(d.xp > xp or d.level > 1, "XP")
+		T.check(d.xp ~= xp or d.level > level, "XP")
 		T.eq(S.story(pl).done.c1_m1, true, "erledigt")
-		T.eq(S.story(pl).active, false, "nicht mehr aktiv")
-		T.eq(S.story(pl).step, 2, "Stufe 2")
-		T.eq(d.games.stats.missionsDone, 1, "missionsDone")
+		T.eq(S.story(pl).step, 3, "Stufe 3")
+		T.eq(S.story(pl).active.id, "c1_m2", "nächste Mission läuft: zurück in die Werkstatt")
+		T.eq(d.games.stats.missionsDone, 2, "missionsDone")
 		money = d.money
 		S.act(pl, "story_claim", { id = "c1_m1" })
 		T.eq(d.money, money, "zweites Abholen bringt nichts")
 		S.act(pl, "story_start", { id = "c1_m1" })
 		T.check(g:HasToast(pl, "schon geschafft", m), "erledigte Mission nicht neu startbar")
-		-- c1_m2: echte Werkstatt-Abrechnung (Integrator: OnEvent "settle" + OnStat jobsDone aus MiniService.OnSettled)
-		S.act(pl, "story_start", { id = "c1_m2" })
-		T.eq(S.story(pl).active.id, "c1_m2", "c1_m2 aktiv")
+		-- c1_m2: echte Werkstatt-Abrechnung (MiniService.OnSettled -> OnEvent "settle")
 		local jobs = d.games.stats.jobsDone
 		local receipt = Flow.CompleteInspection(T, g, pl)
 		T.check(receipt ~= nil, "Auftrag abgerechnet")
 		T.eq(d.games.stats.jobsDone, jobs + 1, "jobsDone +1")
-		SS.OnStat(ms, d, "jobsDone", 1)
-		SS.OnEvent(ms, d, "settle")
-		T.eq(S.story(pl).active.progress, 1, "settle gezählt")
+		T.eq(S.story(pl).active.progress, 1, "settle gezählt (echte Verkabelung)")
 		S.act(pl, "story_claim", { id = "c1_m2" })
 		T.eq(S.story(pl).done.c1_m2, true, "c1_m2 abgeholt")
-		-- c1_m3: Kontostand ≥ 2.500 (Startgeld + Belohnungen reichen nicht: Bedingung wird erst im Tick erfüllt)
-		T.check(d.money < 2500, "Kontostand noch unter 2.500 (" .. tostring(d.money) .. ")")
+		-- c1_ah5: eigener Gebrauchtwagen vom Händler (CarService meldet car_bought)
+		T.eq(S.story(pl).active.id, "c1_ah5", "Gebrauchtwagen kaufen")
+		SS.OnEvent(ms, d, "car_bought", { model = "komet" })
+		T.eq(S.story(pl).active.progress, 1, "Autokauf gezählt")
+		S.act(pl, "story_claim", { id = "c1_ah5" })
+		T.eq(S.story(pl).active.id, "c1_ah3", "nächste Mission: Große Werkstatt")
+		-- c1_ah3: Gebrauchtwagen in der Großen Werkstatt repariert (PublicWorkshopService -> api.storyEvent -> OnEvent)
 		m = g:Mark()
-		S.act(pl, "story_start", { id = "c1_m3" })
-		S.tick(1.5)
+		SS.OnEvent(ms, d, "pw_parts_sold", { part = "x", count = 1, value = 10 })
+		T.eq(S.story(pl).active.progress, 0, "Teileverkauf ist keine Reparatur")
+		SS.OnEvent(ms, d, "pw_repair", { car = "1", gain = 1.25 })
+		T.eq(S.story(pl).active.progress, 1, "Reparatur gezählt")
+		T.eq(S.story(pl).sales.repaired, 1, "reparierter Wagen wartet am Kiesplatz")
+		T.check(g:HasToast(pl, "50 % mehr Gewinn", m), "Hinweis: nächster Verkauf bringt mehr")
+		S.act(pl, "story_claim", { id = "c1_ah3" })
+		T.eq(S.story(pl).active.id, "c1_ah4", "teurer verkaufen")
+		-- c1_ah4: Verkauf am Kiesplatz mit Reparatur-Bonus
+		S.tick(46)
+		local rep = S.customer(pl)
 		snap = S.snapshot(pl)
-		T.check(snap.active and snap.active.progress < 2500 and not snap.active.claimable, "Bedingung noch offen")
-		S.MR.AddMoney(d, 2500 - d.money)
-		S.tick(1.5)
-		snap = S.snapshot(pl)
-		T.check(snap.active and snap.active.progress == 2500 and snap.active.claimable, "Bedingung im Tick erfüllt")
+		T.check(snap.sale and snap.sale.repaired == true, "Verkaufskarte zeigt den Reparatur-Bonus")
+		T.eq(snap.sale.tiers[1].profit, math.floor(rep.tiers[1].profit * 1.5 + 0.5), "angezeigter Gewinn +50 %")
 		money = d.money
-		S.act(pl, "story_claim", { id = "c1_m3" })
-		local done = g:Notices(pl, "story", m)
-		local last = done[#done]
-		T.check(last and last.event == "claimed" and last.chapterDone == true and last.nextChapter == 2 and last.nextLevel == 5, "Kapitel 1 abgeschlossen")
+		local nr = S.sell(pl, 1)
+		T.check(nr and nr.sold == true, "repariert verkauft")
+		T.check(d.money - money >= math.floor(rep.tiers[1].profit * 1.5 + 0.5), "Gewinn +50 %")
+		T.check(type(nr.text) == "string" and nr.text:find("Große", 1, true) ~= nil, "Text nennt die Große Werkstatt")
+		T.eq(S.story(pl).sales.repaired, 0, "Reparatur verbraucht")
+		T.eq(S.story(pl).active.progress, 1, "teurer Verkauf gezählt")
+		m = g:Mark()
+		money = d.money
+		S.act(pl, "story_claim", { id = "c1_ah4" })
+		local last = nil
+		for _, n in ipairs(g:Notices(pl, "story", m)) do
+			if n.event == "claimed" then
+				last = n
+			end
+		end
+		T.check(last and last.chapterDone == true and last.nextChapter == 2 and last.nextLevel == 5, "Kapitel 1 abgeschlossen")
 		T.check(g:HasToast(pl, "Kapitel 1 abgeschlossen", m), "Kapitel-Toast")
-		T.check(d.money >= money + 200, "200 Credits")
+		T.check(d.money >= money + 150, "150 Credits")
 		T.eq(S.story(pl).chapter, 2, "Kapitel 2")
 		T.eq(S.story(pl).step, 1, "Stufe 1")
-		-- Kapitel 2 erst ab Level 5
+		T.eq(d.games.stats.missionsDone, 6, "sechs Missionen")
+		-- Kapitel 2 erst ab Level 5 (läuft dann von selbst an)
 		snap = S.snapshot(pl)
 		T.eq(snap.locked, d.level < 5, "locked je Level")
 		if d.level < 5 then
@@ -443,20 +526,19 @@ return {
 			T.check(g:HasToast(pl, "ab Level 5", m), "Kapitel 2 gesperrt")
 			T.eq(S.story(pl).active, false, "nicht gestartet")
 			d.level = 5
-			S.act(pl, "story_start", { id = "c2_m1" })
-			T.eq(S.story(pl).active and S.story(pl).active.id, "c2_m1", "ab Level 5 startbar")
 		end
+		S.tick(1.5)
+		T.eq(S.story(pl).active and S.story(pl).active.id, "c2_m1", "ab Level 5 läuft c2_m1")
 		-- Verlassen mitten im Vorgang und Wiederkommen: aktive Mission und Verkäufe bleiben
 		local salesN = S.story(pl).sales.n
 		S.leave(pl)
 		g:Advance(1)
 		local pl2, _, d2 = S.join(7001, "Kim")
 		T.eq(d2.games.story.chapter, 2, "nach Rejoin Kapitel 2")
-		T.eq(d2.games.story.done.c1_m3, true, "done bleibt")
+		T.eq(d2.games.story.done.c1_ah4, true, "done bleibt")
 		T.eq(d2.games.story.sales.n, salesN, "Verkäufe bleiben")
-		if d2.level >= 5 then
-			T.eq(d2.games.story.active and d2.games.story.active.id, "c2_m1", "aktive Mission bleibt")
-		end
+		T.eq(d2.games.story.active and d2.games.story.active.id, "c2_m1", "aktive Mission bleibt")
+		T.eq(g:MiniShared("MetaRules").StartPath(d2), "autohaus", "Weg bleibt")
 		noErrors(T, g, "Kapitel 1")
 	end },
 
@@ -784,6 +866,10 @@ return {
 		T.check(party ~= nil, "Party")
 		g:Advance(0.5)
 		T.eq(g:Act(b, "party_join", { code = party.code, rid = 2 }), "ok", "Ben tritt bei")
+		-- alle drei stehen bei c1_m1 (Kiesplatz-Verkäufe); die Mission startet jetzt (mit Party-Größe)
+		for _, x in ipairs({ a, b, c }) do
+			S.at(x, { "c1_ah1" })
+		end
 		S.act(a, "story_start", { id = "c1_m1" })
 		S.act(b, "story_start", { id = "c1_m1" })
 		S.act(c, "story_start", { id = "c1_m1" })
@@ -820,8 +906,8 @@ return {
 		T.check(dA.money >= moneyA + 150, "Anna holt ab")
 		S.act(b, "story_claim", { id = "c1_m1" })
 		T.eq(S.story(b).done.c1_m1, nil, "Ben kann noch nicht abholen")
-		-- Verschiedene aktive Missionen: nichts geteilt (Anna bei c1_m2, Ben noch c1_m1)
-		S.act(a, "story_start", { id = "c1_m2" })
+		-- Verschiedene aktive Missionen: nichts geteilt (Anna bei c1_m2 – läuft nach dem Abholen von selbst –, Ben noch c1_m1)
+		T.eq(S.story(a).active.id, "c1_m2", "Anna: nächste Mission läuft von selbst")
 		SS.OnEvent(msA, dA, "settle")
 		T.eq(S.story(a).active.progress, 1, "Anna settle")
 		T.eq(S.story(b).active.progress, 2, "Ben unverändert (andere Mission)")
@@ -833,19 +919,19 @@ return {
 		T.eq(S.story(a).active.progress, 1, "Anna bleibt bei c1_m2 1/1")
 		S.act(b, "story_claim", { id = "c1_m1" })
 		T.eq(S.story(b).done.c1_m1, true, "Ben holt selbst ab")
+		T.eq(S.story(b).active.id, "c1_m2", "Ben: c1_m2 läuft")
 		-- Party verlassen: kein Übertrag mehr
 		S.act(a, "story_claim", { id = "c1_m2" })
-		S.act(b, "story_start", { id = "c1_m2" })
 		T.eq(g:Act(b, "party_leave", { rid = 5 }), "ok", "Ben verlässt die Party")
-		S.act(a, "story_start", { id = "c1_m3" })
+		T.eq(S.story(a).active.id, "c1_ah5", "Anna bei c1_ah5 (Gebrauchtwagen)")
 		SS.OnEvent(msB, dB, "settle")
 		T.eq(S.story(b).active.progress, 1, "Ben settle")
-		T.eq(S.story(a).active.id, "c1_m3", "Anna bei c1_m3 (eigene Bedingung)")
+		T.eq(S.story(a).active.progress, 0, "Anna: nichts übertragen")
 		-- Mitglied verlässt den Server mitten im Vorgang: kein Fehler beim nächsten Übertrag
 		T.eq(g:Act(c, "party_join", { code = party.code, rid = 6 }), "ok", "Cem tritt bei")
 		S.leave(c)
 		g:Advance(1)
-		S.act(a, "story_claim", { id = "c1_m3" })
+		S.act(a, "story_claim", { id = "c1_ah5" })
 		noErrors(T, g, "Co-op")
 	end },
 
@@ -856,6 +942,8 @@ return {
 		T.eq(ms.p.mode, "lobby", "all-Place: Lobby")
 		S.tick(3)
 		T.eq(S.offer(pl), false, "Lobby: kein Kunde")
+		T.eq(S.story(pl).active, false, "Lobby: die Story startet nicht von selbst")
+		S.at(pl, { "c1_ah1" })
 		S.act(pl, "story_start", { id = "c1_m1" })
 		T.eq(S.story(pl).active.id, "c1_m1", "Start geht auch in der Lobby")
 		local m = g:Mark()

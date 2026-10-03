@@ -902,4 +902,103 @@ return {
 		T.eq(d.games.meta.tutorialStep, step + 1, "gelungenes Abholen erledigt den Schritt")
 		T.eq(#g:Errors(), 0, "keine Fehler: " .. g:ErrorText())
 	end },
+
+	{ "Tutorial je Startweg passt zur Story (3.x): gleiche Reihenfolge, gleiche Namen, keine Story-Belohnung im Tutorial, Überspringen erst nach der Startwahl", function(T, H)
+		local g = H.Garage({ noServer = true })
+		local GC = g:MiniShared("GameConfig")
+		local TR = g:MiniShared("TutorialRules")
+		local MR = g:MiniShared("MetaRules")
+		local SR = g:MiniShared("StoryRules")
+		local function stepIndex(list, id)
+			for i, s in ipairs(list) do
+				if s.id == id then
+					return i
+				end
+			end
+			return nil
+		end
+		local function missionIndex(list, id)
+			for i, m in ipairs(list) do
+				if m.id == id then
+					return i
+				end
+			end
+			return nil
+		end
+		-- keine alten Versprechen mehr: die Story beginnt mit der Startwahl, nicht erst am Kiesplatz
+		for typ, list in pairs(GC.Tutorial.ByPath) do
+			for _, st in ipairs(list) do
+				T.check(not st.text:find("Da beginnt deine Story", 1, true), typ .. ": " .. st.id .. " verspricht den Story-Beginn nicht mehr am Kiesplatz")
+				T.check(not st.text:find("Werkstattmeile", 1, true), typ .. ": " .. st.id .. " sagt Spielermeile")
+			end
+		end
+		T.check(GC.TutorialStepById.move.text:find("Deine Mission", 1, true) ~= nil, "erster Schritt zeigt auf die Karte „Deine Mission“")
+		-- Werkstatt: der Auftrag im Tutorial ist der Ölwechsel = Story-Mission 1
+		T.check(GC.TutorialStepById.accept.text:find("Ölwechsel", 1, true) ~= nil, "Werkstatt: Tutorial schlägt den Ölwechsel vor")
+		T.eq(SR.PathMissions(1, "werkstatt")[1].event, "settle:oil", "Werkstatt: Story-Mission 1 ist der Ölwechsel")
+		-- Verkaufshaus: erst Einnahmen abholen, dann am Kiesplatz verkaufen – im Tutorial wie in der Story
+		local ah = GC.Tutorial.ByPath.autohaus
+		local ahStory = SR.PathMissions(1, "autohaus")
+		T.check(stepIndex(ah, "ah_collect") < stepIndex(ah, "ah_sell"), "Tutorial: Abholen vor dem Verkauf")
+		T.check(missionIndex(ahStory, "c1_ah1") < missionIndex(ahStory, "c1_m1"), "Story: Abholen vor dem Verkauf")
+		T.check(GC.TutorialStepById.ah_buildings.text:find("Verkaufshaus", 1, true) ~= nil, "Tutorial nennt das Verkaufshaus")
+		T.check(GC.TutorialStepById.pr_buildings.text:find("Herstellung", 1, true) ~= nil, "Tutorial nennt die Herstellung")
+		-- Herstellung/Schrottplatz: Abholen ist Tutorial-Schritt und Story-Mission 1 (Pakete / Altteile)
+		T.eq(SR.PathMissions(1, "produktion")[1].owStat, "packs", "Herstellung: Story-Mission 1 = Pakete abholen")
+		T.eq(SR.PathMissions(1, "schrottplatz")[1].owStat, "partsTotal", "Schrottplatz: Story-Mission 1 = Altteile abholen")
+		local sc = SR.PathMissions(1, "schrottplatz")
+		T.check(missionIndex(sc, "c1_sc3") ~= nil and SR.TargetOf(SR.Mission("c1_sc3")).key == "press", "Schrottplatz: Story führt wie das Tutorial an die Presse")
+		-- Tutorial-Schritte geben nichts aus (die Belohnung kommt einmal am Ende), Story-Missionen belohnen getrennt
+		for _, typ in ipairs(GC.Start.Order) do
+			local d = newProfile(g)
+			d.money = 800
+			MR.SetStartPath(d, typ)
+			local money, xp = d.money, d.xp
+			local list = TR.Steps(d)
+			for i = 1, #list - 1 do
+				local st = TR.Current(d, "openworld")
+				if st.event == "next" then
+					TR.Next(d, i)
+				else
+					TR.Advance(d, st.event)
+				end
+			end
+			T.eq(d.money, money, typ .. ": Tutorial-Schritte zahlen nichts aus")
+			T.eq(d.xp, xp, typ .. ": Tutorial-Schritte geben keine XP")
+			T.eq(TR.Done(d), false, typ .. ": letzter Schritt offen")
+		end
+		-- Überspringen geht erst nach der Startwahl (sonst wäre die Pflichtwahl umgangen)
+		local dp = newProfile(g)
+		local ok, why = TR.Skip(dp)
+		T.eq(ok, false, "vor der Wahl kein Überspringen")
+		T.eq(why, "waiting", "Grund waiting")
+		MR.SetStartPath(dp, "produktion")
+		T.eq((TR.Skip(dp)), true, "nach der Wahl überspringbar")
+		T.eq(MR.StartPath(dp), "produktion", "Weg bleibt beim Überspringen")
+	end },
+
+	{ "TutorialService: tutorial_skip vor der Startwahl abgelehnt (Toast), danach normal", function(T, H)
+		local S = setup(H)
+		local g = S.g
+		local MR = g:MiniShared("MetaRules")
+		local pl = g:Join(7801, { name = "Neu" })
+		g:Advance(0.5)
+		local ms, d = g:MiniState(pl), g:D(pl)
+		ensureMeta(g, d)
+		T.eq(MR.StartPending(d), true, "neues Profil: Wahl offen")
+		S.act(pl, "tutorial_skip")
+		T.eq(d.games.meta.tutorialDone, false, "nicht übersprungen")
+		local toasted = false
+		for _, t in ipairs(S.log.toasts) do
+			if t.player == pl and t.text:find("Wähle zuerst", 1, true) then
+				toasted = true
+			end
+		end
+		T.check(toasted, "Toast: erst den Start wählen")
+		MR.SetStartPath(d, "schrottplatz")
+		S.act(pl, "tutorial_skip")
+		T.eq(d.games.meta.tutorialDone, true, "nach der Wahl übersprungen")
+		T.eq(d.games.meta.tutorialSkipped, true, "als übersprungen markiert")
+		T.eq(#g:Errors(), 0, "keine Fehler: " .. g:ErrorText())
+	end },
 }
