@@ -7,6 +7,9 @@
 -- Server und Clients teilen sich EIN DataModel (keine Replikation): Clients laufen in einem eigenen Kontext
 -- (Players.LocalPlayer, Modul-Cache, Remote-Empfang, Eingaben), sehen aber dieselben Instanzen wie der Server.
 local Mock = {}
+-- B-018: so viele FireClient-Nachrichten je RemoteEvent bleiben mindestens im Verlauf (__data.sent); ältere werden
+-- verworfen und in __data.sentBase mitgezählt (gekürzt wird bei 2 × SentKeep auf SentKeep).
+Mock.SentKeep = 4000
 local realOs = os
 
 ---------------------------------------------------------------- Kontexte (Server / Client je Spieler)
@@ -2644,6 +2647,14 @@ function RE.methods:FireClient(player, ...)
 	d.sent = sent
 	local args = packCopy(...)
 	table.insert(sent, { player = player, args = args, t = env.clock.wall })
+	-- B-018: Verlauf begrenzen. Jede Nachricht ist eine tiefe Kopie (Snapshots!) – ein simulierter Tag brauchte
+	-- ungekürzt rund 5 GB. Es bleiben die jüngsten Mock.SentKeep Nachrichten; d.sentBase zählt die verworfenen,
+	-- die fortlaufende Position einer Nachricht ist sentBase + Index (Garage:Mark / Garage:Events in run_tests.lua).
+	local keep = Mock.SentKeep
+	if #sent >= 2 * keep then
+		d.sentBase = (d.sentBase or 0) + (#sent - keep)
+		d.sent = table.move(sent, #sent - keep + 1, #sent, 1, {})
+	end
 	if env.onFireClient then
 		env.onFireClient(self, player, ...)
 	end
